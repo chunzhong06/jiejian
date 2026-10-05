@@ -29,11 +29,13 @@ export class ApiError extends Error {
   code: string
   traceId?: string
   diagnosis?: ErrorDiagnosis
-  constructor(code: string, message: string, traceId?: string, diagnosis?: ErrorDiagnosis) {
+  executionStarted?: boolean
+  constructor(code: string, message: string, traceId?: string, diagnosis?: ErrorDiagnosis, executionStarted?: boolean) {
     super(message)
     this.code = code
     this.traceId = traceId
     this.diagnosis = diagnosis
+    this.executionStarted = typeof executionStarted === 'boolean' ? executionStarted : undefined
   }
 }
 
@@ -50,11 +52,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     )
   }
   if (!response.ok) {
-    throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis)
+    // 只读取明确的执行门禁布尔值，不向页面透传任意错误 details。
+    throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis, body.error?.details?.execution_started)
   }
   return body.data as T
 }
 
-function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis }; trace_id?: string } {
+function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis; details?:{execution_started?:boolean} }; trace_id?: string } {
   return typeof body === 'object' && body !== null && (body as { schema_version?: unknown }).schema_version === '1'
 }

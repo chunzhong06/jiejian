@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
 
@@ -97,6 +97,17 @@ def json_body(payload: object) -> bytes:
         ).encode("utf-8")
     except (TypeError, ValueError):
         raise LLMTransportError("invalid_request") from None
+
+
+def parse_json_response(body: bytes) -> dict[str, Any]:
+    """目录与各 Provider 共用对象响应校验；解析失败只返回脱敏错误分类。"""
+    try:
+        value = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        raise LLMTransportError("invalid_response") from None
+    if not isinstance(value, dict):
+        raise LLMTransportError("invalid_response")
+    return value
 
 
 def max_output_tokens(profile: LLMProfileConfig) -> int:

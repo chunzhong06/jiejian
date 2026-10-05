@@ -8,7 +8,7 @@ import { ApiError } from '../../api/http'
 import { mcpAccessApi, type MCPAccessView } from '../../api/system/mcp'
 import { projectsApi, type ProjectDto } from '../../api/applications/projects'
 import { systemApi } from '../../api/system/system'
-import { DesktopModuleNavigation, MobileModuleNavigation } from '../navigation/ModuleNavigation'
+import { ModuleNavigation } from '../navigation/ModuleNavigation'
 import { ErrorRecovery } from './ErrorRecovery'
 import { AccessPage } from '../../features/access/AccessPage'
 import { CurrentTestsPage } from '../../features/checks/CurrentTestsPage'
@@ -35,7 +35,7 @@ import type { WorkspaceViewDto } from '../../api/workspace'
 import '../../styles.css'
 
 function MissingApplication({ onNavigate }: { onNavigate: () => void }) {
-  return <Result status="info" title="先选择要维护的应用" subTitle="选择应用后才能查看这里的内容。" extra={<Button type="primary" onClick={onNavigate}>去应用接入</Button>} />
+  return <Result status="info" title="先选择待测应用" subTitle="选择应用后才能查看这里的内容。" extra={<Button type="primary" onClick={onNavigate}>接入待测应用</Button>} />
 }
 
 function CurrentUnavailableArea({ title, description, onBack }: { title: string; description: string; onBack: () => void }) {
@@ -85,7 +85,6 @@ function ControlShellContent() {
   // 页面正在编辑时保留任务输入上下文；最新事实继续回读，切换项目立即释放旧快照。
   if (!editing || heldWorkspace.current?.project.project_id !== selected?.project_id) heldWorkspace.current = latestWorkspace
   const workspace = editing && heldWorkspace.current?.project.project_id === selected?.project_id ? heldWorkspace.current : latestWorkspace
-  const pendingTask = editing && workspace?.primary_task?.task_id !== latestWorkspace?.primary_task?.task_id
   const rememberReceipt = (message: string) => { if (selected) setWorkReceipt({ message, projectId: selected.project_id, locationKey: location.key }) }
   // 短期操作回执只属于发出操作的页面和项目；持久进度由真实 Run 单独呈现。
   useEffect(() => { setWorkReceipt(null) }, [selected?.project_id, location.key])
@@ -219,9 +218,9 @@ function ControlShellContent() {
 
   const content = () => {
     // 当前任务与自由入口使用相同组件位置，避免从当前工作进入权限页时丢失草稿。
-    if (route === '/workspace') return <WorkbenchPage workspaceSyncFailed={workspaceState.synchronization?.retrying} selected={selected} workspace={latestWorkspace} systemStatus={systemStatus} experience={experience} mcpStatus={mcpStatusFailed ? null : mcpStatus} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
-    if (route === '/tools') return <ToolsPage onNavigate={navigateRecoveryTarget} projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
-    if (route === '/environment') return <EnvironmentPage onRemoveCurrent={() => setRemoveConfirmOpen(true)} project={selected} workspace={workspace} systemStatus={systemStatus} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next) } }}/>
+    if (route === '/workspace') return <WorkbenchPage workspaceSyncFailed={workspaceState.synchronization?.retrying} selected={selected} workspace={latestWorkspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
+    if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
+    if (route === '/environment') return <EnvironmentPage onRemoveCurrent={() => setRemoveConfirmOpen(true)} project={selected} workspace={workspace} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { const started = !experience?.active || experience.project_id !== next.project_id; workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next); if (started) navigate('/workspace') } }}/>
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
@@ -247,10 +246,9 @@ function ControlShellContent() {
 
   if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务清理完成后，可以关闭此页面。" />
   return <TaskGuardContext.Provider value={updateGuard}><Layout className="app-shell"><a className="skip-to-content" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>跳到主要内容</a>
-    <DesktopModuleNavigation systemStatus={systemStatus} route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} />
     <Layout className="product-main">
-      <MobileModuleNavigation systemStatus={systemStatus} route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} />
-      <AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
+      <div className="product-chrome"><AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
+      <ModuleNavigation route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} /></div>
       <Layout.Content className="content"><div className="content-frame" id="main-content" tabIndex={-1}>
         {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
         {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>

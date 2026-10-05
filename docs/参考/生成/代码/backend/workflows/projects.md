@@ -19,7 +19,6 @@
 - `ProjectCatalog.list(self, include_archived) -> tuple[ProjectRecord, ...]`
 - `ProjectCatalog.get(self, project_id) -> ProjectRecord`
 - `ProjectCatalog.list_for_display(self, include_archived) -> list[dict]`
-- `ProjectCatalog.current_observations(self, project_id) -> tuple[str, ...]`
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage`
 

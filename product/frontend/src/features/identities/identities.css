@@ -1,8 +1,4 @@
 /* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
-.identity-page {
-  display: grid;
-  gap: var(--space-24);
-}
 
 .identity-overview {
   display: grid;
@@ -19,6 +15,10 @@
 .identity-create .ant-select { width: 100%; }
 .identity-guidance { margin: 0; max-width: 80ch; color: var(--color-secondary); font-size: var(--font-secondary); line-height: 1.7; }
 .identity-page-actions .task-action-bar { position: static; }
+.identity-complete { display:grid; justify-items:center; text-align:center; gap:24px; padding:clamp(40px,8vh,100px) 16px; }
+.identity-complete .identity-complete-icon { display:grid; place-items:center; width:72px; height:72px; border-radius:22px; background:var(--color-primary-light); color:var(--color-primary-ink); font-size:30px; }
+.identity-complete h1 { font-size:var(--font-titleMax); margin:0; }.identity-complete p { margin:0; color:var(--color-secondary); max-width:60ch; }
+.identity-complete > .ant-btn { margin-top:16px; min-width:220px; }
 
 .identity-overview .ant-typography {
   margin-bottom: 0;
@@ -96,7 +96,7 @@
 .identity-role-kicker {
   color: var(--color-primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--weight-strong);
   letter-spacing: .06em;
 }
 
@@ -125,31 +125,6 @@
 .identity-login-steps {
   padding-block: var(--space-24);
   border-top: var(--line-width) solid var(--color-border);
-}
-
-.identity-login-step-list {
-  display: grid;
-  gap: 16px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.identity-login-step-list li {
-  align-items: start;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: auto 1fr;
-}
-
-.identity-login-step-list li > div {
-  display: grid;
-  gap: 4px;
-}
-
-.identity-login-step-list .ant-btn {
-  justify-self: start;
-  margin-top: 4px;
 }
 
 .identity-list .ant-list-item {

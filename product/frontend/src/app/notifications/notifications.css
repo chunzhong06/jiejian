@@ -1,0 +1,16 @@
+/* 通知统一标题、关闭按钮、正文与操作的轴线；不占正文高度或夺取焦点。 */
+.notification-center { position: fixed; right: var(--space-24); bottom: var(--space-24); z-index: 1100; display: flex; flex-direction: column; gap: var(--space-12); width: min(400px, calc(100vw - 32px)); max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4); }
+.notification-stack { display: grid; gap: var(--space-12); }
+.notification-stack:empty { display: none; }
+.check-activity-toast,.notification-card { width: 100%; min-width: 0; padding: var(--space-16) var(--space-20); border: 1px solid var(--color-border); border-radius: var(--radius-floating); background: var(--color-floating-surface); box-shadow: var(--shadow-floating); overflow-wrap: anywhere; }
+.check-activity-toast-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); color: var(--color-text); font-size: var(--font-body); font-weight: var(--weight-medium); }
+.check-activity-toast-heading .ant-btn { flex: 0 0 44px; width: 44px; height: 44px; margin: -8px -12px -8px 0; color: var(--color-secondary); }
+.check-activity-toast p { margin: var(--space-12) 0 0; color: var(--color-secondary); font-size: var(--font-secondary); line-height: var(--font-leading); }
+.check-activity-toast-actions { display: flex; margin-top: var(--space-8); }
+.check-activity-toast-actions .ant-btn { padding-inline: 0; }
+.notification-card .ant-alert-description { width: 100%; margin-top: var(--space-8); }
+.notification-card .ant-alert-close-icon { min-width: 44px; min-height: 44px; margin: -8px -12px 0 0; }
+.notification-overflow { align-self: end; background: var(--color-surface); border-radius: var(--radius-small); padding: var(--space-4) var(--space-8); }
+@media (max-width: 600px) {
+  .notification-center { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+}

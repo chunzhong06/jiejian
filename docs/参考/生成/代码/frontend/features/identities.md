@@ -22,6 +22,6 @@
 
 - `TestIdentityPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../api/preparation/testIdentities`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./identities.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../api/preparation/testIdentities`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./identities.css`、`@ant-design/icons`、`antd`、`react`
 
 <!-- GENERATED:END -->

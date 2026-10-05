@@ -1,5 +1,6 @@
 // 单规则工作面分开呈现规则、材料与已发生检查；历史修订不冒充当前有效规则。
-import {Alert,Button,Spin} from 'antd'
+import { LoadingState } from '../../shared/ui/LoadingState'
+import {Alert,Button} from 'antd'
 import {useEffect,useState} from 'react'
 import {ruleDetailsApi,type RuleDetails} from '../../api/boundaries/ruleDetails'
 import {EditorialHeader,EditorialPage} from '../../shared/ui/Editorial'
@@ -20,9 +21,9 @@ export function RuleDetailsPanel({projectId,intentId,revision,onBack,onEdit,onNa
     return () => {current=false}
   },[projectId,intentId,revision,epoch])
   if(error)return <EditorialPage><EditorialHeader title="这条规则暂时无法读取"/><p>指定的应用或规则修订无法核对，未跳转到其他规则。</p><TaskActionBar back={{label:'返回权限列表',onClick:onBack}} primary={{label:'重新读取',onClick:()=>setEpoch(item=>item+1)}}/></EditorialPage>
-  if(!value)return <EditorialPage><Spin/>正在读取这条规则…</EditorialPage>
+  if(!value)return <EditorialPage><LoadingState page>正在读取这条规则…</LoadingState></EditorialPage>
   const latest = value.latest_result
-  return <EditorialPage label="单条权限规则">
+  return <EditorialPage label="单条权限规则" width="summary">
     <EditorialHeader eyebrow={`权限要求 / 规则修订 ${value.revision}`} title={value.action_label} status={<StatusBadge kind="rule" tone={value.expectation==='ALLOW'?'success':'danger'}>{value.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge>}><p className="rule-sentence">{value.sentence}</p></EditorialHeader>
     <div className="proof-toolbar"><Button type="link" onClick={onBack}>返回权限列表</Button>{value.current && <Button onClick={()=>onEdit(value.action_id,value.intent_id)}>修改这条规则</Button>}</div>
     {!value.current && <Alert type="info" message="这是保留的历史修订" description="当前权限已经变化，以下显示这个修订的原约定与历史记录。"/>}

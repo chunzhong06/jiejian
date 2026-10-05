@@ -97,7 +97,7 @@
 - `FlowDraftRevisionRepository.list_for_recording(self, recording_id) -> tuple[FlowDraftRevisionRecord, ...]`
 - `FlowDraftRevisionRepository.latest(self, recording_id) -> FlowDraftRevisionRecord &#124; None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`re`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`time`、`typing`、`作用域内：product.protocols.recording.flow_draft`、`作用域内：product.protocols.recording.recording_legacy`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.recording.models`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`typing`、`作用域内：product.protocols.recording.flow_draft`、`作用域内：product.protocols.recording.recording_legacy`
 
 ### `product/backend/infra/storage/preparation/supplemental_materials.py`
 

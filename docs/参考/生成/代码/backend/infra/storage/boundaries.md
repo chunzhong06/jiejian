@@ -27,7 +27,6 @@
 - `BusinessBoundaryRepository.actor(self, actor_id) -> BusinessActor &#124; None`
 - `BusinessBoundaryRepository.add_actor_revision(self, revision) -> None`
 - `BusinessBoundaryRepository.actor_revision(self, actor_id, revision) -> BusinessActorRevision &#124; None`
-- `BusinessBoundaryRepository.list_actor_revisions(self, project_id) -> tuple[BusinessActorRevision, ...]`
 - `BusinessBoundaryRepository.list_actors(self, project_id) -> tuple[BusinessActor, ...]`
 - `BusinessBoundaryRepository.add_action(self, action) -> None`
 - `BusinessBoundaryRepository.replace_action(self, action) -> None`
@@ -76,7 +75,6 @@
 - `PermissionIntentRepository.get_revision(self, intent_id, revision) -> PermissionIntentRevision &#124; None`
 - `PermissionIntentRepository.latest(self, intent_id) -> PermissionIntentRevision &#124; None`
 - `PermissionIntentRepository.list_history(self, project_id) -> tuple[PermissionIntentRevision, ...]`
-- `PermissionIntentRepository.list_revisions(self, project_id) -> tuple[PermissionIntentRevision, ...]`
 - `PermissionIntentRepository.list_latest(self, project_id) -> tuple[PermissionIntentRevision, ...]`
 
 静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.boundaries.permissions`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`

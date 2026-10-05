@@ -35,6 +35,6 @@
 - `ProjectRepository.list_all(self) -> tuple[ProjectRecord, ...]`
 - `ProjectRepository.replace(self, record) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`re`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`time`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`time`
 
 <!-- GENERATED:END -->

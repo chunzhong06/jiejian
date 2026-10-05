@@ -19,12 +19,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from product.backend.core.lifecycle import JobState, RunLifecycle, RunVerdict
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage.base import _scalars
 from product.backend.infra.storage.execution.jobs import JobRow
 from product.backend.infra.storage.preparation.recordings import RecordingRow
 from product.backend.infra.storage.execution.runs import RunRow
@@ -559,14 +560,6 @@ def _scalar_value(session: Session, statement: Any) -> Any | None:
     except IntegrityError:
         session.rollback()
         raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "数据库约束拒绝写入") from None
-    except SQLAlchemyError:
-        session.rollback()
-        raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库操作失败") from None
-
-
-def _scalars(session: Session, statement: Select[Any]) -> tuple[Any, ...]:
-    try:
-        return tuple(session.execute(statement).scalars())
     except SQLAlchemyError:
         session.rollback()
         raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库操作失败") from None

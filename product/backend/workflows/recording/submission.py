@@ -19,15 +19,14 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Callable, Sequence
-from typing import Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
+from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording.models import Recording, RecordingPurpose, RecordingState, transition_recording_state
+from product.backend.core.recording.models import Recording, RecordingState, transition_recording_state
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraft, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, canonical_flow_draft_json_bytes, canonical_recording_json_bytes
 from product.protocols.web.target import WebTargetScope

@@ -6,14 +6,14 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Checkbox, Radio, Space } from 'antd'
+import { Alert, Checkbox, Radio, Space } from 'antd'
 import { ApiError } from '../../api/http'
 import { recordingsApi, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/preparation/recordings'
 import { jobsApi } from '../../api/preparation/jobs'
 import type { ProjectDto } from '../../api/applications/projects'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { browserState } from '../../shared/runtime/browserState'
-import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
+import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
 import { AssistantPanel } from '../assistant/AssistantPanel'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { TaskReceipt } from '../../shared/ui/TaskReceipt'
@@ -271,7 +271,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       : phase === 'CAPTURING'
         ? { label: '我已完成这个操作', onClick: () => void controlCapture('stop'), loading: busy }
         : reviewable
-          ? { label: canFinalize ? (recordingPurpose === 'TARGET' ? '保存业务流程' : '保存本次补录') : '完成业务选择后保存', onClick: () => void finalize(), loading: busy, disabled: !canFinalize }
+          ? { label: canFinalize ? (materialContext ? '保存为候选材料' : recordingPurpose === 'TARGET' ? '保存业务流程' : '保存本次补录') : '完成业务选择后保存', onClick: () => void finalize(), loading: busy, disabled: !canFinalize }
           : recording.state === 'COMPLETED'
             ? { label: '继续准备', onClick: onContinuePreparation }
             : undefined
@@ -286,16 +286,21 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     : undefined
 
   return <EditorialPage label="演示当前业务动作">
-    <EditorialHeader eyebrow={`验证 · ${captureLabel(recording)}`} title={task?.title ?? '演示一次业务操作'}><p>{task?.user_responsibility ?? '在真实浏览器中完成一次操作，再整理为可复用的业务演示。'}</p></EditorialHeader>
+    <EditorialHeader eyebrow={project.name || '当前应用'} title={reviewable ? '审阅这次业务操作' : recording?.state === 'COMPLETED' ? '录制已保存' : '演示一次业务操作'}><p className="editorial-muted">{captureLabel(recording)}</p></EditorialHeader>
+    <FlowSpine compact label="录制流程" steps={['准备录制','演示一次操作','审阅业务含义','回到检查材料'].map((title,index) => {
+      const stage = !recording ? 0 : recording.state === 'COMPLETED' ? 3 : reviewable || ['STOPPING','FINISHED'].includes(phase) ? 2 : 1
+      return {key:String(index),title,state:index === stage ? 'current' : index < stage ? 'complete' : 'future'}
+    })}/>
+
     {task?.recording_purpose === 'OBSERVATION' && <Alert type="info" showIcon message={`请演示一次：你通常在哪里确认“${effectName ?? '这项已确认的业务结果'}”是否发生。`} />}
     {task?.recording_purpose === 'RECOVERY' && <Alert type="info" showIcon message="请演示一次：你通常怎样恢复这项业务操作改变的状态。" />}
-    {task ? <section className="task-focus recording-workspace"><h2>本次演示</h2><p>{task.why_now}</p><p className="editorial-muted">{task.system_will_do}</p>
-      <p>业务动作：{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</p>
-      <dl className="preparation-account-pair"><div><dt>操作账号</dt><dd>{identityName(subjectId)}</dd></div><div><dt>资源所属账号</dt><dd>{identityName(ownerId)}</dd></div></dl>
+    {task ? <section className="recording-workspace"><h2>{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</h2>
+      <dl className="recording-facts"><div><dt>目标应用</dt><dd>{project.name || '当前应用'}</dd></div><div><dt>操作账号</dt><dd>{identityName(subjectId)}</dd></div><div><dt>资源所属账号</dt><dd>{identityName(ownerId)}</dd></div></dl>
+      {!recording && <p className="editorial-muted">{task.why_now}</p>}
       {!recording && distinctOwner && <Checkbox checked={ownerConfirmed} disabled={busy} onChange={(event) => setOwnerConfirmed(event.target.checked)}>我确认本次演示的测试资源属于“{identityName(ownerId)}”</Checkbox>}
-      {!recording && primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled))} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}</section>
+</section>
       : <Alert type="info" showIcon message="要准备新的业务演示，请返回检查准备，按当前任务选择的账号和资源继续。" />}
-    {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
+    {recording && !reviewable && recording.state !== 'COMPLETED' && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
     {reviewable && recording && <details><summary>解释这次录制</summary><AssistantPanel projectId={project.project_id} surface="recording-review" focus={{ recording_id: recording.recording_id }} title="这次录制的步骤用途" actionLabel="解读这次录制" /></details>}
     {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
     {reviewable && draft && recordingPurpose !== 'TARGET' && <section><h2>{recordingPurpose === 'OBSERVATION' ? '哪一步用于确认业务结果？' : '哪一步用于恢复业务状态？'}</h2>
@@ -305,7 +310,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       <Alert type={canFinalize ? 'success' : 'warning'} showIcon message={canFinalize ? '业务含义已确认，可以保存本次补录' : supplementChoices.length ? '请选择符合这次业务目的的步骤' : '本次补录没有可用的业务步骤，请返回检查准备并重新演示'} />
     </section>}
     {(message || syncError) && <TaskReceipt message={message ?? '录制事实正在核对'} pending={syncError} onRetry={syncError ? () => void refreshPage() : undefined}/>}
-    {recording?.state === 'COMPLETED' && draft && <section className="recording-summary"><h2>已保存的业务流程</h2><p>{recording.action?.display_name ?? '已确认动作'} · 账号：{recording.test_identity?.label ?? '已准备测试账号'}</p><p>录制内容已保存</p></section>}
-    <TaskActionBar back={{ label: '返回检查准备', onClick: onBack, disabled: busy }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={recording && primaryAction ? { ...primaryAction, disabled: Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled)) } : undefined} />
+    {recording?.state === 'COMPLETED' && draft && <section className="recording-summary"><h2>已保存的业务流程</h2><p>{recording.action?.display_name ?? '已确认动作'} · 账号：{recording.test_identity?.label ?? '已准备测试账号'}</p></section>}
+    <TaskActionBar back={{ label: '返回检查准备', onClick: onBack, disabled: busy }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={primaryAction ? { ...primaryAction, disabled: Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled)) } : undefined} />
   </EditorialPage>
 }

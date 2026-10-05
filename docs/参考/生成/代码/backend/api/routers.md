@@ -133,7 +133,7 @@
 - `class SourceChangeRegistrationRequest`
 - `build_source_changes_router(context) -> APIRouter`
 
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.checks.repair`、`product.backend.core.development`、`product.backend.core.errors`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.checks.repair`、`product.backend.core.development`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/checks/__init__.py`
 
@@ -300,7 +300,7 @@
 - `class ReadyResponse`
 - `class MaintenanceOperationRequest`
 
-静态import / dot-source：`__future__`、`fastapi`、`fastapi.responses`、`product.backend`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.errors`、`product.backend.infra.runtime.diagnostics`、`product.backend.infra.runtime.frontend_assets`、`product.backend.infra.storage`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`fastapi.responses`、`product.backend`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.errors`、`product.backend.infra.runtime.diagnostics`、`product.backend.infra.runtime.frontend_assets`、`product.backend.infra.storage`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/workspace.py`
 

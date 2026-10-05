@@ -53,7 +53,7 @@
 - `PreparationBindingService.inspect(self, action, contract, identities, work) -> ActionTechnicalPreparationView`
 - `PreparationBindingService.inspect_item(self, work, binding, action, understanding, missing_reason)`
 
-静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`pathlib`、`product.backend.core.boundaries.entities`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.core.recording.models`、`product.backend.workflows.business_boundaries.inspection`、`product.backend.workflows.preparation.bindings.recording_candidates`、`product.backend.workflows.preparation.bindings.sources`、`product.backend.workflows.preparation.models`、`product.backend.workflows.recording.source`、`product.backend.workflows.test_identities.service`、`typing`、`作用域内：product.backend.workflows.preparation.materials.evidence_models`
+静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`pathlib`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.core.recording.models`、`product.backend.workflows.preparation.bindings.recording_candidates`、`product.backend.workflows.preparation.bindings.sources`、`product.backend.workflows.preparation.models`、`product.backend.workflows.recording.source`、`product.backend.workflows.test_identities.service`、`typing`、`作用域内：product.backend.workflows.preparation.materials.evidence_models`
 
 ### `product/backend/workflows/preparation/bindings/sources.py`
 

@@ -31,8 +31,6 @@
 
 - `lifecycleLabel`
 - `lifecycleLabels`
-- `verdictLabel`
-- `verdictLabels`
 
 ### `product/frontend/src/shared/runtime/browserState.ts`
 
@@ -83,6 +81,11 @@
 
 静态import / dot-source：`react`
 
+### `product/frontend/src/shared/styles/collections.css`
+
+[打开源码](../../../../../product/frontend/src/shared/styles/collections.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
 ### `product/frontend/src/shared/styles/controls.css`
 
 [打开源码](../../../../../product/frontend/src/shared/styles/controls.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
@@ -93,9 +96,24 @@
 [打开源码](../../../../../product/frontend/src/shared/styles/editorial.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
+### `product/frontend/src/shared/styles/materials.css`
+
+[打开源码](../../../../../product/frontend/src/shared/styles/materials.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
 ### `product/frontend/src/shared/styles/proof-details.css`
 
 [打开源码](../../../../../product/frontend/src/shared/styles/proof-details.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/shared/styles/surfaces.css`
+
+[打开源码](../../../../../product/frontend/src/shared/styles/surfaces.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/shared/styles/typography.css`
+
+[打开源码](../../../../../product/frontend/src/shared/styles/typography.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
 ### `product/frontend/src/shared/ui/Editorial.test.tsx`
@@ -111,14 +129,35 @@
 
 - `EditorialHeader`
 - `EditorialPage`
-- `EvidenceSurface`
 - `FlowSpine`
 - `FlowStep`
 - `MarginNote`
 - `RuleSentence`
-- `TaskFocus`
 
 静态import / dot-source：`antd`、`react`
+
+### `product/frontend/src/shared/ui/LoadingState.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/LoadingState.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `LoadingState`
+
+静态import / dot-source：`antd`
+
+### `product/frontend/src/shared/ui/MotionPresenceList.test.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/MotionPresenceList.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`./MotionPresenceList`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/shared/ui/MotionPresenceList.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/MotionPresenceList.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `MotionPresenceList`
+
+静态import / dot-source：`./tokens`、`react`
 
 ### `product/frontend/src/shared/ui/PageTaskHeader.test.tsx`
 
@@ -198,5 +237,22 @@
 - `metrics`
 - `palettes`
 - `productCssVariables`
+
+### `product/frontend/src/shared/ui/useControlMotion.ts`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/useControlMotion.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `useControlMotion`
+
+静态import / dot-source：`./tokens`、`react`
+
+### `product/frontend/src/shared/ui/useProductMotion.ts`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/useProductMotion.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `motionRegistry`
+- `useProductMotion`
+
+静态import / dot-source：`./tokens`、`react`
 
 <!-- GENERATED:END -->

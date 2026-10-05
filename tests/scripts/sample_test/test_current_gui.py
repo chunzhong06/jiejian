@@ -22,15 +22,15 @@ class Node:
         return Node(self.page, "text", name, (*self.scope, self.name))
     def locator(self, selector):
         return Node(self.page, "locator", selector, (*self.scope, self.name))
-    def filter(self, *, has):
-        return Node(self.page, self.kind, has.name, self.scope)
+    def filter(self, *, has=None, has_text=None):
+        return Node(self.page, self.kind, has.name if has else has_text, (*self.scope, self.name) if has_text else self.scope)
     def or_(self, other):
         return self if self.page.evidence_role == self.kind else other
     def count(self):
         if self.name == "登记本地修改": return int(self.page.manual_open)
         if self.name == "示例环境管理": return int(self.page.outer)
         if self.name == ".path-node-breakpoint": return self.page.marks
-        if self.name == "关闭检查完成提示": return 0
+        if self.name == "关闭检查提示": return 0
         return 1
     def nth(self, index):
         assert index == 0
@@ -59,7 +59,7 @@ class Node:
         return "true" if self.page.selected else "false"
     def click(self):
         self.page.events.append(("click", self.name))
-        if self.name == "复验原题":
+        if self.name == "准备复验原题":
             self.page.url = self.page.origin + "/#/tests?" + urlencode({"change_id": self.page.target_change})
         if self.name.startswith('[data-run="'):
             self.page.url = self.page.origin + "/#/history?" + urlencode({"run_id": self.name[11:-2]})
@@ -150,7 +150,7 @@ def test_normal_pages_propose_and_prepare_once_without_starting_check(tmp_path):
     assert ("wait", '[aria-label="当前需要处理的任务"]', {}, ()) in page.events
     assert ("wait", "开始检查", {}, ()) in page.events
     clicks = [item[1] for item in page.events if item[0] == "click"]
-    assert clicks == ["启动示例", "启动示例", "使用已提供的权限提案", "使用已提供的测试材料", "返回检查总览"]
+    assert clicks == ["查看官方示例", "启动示例", "启动示例", "总览", "使用已提供的权限提案", "使用已提供的测试材料", "返回检查总览"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -200,7 +200,7 @@ def test_repair_submission_must_click_changes_action_before_runs_post(tmp_path, 
     else:
         gui.submit("project", body, "change-exact")
         assert ("goto", page.origin+"/#/changes?repair_reference=original-exact") in page.events
-        assert [item[1] for item in page.events if item[0] == "click"] == ["复验原题", "开始检查"]
+        assert [item[1] for item in page.events if item[0] == "click"] == ["准备复验原题", "返回检查总览", "开始检查"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -247,6 +247,8 @@ def test_prepare_rebinds_before_the_only_prepare_call(monkeypatch, gui_mode, sta
         def call(self, method, path, body=None, **kwargs):
             if path.endswith("/runs"): return []
             if path.endswith("/business-boundaries"): return before
+            if path.endswith("/preparation"): return {"project_id": "project", "preparation_complete": True}
+            if path.endswith("/check-preview"): return {"project_id": "project", "can_execute": True}
             if path.endswith("/maintenance-draft"): return {"boundary_state_fingerprint": "fp", "actors": [], "actions": [], "permissions": []}
             calls.append("maintenance" if path.endswith("maintenance-proposals") else "approve" if path.endswith("approve") else "prepare")
             return {"scenario_prepared": True}
@@ -279,7 +281,7 @@ def test_prepare_structured_pending_is_failure_not_a_second_probe(monkeypatch):
 
 def test_ready_fixed_result_original_evidence_and_exit_keep_real_controls(tmp_path):
     gui, page, client = context(tmp_path)
-    client.values['/api/projects/project/repair'] = {'tasks': [{'contract': {'source_run_id': 'fixed', 'repair_fingerprint': 'original'}}]}
+    client.values['/api/projects/project/repair'] = {'tasks': [{'status': 'VERIFIED', 'contract': {'source_run_id': 'fixed', 'repair_fingerprint': 'original'}}]}
     for name in ("limited-ready", "fixed-ready"):
         gui.checkpoint(name, {"project_id": "project"})
     fixed = {"run_id": "fixed", "story": {"judgement": "本轮修复结果", "repair_verification": {"status": "VERIFIED"}}}
@@ -296,10 +298,10 @@ def test_ready_fixed_result_original_evidence_and_exit_keep_real_controls(tmp_pa
     gui.shutdown()
     clicks = [item[1] for item in page.events if item[0] == "click"]
     assert "开始检查" not in clicks
-    assert clicks == ["查看原问题", 'button[data-result-case="case-original"]', "执行过程", "查看定位证据", "← 返回事实与证明", "搜索", '[data-run="fixed"]', "检查历史",
+    assert clicks == ["查看原检查结果", 'button[data-result-case="case-original"]', "执行过程", "查看定位证据", "← 返回事实与证明", "搜索", '[data-run="fixed"]', "检查历史",
         "设置与更多", "退出界鉴", "安全退出"]
     assert ("wait", "原题复验通过", {}, ('[aria-label="权限验证工作区"]:visible',)) in page.events
-    assert ("wait", "原题复验通过", {}, ('[aria-label="修复依据"]:visible',)) in page.events
+    assert ("wait", "原题复验通过", {}, ('[aria-label="修复依据"]:visible .product-status[data-kind="verdict"][data-tone="success"]',)) in page.events
     assert [record["event"] for record in gui.records] == ["limited-ready", "fixed-ready", "fixed-result", "history-search", "history-return", "evidence-and-repair", "exit"]
 
 
@@ -338,19 +340,33 @@ def test_valid_materials_are_reused_without_reinstall_or_check_submission(tmp_pa
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
-def test_prepare_accepts_public_readiness_without_rewriting_sample_marker():
+@pytest.mark.parametrize("installed", [False, True])
+@pytest.mark.parametrize("ready", [False, True])
+def test_prepare_always_requires_public_readiness_without_rewriting_sample_marker(installed, ready):
     calls=[]
     class Api:
         def call(self, method, path, body=None, **kwargs):
             calls.append((method,path))
             if path.endswith("/runs"): return []
             if path.endswith("/business-boundaries"): return {"policy_epoch":1,"permission_intents":[],"actor_bindings":[],"action_bindings":[]}
-            if path.endswith("/preparation"): return {"project_id":"project","preparation_complete":True}
-            if path.endswith("/check-preview"): return {"project_id":"project","can_execute":True}
+            if path.endswith("/preparation"): return {"project_id":"project","preparation_complete":ready}
+            if path.endswith("/check-preview"): return {"project_id":"project","can_execute":ready}
             raise AssertionError(path)
-    actual={"project_id":"project","scenario_prepared":False}
-    result=current_api.prepare_current(Api(),"project",gui=N(prepare=lambda:actual))
-    assert result is actual and result["scenario_prepared"] is False
+    actual={"project_id":"project","scenario_prepared":installed}
+    if ready:
+        result=current_api.prepare_current(Api(),"project",gui=N(prepare=lambda:actual))
+        assert result is actual and result["scenario_prepared"] is installed
+    else:
+        class ApiWithPreparation(Api):
+            def call(self, method, path, body=None, **kwargs):
+                if path.endswith('/prepare'):
+                    calls.append((method,path))
+                    return actual
+                return super().call(method,path,body,**kwargs)
+        with pytest.raises(SampleTestError, match='SAMPLE_PREPARATION_INCOMPLETE'):
+            current_api.prepare_current(ApiWithPreparation(), 'project')
+        assert [entry for entry in calls if entry[0]=='POST'] == [('POST','/api/experience/official-sample/prepare')]
+        calls = [entry for entry in calls if entry[0]!='POST']
     assert all(method == "GET" for method, _ in calls)
 
 
@@ -460,7 +476,7 @@ def test_mcp_change_requires_visible_source_and_closed_manual_registration(tmp_p
         assert not gui.records
     else:
         gui.mcp_change(change)
-        assert any(item[0] == "wait" and item[1] == "登记来源：" + change["submitted_by"] for item in page.events)
+        assert any(item[0] == "wait" and item[1] == change["submitted_by"] and item[3] == ("最新一批修改",) for item in page.events)
         assert gui.records[-1]["change_id"] == "change"
     assert not [item for item in page.events if item[0] == "click"]
     assert client.calls == []

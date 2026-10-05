@@ -110,7 +110,7 @@
 
 .supplemental-checks strong {
   font-size: var(--font-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .supplemental-checks .anticon {
@@ -193,12 +193,11 @@
 }
 
 .supplemental-list>button[aria-pressed=true] {
-  background: var(--color-primary-light);
   border-radius: var(--radius-medium);
 }
 
 .supplemental-list strong {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .supplemental-list small {

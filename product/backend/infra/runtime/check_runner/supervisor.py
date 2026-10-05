@@ -8,7 +8,7 @@ from pathlib import Path
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState
-from product.backend.infra.artifacts.checks.check_packages import check_final_directory, read_check_bytes, reject_check_links, validate_check_package
+from product.backend.infra.artifacts.checks.check_packages import check_final_directory, reject_check_links, validate_check_package
 from product.backend.infra.artifacts.checks.check_publication import CheckPublisher
 from product.backend.infra.artifacts.checks.check_validation import validate_check_inputs
 from product.backend.infra.execution.web.check_runtime import check_secret_names

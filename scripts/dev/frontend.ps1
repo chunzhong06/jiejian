@@ -26,6 +26,7 @@ function Resolve-DevelopmentNode($Toolchain, [bool]$Exact) {
             $nodeArchive = Join-Path $downloadRoot ("node-v{0}-win-{1}.zip" -f $nodeVersion, $key)
             $pnpmArchive = Join-Path $downloadRoot ("pnpm-{0}.tgz" -f $pnpmVersion)
             New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
+            Register-StartupTemporary $downloadRoot
             try {
                 Invoke-WebRequest -Uri ("{0}node-v{1}-win-{2}.zip" -f [string]$Toolchain.node.source, $nodeVersion, $key) -OutFile $nodeArchive -UseBasicParsing
                 if ((Get-FileDigest $nodeArchive) -ne $expectedNodeHash) { Fail-Development "frontend" "Node.js 发布构建归档校验失败" "检查 product/config/toolchain.json 与官方下载源" }
@@ -225,6 +226,7 @@ function Publish-FrontendBuild([string]$Workspace, [string]$BuildDigest, [string
     $temporary = Join-Path $script:DevelopmentRoot ("temp\frontend-build-{0}" -f [guid]::NewGuid().ToString("N"))
     $temporaryDist = Join-Path $temporary "dist"
     New-Item -ItemType Directory -Path $temporary -Force | Out-Null
+    Register-StartupTemporary $temporary
     try {
         Invoke-FrontendBuild $Workspace $temporaryDist
         if (-not (Test-Path -LiteralPath (Join-Path $temporaryDist "index.html") -PathType Leaf)) { Fail-Development "frontend-build" "前端构建没有生成共享 build 的 index.html" "检查 TypeScript/Vite 输出" }

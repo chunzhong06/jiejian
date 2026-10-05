@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import JiejianError
-from product.backend.api.errors import jiejian_error_handler, request_validation_error_handler, validation_error_handler
+from product.backend.api.errors import jiejian_error_handler, validation_error_handler
 from product.backend.api.routers.system.llm import build_llm_router
 from product.backend.api.routers.applications.onboarding import build_onboarding_router
 from product.backend.api.routers.applications.projects import build_projects_router
@@ -116,7 +116,7 @@ def create_app(
 
     app.add_exception_handler(JiejianError, jiejian_error_handler)
     app.add_exception_handler(
-        RequestValidationError, request_validation_error_handler
+        RequestValidationError, validation_error_handler
     )
     app.add_exception_handler(ValidationError, validation_error_handler)
 

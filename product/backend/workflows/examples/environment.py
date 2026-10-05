@@ -19,7 +19,7 @@ from product.backend.infra.samples import OfficialSampleManager, OfficialSampleR
 from product.backend.infra.secrets import credential_ref
 from product.backend.workflows.business_boundaries.proposals.official_recipe import official_boundary_recipe
 from product.backend.workflows.checks.registry import CheckRuntimeRegistration, RegisteredCheckIdentity, RegisteredCheckProof, RegisteredAuxiliarySource
-from product.backend.workflows.examples.materials import EXPORT_ACTION_KEY, VIEW_ACTION_KEY, SAMPLE_RESOURCE_ID, SAMPLE_PROJECT_ID
+from product.backend.workflows.examples.materials import EXPORT_ACTION_KEY, VIEW_ACTION_KEY, SAMPLE_RESOURCE_ID
 from product.backend.workflows.checks.local_observer_wiring import load_local_observer_wiring
 from product.backend.workflows.test_identities import PreparedLoginState, TestIdentityStatus
 from product.protocols.checks.check_runtime import CheckIdentityVerification, CheckAuxiliarySource
@@ -378,7 +378,7 @@ class OfficialSampleExperience:
                     self._record_preset_delivery(current, version, reference, created)
                 return self.status()
             if current.preset_source_fingerprint is not None and self._understanding.inspect_source_fingerprint(current.project_id) != current.preset_source_fingerprint:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已有外部修改，预设变更不会覆盖它；请通过普通 Agent 协作登记和验证")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已有外部修改，预设变更不会覆盖它；请在“修改与验证”中登记和验证")
             if version is OfficialScenarioVersion.BASELINE:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"起始实现只能通过启动全新示例建立，不能覆盖当前开发历史")
             if version is OfficialScenarioVersion.VULNERABLE:

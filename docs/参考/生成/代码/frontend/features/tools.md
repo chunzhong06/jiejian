@@ -4,14 +4,6 @@
 
 <!-- GENERATED:START -->
 
-### `product/frontend/src/features/tools/AgentPageHeader.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/tools/AgentPageHeader.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `AgentPageHeader`
-
-静态import / dot-source：`../../shared/ui/Editorial`、`antd`
-
 ### `product/frontend/src/features/tools/clientGuides.ts`
 
 [打开源码](../../../../../../product/frontend/src/features/tools/clientGuides.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -39,7 +31,7 @@
 
 - `MCPAccessCard`
 
-静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/ui/StatusBadge`、`./clientGuides`、`./connections.css`、`antd`、`react`
+静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./clientGuides`、`./connections.css`、`antd`、`react`
 
 ### `product/frontend/src/features/tools/ToolsPage.test.tsx`
 
@@ -54,6 +46,6 @@
 
 - `ToolsPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`./AgentPageHeader`、`./MCPAccessCard`
+静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`./MCPAccessCard`
 
 <!-- GENERATED:END -->

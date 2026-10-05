@@ -12,14 +12,28 @@
 
 静态import / dot-source：`../../api/applications/projects`、`@ant-design/icons`、`antd`
 
+### `product/frontend/src/app/navigation/EntrySearch.test.tsx`
+
+[打开源码](../../../../../product/frontend/src/app/navigation/EntrySearch.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`./EntrySearch`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/app/navigation/EntrySearch.tsx`
+
+[打开源码](../../../../../product/frontend/src/app/navigation/EntrySearch.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `EntrySearch`
+
+静态import / dot-source：`@ant-design/icons`、`antd`、`react`
+
 ### `product/frontend/src/app/navigation/ModuleNavigation.tsx`
 
 [打开源码](../../../../../product/frontend/src/app/navigation/ModuleNavigation.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
-- `DesktopModuleNavigation`
-- `MobileModuleNavigation`
+- `ModuleNavigation`
 
-静态import / dot-source：`../../api/system/system`、`../../api/workspace`、`../shell/AppHeader`、`./routes`、`@ant-design/icons`、`antd`
+静态import / dot-source：`../../api/workspace`、`./routes`、`react`
 
 ### `product/frontend/src/app/navigation/ProductShellComponents.test.tsx`
 
@@ -72,7 +86,12 @@
 - `removeExpiredNotifications`
 - `useNotificationExpiry`
 
-静态import / dot-source：`../../api/http`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/http`、`../../shared/ui/MotionPresenceList`、`@ant-design/icons`、`antd`、`react`
+
+### `product/frontend/src/app/notifications/notifications.css`
+
+[打开源码](../../../../../product/frontend/src/app/notifications/notifications.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
 
 ### `product/frontend/src/app/shell/AppHeader.tsx`
 
@@ -83,7 +102,7 @@
 - `mcpStatusLabel`
 - `systemStatusLabel`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/assistance/llm`、`../../api/system/mcp`、`../../api/system/system`、`../navigation/ApplicationSwitcher`、`../theme/ThemeContext`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/assistance/llm`、`../../api/system/mcp`、`../../api/system/system`、`../navigation/ApplicationSwitcher`、`../navigation/EntrySearch`、`../theme/ThemeContext`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/app/shell/ControlShell.test.tsx`
 
@@ -122,6 +141,11 @@
 - `RetainedWorkPages`
 
 静态import / dot-source：`../../shared/runtime/visibility`、`react`
+
+### `product/frontend/src/app/shell/shell.css`
+
+[打开源码](../../../../../product/frontend/src/app/shell/shell.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
 
 ### `product/frontend/src/app/state/useCheckActivity.test.ts`
 
@@ -183,10 +207,12 @@
 
 [打开源码](../../../../../product/frontend/src/app/theme/ThemeContext.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
+- `DensityMode`
+- `MotionMode`
 - `ProductThemeProvider`
 - `ThemeMode`
 - `useThemeMode`
 
-静态import / dot-source：`../../shared/ui/tokens`、`./theme`、`antd`、`antd/locale/zh_CN`、`react`
+静态import / dot-source：`../../shared/ui/tokens`、`../../shared/ui/useControlMotion`、`../../shared/ui/useProductMotion`、`./theme`、`antd`、`antd/locale/zh_CN`、`react`
 
 <!-- GENERATED:END -->

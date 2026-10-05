@@ -23,3 +23,26 @@ def test_features_and_shared_do_not_import_application_shell() -> None:
                 if target.is_relative_to(SOURCE / "app"):
                     violations.append((path.relative_to(ROOT).as_posix(), imported))
     assert violations == []
+
+
+def test_feature_components_are_reachable_from_product_entry() -> None:
+    """组件自己的测试不算产品接线；退役页面应连同专属样式和测试一起收口。"""
+    modules = {path.resolve() for path in SOURCE.rglob("*")
+               if path.suffix in {".ts", ".tsx"} and ".test." not in path.name}
+    reachable = set()
+    pending = [(SOURCE / "main.tsx").resolve()]
+    while pending:
+        path = pending.pop()
+        if path in reachable:
+            continue
+        reachable.add(path)
+        for imported in MODULE_SPECIFIER.findall(path.read_text(encoding="utf-8")):
+            if not imported.startswith("."):
+                continue
+            target = (path.parent / imported).resolve()
+            choices = [target, Path(str(target) + ".ts"), Path(str(target) + ".tsx"),
+                       target / "index.ts", target / "index.tsx"]
+            pending.extend(candidate for candidate in choices if candidate in modules)
+    components = {path.resolve() for path in (SOURCE / "features").rglob("*.tsx")
+                  if ".test." not in path.name}
+    assert sorted(path.relative_to(ROOT).as_posix() for path in components - reachable) == []

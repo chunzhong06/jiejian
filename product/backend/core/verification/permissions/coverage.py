@@ -25,18 +25,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from .contract import PermissionContract, permission_model_sha256
-from .models import (
-    BatchAuthorizationMode,
-    BatchPermissionRule,
-    BatchResourceExpectation,
-    CoverageDimension,
-    PermissionContext,
-    PermissionExpectation,
-    PermissionModel,
-    PermissionRule,
-    RelationFact,
-    RelationType,
-)
+from .models import BatchAuthorizationMode, BatchPermissionRule, CoverageDimension, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact
 
 
 class CoverageGapCode(StrEnum):

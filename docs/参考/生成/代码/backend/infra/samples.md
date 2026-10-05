@@ -39,6 +39,6 @@
 - `OfficialSampleManager.cleanup_exited_instance(self, instance_id, identity) -> None`
 - `OfficialSampleManager.stop(self, experience_id) -> None`
 
-静态import / dot-source：`__future__`、`ast`、`collections.abc`、`dataclasses`、`httpx`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.controlled.artifact`、`product.backend.infra.runtime.process.controlled.correspondence`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.runtime.runtime_identity`、`re`、`secrets`、`shutil`、`subprocess`、`threading`、`time`、`typing`、`urllib.parse`、`uuid`、`作用域内：product.backend.infra.runtime.process.tree`
+静态import / dot-source：`__future__`、`ast`、`collections.abc`、`dataclasses`、`httpx`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.controlled.artifact`、`product.backend.infra.runtime.process.controlled.correspondence`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.runtime.runtime_identity`、`re`、`secrets`、`shutil`、`subprocess`、`threading`、`time`、`typing`、`urllib.parse`、`uuid`、`作用域内：product.backend.infra.runtime.generated_files`、`作用域内：product.backend.infra.runtime.process.tree`
 
 <!-- GENERATED:END -->

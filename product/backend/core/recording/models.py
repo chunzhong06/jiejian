@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN

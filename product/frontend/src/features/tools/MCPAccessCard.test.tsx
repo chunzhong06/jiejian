@@ -112,8 +112,8 @@ describe('MCPAccessCard', () => {
     expect(await screen.findByRole('heading', { name: 'Codex 的连接已验证' })).toBeInTheDocument()
     expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
     expect(screen.getByText('AI 工具这次可以做什么')).toBeInTheDocument()
-    expect(screen.getByText('2. 准备可检验的规则')).toBeInTheDocument()
-    expect(screen.getByText('Agent 补缺口，你确认必要范围')).toBeInTheDocument()
+    expect(screen.getByRole('button', {name:'调整这次允许范围'})).toBeInTheDocument()
+    expect(screen.getByText('AI 工具不能批准权限规则，也不能改变检查结论。')).toBeInTheDocument()
     expect(screen.queryByText('三步完成连接')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '复制使用说明' }))

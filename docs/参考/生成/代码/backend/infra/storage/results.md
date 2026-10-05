@@ -32,7 +32,7 @@
 - `EvidenceIndexRepository.add(self, record) -> None`
 - `EvidenceIndexRepository.list_for_run(self, run_id) -> tuple[EvidenceIndexRecord, ...]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`re`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`time`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.identifiers`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`
 
 ### `product/backend/infra/storage/results/finalizations.py`
 
@@ -46,11 +46,10 @@
 - `class RunFinalizationRepository`
 - `RunFinalizationRepository.add(self, record) -> None`
 - `RunFinalizationRepository.get(self, run_id) -> RunFinalizationRecord &#124; None`
-- `RunFinalizationRepository.list_for_runs(self, run_ids) -> tuple[RunFinalizationRecord, ...]`
 - `RunFinalizationRepository.save(self, record) -> None`
 - `RunFinalizationRepository.ensure_initial(self, run_id, publication_sha256, now_us) -> RunFinalizationRecord`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`
 
 ### `product/backend/infra/storage/results/findings.py`
 

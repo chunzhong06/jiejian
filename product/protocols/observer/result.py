@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .config import (
     CausalityStatus,

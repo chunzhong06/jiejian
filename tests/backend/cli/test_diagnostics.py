@@ -299,6 +299,8 @@ def test_maintenance_cli_uses_application_service_and_preserves_data(tmp_path: P
     cached.parent.mkdir(parents=True)
     data.write_text("keep", encoding="utf-8")
     cached.write_bytes(b"cache")
+    from product.backend.infra.runtime.generated_files import register_generated_file
+    register_generated_file(var_dir, cached, "assistant-cache")
 
     cleaned = CliRunner().invoke(
         app, ["--var-dir", str(var_dir), "system", "clean", "assistant", "--confirm"]

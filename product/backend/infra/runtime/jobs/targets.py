@@ -174,10 +174,6 @@ class RunJobTargetHandler:
         return run, None
 
 
-def default_run_job_targets() -> JobTargetRegistry:
-    registry = JobTargetRegistry()
-    registry.register(JobTargetType.RUN, RunJobTargetHandler())
-    return registry
 
 
 def recording_job_targets() -> JobTargetRegistry:

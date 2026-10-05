@@ -56,13 +56,15 @@ class ChecksActions(GuiSession):
             if len(matches) != 1 or matches[0].get("status") != "READY_TO_VERIFY":
                 raise SampleTestError("GUI_REPAIR_NOT_READY")
             self._goto("/changes?" + urlencode({"repair_reference": matches[0]["contract"]["repair_fingerprint"]}))
-            self.page.get_by_role("button", name="复验原题", exact=True).click()
+            self.page.get_by_role("button", name="准备复验原题", exact=True).click()
             def exact_change(url):
                 route, _, query = urlsplit(str(url)).fragment.partition("?")
                 return route == "/tests" and parse_qs(query).get("change_id") == [change_id]
             self.page.wait_for_url(exact_change)
             if not exact_change(self.page.url):
                 raise SampleTestError("GUI_REPAIR_CHANGE_MISMATCH")
+            self.page.get_by_role("button", name="返回检查总览", exact=True).click()
+            self.page.wait_for_url(lambda url: exact_change(url) and "materials" not in parse_qs(urlsplit(str(url)).fragment.partition("?")[2]))
             self._mark("repair-via-changes")
         else:
             self._goto("/tests" + ("?" + urlencode({"change_id": change_id}) if change_id else ""))
@@ -80,7 +82,10 @@ class ChecksActions(GuiSession):
         from tests.acceptance.sample_test.harness.state import SampleTestError
         if event.endswith("-result"):
             self._goto("/tests?" + urlencode({"run_id": payload["run_id"]}))
-            self.page.get_by_role("heading", name=payload["story"]["judgement"], level=1, exact=True).wait_for()
+            if event == "fixed-result" and (payload["story"].get("repair_verification") or {}).get("status") != "VERIFIED":
+                raise SampleTestError("GUI_ORIGINAL_REPAIR_NOT_VERIFIED")
+            title = "原题复验通过" if event == "fixed-result" else payload["story"]["judgement"]
+            self.page.get_by_role("heading", name=title, level=1, exact=True).wait_for()
             if event == "problem-result":
                 self._decisive_evidence(payload)
                 self._execution_path(payload)
@@ -100,7 +105,7 @@ class ChecksActions(GuiSession):
                 raise SampleTestError("GUI_ORIGINAL_REPAIR_MISSING")
             self._goto("/tests?" + urlencode({"run_id": runs[-1]["run_id"]}))
             self.page.locator('[aria-label="权限验证工作区"]:visible').get_by_text("原题复验通过", exact=True).wait_for()
-            self.page.get_by_role("button", name="查看原问题", exact=True).click()
+            self.page.get_by_role("button", name="查看原检查结果", exact=True).click()
             self.page.get_by_role("heading", name=runs[0]["story"]["judgement"], level=1, exact=True).wait_for()
             self._breakpoint_evidence(runs[0])
             self.history_search(payload["project_id"], runs[0]["run_id"])
@@ -110,10 +115,12 @@ class ChecksActions(GuiSession):
             original = [item for item in repair["tasks"] if item["contract"]["source_run_id"] == runs[0]["run_id"]]
             if len(original) != 1:
                 raise SampleTestError("GUI_ORIGINAL_REPAIR_AMBIGUOUS")
+            if original[0]["status"] != "VERIFIED":
+                raise SampleTestError("GUI_ORIGINAL_REPAIR_NOT_VERIFIED")
             self._goto("/changes?" + urlencode({"repair_reference": original[0]["contract"]["repair_fingerprint"]}))
-            self.page.get_by_role("heading", name="修复依据", exact=True).wait_for()
-            # 已离开的结果页仍保留在 DOM；只核对当前可见的修复工作面，不能命中隐藏旧结果。
-            self.page.locator('[aria-label="修复依据"]:visible').get_by_text("原题复验通过", exact=True).wait_for()
+            self.page.get_by_role("heading", name="修复与复验", exact=True).wait_for()
+            # 只核对可见工作面中的结论标签；装饰符号不是业务文案的一部分。
+            self.page.locator('[aria-label="修复依据"]:visible .product-status[data-kind="verdict"][data-tone="success"]').filter(has_text="原题复验通过").wait_for()
             self.capture("repair")
         else:
             raise SampleTestError("GUI_CHECKPOINT_UNKNOWN")

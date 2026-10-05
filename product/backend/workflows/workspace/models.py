@@ -19,7 +19,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.boundaries.proposals import PROPOSAL_ID_PATTERN
 
-from product.backend.core.boundaries.entities import BusinessEffectDefinition, BusinessActionRevision, BusinessActorRevision
+from product.backend.core.boundaries.entities import BusinessEffectDefinition
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.core.boundaries.permissions import PermissionIntentRevision

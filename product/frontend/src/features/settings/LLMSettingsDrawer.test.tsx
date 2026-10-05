@@ -46,7 +46,7 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.queryByLabelText('推理强度')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前账号可用模型' })).not.toHaveClass('ant-btn-primary')
     expect(document.querySelector('.llm-settings-fields-pair')).not.toBeInTheDocument()
-    expect(document.querySelectorAll('.llm-settings-section .ant-btn-primary')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: '保存并检查连接' })).toHaveLength(1)
     expect(screen.queryByText('AI 工具连接（MCP）')).not.toBeInTheDocument()
   })
 

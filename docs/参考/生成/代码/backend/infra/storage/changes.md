@@ -72,13 +72,9 @@
 - `SourceChangeRepository.add_snapshot(self, snapshot) -> None`
 - `SourceChangeRepository.snapshot_for_fingerprint(self, project_id, fingerprint) -> SourceRevisionSnapshot &#124; None`
 - `SourceChangeRepository.snapshot(self, snapshot_id) -> SourceRevisionSnapshot &#124; None`
-- `SourceChangeRepository.add_change(self, manifest, change_set, assessment) -> None`
 - `SourceChangeRepository.manifest(self, change_id) -> ChangeManifest &#124; None`
 - `SourceChangeRepository.change_set(self, change_id) -> SourceChangeSet &#124; None`
 - `SourceChangeRepository.assessment(self, change_id) -> ChangeImpactAssessment &#124; None`
-- `SourceChangeRepository.latest_assessment(self, project_id) -> ChangeImpactAssessment &#124; None`
-- `SourceChangeRepository.latest_manifest_for_repair(self, project_id, reference) -> ChangeManifest &#124; None`
-- `SourceChangeRepository.list_assessments(self, project_id, limit) -> tuple[ChangeImpactAssessment, ...]`
 
 静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.changes.models`、`product.backend.core.errors`、`product.backend.core.reports.repair`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`、`作用域内：product.backend.core.changes.models`
 

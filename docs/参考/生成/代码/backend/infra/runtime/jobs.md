@@ -37,7 +37,7 @@
 - `WorkerDispatcher.wait_recording(self, job_id, process, timeout_seconds) -> JobRecord`
 - `WorkerDispatcher.close_process(process, timeout) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`product.backend.infra.storage`、`product.protocols`、`pydantic`、`re`、`subprocess`、`sys`、`time`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`product.backend.infra.storage`、`product.protocols`、`pydantic`、`re`、`subprocess`、`sys`、`time`、`typing`、`作用域内：product.backend.infra.runtime.generated_files`
 
 ### `product/backend/infra/runtime/jobs/events.py`
 
@@ -141,7 +141,7 @@
 - `class RunReconciler`
 - `RunReconciler.reconcile(self, known_secrets) -> ReconciliationResult`
 
-静态import / dot-source：`__future__`、`collections.abc`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.paths`、`product.backend.infra.storage`、`pydantic`、`time`、`typing`、`uuid`
+静态import / dot-source：`__future__`、`collections.abc`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.paths`、`product.backend.infra.storage`、`pydantic`、`time`、`uuid`
 
 ### `product/backend/infra/runtime/jobs/recovery.py`
 
@@ -199,9 +199,8 @@
 - `ProofPreflightTargetHandler.load(self, work, job)`
 - `ProofPreflightTargetHandler.advance_after_claim(self, work, job, now_us)`
 - `ProofPreflightTargetHandler.finish(self, work, job, now_us, outcome)`
-- `proof_preflight_targets()`
 
-静态import / dot-source：`product.backend.core.errors`、`product.backend.infra.runtime.jobs.targets`、`product.protocols.preparation.proof_sources`
+静态import / dot-source：`product.backend.core.errors`、`product.protocols.preparation.proof_sources`
 
 ### `product/backend/infra/runtime/jobs/target_handlers/recording.py`
 
@@ -266,7 +265,6 @@
 - `RunJobTargetHandler.load(self, work, job) -> tuple[RunRecord &#124; None, RecordingRecord &#124; None]`
 - `RunJobTargetHandler.advance_after_claim(self, work, job, now_us) -> tuple[RunRecord &#124; None, RecordingRecord &#124; None]`
 - `RunJobTargetHandler.finish(self, work, job, now_us, outcome) -> tuple[RunRecord &#124; None, RecordingRecord &#124; None]`
-- `default_run_job_targets() -> JobTargetRegistry`
 - `recording_job_targets() -> JobTargetRegistry`
 - `class CheckJobTargetHandler`
 - `CheckJobTargetHandler.load(self, work, job)`

@@ -1,16 +1,16 @@
 /* 证明准备沿用编辑式骨架：低权重来源索引、唯一主任务、对齐的事实与状态；颜色复用全局语义token。 */
-.proof-toolbar,.proof-section-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-16); margin-bottom:var(--space-24); flex-wrap:wrap; }
-.proof-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--space-32); margin-top:var(--space-24); }
+
+.proof-toolbar,.proof-section-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-16); margin-bottom:0; flex-wrap:wrap; }
+.proof-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--space-24); margin-top:0; }
 .proof-index { min-width:0; border-right:1px solid var(--color-border); padding-right:var(--space-24); }
 .proof-index h2 { font-size:var(--font-body); display:flex; justify-content:space-between; }
-.proof-index h2 span { color:var(--color-secondary); font-weight:400; }
+.proof-index h2 span { color:var(--color-secondary); font-weight: var(--weight-regular); }
 .proof-index-item { display:grid; gap:var(--space-8); width:100%; text-align:left; background:transparent; color:var(--color-text); border:1px solid transparent; border-radius:var(--radius-small); padding:var(--space-16); cursor:pointer; margin-block:var(--space-8); }
 .proof-index-item span { color:var(--color-secondary); font-size:var(--font-secondary); }
-.proof-index-item[aria-current=true] { border-color:var(--color-primary); background:var(--color-primary-light); }
 .proof-index-item:disabled { cursor:default; }
 .proof-detail { min-width:0; display:flex; flex-direction:column; gap:var(--space-24); }
 .proof-focus { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-24); border-bottom:1px solid var(--color-border); padding-bottom:var(--space-24); }
-.proof-focus h2 { margin:var(--space-8) 0 var(--space-16); font-size:var(--font-section); }
+.proof-focus h2 { margin:var(--space-8) 0 var(--space-12); font-size:var(--font-section); }
 .proof-focus p { margin-block:var(--space-8); }
 .proof-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-24); margin:0; }
 .proof-facts dt,.proof-technical dt,.proof-confirm dt { color:var(--color-secondary); font-size:var(--font-secondary); margin-bottom:var(--space-8); }
@@ -28,7 +28,7 @@
 .proof-agent-return { display:flex; justify-content:space-between; align-items:center; gap:var(--space-24); flex-wrap:wrap; }
 .proof-agent-return p { color:var(--color-secondary); flex:1 1 260px; margin:0; }
 .proof-editor textarea { font-family:monospace; }
-.proof-confirm { margin-block:var(--space-24); }
+.proof-confirm { margin-block:0 var(--space-24); }
 .proof-confirm dl { display:grid; grid-template-columns:100px minmax(0,1fr); gap:var(--space-16); }
 @media(max-width:900px) { .proof-workspace { grid-template-columns:minmax(0,1fr); }.proof-index { border-right:0; border-bottom:1px solid var(--color-border); padding:0 0 var(--space-16); }.proof-focus { flex-wrap:wrap; } }
 @media(max-width:600px) { .proof-facts,.proof-technical dl { grid-template-columns:minmax(0,1fr); }.proof-checks li { padding:var(--space-16); gap:var(--space-12); }.proof-confirm dl { grid-template-columns:minmax(0,1fr); }.proof-confirm dt { margin:0; }.proof-index-item { min-height:44px; } }
@@ -37,9 +37,16 @@
 .rule-detail-proof,.rule-detail-results { margin-block:var(--space-32); }
 .rule-detail-proof h2,.rule-detail-results h2,.proof-checks h2 { font-size:var(--font-section); }
 @media(max-width:700px) { .rule-detail-axes { grid-template-columns:minmax(0,1fr); }.rule-detail-axes>div+div { border-top:1px solid var(--color-border); padding-top:var(--space-16); } }
-.proof-next-advice { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); padding: var(--space-24); margin-bottom: var(--space-24); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); }
+.proof-next-advice { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); padding: var(--space-24); margin-bottom:0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); }
 .proof-next-advice h2 { margin: var(--space-8) 0; font-size: var(--font-section); }
 .proof-next-advice p { margin-bottom: 0; color: var(--color-secondary); }
 .proof-next-advice .editorial-eyebrow { margin-top: 0; }
 .proof-next-advice .ant-btn { flex-shrink: 0; }
 @media(max-width:600px) { .proof-next-advice { align-items: start; flex-direction: column; padding: var(--space-16); } }
+
+/* 四项事实并列呈现，不把配置、授权或预检查成功写成采用与安全结论。 */
+.proof-stages { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); list-style:none; padding:var(--space-16); margin:0; gap:var(--space-16); border-radius:var(--radius-small); background:var(--color-surface-subtle); }
+.proof-stages li { min-width:0; }
+.proof-stages span { display:block; color:var(--color-secondary); font-size:var(--font-label); margin-bottom:var(--space-8); }
+.proof-stages strong { font-size:var(--font-secondary); font-weight:var(--weight-medium); }
+@media(max-width:700px) { .proof-stages { grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-20); } }

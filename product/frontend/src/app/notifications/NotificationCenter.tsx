@@ -1,9 +1,10 @@
 /* 全局通知：检查动态与错误队列共享浮层，消费结构化诊断，独立维护去重、过期和有限展示状态。 */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Alert, Button, Space, Typography } from 'antd'
 import { CloseOutlined } from '@ant-design/icons'
 import type { ApiError, ErrorDiagnosis } from '../../api/http'
+import { MotionPresenceList } from '../../shared/ui/MotionPresenceList'
 
 const FALLBACK_WINDOW_MS = 10_000
 const DEFAULT_DURATION_MS = 6_000
@@ -105,12 +106,12 @@ export function NotificationCenter({
   const overflow = Math.max(0, items.length - visible.length)
   return <aside className="notification-center" aria-label="全局通知" aria-live="polite" aria-relevant="additions">
     {resourceNotice}
-    {activity && <section className="check-activity-toast" aria-label="检查动态">
-      <div className="check-activity-toast-heading"><span>检查动态</span>{activity.onDismiss && <Button type="text" aria-label="关闭检查提示" icon={<CloseOutlined />} onClick={activity.onDismiss} />}</div>
-      <p>{activity.label}</p><div className="check-activity-toast-actions"><Button type="link" onClick={activity.onView}>{activity.actionLabel}</Button></div>
-    </section>}
+    <MotionPresenceList items={activity ? [{...activity,key:'check-activity'}] : []}>{item=><section className="check-activity-toast" aria-label="检查动态">
+      <div className="check-activity-toast-heading"><span>检查动态</span>{item.onDismiss && <Button type="text" aria-label="关闭检查提示" icon={<CloseOutlined />} onClick={item.onDismiss} />}</div>
+      <p>{item.label}</p><div className="check-activity-toast-actions"><Button type="link" onClick={item.onView}>{item.actionLabel}</Button></div>
+    </section>}</MotionPresenceList>
     <div className="notification-stack">
-      {visible.map((item) => <NotificationCard key={item.key} item={item} onDismiss={onDismiss} onNavigate={onNavigate} />)}
+      <MotionPresenceList items={visible}>{item=><NotificationCard item={item} onDismiss={onDismiss} onNavigate={onNavigate}/>}</MotionPresenceList>
     </div>
     {overflow > 0 && <Typography.Text className="notification-overflow">还有 {overflow} 条消息</Typography.Text>}
   </aside>

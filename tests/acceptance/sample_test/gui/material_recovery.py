@@ -46,7 +46,7 @@ def verify_material_reuse(gui, project_id):
     expect(page.get_by_role("button", name="查看证明要求与来源能力", exact=True)).to_be_focused()
     page.get_by_text("录制新的材料", exact=True).click()
     page.get_by_role("button", name="准备新的录制", exact=True).click()
-    page.get_by_role("heading", name="录制新的替换材料", exact=True).wait_for()
+    page.get_by_role("heading", name="演示一次业务操作", exact=True).wait_for()
     expect(page.get_by_role("button", name="打开浏览器并开始准备", exact=True)).to_be_enabled()
     gui.capture("material-recording-entry")
     page.get_by_role("button", name="返回检查准备", exact=True).click()
@@ -64,7 +64,7 @@ def verify_material_reuse(gui, project_id):
     stored = client.call("GET", f"/api/projects/{project_id}/preparation/changes/{command['operation_id']}")
     if stored != receipt or client.call("GET", f"/api/projects/{project_id}/preparation") != before:
         raise SampleTestError("MATERIAL_RECEIPT_OR_BINDING_DRIFT")
-    page.get_by_text("材料已保存并重新核对。已有检查与证据保持原样。", exact=True).wait_for()
+    page.get_by_text("材料已保存并重新核对。", exact=True).wait_for()
     page.get_by_role("button", name="返回材料", exact=True).click()
     table().wait_for()
     page.wait_for_function("document.activeElement?.hasAttribute('data-material-key')")

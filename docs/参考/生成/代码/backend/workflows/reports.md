@@ -47,7 +47,7 @@
 - `RegressionGate.get_gate_result(self, gate_result_id) -> dict[str, Any]`
 - `RegressionGate.latest_gate_result(self, baseline_id, run_id) -> dict[str, Any]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.behavior_differential`、`product.backend.core.verification.gating`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.results.gating`、`product.backend.workflows.reports.findings`、`product.backend.workflows.reports.published`、`product.protocols`、`time`、`typing`
+静态import / dot-source：`__future__`、`json`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.behavior_differential`、`product.backend.core.verification.gating`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.results.gating`、`product.backend.workflows.reports.findings`、`product.backend.workflows.reports.published`、`product.protocols`、`time`、`typing`
 
 ### `product/backend/workflows/reports/presentation/__init__.py`
 
@@ -69,7 +69,7 @@
 - `_BREAKPOINT_LABELS`
 - `_TRACE_KIND_LABELS`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.reports.repair`、`product.backend.core.verification.breakpoints`、`product.backend.core.verification.continuity`、`product.backend.core.verification.facts`、`product.backend.core.verification.trace`、`product.backend.workflows.reports.presentation.explanations`、`product.backend.workflows.reports.presentation.models`、`product.backend.workflows.reports.trace`、`product.protocols.observer`、`product.protocols.runner.execution_request`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.reports.repair`、`product.backend.core.verification.breakpoints`、`product.backend.core.verification.continuity`、`product.backend.core.verification.facts`、`product.backend.core.verification.trace`、`product.backend.workflows.reports.presentation.explanations`、`product.backend.workflows.reports.presentation.models`、`product.backend.workflows.reports.trace`、`product.protocols.observer`、`product.protocols.runner.execution_request`、`typing`
 
 ### `product/backend/workflows/reports/presentation/explanations.py`
 
@@ -147,7 +147,7 @@
 - `ReportBuilder.read_format(self, run_id, report_id, output_format) -> bytes`
 - `ReportBuilder.list(self, run_id) -> list[dict[str, str]]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`json`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.gating`、`product.backend.infra.artifacts.reports.report_reader`、`product.backend.infra.artifacts.reports.report_store`、`product.backend.infra.storage`、`product.backend.workflows.reports.published`、`product.protocols`、`product.protocols.report`、`typing`
+静态import / dot-source：`__future__`、`json`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.gating`、`product.backend.infra.artifacts.reports.report_reader`、`product.backend.infra.artifacts.reports.report_store`、`product.backend.infra.storage`、`product.backend.workflows.reports.published`、`product.protocols`、`product.protocols.report`、`typing`
 
 ### `product/backend/workflows/reports/trace.py`
 

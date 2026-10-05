@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from sqlalchemy import event
 
+from product.backend.core.applications.models import CandidateDecision
 from product.backend.core.errors import JiejianError
 from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
@@ -82,6 +83,34 @@ def test_source_drift_inside_submit_checkpoint_leaves_no_check_job_or_assets(tmp
         assert caught.value.code == "STATE_PRECONDITION"
         with core.uow_factory() as work:
             assert work.runs.list_for_project(harness.project_id) == ()
+        assert list(RuntimePaths(core.var_dir).jobs.glob("*/config-*.json")) == []
+    finally:
+        harness.close()
+
+
+def test_candidate_rejection_blocks_prepared_check_without_rewriting_permissions(tmp_path):
+    """通过真实候选操作核验读取和提交链，避免空刷新钩子掩盖来源失效。"""
+    harness = ready_check_harness(tmp_path)
+    try:
+        core, project_id = harness.core, harness.project_id
+        preview = core.checks.preview(project_id)
+        assert preview.can_execute
+        before = core.business_boundaries.view(project_id)
+        understanding = core.application_understanding.get(project_id)
+        core.application_understanding.decide_action(
+            project_id, understanding.action_candidates[0].candidate_id,
+            revision=understanding.revision, decision=CandidateDecision.REJECTED,
+        )
+        assert not core.checks.preview(project_id).can_execute
+        with pytest.raises(JiejianError) as caught:
+            core.checks.submit(project_id, expected_plan_fingerprint=preview.plan_fingerprint,
+                               idempotency_key="rejected-candidate")
+        assert caught.value.code == "STATE_PRECONDITION"
+        after = core.business_boundaries.view(project_id)
+        assert after.permission_intents == before.permission_intents
+        assert after.policy_epoch == before.policy_epoch
+        with core.uow_factory() as work:
+            assert work.runs.list_for_project(project_id) == ()
         assert list(RuntimePaths(core.var_dir).jobs.glob("*/config-*.json")) == []
     finally:
         harness.close()

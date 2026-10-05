@@ -27,6 +27,22 @@ from typing import TextIO
 
 from product.backend.core.redaction import redact_known_secrets
 from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.infra.runtime.generated_files import register_generated_file
+
+
+class OwnedRotatingFileHandler(RotatingFileHandler):
+    """轮换产生的历史文件由日志写入者登记，清理器无需猜测名称。"""
+    def __init__(self, var_dir: Path, filename: Path, **kwargs):
+        self.var_dir = var_dir
+        super().__init__(filename, **kwargs)
+        register_generated_file(var_dir, filename, 'app-log')
+
+    def doRollover(self):
+        super().doRollover()
+        for index in range(self.backupCount+1):
+            path=Path(self.baseFilename + (f'.{index}' if index else ''))
+            if path.is_file():
+                register_generated_file(self.var_dir,path,'app-log')
 
 
 class JsonFormatter(stdlib_logging.Formatter):
@@ -89,8 +105,8 @@ def configure_logging(
     if var_dir is not None:
         log_path = RuntimePaths(Path(var_dir)).app_logs / "jiejian.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(
-            log_path,
+        file_handler = OwnedRotatingFileHandler(
+            Path(var_dir), log_path,
             maxBytes=10 * 1024 * 1024,
             backupCount=5,
             encoding="utf-8",

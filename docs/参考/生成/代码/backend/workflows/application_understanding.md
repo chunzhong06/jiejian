@@ -55,7 +55,7 @@
 - `class SourceAnalysisLimits`
 - `class ApplicationAnalysisResult`
 
-静态import / dot-source：`__future__`、`ast`、`collections.abc`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.applications.models`、`product.backend.core.changes.models`、`product.backend.core.errors`、`product.backend.core.http_routes`、`product.backend.workflows.onboarding.discovery`、`pydantic`、`re`、`yaml`
+静态import / dot-source：`__future__`、`json`、`product.backend.core.applications.models`、`product.backend.core.changes.models`、`pydantic`、`re`、`yaml`
 
 ### `product/backend/workflows/application_understanding/analysis/openapi.py`
 
@@ -63,7 +63,7 @@
 
 - `class OpenApiAnalysisMixin`
 
-静态import / dot-source：`.models`、`__future__`、`collections.abc`、`json`、`product.backend.core.applications.models`、`product.backend.core.http_routes`、`product.backend.workflows.onboarding.discovery`、`yaml`
+静态import / dot-source：`.models`、`__future__`、`collections.abc`、`json`、`product.backend.core.applications.models`、`product.backend.core.http_routes`、`yaml`
 
 ### `product/backend/workflows/application_understanding/analysis/python.py`
 
@@ -103,7 +103,6 @@
 
 - `class ApplicationConnectionView`
 - `class ApplicationUnderstandingService`
-- `ApplicationUnderstandingService.set_permission_binding_refresher(self, refresher) -> None`
 - `ApplicationUnderstandingService.connect(self, source_root, project_name) -> ApplicationConnectionView`
 - `ApplicationUnderstandingService.get(self, project_id) -> ApplicationUnderstanding`
 - `ApplicationUnderstandingService.discover_endpoints(self, project_id) -> EndpointDiscoveryResult`

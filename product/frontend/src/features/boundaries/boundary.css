@@ -72,13 +72,6 @@
   }
 }
 
-.rule-effect-note {
-  display: block;
-  margin-top: var(--space-8);
-  font-size: var(--font-body);
-  color: var(--color-secondary);
-}
-
 .sentence-field {
   display: grid;
   gap: var(--space-8);
@@ -106,3 +99,12 @@
   min-width: 0;
   max-width: 100%;
 }
+/* 权限版本来自当前只读投影，候选不占据正式规则之前的大卡片。 */
+.boundary-current-summary { display:flex;justify-content:space-between;align-items:center;gap:var(--space-32);padding:var(--space-24) 0;border-block:1px solid var(--color-border); }
+.boundary-current-summary h2 { font-size:var(--font-section);margin:var(--space-8) 0; }
+.boundary-current-summary p { margin:0;color:var(--color-secondary);font-size:var(--font-secondary); }
+.boundary-current-summary dl { display:flex;gap:var(--space-40);margin:0; }
+.boundary-current-summary dt { color:var(--color-secondary);font-size:var(--font-label);white-space:nowrap; }
+.boundary-current-summary dd { margin:var(--space-8) 0 0;font-size:var(--font-section); }
+.boundary-current-summary small { font-size:var(--font-label);color:var(--color-secondary); }
+@media(max-width:600px) { .boundary-current-summary { flex-wrap:wrap;gap:var(--space-20); }.boundary-current-summary dl { width:100%; } }

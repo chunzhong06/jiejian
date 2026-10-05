@@ -26,6 +26,8 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
     </header>
     {unavailable&&<Alert type="warning" showIcon message="无法恢复提案的原始基线" description="暂不提供批准入口。缺失的历史版本不会被当前值或空值替代。"/>}
     {review?.current_state_changed&&!decision&&<Alert type="warning" showIcon message="当前正式状态已经变化" description="下方仍保留提案引用的原始版本，请返回修改并重新形成提案。"/>}
+    <div className="permission-review-workspace">
+    <div className="permission-review-document work-surface">
     {summary&&<p className="permission-review-summary">新增 {summary.new_actor_count} 个角色、{summary.new_action_count} 个动作。<span>{summary.permission_updates.length} 项权限更新，{summary.permission_carry_forwards.length} 项权限沿用。</span></p>}
     <section className="permission-review-rules" aria-label="本次权限变化"><header><h3>权限规则</h3><p>先核对操作人、资源归属和需要保护的结果。</p></header>
       {permissions.map(item=><ReviewChange key={item.item_id} item={item}/>)}
@@ -34,8 +36,12 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
     {!!definitions.length&&<details className="permission-review-support"><summary>业务定义变更 · {definitions.length} 项<span>角色与动作的含义、资源和结果定义</span></summary><div className="permission-definition-grid">{definitions.map(item=><ReviewChange key={item.item_id} item={item}/>)}</div></details>}
     {!!retained.length&&<details className="permission-review-support"><summary>沿用的 {retained.length} 项业务定义与权限<span>本次没有修改，确认范围中继续保留</span></summary><div className="permission-definition-grid">{retained.map(item=><ReviewChange key={item.item_id} item={item}/>)}</div></details>}
     <details className="permission-review-support"><summary>拟采用的当前定位与来源<span>源码关联及提案来源</span></summary><div className="permission-review-support-body"><p>{proposal.provenance}</p>{proposal.proposed_actors.filter(item=>item.source_candidate_ids?.length).map(item=><p key={item.item_id}>{item.display_name} · 使用本提案选定的角色来源</p>)}{proposal.proposed_actions.filter(item=>item.source_candidate_ids?.length).map(item=><p key={item.item_id}>{item.display_name} · 使用本提案选定的动作来源</p>)}<p className="editorial-muted">旧定位没有独立历史记录时，不构造旧定位对照。</p></div></details>
+    </div>
+    <aside className="permission-review-aside work-aside" aria-label="批准前核对">
+    <h3>确认这份提案</h3><p>核对正文中的权限变化与沿用要求，再决定是否批准。</p>
     {!!proposal.unresolved_questions?.length&&<Alert type="warning" message="仍有未解决问题" description={proposal.unresolved_questions.join('；')}/>}
-    {decision?<Alert type="info" message={decision.decision==='APPROVED'?'这份提案已确认':'这份提案已放弃'} description={decision.reason}/>:<footer className="permission-review-decision"><div><Checkbox disabled={busy} checked={checked} onChange={e=>setChecked(e.target.checked)}>我已核对本次变更和沿用的业务要求</Checkbox><p>确认后继续准备检查；权限获批不代表检查通过。</p></div><div className="boundary-review-actions"><Button type="text" disabled={busy} onClick={()=>onReject('用户明确放弃这组业务边界提案')}>放弃这组提案</Button><Button disabled={busy} onClick={onReturnToEdit}>返回修改</Button><Button type="primary" loading={busy} disabled={busy||unavailable||review?.current_state_changed||!checked||Boolean(proposal.unresolved_questions?.length)} onClick={()=>onApprove('用户已勾选确认：已核对本次变更和沿用的业务要求')}>确认这组业务边界</Button></div></footer>}
+    {decision?<Alert type="info" message={decision.decision==='APPROVED'?'这份提案已确认':'这份提案已放弃'} description={decision.reason}/>:<footer className="permission-review-decision"><div className="permission-review-acknowledgement"><Checkbox disabled={busy} checked={checked} onChange={e=>setChecked(e.target.checked)}>我已核对本次变更和沿用的业务要求</Checkbox><p>批准后进入材料准备，检查结果另行形成。</p></div><div className="boundary-review-actions"><Button disabled={busy} onClick={onReturnToEdit}>返回修改</Button><Button type="primary" loading={busy} disabled={busy||unavailable||review?.current_state_changed||!checked||Boolean(proposal.unresolved_questions?.length)} onClick={()=>onApprove('用户已勾选确认：已核对本次变更和沿用的业务要求')}>确认这组业务边界</Button></div><div className="permission-review-withdraw"><Button type="text" danger disabled={busy} onClick={()=>onReject('用户明确放弃这组业务边界提案')}>放弃这组提案</Button><span>仅对当前提案生效</span></div></footer>}
+    </aside></div>
   </section>
 }
 function ReviewChange({item}:{item:ReviewItem}) {

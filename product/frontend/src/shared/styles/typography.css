@@ -1,0 +1,23 @@
+/* MiSans 原始变量字体统一中英文；加载失败仍保留可读的系统字体。 */
+@font-face {
+  font-family: MiSans;
+  src: url('../../assets/fonts/misans/MiSansVF.ttf') format('truetype');
+  font-weight: 150 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+[data-product=jiejian] {
+  font-synthesis: none;
+  font-weight: var(--weight-regular);
+}
+[data-product=jiejian] :is(.ant-typography,.ant-form,.ant-input,.ant-select,.ant-descriptions,.ant-table,.ant-alert,.ant-modal,.ant-drawer,.ant-dropdown) {
+  font-weight: var(--weight-regular);
+}
+[data-product=jiejian] :is(strong,b,h1,h2,h3,h4,h5,h6,.ant-typography strong) {
+  font-weight: var(--weight-strong);
+}
+[data-product=jiejian] :is(.ant-btn,.ant-form-item-label>label,.ant-tabs-tab,.ant-dropdown-menu-item) {
+  font-weight: var(--weight-medium);
+}
+[data-product=jiejian] :is(h1,h2,h3,h4,h5,h6) { overflow-wrap: anywhere; }

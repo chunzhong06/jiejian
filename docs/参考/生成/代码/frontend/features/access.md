@@ -37,7 +37,7 @@
 
 - `ApplicationSetup`
 
-静态import / dot-source：`../../api/applications/onboarding`、`../../api/applications/projects`、`../../api/http`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`../assistant/AssistantPanel`、`./CandidateReview`、`./ConnectionSupport`、`./ControlledRuntimePanel`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/onboarding`、`../../api/applications/projects`、`../../api/http`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./CandidateReview`、`./ConnectionSupport`、`./ControlledRuntimePanel`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/features/access/CandidateReview.test.tsx`
 

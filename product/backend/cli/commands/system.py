@@ -19,6 +19,11 @@ from product.backend.cli.presentation import emit_command, emit_doctor, fail
 logger = logging.getLogger("jiejian.cli.system")
 
 
+class GuiBrowser(StrEnum):
+    MANAGED = "managed"
+    SYSTEM = "system"
+
+
 class ServeReadinessStatus(StrEnum):
     """Python 端持有的服务就绪与浏览器打开事实。"""
 
@@ -112,6 +117,7 @@ def serve_command(
     host: str = typer.Option("127.0.0.1", "--host", hidden=True),
     port: int = typer.Option(8765, "--port", min=1, max=65535, hidden=True),
     open_browser: bool = typer.Option(False, "--open/--no-open", hidden=True),
+    browser: GuiBrowser = typer.Option(GuiBrowser.MANAGED, "--browser", help="界面浏览器：managed 使用专用 Chromium，system 使用系统浏览器"),
     frontend_dir: Path | None = typer.Option(
         None, "--frontend-dir", hidden=True
     ),
@@ -125,7 +131,8 @@ def serve_command(
 
     import ipaddress
     import threading
-    import webbrowser
+    from product.backend.cli.gui_browser import GuiBrowserSession, open_gui_browser
+    from product.backend.cli.gui_console import run_gui_console
 
     import uvicorn
 
@@ -171,13 +178,19 @@ def serve_command(
             server_holder["server"] = server
             ready_thread = None
             stopped_event = threading.Event()
+            gui_session = GuiBrowserSession()
             if open_browser:
+                gui_url = f"http://127.0.0.1:{port}/"
+
+                def reopen_gui() -> bool:
+                    return open_gui_browser(gui_url, settings.var_dir, session=gui_session, system_browser=browser == GuiBrowser.SYSTEM)
+
                 def open_when_ready() -> None:
                     status = _wait_for_ready(
                         server,
                         host,
                         port,
-                        open_browser=webbrowser.open,
+                        open_browser=lambda _url: reopen_gui(),
                         status_callback=lambda value: print(
                             f"__JIEJIAN_SERVE_STATUS__:{value.value}",
                             flush=True,
@@ -185,6 +198,13 @@ def serve_command(
                         stopped_event=stopped_event,
                     )
                     print(f"__JIEJIAN_SERVE_STATUS__:{status.value}", flush=True)
+                    if status in {ServeReadinessStatus.READY_BROWSER_OPENED, ServeReadinessStatus.READY_BROWSER_OPEN_FAILED}:
+                        run_gui_console(
+                            open_browser=reopen_gui,
+                            stopped=stopped_event,
+                            is_stopping=lambda: server.should_exit,
+                            emit=lambda value: print(f"__JIEJIAN_GUI_STATUS__:{value}", flush=True),
+                        )
 
                 ready_thread = threading.Thread(
                     target=open_when_ready,
@@ -197,6 +217,7 @@ def serve_command(
                 stopped_event.set()
                 if ready_thread is not None:
                     ready_thread.join(timeout=1.0)
+                gui_session.close()
         finally:
             if previous_lock_path is None:
                 os.environ.pop("JIEJIAN_SERVE_LOCK_PATH", None)

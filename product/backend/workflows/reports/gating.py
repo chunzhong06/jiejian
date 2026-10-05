@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
 from typing import Any
 
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle
@@ -30,7 +29,7 @@ from product.backend.core.verification.behavior_differential import (
 from product.backend.core.verification.permissions import permission_model_sha256
 from product.protocols import ObserverOutcomeStatus, RunnerResult
 from product.backend.infra.storage.results.gating import GateResultRecord, RegressionBaselineRecord
-from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, gate_canonical_sha256, evaluate_gate, gate_input_hash
+from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, gate_canonical_sha256, evaluate_gate
 from product.backend.workflows.reports.published import PublishedResultReader, PublishedRunView
 from product.backend.workflows.reports.findings import FindingQueries
 

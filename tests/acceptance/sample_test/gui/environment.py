@@ -6,10 +6,13 @@ from .session import GuiSession
 class EnvironmentActions(GuiSession):
     def start(self):
         self._goto("/workspace")
+        self.page.get_by_role("button", name="查看官方示例", exact=True).click()
         self.page.get_by_role("button", name="启动示例", exact=True).click()
         self.page.get_by_role("dialog", name="启动官方示例？").wait_for()
         result, _ = self._response("/api/experience/official-sample/start",
             lambda: self.page.get_by_role("dialog", name="启动官方示例？").get_by_role("button", name="启动示例", exact=True).click())
+        # 启动入口已归环境管理；回到总览读取真实下一步，不再次提交启动。
+        self.page.get_by_role("navigation", name="界鉴主导航").get_by_role("button", name="总览", exact=True).click()
         self.page.locator('[aria-label="当前需要处理的任务"]').wait_for()
         self._mark("start")
         return result

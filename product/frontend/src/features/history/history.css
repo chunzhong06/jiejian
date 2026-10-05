@@ -27,12 +27,11 @@
 
 .history-date {
   margin: 0;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  font-size: 12px;
-  padding: 16px 0 6px;
+  background: transparent;
+  font-size: var(--font-label);
+  padding: var(--space-16) var(--space-16) var(--space-8);
   color: var(--color-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .history-record {
@@ -46,7 +45,7 @@
   gap: var(--space-20);
   align-items: center;
   cursor: pointer;
-  padding: 20px 0;
+  padding: var(--space-20) var(--space-16);
   border-radius: 0;
   background: transparent;
   min-width: 0;
@@ -63,7 +62,7 @@
 }
 
 .history-record-copy strong {
-  font-weight: 550;
+  font-weight: var(--weight-medium);
   overflow-wrap: anywhere;
   font-size: 14px;
 }
@@ -104,7 +103,7 @@
 
 .history-empty h2 {
   font-size: var(--font-section);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .history-empty p {
@@ -215,7 +214,7 @@
   display: grid;
   grid-template-columns: minmax(0,1fr) 130px 100px 90px;
   gap: var(--space-20);
-  padding: var(--space-12) 0;
+  padding: var(--space-12) var(--space-16);
   font-size: var(--font-label);
   color: var(--color-secondary);
   border-bottom: 1px solid var(--color-border);

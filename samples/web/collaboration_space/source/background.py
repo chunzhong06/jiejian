@@ -174,9 +174,3 @@ class ExportWorker:
                 result="failed",
                 effect="FAILED",
             )
-
-    def _job_by_task(self, task_id: str) -> dict[str, Any] | None:
-        for record in self.storage.queue_records():
-            if record.get("task_id") == task_id:
-                return self.storage.find_job(str(record.get("case_tag", "")))
-        return None

@@ -29,6 +29,7 @@
 - `LLMAdapter.build_request(self, profile, secret, prompt, reasoning_effort, json_schema) -> LLMHttpRequest`
 - `LLMAdapter.parse_response(self, response) -> str`
 - `json_body(payload) -> bytes`
+- `parse_json_response(body) -> dict[str, Any]`
 - `max_output_tokens(profile) -> int`
 - `class LLMInvokeResult`
 
@@ -43,7 +44,7 @@
 - `DeepSeekAdapter.build_request(self, profile, secret, prompt, reasoning_effort, json_schema) -> LLMHttpRequest`
 - `DeepSeekAdapter.parse_response(self, response) -> str`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`typing`
+静态import / dot-source：`__future__`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`typing`
 
 ### `product/backend/infra/llm/adapters/gemini.py`
 
@@ -54,7 +55,7 @@
 - `GeminiAdapter.build_request(self, profile, secret, prompt, reasoning_effort, json_schema) -> LLMHttpRequest`
 - `GeminiAdapter.parse_response(self, response) -> str`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`typing`、`urllib.parse`
+静态import / dot-source：`__future__`、`json`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`urllib.parse`
 
 ### `product/backend/infra/llm/adapters/httpx_transport.py`
 
@@ -74,7 +75,7 @@
 - `OpenAIAdapter.build_request(self, profile, secret, prompt, reasoning_effort, json_schema) -> LLMHttpRequest`
 - `OpenAIAdapter.parse_response(self, response) -> str`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`typing`
+静态import / dot-source：`__future__`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`
 
 ### `product/backend/infra/llm/adapters/openai_compatible.py`
 
@@ -84,7 +85,7 @@
 - `OpenAICompatibleAdapter.build_request(self, profile, secret, prompt, reasoning_effort, json_schema) -> LLMHttpRequest`
 - `OpenAICompatibleAdapter.parse_response(self, response) -> str`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.config`、`typing`
+静态import / dot-source：`__future__`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.config`
 
 ### `product/backend/infra/llm/catalog.py`
 
@@ -99,7 +100,7 @@
 - `LLMModelCatalogService.discover(self, provider, secret, base_url, allow_local_http) -> LLMModelCatalog`
 - `LLMModelCatalogService.refresh(self, profile, secret) -> LLMModelCatalog`
 
-静态import / dot-source：`__future__`、`dataclasses`、`json`、`product.backend.core.errors`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`typing`、`urllib.parse`、`作用域内：product.backend.infra.llm.config`
+静态import / dot-source：`__future__`、`dataclasses`、`product.backend.infra.llm.adapters.base`、`product.backend.infra.llm.adapters.openai_compatible`、`product.backend.infra.llm.config`、`urllib.parse`、`作用域内：product.backend.infra.llm.config`
 
 ### `product/backend/infra/llm/config.py`
 
@@ -126,7 +127,7 @@
 - `reasoning_options_for(provider, model) -> tuple[str, ...]`
 - `normalize_llm_base_url(value, allow_local_http, require_local_http_authorization) -> str`
 
-静态import / dot-source：`__future__`、`enum`、`ipaddress`、`posixpath`、`product.backend.infra.secrets.refs`、`pydantic`、`re`、`typing`、`urllib.parse`
+静态import / dot-source：`__future__`、`enum`、`ipaddress`、`posixpath`、`product.backend.infra.secrets.refs`、`pydantic`、`re`、`urllib.parse`
 
 ### `product/backend/infra/llm/profiles.py`
 

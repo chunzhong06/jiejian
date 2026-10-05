@@ -24,13 +24,13 @@ if __package__:
     from .background import ExportWorker
     from .inline_export import complete_inline_export
     from .page import APPLICATION_PAGE
-    from .storage import CollaborationStorage, PROJECT_ID, PROJECT_NAME, RESOURCE_ID
+    from .storage import CollaborationStorage, PROJECT_ID, RESOURCE_ID
 else:
     # 正式 Sample 以 source 为模块根运行，仓库测试则通过命名空间包导入。
     from background import ExportWorker
     from inline_export import complete_inline_export
     from page import APPLICATION_PAGE
-    from storage import CollaborationStorage, PROJECT_ID, PROJECT_NAME, RESOURCE_ID
+    from storage import CollaborationStorage, PROJECT_ID, RESOURCE_ID
 
 
 AuthorizationOrder = Literal["ENQUEUE_BEFORE_AUTHORIZE", "AUTHORIZE_BEFORE_ENQUEUE"]

@@ -1,6 +1,6 @@
 // 权限文本建议面板：显式生成、逐条审阅；异步结果与当前本地草稿及正式边界同时核对。
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Checkbox, Input, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Checkbox, Input, Space, Typography } from 'antd'
 import { businessBoundariesApi } from '../../../api/boundaries/businessBoundaries'
 import { permissionDraftsApi, type PermissionDraftSuggestion, type PermissionDraftView } from '../../../api/boundaries/permissionDrafts'
 import { relationLabels } from './boundaryLabels'

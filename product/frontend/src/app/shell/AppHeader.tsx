@@ -2,13 +2,14 @@
 
 import { Button, Dropdown, Layout, Space } from 'antd'
 import { useEffect, useState } from 'react'
-import { ApiOutlined, BgColorsOutlined, LogoutOutlined, MoreOutlined, RobotOutlined } from '@ant-design/icons'
+import { ApiOutlined, BgColorsOutlined, LogoutOutlined, SettingOutlined, RobotOutlined, SearchOutlined, AppstoreOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../../api/assistance/llm'
 import type { MCPAccessView } from '../../api/system/mcp'
 import type { ProjectDto } from '../../api/applications/projects'
 import type { SystemStatus } from '../../api/system/system'
 import { ApplicationSwitcher } from '../navigation/ApplicationSwitcher'
-import { useThemeMode, type ThemeMode } from '../theme/ThemeContext'
+import { useThemeMode, type ThemeMode, type MotionMode, type DensityMode } from '../theme/ThemeContext'
+import { EntrySearch } from '../navigation/EntrySearch'
 
 export function aiStatusLabel(
   profiles: LLMProfile[],
@@ -74,8 +75,14 @@ export function AppHeader({
   onOpenAI,
   onRequestShutdown,
 }: AppHeaderProps) {
-  const { mode, setMode } = useThemeMode()
+  const { mode, setMode, motion, setMotion, density, setDensity } = useThemeMode()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  useEffect(() => {
+    const search = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(value => !value) } }
+    window.addEventListener('keydown', search)
+    return () => window.removeEventListener('keydown', search)
+  }, [])
   // 主题或视口变化后关闭旧浮层；再次打开时由组件按当前布局定位。
   useEffect(() => { setMenuOpen(false) }, [mode])
   useEffect(() => {
@@ -86,14 +93,21 @@ export function AppHeader({
   const themeLabels: Record<ThemeMode, string> = { system: '跟随系统', light: '亮色', dark: '暗色' }
   const mcpLabel = mcpStatusLabel(mcpStatus, mcpStatusFailed)
   const mcpConnected = mcpStatus?.connection_state === 'CONNECTED'
-  const compactMcpLabel = mcpConnected ? `${mcpStatus?.client_name?.trim() || 'Agent'} · 已连接` : 'Agent · 未连接'
-  return <Layout.Header className="topbar">
+  const compactMcpLabel = mcpConnected ? `${mcpStatus?.client_name?.trim() || '开发客户端'} · 已连接` : mcpLabel.replace(/^Coding Agent/, '开发工具')
+  return <><Layout.Header className="topbar">
     <div className="topbar-left">
+      <button className="product-brand" aria-label="界鉴总览" onClick={() => onNavigate('/workspace')}><svg width="27" height="27" viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M17 4H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V11" stroke="currentColor" strokeWidth="3" strokeLinejoin="round"/><path d="m19 3 7 7-7 5-5-7 5-5Z" fill="currentColor"/></svg><strong>界鉴</strong></button>
       <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} />
 
     </div>
     <Space className="topbar-tools" size="small">
-      <Button type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开 Coding Agent`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
+      <Button type="text" icon={<SearchOutlined />} aria-label="查找入口，Ctrl K" onClick={() => setSearchOpen(true)}><span>查找入口</span><kbd>Ctrl K</kbd></Button>
+      <Button className="topbar-agent-entry" type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开开发工具连接`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
+      <Dropdown trigger={['click']} placement="bottomRight" menu={{ triggerSubMenuAction: 'click', selectable: true, selectedKeys: [`theme:${mode}`, `motion:${motion}`, `density:${density}`], items: [
+        { key: 'theme', label: `主题 · ${themeLabels[mode]}`, children: [{key:'theme:system',label:'跟随系统'},{key:'theme:light',label:'亮色'},{key:'theme:dark',label:'暗色'}] },
+        { key: 'motion', label: '动效', children: [{key:'motion:full',label:'完整动效'},{key:'motion:soft',label:'减少动效'},{key:'motion:off',label:'关闭动效'}] },
+        { key: 'density', label: '密度', children: [{key:'density:comfortable',label:'舒适'},{key:'density:compact',label:'紧凑'}] },
+      ], onClick: ({key}) => { const [kind,value] = key.split(':'); if(kind==='theme')setMode(value as ThemeMode); if(kind==='motion')setMotion(value as MotionMode); if(kind==='density')setDensity(value as DensityMode) } }}><Button type="text" icon={<BgColorsOutlined />} aria-label="显示偏好">显示</Button></Dropdown>
       <Dropdown
         open={menuOpen}
         onOpenChange={setMenuOpen}
@@ -103,28 +117,24 @@ export function AppHeader({
         menu={{
           triggerSubMenuAction: 'click',
           items: [
-            { key: 'ai', icon: <RobotOutlined />, label: `AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
-            { type: 'divider' },
-            {
-              key: 'theme', icon: <BgColorsOutlined />, label: `主题 · ${themeLabels[mode]}`, children: [
-                { key: 'theme:system', label: '跟随系统' },
-                { key: 'theme:light', label: '亮色主题' },
-                { key: 'theme:dark', label: '暗色主题' },
-              ],
-            },
+            { key: 'system', icon: <span className="system-state-icon" aria-hidden="true"><i className={`system-state-dot${systemStatusLabel(systemStatus) === '系统正常' ? ' is-ready' : ''}`} /></span>, label: systemStatusLabel(systemStatus) },
+            { key: 'application', icon: <AppstoreOutlined />, label: '应用与环境' },
+            { key: 'ai', icon: <RobotOutlined />, label: `界鉴 AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
             { type: 'divider' },
             { key: 'shutdown', danger: true, icon: <LogoutOutlined />, label: '退出界鉴' },
           ],
             onClick: ({ key }) => {
               setMenuOpen(false)
             if (key === 'ai') onOpenAI()
+            else if (key === 'application') onNavigate('/environment')
+            else if (key === 'system') onNavigate('/settings/system')
             else if (key === 'shutdown') onRequestShutdown()
             else if (key.startsWith('theme:')) setMode(key.slice('theme:'.length) as ThemeMode)
           },
         }}
       >
-        <Button type="text" icon={<MoreOutlined />} aria-label="设置与更多" />
+        <Button type="text" icon={<SettingOutlined />} aria-label="设置与更多">设置</Button>
       </Dropdown>
     </Space>
-  </Layout.Header>
+  </Layout.Header><EntrySearch open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={onNavigate} /></>
 }

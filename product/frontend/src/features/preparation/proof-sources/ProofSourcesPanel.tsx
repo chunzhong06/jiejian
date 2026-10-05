@@ -1,5 +1,6 @@
-// 证明准备围绕当前候选组织：默认交回原Agent配置，GUI只突出读取范围、缺口和采用决定。
-import { Alert, Button, Checkbox, Input, Modal, Spin } from 'antd'
+// 证明准备围绕当前候选组织：由开发客户端中的 Agent 协助配置，GUI只突出读取范围、缺口和采用决定。
+import { LoadingState } from '../../../shared/ui/LoadingState'
+import { Alert, Button, Checkbox, Input, Modal } from 'antd'
 import { useCallback, useState } from 'react'
 import { type ProofSource, type AdoptionPreview, type ProofReceipt } from '../../../api/preparation/proofSources'
 import { useProofSources } from './useProofSources'
@@ -11,7 +12,8 @@ import '../../../shared/styles/proof-details.css'
 
 const keyLabels: Record<string,string> = {resource_id:'资源标识',owner_id:'资源所有者',state:'业务状态',version:'资源版本',effect_count:'结果发生次数',history_generation:'历史代次',operation_id:'操作标识',operation_resource_id:'操作对应资源',operation_subject_id:'实际操作人',operation_before_version:'操作前版本',operation_after_version:'操作后版本',operation_state:'操作完成状态',unfinished_effects:'未完成后果',title:'资料标题',summary:'资料摘要',body:'完整内容'}
 const reasonLabels: Record<string,string> = {SOURCE_REQUIRES_MIGRATION:'旧来源需要按通用方式重新准备',PROTECTED_FIELD_READABLE:'受保护字段已读到',RECORD_PROVIDER_UNAVAILABLE:'记录组件或运行对应暂时不可用',RECORD_SOURCE_UNAVAILABLE:'记录来源暂时无法读取',MAPPING_READABLE:'字段已读到',RESOURCE_OWNER_MATCH:'资源与所有者一致',SOURCE_CONTRACT_VERIFIED:'业务记录合同已核对',OPERATION_RECORD_COMPLETE:'当前操作记录完整',ACTUAL_IDENTITY_MATCH:'实际账号与角色一致',ACTUAL_IDENTITY_MISMATCH:'实际账号或角色不一致',CONTRACT_UNVERIFIED:'尚无可核对的业务记录合同',MAPPING_MISSING:'没有读到该字段',MAPPING_TYPE_INVALID:'字段类型与要求不同',MAPPING_REQUIRED:'缺少必要字段映射',SOURCE_READ_DENIED:'当前账号不能读取来源',SOURCE_READ_UNAVAILABLE:'来源暂时无法读取',IDENTITY_SESSION_MISSING:'账号需要重新登录',READ_AUTHORITY_UNAVAILABLE:'读取授权或运行实例已失效',RESOURCE_OWNER_MISMATCH:'资源或所有者不一致',COMPLETION_UNCONFIRMED:'操作完成情况尚未核对',JSON_DUPLICATE_KEY:'响应包含重复字段',JSON_INVALID:'响应不是有效对象',JSON_NONFINITE:'响应包含无效数值',JSON_STRUCTURE_LIMIT:'响应结构超出读取范围',RESPONSE_TOO_LARGE:'响应超出读取大小限制'}
-const sourceLabel = (source: ProofSource) => source.config.source_kind === 'JSON_HTTP_RESOURCE' ? '需要重新准备' : source.adopted ? source.preflight?.current_basis ? '已采用' : '已采用 · 待复核' : source.preflight?.report?.assessment === 'USABLE' && source.preflight.current_basis ? '待你采用' : source.preflight?.state === 'RUNNING' ? '正在预检查' : source.preflight?.state === 'PENDING' ? '等待预检查' : '待准备'
+const preflightUsable = (source?: ProofSource) => Boolean(source?.preflight?.state === 'SUCCEEDED' && source.preflight.report?.assessment === 'USABLE' && source.preflight.current_basis)
+const sourceLabel = (source: ProofSource) => source.config.source_kind === 'JSON_HTTP_RESOURCE' ? '需要重新准备' : source.adopted ? preflightUsable(source) ? '已采用' : '已采用 · 待复核' : preflightUsable(source) ? '待你采用' : source.preflight?.state === 'RUNNING' ? '正在预检查' : source.preflight?.state === 'PENDING' ? '等待预检查' : '待准备'
 
 export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged, onNavigate}: {
   projectId: string; requestedSource?: string | null; onBack: () => void; onChanged: () => Promise<unknown>; onNavigate?: (path: string) => void
@@ -40,7 +42,7 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
   const guidance = context?.guidance
   const nextAction = guidance?.state === 'CURRENT' ? guidance.next_action : undefined
   const sourceAdvice = guidance?.sources.find(item => item.source_id === source?.source_id && item.revision === source?.revision)
-  const usable = Boolean(source?.preflight?.state === 'SUCCEEDED' && source.preflight.report?.assessment === 'USABLE' && source.preflight.current_basis)
+  const usable = preflightUsable(source)
   const checks = source?.preflight?.report?.checks ?? []
   const mappedCount = checks.filter(item => item.code === 'MAPPING_READABLE' && item.status === 'CONFIRMED').length
   const visibleChecks = [...(mappedCount ? [{code:'MAPPING_READABLE',status:'CONFIRMED' as const,mapping_key:null}] : []), ...checks.filter(item => item.code !== 'MAPPING_READABLE' || item.status !== 'CONFIRMED')]
@@ -49,16 +51,15 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
   const copyPrompt = async () => {
     const suggestion = nextAction ? `当前建议：${nextAction.title}。${nextAction.reason}；处理者：${nextAction.handler}。` : ''
     try { await navigator.clipboard.writeText(`请使用界鉴MCP为应用 ${projectId}${source ? ` 的证明来源 ${source.source_id}（修订 ${source.revision}，动作 ${source.config.action_id}）` : ''}完善结果证明。${suggestion}先重新调用 jiejian_preparation_context，以最新guidance和basis_id为准，不直接执行复制时的旧建议。沿用可复用材料，只补当前缺口。需要确认读取范围或采用时给我精确GUI入口，不批准或改变权限；写响应未知时查询原operation_id。`); setNotice('已复制，可粘贴到你正在使用的 Agent。') }
-    catch { setIssue('未能复制，请在原 Agent 中让它读取本应用的 preparation_context。') }
+    catch { setIssue('未能复制，请在开发客户端中让它读取本应用的 preparation_context。') }
   }
-  if (loading) return <EditorialPage><Spin />正在读取证明来源…</EditorialPage>
+  if (loading) return <EditorialPage><LoadingState page>正在读取证明来源…</LoadingState></EditorialPage>
   return <EditorialPage label="证明来源准备">
-    <EditorialHeader eyebrow="检查材料 / 结果证明" title="让规则有据可验"><p className="editorial-muted">在原 Agent 中完善配置，在这里核对它将读取什么、还缺什么。</p></EditorialHeader>
-    <div className="proof-toolbar"><Button type="link" onClick={onBack} disabled={busy || Boolean(pending)}>返回检查材料</Button><Button onClick={() => void load()} disabled={busy}>刷新准备情况</Button></div>
+    <EditorialHeader eyebrow="检查材料 / 结果证明" title="核对结果证明"><p className="editorial-muted">核对读取范围和来源报告，再决定是否采用。</p></EditorialHeader>
     {issue && <Alert type="warning" showIcon message={issue} action={pending && <Button onClick={() => void recover()} loading={busy}>查询原操作</Button>}/>}
     {notice && <p className="editorial-muted" role="status">{notice}</p>}
     {guidance?.state === 'NEEDS_REFRESH' && <Alert type="warning" showIcon message="准备条件在读取期间发生变化" description={guidance.note}/>}
-    {nextAction && !pending && !editing && <section className="proof-next-advice" aria-label="当前准备建议"><div><p className="editorial-eyebrow">{nextAction.handler === 'AGENT' ? '交给原 Agent 整理' : nextAction.handler === 'SYSTEM' ? '正在处理' : '现在需要你做'}</p><h2>{nextAction.title}</h2><p>{nextAction.reason}</p></div>
+    {nextAction && !pending && !editing && <section className="proof-next-advice work-surface" aria-label="当前准备建议"><div><p className="editorial-eyebrow">{nextAction.handler === 'AGENT' ? '交给开发客户端中的 Agent 整理' : nextAction.handler === 'SYSTEM' ? '正在处理' : '现在需要你做'}</p><h2>{nextAction.title}</h2><p>{nextAction.reason}</p></div>
       {onNavigate && ['REVIEW_RUNTIME','REVIEW_IDENTITY','REVIEW_RULE_REFERENCE'].includes(nextAction.kind) && <Button onClick={() => onNavigate(nextAction.gui_url.slice(1))} disabled={busy}>前往处理</Button>}
     </section>}
     {!context ? <Button onClick={() => void load()}>重新读取</Button> : <div className="proof-workspace">
@@ -69,7 +70,7 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
         {!context.sources.length && <p className="editorial-muted">Agent 保存来源候选后，会显示在这里。</p>}
         <Button type="link" disabled={busy || Boolean(pending)} onClick={() => { setSelected('__new__'); setDraft(''); setEditing(true) }}>手动补充来源</Button>
       </aside>
-      <section className="proof-detail" aria-label="当前证明来源">
+      <section className="proof-detail work-surface" aria-label="当前证明来源">
         {sourceAdvice?.next_action && sourceAdvice.next_action.source_id !== nextAction?.source_id && <p className="editorial-muted">这项来源：{sourceAdvice.next_action.reason}</p>}
         <section className="proof-focus">
           <div><p className="editorial-eyebrow">{source ? `${action?.label ?? '业务动作'} · ${source.client_name}` : '准备下一步'}</p>
@@ -78,6 +79,12 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
           {source && <StatusBadge kind="preparation" tone={usable ? 'neutral' : 'warning'}>{sourceLabel(source)}</StatusBadge>}
         </section>
         {source && <>
+          <ol className="proof-stages" aria-label="证明来源的四项事实">
+            <li><span>配置</span><strong>候选修订 {source.revision}</strong></li>
+            <li><span>读取范围</span><strong>{scope ? '已确认' : '待你确认'}</strong></li>
+            <li><span>预检查</span><strong>{usable ? '当前依据可用' : source.preflight ? '需核对报告' : '尚未进行'}</strong></li>
+            <li><span>采用</span><strong>{source.adopted ? usable ? '已采用' : '已采用，待复核' : '尚未采用'}</strong></li>
+          </ol>
           <dl className="proof-facts"><div><dt>读取内容</dt><dd>单个资源的{source.config.source_contract_id === 'TRANSACTION_HISTORY_V1' ? '业务操作记录' : '可见内容'}</dd></div><div><dt>观察账号</dt><dd>{context.identities.find(item => item.identity_id === source.config.observation_identity_id)?.label ?? '尚未确认'}</dd></div>
             <div><dt>对应资源</dt><dd>{context.resources.find(item => item.resource_binding_id === source.config.resource_binding_id)?.resource_id ?? '资源已经变化'}</dd></div><div><dt>读取范围</dt><dd>{scope ? '已由你确认' : savedScope ? '授权已保存，启动后核对' : '等待确认'}</dd></div></dl>
           {source.preflight && !source.preflight.current_basis && <Alert type="warning" message="准备条件已经变化" description="原报告保留；请对当前账号、资源和运行实例重新预检查。"/>}
@@ -90,7 +97,7 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
             {scope && <Button type="link" danger disabled={busy || Boolean(pending)} onClick={() => void write('REVOKE_SCOPE',{scope_id:scope.scope_id})}>撤销这项读取授权</Button>}
           </details>
         </>}
-        <div className="proof-agent-return"><p>配置仍在原 Agent 中完成；这里保留每次核对和你的采用决定。</p><Button onClick={() => void copyPrompt()}>复制给 Agent 的准备说明</Button></div>
+        <div className="proof-agent-return"><p>配置仍在开发客户端中完成；这里保留每次核对和你的采用决定。</p><Button onClick={() => void copyPrompt()}>复制给 Agent 的准备说明</Button></div>
         {!editing && source && <Button type="link" disabled={busy || Boolean(pending)} onClick={() => { setDraft(JSON.stringify(source.config,null,2)); setEditing(true) }}>手动调整配置</Button>}
         {editing && <section className="proof-editor"><h3>手动调整有限来源配置</h3><p className="editorial-muted">填写来源配置 JSON；只接受账号引用、固定读取路径与字段映射，不填写密码、Cookie 或令牌。</p>
           <Input.TextArea aria-label="证明来源配置" value={draft} onChange={event => setDraft(event.target.value)} rows={12} maxLength={32768} disabled={busy || Boolean(pending)}/>
@@ -99,11 +106,12 @@ export function ProofSourcesPanel({projectId, requestedSource, onBack, onChanged
             catch { setIssue('配置不是有效 JSON，请核对括号和字段。') }
           }}}/>
         </section>}
-        {!editing && source && <TaskActionBar back={{label:'返回检查材料',onClick:onBack,disabled:busy || Boolean(pending)}}
+        {!editing && source && <TaskActionBar back={{label:'返回检查材料',onClick:onBack,disabled:busy || Boolean(pending)}} refresh={{label:'刷新准备情况',onClick:() => void load(),disabled:busy}}
           restart={source.preflight && ['PENDING','RUNNING','RETRY_WAIT'].includes(source.preflight.state) ? {label:'取消预检查',onClick:() => void write('CANCEL_PREFLIGHT',{preflight_id:source.preflight!.preflight_id}),disabled:busy || Boolean(pending)} : undefined}
           primary={source.config.source_kind === 'JSON_HTTP_RESOURCE' || !context.runtime_available || running ? undefined : !scope ? {label:'确认读取范围',onClick:() => { setConfirmed(false); setDialog('scope') },disabled:busy || Boolean(pending)} : usable && !source.adopted ? {label:'预览采用影响',onClick:() => void prepareAdoption(),disabled:busy || Boolean(pending)} : source.adopted && usable ? undefined : {label:'开始预检查',onClick:() => void write('START_PREFLIGHT',common!),disabled:busy || Boolean(pending)}}/>}
       </section>
     </div>}
+    {!source && !editing && <TaskActionBar back={{label:'返回检查材料',onClick:onBack,disabled:busy || Boolean(pending)}} refresh={{label:'刷新准备情况',onClick:() => void load(),disabled:busy}}/>}
     <Modal open={Boolean(dialog)} title={dialog === 'scope' ? '确认来源读取范围' : '采用这项证明来源'} onCancel={() => { if (!busy) setDialog(undefined) }} closable={!busy} maskClosable={false}
       okText={dialog === 'scope' ? '允许这些读取' : '确认采用'} cancelText="返回核对" confirmLoading={busy} okButtonProps={{disabled:!confirmed || Boolean(pending)}} cancelButtonProps={{disabled:busy}}
       onOk={() => { if (dialog === 'scope') void write('GRANT_SCOPE',{...common,confirmed:true}); else if (adoption) void write('ADOPT_SOURCE',{source_id:adoption.source_id,revision:adoption.revision,basis_id:adoption.basis_id,preflight_id:adoption.preflight_id,confirmed:true}) }}>

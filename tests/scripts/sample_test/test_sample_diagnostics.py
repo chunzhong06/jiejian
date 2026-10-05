@@ -9,6 +9,28 @@ import pytest
 from tests.acceptance.sample_test import official
 
 
+def test_preparation_diagnostic_keeps_codes_without_raw_materials():
+    facts = sample_reporting_diagnostics.preparation_facts('project',
+        {'project_id':'project', 'preparation_complete':False,
+         'actions':[{'preparation_complete':False,'display_name':'never-publish',
+                     'reason_codes':['SECRET_STATE_UNAVAILABLE','token=never-publish']}], 'cookie':'never-publish'},
+        {'project_id':'project','can_execute':False,'detail':'never-publish'})
+    assert facts['actions'][0]['reason_codes'] == ['SECRET_STATE_UNAVAILABLE']
+    assert 'never-publish' not in json.dumps(facts)
+
+
+@pytest.mark.parametrize("message,code", [
+    ("Target page, context or browser has been closed", "PLAYWRIGHT_TARGET_CLOSED"),
+    ("strict mode violation", "PLAYWRIGHT_LOCATOR_AMBIGUOUS"),
+    ("Execution context was destroyed", "PLAYWRIGHT_CONTEXT_CHANGED"),
+])
+def test_browser_failure_category_does_not_publish_private_body(message, code):
+    from playwright.sync_api import Error
+    result = sample_reporting_diagnostics._failure_identity(Error(message + " token=never-publish"))
+    assert result[0] == code
+    assert "never-publish" not in str(result)
+
+
 def test_nested_gui_failure_has_scoped_location_without_private_body(tmp_path):
     from types import SimpleNamespace
     from tests.acceptance.sample_test.current_gui import CurrentGui

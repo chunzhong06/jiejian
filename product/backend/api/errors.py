@@ -106,22 +106,8 @@ async def jiejian_error_handler(request: Request, exc: JiejianError) -> JSONResp
     )
 
 
-async def request_validation_error_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    error = JiejianError(ErrorCode.INPUT_INVALID, "请求参数无效")
-    return JSONResponse(
-        status_code=422,
-        content={
-            "schema_version": "1",
-            "error": error.to_dict(),
-            "trace_id": request.state.trace_id,
-        },
-    )
-
-
 async def validation_error_handler(
-    request: Request, exc: ValidationError
+    request: Request, exc: RequestValidationError | ValidationError
 ) -> JSONResponse:
     error = JiejianError(ErrorCode.INPUT_INVALID, "请求参数无效")
     return JSONResponse(

@@ -27,7 +27,7 @@
 
 - `BusinessBoundaryPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/Editorial`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskReceipt`、`../changes/styles/lightweight.css`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./draft/boundaryLabels`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskReceipt`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/definitions/BoundaryObjectsWorkspace.tsx`
 
@@ -152,7 +152,7 @@
 
 - `RuleDetailsPanel`
 
-静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../shared/format/time`、`../../shared/styles/proof-details.css`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../shared/format/time`、`../../shared/styles/proof-details.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/rules/PermissionRuleForm.tsx`
 

@@ -45,7 +45,7 @@
 - `boundary_views(boundary, pending)`
 - `development_view(facts)`
 
-静态import / dot-source：`__future__`、`product.backend.core.applications.models`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.semantics`、`product.backend.workflows.workspace.models`、`作用域内：product.backend.workflows.checks.repairs.repair_text`、`作用域内：product.backend.workflows.workspace.models`
+静态import / dot-source：`__future__`、`product.backend.core.applications.models`、`product.backend.core.boundaries.entities`、`product.backend.workflows.workspace.models`、`作用域内：product.backend.workflows.checks.repairs.repair_text`、`作用域内：product.backend.workflows.workspace.models`
 
 ### `product/backend/workflows/workspace/reading.py`
 

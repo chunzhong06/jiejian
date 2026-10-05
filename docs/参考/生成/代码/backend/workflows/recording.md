@@ -38,6 +38,14 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.protocols.recording.flow_draft`、`product.protocols.recording.recording_flow`、`product.protocols.web.workflow`、`pydantic`、`re`、`typing`、`urllib.parse`
 
+### `product/backend/workflows/recording/json_locations.py`
+
+[打开源码](../../../../../../product/backend/workflows/recording/json_locations.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `read_json_location(value, path) -> Any`
+
+静态import / dot-source：`re`、`typing`
+
 ### `product/backend/workflows/recording/lifecycle.py`
 
 [打开源码](../../../../../../product/backend/workflows/recording/lifecycle.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -68,7 +76,7 @@
 - `class FlowDraftProcessor`
 - `FlowDraftProcessor.build(self, recording_id, flow_id, business_action_id, action_revision, subject_test_identity_id, resource_owner_test_identity_id, events, purpose, parent_recording_id, effect_id, known_secrets, action_path_templates) -> FlowDraft`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.core.redaction`、`product.protocols.recording.events`、`product.protocols.recording.flow_draft`、`product.protocols.web.workflow`、`re`、`typing`、`urllib.parse`
+静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.core.redaction`、`product.backend.workflows.recording.json_locations`、`product.protocols.recording.events`、`product.protocols.recording.flow_draft`、`product.protocols.web.workflow`、`re`、`typing`、`urllib.parse`
 
 ### `product/backend/workflows/recording/project_submission.py`
 
@@ -88,7 +96,7 @@
 - `class FlowDraftReviewer`
 - `FlowDraftReviewer.apply(self, draft, command) -> FlowDraft`
 
-静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.protocols.recording.flow_draft`、`product.protocols.web.workflow`、`pydantic`、`re`、`typing`、`urllib.parse`
+静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.workflows.recording.json_locations`、`product.protocols.recording.flow_draft`、`product.protocols.web.workflow`、`pydantic`、`typing`、`urllib.parse`
 
 ### `product/backend/workflows/recording/run_service.py`
 
@@ -129,6 +137,6 @@
 - `RecordingSubmission.submit_captured(self, command, result, known_secrets) -> RecordingSubmissionResult`
 - `RecordingSubmission.consume_result(self, job_id, lease_owner, fencing_token, result, now_us, known_secrets) -> RecordingCompletionResult`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.events`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.storage`、`product.backend.workflows.recording.processing`、`product.backend.workflows.recording.source`、`product.protocols`、`product.protocols.web.target`、`pydantic`、`time`、`typing`、`urllib.parse`、`uuid`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.events`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.storage`、`product.backend.workflows.recording.processing`、`product.backend.workflows.recording.source`、`product.protocols`、`product.protocols.web.target`、`pydantic`、`time`、`urllib.parse`、`uuid`
 
 <!-- GENERATED:END -->

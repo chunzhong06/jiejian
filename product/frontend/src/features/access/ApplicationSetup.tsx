@@ -17,7 +17,6 @@ import { ArrowRightOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/applications/onboarding'
-import { AssistantPanel } from '../assistant/AssistantPanel'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
 import { ConnectionSupport } from './ConnectionSupport'
@@ -300,7 +299,10 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
 
   const candidateReview = endpointReady && understanding?.source_fingerprint ? <CandidateReview
     key={understanding.project_id} value={understanding} onEditingChange={setCandidateEditing} onApplied={async (value, confirmed) => { applyUnderstanding(value); const synced = await syncWorkspace(); if (confirmed && synced && value.role_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale) && value.action_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale)) onContinue() }}
-    manual={<><div className="application-manual"><Input aria-label="手工补充权限组" value={manualRole} onChange={event=>setManualRole(event.target.value)} placeholder="例如：审核员"/><Button disabled={!manualRole.trim()} loading={loading} onClick={()=>void addRole()}>补充并确认权限组</Button></div><div className="application-manual"><Input aria-label="手工补充业务动作" value={manualAction} onChange={event=>setManualAction(event.target.value)} placeholder="例如：查看项目"/><Button disabled={!manualAction.trim()} loading={loading} onClick={()=>void addAction()}>补充并确认业务动作</Button></div></>}
+    manual={<>
+      <div className="application-manual"><label className="application-manual-field"><span>权限组</span><Input aria-label="手工补充权限组" value={manualRole} onChange={event=>setManualRole(event.target.value)} placeholder="例如：审核员"/></label><Button aria-label="补充并确认权限组" disabled={!manualRole.trim()} loading={loading} onClick={()=>void addRole()}>补充并确认</Button></div>
+      <div className="application-manual"><label className="application-manual-field"><span>业务动作</span><Input aria-label="手工补充业务动作" value={manualAction} onChange={event=>setManualAction(event.target.value)} placeholder="例如：查看项目"/></label><Button aria-label="补充并确认业务动作" disabled={!manualAction.trim()} loading={loading} onClick={()=>void addAction()}>补充并确认</Button></div>
+    </>}
     staleReview={<>{[...understanding.role_candidates.map(item=>({...item,kind:'role' as const})),...understanding.action_candidates.map(item=>({...item,kind:'action' as const}))].filter(item=>item.stale||item.decision==='REVIEW_REQUIRED').map(item=><details key={item.candidate_id} className="candidate-stale"><summary>{item.display_name} · 需要单独复核</summary><CandidateRow candidate={item} kind={item.kind} loading={loading} onDecide={(decision,name)=>void decide(item.kind,item,decision,name)}/></details>)}</>}
   /> : null
 
@@ -329,7 +331,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       </div>
       <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
     </section>}
-    {currentStep < 4 && <ConnectionSupport />}
+    {currentStep === 1 && <ConnectionSupport />}
     {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
       <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
       <Typography.Paragraph>如果应用已经启动，直接选择它的源码文件夹。界鉴不会安装依赖、读取秘密或扫描任意端口。</Typography.Paragraph>

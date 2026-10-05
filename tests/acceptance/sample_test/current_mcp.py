@@ -88,20 +88,6 @@ def _deny_without_writes(session, client, project, tool, args):
         _error("MCP_DENIAL_CREATED_STATE")
 
 
-def _recover_run(client, project, before_runs, state):
-    try:
-        added = set(current_api.project_run_ids(client, project)) - before_runs
-        if len(added) == 1:
-            run_id = added.pop()
-            status = client.call("GET", f"/api/runs/{run_id}")
-            if status.get("run", {}).get("project_id") == project:
-                state.active_run_id = run_id
-                state.active_run_job_id = (status.get("job") or {}).get("job_id")
-    except Exception:
-        # 补查仅服务失败清理；读失败不能替换首个未知写入回执，也不能诱导再次提交。
-        return
-
-
 def cleanup(client, gui, state):
     """只撤销本场景的临时权限与新建配对；每次删除前回读，已有用户配对永久保留。"""
     if not state.mcp_cleanup_pending:
@@ -199,18 +185,18 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
                 submitted = _call(session, "jiejian_check_run", {"project_id": project, "idempotency_key": RUN_KEY, "change_id": change_id})
             except Exception:
                 # 只回读新增 Run 供外层失败清理；不以 SDK 或 HTTP 重发检查。
-                _recover_run(client, project, before_runs, state)
+                current_api.recover_run_for_cleanup(client, project, before_runs, state)
                 raise
             run_id, job_id = submitted.get("run_id"), (submitted.get("job") or {}).get("job_id")
             if submitted.get("project_id") != project or not run_id or not job_id or run_id in before_runs:
-                _recover_run(client, project, before_runs, state)
+                current_api.recover_run_for_cleanup(client, project, before_runs, state)
                 _error("MCP_RUN_RECEIPT_MISMATCH")
             # 已取得同项目回执即保留清理身份；后续只读失败不能丢掉已创建的活动任务。
             state.active_run_id, state.active_run_job_id = run_id, job_id
             observed = client.call("GET", f"/api/runs/{run_id}")
             if observed.get("run", {}).get("project_id") != project or (observed.get("job") or {}).get("job_id") != job_id:
                 state.active_run_id = state.active_run_job_id = None
-                _recover_run(client, project, before_runs, state)
+                current_api.recover_run_for_cleanup(client, project, before_runs, state)
                 _error("MCP_RUN_JOB_MISMATCH")
             current_api.wait_published(client, state.active_run_id, state.active_run_job_id)
             result = current_api.read_result(client, state.active_run_id)

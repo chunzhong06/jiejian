@@ -22,7 +22,7 @@
 
 - `EvidenceMaterials`
 
-静态import / dot-source：`../../../api/http`、`../../../api/preparation/preparation`、`../../../shared/ui/Editorial`、`../supplemental/SupplementalMaterials`、`./evidence-materials.css`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../../api/http`、`../../../api/preparation/preparation`、`../../../shared/ui/Editorial`、`../../../shared/ui/LoadingState`、`../supplemental/SupplementalMaterials`、`./evidence-materials.css`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/materials/MaterialEditor.test.tsx`
 
@@ -66,7 +66,7 @@
 
 - `PreparationPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/preparation/preparation`、`../../api/preparation/preparationGuidance`、`../../api/preparation/proofSources`、`../../api/preparation/testIdentities`、`../../api/workspace`、`../../shared/navigation/taskDestination`、`../../shared/runtime/editGuard`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`../assistant/AssistantPanel`、`../identities/TestIdentityPage`、`../recording/RecordingPage`、`./evidence/EvidenceMaterials`、`./materials/MaterialEditor`、`./materials/MaterialOverview`、`./proof-sources/ProofSourcesPanel`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/preparation/preparation`、`../../api/preparation/preparationGuidance`、`../../api/preparation/proofSources`、`../../api/preparation/testIdentities`、`../../api/workspace`、`../../shared/navigation/taskDestination`、`../../shared/runtime/editGuard`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`../assistant/AssistantPanel`、`../identities/TestIdentityPage`、`../recording/RecordingPage`、`./evidence/EvidenceMaterials`、`./materials/MaterialEditor`、`./materials/MaterialOverview`、`./proof-sources/ProofSourcesPanel`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/proof-sources/proofSourceOperations.test.ts`
 
@@ -99,7 +99,7 @@
 
 - `ProofSourcesPanel`
 
-静态import / dot-source：`../../../api/preparation/proofSources`、`../../../shared/runtime/editGuard`、`../../../shared/styles/proof-details.css`、`../../../shared/ui/Editorial`、`../../../shared/ui/StatusBadge`、`../../../shared/ui/TaskActionBar`、`./useProofSources`、`antd`、`react`
+静态import / dot-source：`../../../api/preparation/proofSources`、`../../../shared/runtime/editGuard`、`../../../shared/styles/proof-details.css`、`../../../shared/ui/Editorial`、`../../../shared/ui/LoadingState`、`../../../shared/ui/StatusBadge`、`../../../shared/ui/TaskActionBar`、`./useProofSources`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/proof-sources/useProofSources.ts`
 

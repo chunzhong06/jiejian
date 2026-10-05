@@ -12,6 +12,18 @@ from playwright.sync_api import Error as PlaywrightError
 import tests.acceptance.sample_test.harness.state as sample_harness_state
 
 
+def preparation_facts(project, materials, preview):
+    """只保留布尔值、有限状态和原因码，不写标签、源码路径、请求或登录材料。"""
+    def codes(value):
+        return [item for item in value if isinstance(item, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", item)][:32]
+    return {"project_matches": materials.get("project_id") == project and preview.get("project_id") == project,
+            "preparation_complete": materials.get("preparation_complete") is True,
+            "can_execute": preview.get("can_execute") is True,
+            "actions": [{"complete": item.get("preparation_complete") is True,
+                         "reason_codes": codes(item.get("reason_codes", []))}
+                        for item in materials.get("actions", [])[:16]]}
+
+
 def _write_summary(audit_dir: Path, payload: dict[str, object]) -> None:
     audit_dir.mkdir(parents=True, exist_ok=True)
     path = audit_dir / "sample-test-summary.json"
@@ -32,6 +44,16 @@ def _failure_identity(error: Exception) -> tuple[str, str]:
         code = token if re.fullmatch(r"[A-Z][A-Z0-9_]+", token) else type(error).__name__.upper()
         return code, summary[:512]
     if isinstance(error, PlaywrightError):
+        # 只发布错误类别，浏览器正文可能含请求信息，不能原样写入失败报告。
+        message = str(error)
+        if "has been closed" in message:
+            return "PLAYWRIGHT_TARGET_CLOSED", "浏览器页面、会话或进程已关闭"
+        if "strict mode violation" in message:
+            return "PLAYWRIGHT_LOCATOR_AMBIGUOUS", "浏览器定位命中了多个元素"
+        if "Execution context was destroyed" in message:
+            return "PLAYWRIGHT_CONTEXT_CHANGED", "浏览器操作期间页面上下文已改变"
+        if type(error).__name__ == "TimeoutError":
+            return "PLAYWRIGHT_TIMEOUT", "浏览器等待超时"
         return "PLAYWRIGHT_ERROR", "Playwright 自动化边界失败"
     return type(error).__name__.upper(), "自动 L5 出现未分类失败"
 

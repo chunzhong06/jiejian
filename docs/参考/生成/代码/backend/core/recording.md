@@ -25,7 +25,7 @@
 - `_TRANSITIONS`
 - `transition_recording_state(recording, target, operator, occurred_at_us, reason_code, pending_terminal_state) -> Recording`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identifiers`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identifiers`、`pydantic`、`re`
 
 ### `product/backend/core/recording/sanitization.py`
 

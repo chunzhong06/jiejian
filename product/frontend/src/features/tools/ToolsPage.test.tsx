@@ -38,13 +38,13 @@ describe('ToolsPage', () => {
       last_auth_failure_at_us: null,
     })
 
-    render(<ToolsPage onNavigate={vi.fn()} projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
+    render(<ToolsPage projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
 
     expect(await screen.findByRole('heading', { name: '连接与授权', level: 1 })).toBeInTheDocument()
     for (const label of ['Codex', 'DSH', 'ZCode']) {
       expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
     }
-    expect(screen.getByText(/不能批准或更改权限规则，也不能改变界鉴的检查结论/)).toBeInTheDocument()
+    expect(screen.getByText('AI 工具不能批准权限规则，也不能改变检查结论。')).toBeInTheDocument()
     expect(document.querySelector('.module-navigation')).not.toBeInTheDocument()
   })
 })

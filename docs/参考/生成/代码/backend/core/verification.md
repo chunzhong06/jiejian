@@ -25,7 +25,7 @@
 - `normalize_evidence_behavior(evidence, contract_fingerprint, workflow_fingerprint, baseline_fingerprint) -> BehaviorSnapshot`
 - `compare_behavior_snapshots(before, after) -> BehaviorDifferentialResult`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.lifecycle`、`product.backend.core.verification.facts`、`product.backend.core.verification.permissions`、`product.protocols.runner`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.lifecycle`、`product.backend.core.verification.facts`、`product.backend.core.verification.permissions`、`product.protocols.runner`、`pydantic`
 
 ### `product/backend/core/verification/breakpoints.py`
 
@@ -116,7 +116,7 @@
 - `SecurityEffectFact.validate_effect_fact(self) -> SecurityEffectFact`
 - `aggregate_security_effect(effect, resource_id, required_requirement_ids, corroborating_requirement_ids, observations, baseline_integrity, disclosure_proof) -> SecurityEffectFact`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.verification.permissions`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.verification.permissions`、`pydantic`、`re`
 
 ### `product/backend/core/verification/findings.py`
 
@@ -175,7 +175,7 @@
 - `gate_result_id_for(baseline_id, run_id, policy_version, input_hash) -> str`
 - `evaluate_gate(baseline, facts, policy) -> GateResult`
 
-静态import / dot-source：`__future__`、`collections.abc`、`enum`、`hashlib`、`json`、`product.backend.core.lifecycle`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`enum`、`hashlib`、`json`、`product.backend.core.lifecycle`、`pydantic`、`re`、`typing`
 
 ### `product/backend/core/verification/permissions/__init__.py`
 
@@ -286,7 +286,7 @@
 - `BatchPermissionRule.normalize_batch_dimensions(cls, values) -> tuple[CoverageDimension, ...]`
 - `BatchPermissionRule.require_bulk_dimension(self) -> BatchPermissionRule`
 
-静态import / dot-source：`__future__`、`collections.abc`、`enum`、`hashlib`、`json`、`product.backend.core.boundaries.semantics`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.boundaries.semantics`、`pydantic`、`re`、`typing`
 
 ### `product/backend/core/verification/trace.py`
 

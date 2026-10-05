@@ -32,8 +32,6 @@
 - `function Get-StageFailureCode`
 - `function Invoke-CliShell`
 - `function Invoke-Package`
-- `function Invoke-Python`
-- `function Write-PythonEnvironment`
 - `function Write-Stage`
 - `function jiejian`
 - `param $Value`

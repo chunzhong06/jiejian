@@ -5,8 +5,8 @@ import { experienceApi, type OfficialExperienceDto } from '../../api/application
 import { ApiError } from '../../api/http'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 
-export function OfficialSamplePanel({ value, onChanged, onError, expanded = false }: {
-  expanded?: boolean
+export function OfficialSamplePanel({ value, onChanged, onError, expanded = false, compact = false }: {
+  expanded?: boolean; compact?: boolean
   value: OfficialExperienceDto | null; onChanged: (value: OfficialExperienceDto) => Promise<void>; onError: (error: ApiError) => void
 }) {
   const [busy, setBusy] = useState(false)
@@ -60,11 +60,11 @@ export function OfficialSamplePanel({ value, onChanged, onError, expanded = fals
         <Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button>
         <div className="environment-retained"><div><strong>旧项目归档保留</strong><p>检查结果与证据</p><p>原问题与修复记录</p><p>历史权限与源码记录</p></div><div><strong>新项目从零开始</strong><p>同步导出的起始源码</p><p>尚未批准的权限提案</p><p>重新准备账号、资源与材料</p></div></div>
         <p className="editorial-muted">旧源码修改、登录状态和材料不带入新实例。启动不会自动批准权限或执行检查。</p>
-      </div> : <div className="sample-start-row"><div className="sample-start-copy"><p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
+      </div> : <div className="sample-start-row">{!compact && <div className="sample-start-copy"><p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
       {retainedExited && <p className="editorial-muted">上次示例已退出，历史记录保留。本次启动将创建全新示例。</p>}
-      </div><Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button></div>}
+      </div>}<Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button></div>}
     </> : <section className="sample-environment" aria-label="示例环境管理" data-expanded={expanded}><h3>示例环境管理</h3>
-      <p className="editorial-muted">在 Agent 协作中继续开发与验证。这里仅管理实例和可选观察条件，检查结束不会重置项目。</p>
+      <p className="editorial-muted">在开发客户端继续开发，回到“源码改动”登记修改并检查。这里管理示例实例和观察条件，检查结束不会重置项目。</p>
       <Space wrap>
         <Button disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('reset')}>重置官方环境</Button>
         <Button disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('stop')}>停止官方示例</Button>

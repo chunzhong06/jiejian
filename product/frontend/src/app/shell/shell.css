@@ -1,0 +1,84 @@
+/* 持久顶部壳承载四个业务入口；所有宽度共享同一轴线，路由切换不卸载导航。 */
+/* 页面与窗口共用均匀底色；限宽只约束内容，不再绘制包围整页的圆角底板。 */
+[data-product=jiejian] .app-shell { min-height:100dvh; min-width:0; margin:0 auto; width:100%; background:transparent; }
+[data-product=jiejian] .product-main { min-width:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.product-chrome { position:sticky;top:0;z-index:30;isolation:isolate;margin:0;border:0;border-radius:0;background:transparent;box-shadow:none; }
+/* 只让玻璃背景淡出，导航文字与交互区域保持完整；滚动时模糊下方内容以保证可读。 */
+.product-chrome::before { content:'';position:absolute;inset:0 0 -48px;z-index:-1;pointer-events:none;background:var(--glass-texture),var(--chrome-gradient),var(--glass-fill);backdrop-filter:blur(24px) saturate(112%);mask-image:linear-gradient(to bottom,#000 0%,#000 calc(100% - 48px),transparent 100%); }
+
+[data-product=jiejian] .topbar.ant-layout-header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-24); min-width:0;max-width:1840px;margin-inline:auto; height:auto; min-height:var(--layout-header); padding:12px 24px; background:transparent; border-bottom:0; line-height:normal; }
+.topbar-left { display:flex; align-items:center; gap:var(--space-24); min-width:0; }
+.product-brand { display:inline-flex; align-items:center; gap:12px; color:var(--color-primary-ink); background:transparent; border:0; border-right:1px solid var(--color-border); padding:0 24px 0 0; min-height:40px; cursor:pointer; flex-shrink:0; }
+.product-brand strong { font-size:24px; color:var(--color-text); letter-spacing:.08em; font-weight:var(--weight-strong); }
+.application-switcher.ant-btn { max-width:min(320px,28vw); min-width:0; background:transparent; border-color:transparent; box-shadow:none; color:var(--color-secondary); font-weight:var(--weight-medium); padding-inline:var(--space-12); gap:var(--space-8); }
+/* 悬停底色仍保留完整左右内距，长名称只截断文字，不挤压箭头。 */
+.application-switcher .anticon { flex-shrink:0; }
+.application-switcher-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-tools { flex-shrink:0; }
+.topbar-tools .ant-btn-text { color:var(--color-secondary); }
+.topbar-tools .ant-btn-text:not(:disabled):hover { background:transparent; color:var(--color-primary-ink); }
+.topbar-tools kbd { font-family:inherit; font-size:10px; padding:3px 5px; border:1px solid var(--color-border); border-radius:4px; color:var(--color-secondary); }
+.topbar-agent-entry.ant-btn { display:inline-flex; font-size:var(--font-secondary); }
+.topbar-status-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--color-secondary); flex-shrink:0; }
+.topbar-status-dot.is-connected { background:var(--color-safe); }
+.module-navigation { position:relative;max-width:1840px;margin-inline:auto;padding:0 20px; }
+.module-navigation-list { display:flex; justify-content:center; gap:20px; list-style:none; margin:0; padding:0; }
+.module-navigation-button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:56px; min-width:106px; padding:12px 20px; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--color-secondary); background:transparent; cursor:pointer; }
+.module-navigation-button:hover { color:var(--color-primary-ink); }
+.module-navigation-item.is-selected .module-navigation-button { color:var(--color-primary-ink); font-weight:var(--weight-strong); }
+.module-navigation-indicator { position:absolute; left:20px; bottom:0; height:2px; pointer-events:none; background:var(--color-primary-ink); }
+[data-motion=full] .module-navigation-indicator { transition:transform var(--motion-emphasis) var(--ease-standard),width var(--motion-emphasis) var(--ease-standard); }
+.module-navigation-dot { width:5px; height:5px; border-radius:50%; background:var(--color-warning); }
+[data-product=jiejian] .content { min-width:0; background:transparent; padding:var(--rhythm-pagePadding) clamp(24px,5vw,80px) calc(var(--rhythm-pagePadding) + 16px); }
+.content-frame { width:100%; max-width:var(--layout-content); min-width:0; margin-inline:auto; }
+.content-frame > .ant-space-vertical { gap:var(--space-24) !important; }
+.content-frame .ant-card { border-color:var(--color-border); border-radius:var(--radius-large); box-shadow:var(--shadow-focus); }
+.content-frame .ant-card .ant-card { box-shadow:none; border-radius:var(--radius-small); }
+.entry-search .ant-modal-body { padding-top:16px; }
+.entry-search-results { max-height:min(55dvh,470px); overflow-y:auto; margin-top:16px; padding:0 4px; }
+.entry-search-group { margin:20px 12px 8px; font-size:var(--font-label); color:var(--color-secondary); }
+.entry-search-choice { display:flex; align-items:center; justify-content:space-between; width:100%; padding:12px 16px; gap:24px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--color-text); text-align:left; cursor:pointer; }
+.entry-search-choice strong { display:block; font-weight:var(--weight-medium); }
+.entry-search-choice small { display:block; margin-top:3px; color:var(--color-secondary); }
+.entry-search-choice[aria-selected=true] { background:var(--glass-hover); border-color:var(--glass-edge); color:var(--color-primary-ink); box-shadow:inset 0 1px 0 var(--glass-highlight); }
+.entry-search-choice > .anticon { font-size:12px; color:var(--color-primary-ink); }
+.entry-search-footer { display:flex; justify-content:space-between; gap:16px; padding:16px 4px 0; margin-top:16px; border-top:1px solid var(--color-border); color:var(--color-secondary); font-size:var(--font-label); }
+.entry-search-empty { text-align:center; padding:32px 16px; }
+/* 切换从已可读的内容开始，不能用 opacity:0 或等待退出动画制造空白帧。 */
+[data-motion=full] .retained-work-page:not([hidden]) { animation:page-settle var(--motion-slow) var(--ease-standard); }
+[data-product=jiejian][data-motion=soft] .retained-work-page:not([hidden]) { animation:page-reveal var(--motion-fast) linear !important; }
+/* hidden 与动效偏好切换会取消旧动画；内容从可读状态入场，不等待上一页退出。 */
+@keyframes page-settle { from { transform:translateY(8px); opacity:.88; } to { transform:translateY(0); opacity:1; } }
+@keyframes page-reveal { from { opacity:.92; } to { opacity:1; } }
+@media(max-width:1100px) {
+  .topbar-tools kbd { display:none; }
+  .topbar-tools .topbar-agent-entry > span:not(.ant-btn-icon) { display:none; }
+  .topbar-left { gap:16px; }
+  .product-brand { padding-right:16px; }
+}
+@media(max-width:760px) {
+  [data-product=jiejian] .app-shell { width:100%; margin:0; min-height:100dvh; }
+  [data-product=jiejian] .product-main { border:0; border-radius:0; }
+  .product-chrome::before { inset:0 0 -36px;mask-image:linear-gradient(to bottom,#000 0%,#000 calc(100% - 36px),transparent 100%); }
+  [data-product=jiejian] .topbar.ant-layout-header { flex-wrap:wrap; gap:8px; padding:12px 16px 4px; }
+  .topbar-left { flex:1 1 100%; justify-content:space-between; }
+  .application-switcher.ant-btn { max-width:65vw; }
+  .product-brand { border:0; }.product-brand strong { font-size:20px; }
+  .topbar-tools { width:100%; justify-content:flex-end; }
+  .topbar-tools .ant-btn { min-height:40px; }
+  .module-navigation { padding:0 12px; }
+  .module-navigation-indicator { left:12px; }
+  .module-navigation-list { gap:4px; justify-content:space-between; }
+  .module-navigation-item { flex:1; }
+  .module-navigation-button { min-width:0; width:100%; min-height:48px; padding:12px 6px; white-space:nowrap; font-size:14px; }
+  [data-product=jiejian] .content { padding:var(--rhythm-pagePadding) var(--rhythm-pagePaddingNarrow) calc(var(--rhythm-pagePadding) + 16px); }
+  .entry-search .ant-modal-content { padding:20px 16px; }
+}
+
+/* 设置中的系统状态只陈述服务事实，绿色点与文字共同表达正常。 */
+.system-state-icon { display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;vertical-align:middle; }
+.system-state-icon .system-state-dot { display:block;flex:0 0 7px;width:7px;min-width:7px;max-width:7px;height:7px;border-radius:50%;background:var(--color-warning);margin:0; }
+.system-state-dot.is-ready { background:var(--color-safe); }
+
+/* 菜单统一图标占位；状态圆点放在占位内部，不接受组件库对图标的最小宽度拉伸。 */
+[data-product=jiejian] .ant-dropdown-menu-item-icon { display:inline-flex;align-items:center;justify-content:center;width:16px;min-width:16px;height:16px;font-size:16px;flex:0 0 16px; }

@@ -179,7 +179,7 @@
 - `SourceChangeViewDto`
 - `sourceChangesApi`
 
-静态import / dot-source：`../checks/repairs`、`../http`、`./development`
+静态import / dot-source：`../checks/repairs`、`../http`、`../preparation/preparation`、`./development`
 
 ### `product/frontend/src/api/changes/sourceIdentity.ts`
 

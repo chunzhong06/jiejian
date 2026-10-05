@@ -15,6 +15,7 @@
 # =============================================================================
 
 from __future__ import annotations
+from product.backend.infra.observers.artifacts import write_atomic as _write_atomic
 
 import hashlib
 import json
@@ -105,15 +106,6 @@ def _secret_name(spec: ObserverSpec) -> str:
     if not isinstance(locator, AzureBlobObjectLocator):
         raise ValueError("azure blob observer requires a blob locator")
     return locator.read_only_sas_ref.removeprefix("env:")
-
-
-def _write_atomic(path: Path, payload: bytes) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    try:
-        temporary.write_bytes(payload)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _failure_envelope(

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from urllib.parse import quote
 
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, reasoning_options_for

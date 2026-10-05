@@ -338,8 +338,6 @@ def test_normal_start_no_longer_prints_runtime_summary_but_keeps_diagnostics() -
     source = _text(SOURCE)
     assert "Write-RuntimeSummary" not in start + product
     assert "当前界鉴运行环境" not in start + product
-    assert "Write-PythonEnvironment" in product
-    assert "Write-Startup" in product[product.index("function Write-PythonEnvironment") : product.index("function Invoke-Python")]
     assert "receipt.json" in source
     assert '"doctor"' in start
     for text in ("VarDir", "jiejian status", "jiejian system doctor"):

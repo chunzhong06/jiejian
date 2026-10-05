@@ -5,24 +5,11 @@
 #   已确认源码运行环境与 CLI/GUI 产品入口之间的薄编排层
 #
 # 职责
-#   展示环境事实｜调用统一产品 CLI｜创建仅对当前会话生效的命令行入口
+#   调用统一产品 CLI｜创建仅对当前会话生效的命令行入口
 #
 # 边界
 #   不准备依赖、数据库或前端，不复制 ApplicationCore 业务流程。
 # =============================================================================
-
-function Write-PythonEnvironment {
-    Write-Startup ("Python 环境: {0}`nPython 环境路径: {1}`nPython 可执行文件: {2}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath, $script:PythonExecutable)
-    if ($null -ne $script:PythonEnvironmentReport) {
-        $siteStatus = if ($script:PythonEnvironmentReport.user_site_on_sys_path) { "检测到用户级来源" } else { "未使用用户级来源" }
-        Write-Startup ("Python site-packages: {0}`n依赖来源: {1}" -f $siteStatus, ($script:PythonEnvironmentReport.package_origins | ConvertTo-Json -Compress))
-    }
-    Write-Startup "后续 CLI 用法: <已解析 Python> -B -m product.backend.cli <命令>"
-}
-
-function Invoke-Python([object[]]$Arguments, [string]$Stage, [int]$Code = 40) {
-    Invoke-External $Stage $script:PythonRunner $Arguments $Code
-}
 
 function Invoke-Package([object[]]$Arguments, [string]$Stage, [int]$Code = 50) {
     Invoke-External $Stage $script:PackageRunner $Arguments $Code

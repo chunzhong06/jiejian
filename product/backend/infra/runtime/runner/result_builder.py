@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
-from product.protocols import Evidence, RunnerResultType, build_evidence
+from product.protocols import Evidence, build_evidence
 
 
 def evidence_from_case(document, case_result) -> Evidence:

@@ -97,6 +97,8 @@ class WorkerDispatcher:
         log_path = self._prepare_worker_log(job_id)
         try:
             worker_log = log_path.open("ab", buffering=0)
+            from product.backend.infra.runtime.generated_files import register_generated_file
+            register_generated_file(self.var_dir, log_path, 'worker-log')
         except OSError:
             raise JiejianError(
                 ErrorCode.RUNNER_START_FAILED,
@@ -150,6 +152,9 @@ class WorkerDispatcher:
                     if source.is_file():
                         os.replace(source, path.with_name(f"{path.name}.{index + 1}"))
                 os.replace(path, path.with_name(f"{path.name}.1"))
+                from product.backend.infra.runtime.generated_files import register_generated_file
+                for backup in root.glob(f"{path.name}.*"):
+                    register_generated_file(self.var_dir, backup, 'worker-log')
         except OSError:
             raise JiejianError(
                 ErrorCode.RUNNER_START_FAILED,

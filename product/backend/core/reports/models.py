@@ -15,13 +15,7 @@ import json
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape as xml_escape
 
-from product.protocols.report import (
-    BaseRunReport,
-    GateRunReport,
-    ReportDocument,
-    ReportFinding,
-    ReportPresentationIssue,
-)
+from product.protocols.report import GateRunReport, ReportDocument, ReportFinding, ReportPresentationIssue
 
 
 _REPORT_CSS = """

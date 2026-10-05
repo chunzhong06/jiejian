@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 from typing import Literal
+from typing import Annotated
+from pydantic import Field
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -55,7 +57,7 @@ def build_system_router(
 
     @router.get("/api/system/maintenance", response_model=ApiResponse)
     def maintenance_status() -> JSONResponse:
-        """读取三类可清理统计与永不进入普通清理的受保护摘要。"""
+        """读取已登记运行生成物、活动引用保护及无法确认的来源，不扫描业务资料。"""
 
         try:
             return data_response(context.maintenance.status())
@@ -90,8 +92,11 @@ def build_system_router(
                 result = context.maintenance.execute(
                     body.plan_id,
                     expected_scope=operation,
+                    item_ids=body.item_ids,
                 )
             elif not body.confirmed and body.dry_run:
+                if body.item_ids is not None:
+                    raise JiejianError(ErrorCode.INPUT_INVALID, "请先读取完整清理预览，再选择项目")
                 result = context.maintenance.preview(operation)
             else:
                 raise JiejianError(
@@ -106,6 +111,11 @@ def build_system_router(
                 ErrorCode.LOCAL_MAINTENANCE_FAILED,
                 "本地运行数据维护失败",
             ) from None
+
+    @router.get("/api/system/maintenance/plans/{plan_id}", response_model=ApiResponse)
+    def maintenance_outcome(plan_id: str) -> JSONResponse:
+        """只读回查未知清理回执；查询绝不再次执行删除。"""
+        return data_response(context.maintenance.outcome(plan_id))
 
     @router.post("/api/system/shutdown", response_model=ApiResponse, status_code=202)
     def shutdown() -> JSONResponse:
@@ -149,4 +159,5 @@ class MaintenanceOperationRequest(ApiModel):
     schema_version: Literal["1"]
     confirmed: bool = False
     dry_run: bool = True
-    plan_id: str | None = None
+    plan_id: str | None = Field(default=None, min_length=1, max_length=128)
+    item_ids: list[Annotated[str, Field(min_length=1, max_length=128)]] | None = Field(default=None, min_length=1, max_length=10000)

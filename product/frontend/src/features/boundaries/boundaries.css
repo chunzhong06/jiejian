@@ -4,13 +4,7 @@
   gap: var(--space-20);
 }
 
-.boundary-loading {
-  min-height: 220px;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-}
+
 
 .boundary-section-heading {
   display: flex;
@@ -43,15 +37,6 @@
   border-radius: var(--radius-large);
   padding: var(--space-24);
   box-shadow: var(--shadow-focus);
-}
-
-.boundary-review {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-large);
-  background: var(--color-surface);
-  padding: 22px;
-  display: grid;
-  gap: 16px;
 }
 
 .boundary-new-proposal {
@@ -92,15 +77,6 @@
   gap: 12px;
 }
 
-.boundary-editor-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-medium);
-  background: var(--color-surface);
-  padding: 18px;
-  display: grid;
-  gap: 12px;
-}
-
 .current-boundary-action .ant-typography {
   margin-bottom: 0;
 }
@@ -115,20 +91,11 @@
   padding-left: 20px;
 }
 
-.boundary-review-grid ul {
-  margin: 8px 0 0;
-  padding-left: 20px;
-}
-
 .current-boundary-effects li {
   margin: 7px 0;
 }
 
 .current-boundary-permissions li {
-  margin: 7px 0;
-}
-
-.boundary-review-grid li {
   margin: 7px 0;
 }
 
@@ -139,12 +106,6 @@
 }
 
 .current-boundary-permissions li span {
-  display: block;
-  color: var(--color-secondary);
-  margin-top: 2px;
-}
-
-.boundary-review-grid li span {
   display: block;
   color: var(--color-secondary);
   margin-top: 2px;
@@ -193,19 +154,7 @@
   padding: 12px 0 12px 14px;
 }
 
-.boundary-permission-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(180px, .6fr);
-  gap: 10px;
-  border-left: 3px solid var(--color-border-strong);
-  padding: 12px 0 12px 14px;
-}
-
 .boundary-effect-editor .ant-input-textarea {
-  grid-column: 1 / -1;
-}
-
-.boundary-permission-editor .ant-checkbox-group {
   grid-column: 1 / -1;
 }
 
@@ -214,19 +163,6 @@
   justify-content: flex-end;
   align-items: center;
   gap: 16px;
-}
-
-.boundary-review-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.boundary-review-grid article {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-medium);
-  padding: 16px;
-  background: var(--color-surface);
 }
 
 .boundary-review-actions {
@@ -264,25 +200,7 @@
 }
 
 @media (max-width: 760px) {
-  .boundary-permission-editor {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .boundary-review-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
   .boundary-effect-editor .ant-input-textarea {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 760px) {
-  .boundary-permission-editor .ant-checkbox-group {
     grid-column: auto;
   }
 }
@@ -299,11 +217,6 @@
   justify-self: start;
 }
 
-.boundary-permission-assist .boundary-editor-card {
-  margin-block: var(--space-16);
-  overflow-wrap: anywhere;
-}
-
 .boundary-draft {
   background: transparent;
   padding: 0;
@@ -312,13 +225,6 @@
   display: grid;
   gap: var(--space-20);
   min-width: 0;
-}
-
-.boundary-confirmation {
-  display: inline-block;
-  color: var(--color-secondary);
-  font-size: var(--font-secondary);
-  margin-top: var(--space-12);
 }
 
 .boundary-document .action-index h3 {
@@ -336,7 +242,7 @@
 
 .action-index button small {
   display: block;
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   margin-top: var(--space-8);
   color: var(--color-secondary);
 }
@@ -372,19 +278,8 @@
 .boundary-draft-toolbar h1 {
   font-size: var(--font-titleMax);
   color: var(--color-text);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   margin: 0 0 8px;
-}
-
-.boundary-overview-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-24);
-}
-
-.boundary-overview-heading>.ant-btn {
-  flex-shrink: 0;
 }
 
 .boundary-draft-toolbar>div {
@@ -398,13 +293,14 @@
   margin: 0;
   font-size: var(--font-body);
   line-height: 1.7;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
+/* 连续记录沿用父工作面的底色，避免不透明行底遮住共享悬停层。 */
 .permission-summary-row {
   display: flex;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 22px;
@@ -454,7 +350,7 @@
 .boundary-secondary summary {
   cursor: pointer;
   font-size: var(--font-body);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .boundary-empty-rules {
@@ -505,13 +401,6 @@
 
 .boundary-draft [hidden] {
   display: none!important;
-}
-
-@media(max-width:760px) {
-  .boundary-overview-heading {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
 }
 
 @media(max-width:760px) {
@@ -592,12 +481,7 @@
   display: block;
 }
 
-.action-index button[aria-current] {
-  border-left-color: var(--color-primary);
-  background: var(--color-surface-subtle);
-  color: var(--color-text);
-  border-left: 0;
-}
+
 
 .action-index-horizontal {
   flex-direction: row;
@@ -612,11 +496,6 @@
 
 .boundary-action-document h3 {
   margin-top: var(--space-32);
-}
-
-.boundary-implementation {
-  padding-block: var(--space-16);
-  border-top: var(--line-width) solid var(--color-border);
 }
 
 .boundary-actor-details {
@@ -650,48 +529,6 @@
   padding-left: 0;
 }
 
-.boundary-editor .boundary-permission-editor {
-  border-left: 0;
-  padding-inline: 0;
-}
-
-.boundary-permission-editor .rule-sentence {
-  grid-column: 1/-1;
-  margin: 0 0 var(--space-12);
-}
-
-.editorial-page .boundary-review {
-  border: var(--line-width) solid var(--color-border-strong);
-  border-radius: var(--radius-small);
-  background: var(--color-surface);
-  padding: var(--space-24);
-}
-
-.proposal-diff > section {
-  border-top: var(--line-width) solid var(--color-border);
-  padding-block: var(--space-16);
-}
-
-.proposal-diff-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-top: 12px;
-  gap: 0;
-}
-
-.proposal-diff-columns > div + div {
-  border-left: var(--line-width) solid var(--color-border);
-  padding-left: var(--space-24);
-}
-
-.boundary-review h4 {
-  font-size: var(--font-body);
-  margin: 0 0 var(--space-12);
-}
-
 @media(max-width:900px) {
   .boundary-document {
     grid-template-columns: 1fr;
@@ -707,12 +544,6 @@
 }
 
 @media(max-width:600px) {
-  .boundary-editor .boundary-permission-editor {
-    grid-template-columns: minmax(0,1fr);
-  }
-}
-
-@media(max-width:600px) {
   .boundary-editor .boundary-effect-editor {
     grid-template-columns: minmax(0,1fr);
   }
@@ -721,27 +552,6 @@
 @media(max-width:600px) {
   .boundary-editor .boundary-editor-row {
     grid-template-columns: minmax(0,1fr);
-  }
-}
-
-@media(max-width:600px) {
-  .proposal-diff-columns {
-    grid-template-columns: minmax(0,1fr);
-  }
-}
-
-@media(max-width:600px) {
-  .proposal-diff-columns > div + div {
-    border-left: 0;
-    padding-left: 0;
-    border-top: var(--line-width) solid var(--color-border);
-    padding-top: var(--space-16);
-  }
-}
-
-@media(max-width:600px) {
-  .editorial-page .boundary-review {
-    padding: var(--space-16);
   }
 }
 
@@ -801,7 +611,7 @@
 
 .boundary-view-tabs button[aria-current=page] {
   color: var(--color-text);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   border-bottom-color: var(--color-primary);
 }
 
@@ -818,12 +628,10 @@
 .action-index>h3 {
   font-size: 12px;
   color: var(--color-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .action-index button[aria-current=true] {
-  background: var(--color-surface);
-  border-color: var(--color-border);
   box-shadow: inset 3px 0 var(--color-primary);
 }
 
@@ -851,23 +659,6 @@
   line-height: 1.7;
 }
 
-.definition-kind {
-  display: flex;
-  gap: 3px;
-  border-radius: 8px;
-  padding: 3px;
-  background: var(--color-surface-subtle);
-  margin-bottom: 18px;
-}
-
-.definition-kind button {
-  padding: 7px 3px;
-  text-align: center;
-  font-size: 12px;
-  margin: 0;
-  flex: 1;
-}
-
 .definition-kind button[aria-pressed=true] {
   background: var(--color-surface);
   border-color: var(--color-border);
@@ -881,7 +672,7 @@
 .definition-section-label {
   font-size: 12px;
   color: var(--color-secondary);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   margin: var(--space-24) 0 var(--space-8);
 }
 
@@ -924,7 +715,7 @@
 .definition-effect-summary h3 {
   margin: 0 0 var(--space-8);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   color: var(--color-secondary);
 }
 
@@ -1006,58 +797,6 @@
   font-size: 13px;
 }
 
-.boundary-review.review-layout {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) 230px;
-  gap: 30px;
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-  background: transparent;
-}
-
-.proposal-sheet {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 28px;
-  min-width: 0;
-}
-
-.proposal-sheet h2 {
-  font-size: 19px;
-}
-
-.proposal-item-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.proposal-item-heading h3 {
-  font-size: 16px;
-}
-
-.proposal-diff {
-  display: grid;
-  gap: 22px;
-  margin-top: 24px;
-  min-width: 0;
-}
-
-.proposal-diff-columns>div {
-  padding: 19px;
-  background: var(--color-bg);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.proposal-diff-columns>div+div {
-  border-left: 1px solid var(--color-border);
-  background: var(--color-primary-light);
-}
-
 .review-business-value {
   font-size: 13px;
   line-height: 1.85;
@@ -1071,10 +810,6 @@
   margin: 8px 0;
 }
 
-.proposal-diff-columns .editorial-eyebrow {
-  font-size: 11px;
-}
-
 .boundary-approval {
   display: grid;
   gap: 14px;
@@ -1085,21 +820,6 @@
 
 .boundary-approval>label {
   font-size: 13px;
-}
-
-.review-context {
-  padding: 8px 0;
-}
-
-.review-context h3 {
-  font-size: 13px;
-  margin: 20px 0 8px;
-}
-
-.review-context p {
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--color-secondary);
 }
 
 @media(min-width:1900px) {
@@ -1115,13 +835,6 @@
 }
 
 @media(max-width:1100px) {
-  .boundary-review.review-layout {
-    grid-template-columns: minmax(0,1fr) 175px;
-    gap: 22px;
-  }
-}
-
-@media(max-width:1100px) {
   .boundary-document {
     grid-template-columns: 190px minmax(0,1fr);
   }
@@ -1130,12 +843,6 @@
 @media(max-width:1100px) {
   .boundary-action-document {
     padding-left: 24px;
-  }
-}
-
-@media(max-width:1100px) {
-  .proposal-sheet {
-    padding: 22px;
   }
 }
 
@@ -1213,37 +920,10 @@
 }
 
 @media(max-width:760px) {
-  .boundary-review.review-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media(max-width:760px) {
-  .proposal-diff-columns {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media(max-width:760px) {
-  .proposal-diff-columns>div+div {
-    border-left: 0;
-    border-top: 1px solid var(--color-border);
-  }
-}
-
-@media(max-width:760px) {
   .boundary-review-actions {
-    position: sticky;
-    bottom: 0;
-    background: var(--color-surface);
-    padding: 12px 0;
-    z-index: 2;
-  }
-}
-
-@media(max-width:760px) {
-  .review-context {
-    border-top: 1px solid var(--color-border);
+    position: static;
+    background: transparent;
+    padding: 0;
   }
 }
 
@@ -1266,12 +946,6 @@
 }
 
 @media(max-width:420px) {
-  .proposal-sheet {
-    padding: 18px;
-  }
-}
-
-@media(max-width:420px) {
   .definition-properties {
     display: grid;
   }
@@ -1281,14 +955,6 @@
   .boundary-review-actions button {
     font-size: 12px;
   }
-}
-
-.boundary-maintenance {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
 }
 
 /* 集合操作与对象操作分层；三类业务内容复用相同工具栏尺度。 */
@@ -1301,9 +967,12 @@
 .boundary-draft .permission-assist-disclosure{border-top:1px solid var(--color-border);margin-top:24px;padding:16px 0}
 @media(max-width:760px){.boundary-collection-toolbar{flex-wrap:wrap;gap:12px}.boundary-view-tabs{gap:20px}.boundary-view-tabs button{font-size:14px}}
 
-.boundary-draft-main-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.boundary-draft-toolbar p{max-width:62ch;margin:8px 0 0;font-size:13px}.change-support-entry,.preparation-secondary-entry{display:flex;align-items:center;gap:16px;margin-top:24px;font-size:13px;color:var(--color-secondary)}
+.boundary-draft-main-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.boundary-draft-toolbar p{max-width:62ch;margin:8px 0 0;font-size:13px}.change-support-entry{display:flex;align-items:center;gap:16px;margin-top:24px;font-size:13px;color:var(--color-secondary)}
 
 .boundary-draft-toolbar>div:first-child{flex:1;min-width:0}.boundary-draft-toolbar p{flex-basis:100%}.boundary-draft-toolbar>.boundary-draft-main-actions{flex-shrink:0;justify-content:flex-end;align-self:flex-start;max-width:100%}
 
 /* 起始路径的并列动作保留间距；搜索尺寸由公共 SearchField 管理。 */
 .boundary-entry-actions{display:flex;flex-wrap:wrap;gap:var(--space-12);margin-top:var(--space-20);}
+
+/* 提案入口是一次决策，普通编辑在前、确认入口在右。 */
+.boundary-entry-actions { justify-content:flex-end; align-items:center; }

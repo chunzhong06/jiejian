@@ -91,7 +91,7 @@ export function MaterialEditor({ projectId, reference, actionLabel, effectLabel,
   }
   const saved = async () => {
     setPending(undefined); setPreview(undefined); command.current = undefined
-    setMessage('材料已保存并重新核对。已有检查与证据保持原样。')
+    setMessage('材料已保存并重新核对。')
     const currentDraft = draftPointer.current
     if (currentDraft) {
       const currentDetails = await preparationApi.material(projectId, reference)

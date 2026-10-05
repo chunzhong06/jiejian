@@ -5,12 +5,15 @@ function Write-Startup([string]$Message) {
         New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
     }
     if (-not $script:StartupLogInitialized) {
-        # 新日志写入前只保留最近十九份历史，连同本轮日志最多二十份。
-        @(Get-ChildItem -LiteralPath $script:LogDir -Filter "*.log" -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTimeUtc, Name -Descending |
-            Select-Object -Skip 19) | ForEach-Object {
-                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
-            }
+        # 只登记本次创建的日志；历史保留由同一维护服务按归属记录处理。
+        $relative = "logs/startup/" + [IO.Path]::GetFileName($script:LogPath)
+        $registry = Join-Path $script:VarDir "runtime\generated-files"
+        New-Item -ItemType Directory -Path $registry -Force | Out-Null
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $key = ([BitConverter]::ToString($sha.ComputeHash($script:Utf8Encoding.GetBytes($relative))) -replace '-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        $record = [ordered]@{ schema_version="1"; kind="generated-file"; producer="startup-log"; path=$relative }
+        [IO.File]::WriteAllText((Join-Path $registry ($key + ".json")), ($record | ConvertTo-Json -Compress), $script:Utf8Encoding)
         $script:StartupLogInitialized = $true
     }
     [IO.File]::AppendAllText($script:LogPath, $Message + [Environment]::NewLine, $script:Utf8Encoding)

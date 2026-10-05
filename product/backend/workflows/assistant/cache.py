@@ -131,8 +131,13 @@ class AssistantCache:
                 handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
+            from product.backend.infra.runtime.generated_files import register_generated_file
+            register_generated_file(self._root.parents[1], temporary, 'assistant-cache')
             # 同目录替换避免并发读者观察到半个 JSON 文档。
             os.replace(temporary, path)
+            from product.backend.infra.runtime.generated_files import forget_generated_file
+            forget_generated_file(self._root.parents[1], temporary, 'assistant-cache')
+            register_generated_file(self._root.parents[1], path, 'assistant-cache')
         except OSError:
             if temporary is not None:
                 try:

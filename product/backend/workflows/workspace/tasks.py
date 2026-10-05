@@ -380,7 +380,7 @@ def development_task(primary_task, facts, boundary_attention, active_check, prev
                 can_execute=preview.can_execute, facts={"delivery_id": delivery["delivery_id"], "plan": preview.plan_fingerprint})
         elif primary_task is None or primary_task.task_kind == "VIEW_CURRENT_RESULT":
             primary_task = task_view("CONTINUE_DEVELOPMENT_TASK", title="继续开发，沿用已确认权限",
-                why_now="本次修改与检查已分别保留，可以回原客户端继续开发。", user_responsibility="查看本次记录，或登记下一次修改。",
+                why_now="本次修改与检查已分别保留，可以在开发客户端继续开发。", user_responsibility="查看本次记录，或登记下一次修改。",
                 system_will_do="权限要求沿用；检查结果只关联其实际执行批次。", route="/changes",
                 facts={"task_id": active_task.task_id, "task_version": active_task.version})
         elif delivery is not None and primary_task.route == "/tests" and primary_task.change_id is None and primary_task.run_id is None:

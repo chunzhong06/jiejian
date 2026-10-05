@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import Field, model_validator
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKeyConstraint, Index, Integer, String, select
@@ -25,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, Session
 
 from product.backend.core.identifiers import RUN_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage.base import Base, StorageRecord, _flush, _scalar, _scalars, ensure_storage_payload_safe
+from product.backend.infra.storage.base import Base, StorageRecord, _flush, _scalar, ensure_storage_payload_safe
 
 
 class FindingFinalizationState(StrEnum):
@@ -152,11 +151,6 @@ class RunFinalizationRepository:
         row = _scalar(self._session, select(RunFinalizationRow).where(RunFinalizationRow.run_id == run_id))
         return None if row is None else _record(row)
 
-    def list_for_runs(self, run_ids: tuple[str, ...]) -> tuple[RunFinalizationRecord, ...]:
-        if not run_ids:
-            return ()
-        rows = _scalars(self._session, select(RunFinalizationRow).where(RunFinalizationRow.run_id.in_(run_ids)))
-        return tuple(_record(row) for row in rows)
 
     def save(self, record: RunFinalizationRecord) -> None:
         ensure_storage_payload_safe(record.model_dump(mode="json"), self._known_secrets)

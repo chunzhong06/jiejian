@@ -44,7 +44,7 @@ def test_uncertain_gui_submission_reads_owned_run_and_never_resubmits():
             if "check-preview" in path:
                 return {"can_execute": True, "action_count": 2, "case_count": 3, "plan_fingerprint": "frozen"}
             if path == "/api/runs/owned-run":
-                return {"job": {"job_id": "owned-job"}}
+                return {"run": {"project_id": "project"}, "job": {"job_id": "owned-job"}}
             count += 1
             return [] if count == 1 else [{"run": {"run_id": "owned-run"}}]
 
@@ -56,4 +56,35 @@ def test_uncertain_gui_submission_reads_owned_run_and_never_resubmits():
     with pytest.raises(TimeoutError):
         current_api.run_current(Client(), "project", state, name="problem", expected="BLOCK", gui=SimpleNamespace(submit=submit))
     assert state.active_run_id == "owned-run" and state.active_run_job_id == "owned-job"
+    assert all(method == "GET" for method, _ in calls)
+
+
+@pytest.mark.parametrize("failure", ["unreadable", "other-project"])
+def test_uncertain_submission_preserves_first_failure_when_recovery_is_unusable(failure):
+    calls, count = [], 0
+    original = TimeoutError("original receipt unavailable")
+
+    class Client:
+        def call(self, method, path, *args, **kwargs):
+            nonlocal count
+            calls.append((method, path))
+            if "check-preview" in path:
+                return {"can_execute": True, "action_count": 2, "case_count": 3, "plan_fingerprint": "frozen"}
+            if path == "/api/runs/foreign":
+                return {"run": {"project_id": "other"}, "job": {"job_id": "foreign-job"}}
+            count += 1
+            if count == 1:
+                return []
+            if failure == "unreadable":
+                raise ValueError("secondary read failure")
+            return [{"run": {"run_id": "foreign"}}]
+
+    def submit(*args, **kwargs):
+        raise original
+
+    state = sample_harness_state.HarnessState()
+    with pytest.raises(TimeoutError) as caught:
+        current_api.run_current(Client(), "project", state, name="problem", expected="BLOCK", gui=SimpleNamespace(submit=submit))
+    assert caught.value is original
+    assert state.active_run_id is None and state.active_run_job_id is None
     assert all(method == "GET" for method, _ in calls)

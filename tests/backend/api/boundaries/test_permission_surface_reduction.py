@@ -39,7 +39,9 @@ def test_internal_execution_profile_storage_remains_registered() -> None:
 
 def test_non_gui_control_modules_do_not_call_human_approval_surfaces() -> None:
     cli_sources = sorted((ROOT / "product" / "backend" / "cli").rglob("*.py"))
-    sources = cli_sources + [ROOT / "product" / "backend" / "api" / "mcp.py"]
+    mcp_sources = sorted((ROOT / "product" / "backend" / "api" / "mcp").rglob("*.py"))
+    assert cli_sources and mcp_sources
+    sources = cli_sources + mcp_sources
     forbidden_calls = (
         "permission_intents.confirm(",
         "application_understanding.decide_role(",

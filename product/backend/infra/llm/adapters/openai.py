@@ -3,15 +3,13 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
 from product.backend.infra.llm.adapters.base import (
     LLMHttpRequest,
     LLMHttpResponse,
     LLMTransportError,
     json_body,
     max_output_tokens,
+    parse_json_response,
 )
 from product.backend.infra.llm.adapters.openai_compatible import _raise_for_status
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, reasoning_options_for
@@ -63,7 +61,7 @@ class OpenAIAdapter:
 
     def parse_response(self, response: LLMHttpResponse) -> str:
         _raise_for_status(response.status_code)
-        payload = _parse_json(response.body)
+        payload = parse_json_response(response.body)
         output_text = payload.get("output_text")
         if isinstance(output_text, str) and output_text.strip():
             return output_text
@@ -83,13 +81,3 @@ class OpenAIAdapter:
         if not result.strip():
             raise LLMTransportError("invalid_response")
         return result
-
-
-def _parse_json(body: bytes) -> dict[str, Any]:
-    try:
-        value = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        raise LLMTransportError("invalid_response") from None
-    if not isinstance(value, dict):
-        raise LLMTransportError("invalid_response")
-    return value

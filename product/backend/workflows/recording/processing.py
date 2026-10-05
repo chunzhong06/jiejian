@@ -15,6 +15,7 @@
 # =============================================================================
 
 from __future__ import annotations
+from product.backend.workflows.recording.json_locations import read_json_location
 
 import hashlib
 import json
@@ -474,7 +475,7 @@ class FlowDraftProcessor:
                 )
         recorded_body = self._request_json(step.request)
         for path, current_value in self._walk_scalars(step.json_body):
-            value = self._json_location(recorded_body, path)
+            value = read_json_location(recorded_body, path)
             if value is None:
                 value = current_value
             if self._candidate_value(value) and not self._path_sensitive(path):
@@ -656,17 +657,6 @@ class FlowDraftProcessor:
         elif isinstance(value, (str, int)) and not isinstance(value, bool):
             found.append((path, value))
         return found
-
-    @staticmethod
-    def _json_location(value: Any, path: str) -> Any:
-        current = value
-        for field, offset in re.findall(r"\.([A-Za-z_][A-Za-z0-9_-]*)|\[([0-9]+)\]", path):
-            key: str | int = field if field else int(offset)
-            try:
-                current = current[key]
-            except (KeyError, IndexError, TypeError):
-                return None
-        return current
 
     @staticmethod
     def _business_field(value: str) -> str:

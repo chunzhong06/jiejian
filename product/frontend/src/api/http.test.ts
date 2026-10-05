@@ -41,4 +41,10 @@ describe('HTTP API 根消息', () => {
       new ApiError('INPUT_INVALID', '请求参数无效', 'tr_test'),
     )
   })
+
+  it('只透传明确的执行门禁布尔值，不透传其他错误详情', async()=>{
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response({schema_version:'1',error:{code:'LOCAL_MAINTENANCE_FAILED',message:'重新预览',details:{execution_started:false,internal:'unused'}}},{ok:false})))
+    try{await request('/api/system/maintenance/clear-all');throw new Error('expected failure')}
+    catch(error){expect(error).toMatchObject({executionStarted:false});expect(error).not.toHaveProperty('details')}
+  })
 })

@@ -104,6 +104,7 @@ class ApplicationCore:
         self._configure_product_services(factory, clock_us, folder_selector, llm_transport, environ)
         self._configure_runtime_providers(factory, clock_us, official_sample_root)
         self._validate_connections()
+        self.maintenance.assets.retain_live_references()
 
     def _configure_project_materials(self, factory, clock_us, control_origin, endpoint_discovery) -> None:
         """装配项目、受控运行、权限与准备材料；这里只建立对象，不启动目标。"""
@@ -250,10 +251,7 @@ class ApplicationCore:
         )
         self.maintenance = LocalMaintenanceService(
             self.var_dir,
-            active_runtime_paths=lambda: (
-                self.paths.runtime, self.paths.worker_logs, self.paths.recording_logs,
-            ) + self.identity_preparations.active_runtime_paths() if self.worker.is_running()
-            else self.identity_preparations.active_runtime_paths(),
+            active_runtime_paths=lambda: self.worker.active_runtime_paths() + self.identity_preparations.active_runtime_paths(),
         )
         self.onboarding = OnboardingWorkflow(
             folder_selector
@@ -334,6 +332,7 @@ class ApplicationCore:
         self.runtime_secrets.clear()
         self.secret_store.clear()
         self.engine.dispose()
+        self.maintenance.assets.close()
 
     def environment_for_secret_names(self, names) -> dict[str, str]:
         values = self.runtime_secrets.resolve(names)

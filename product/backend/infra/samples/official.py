@@ -238,6 +238,8 @@ class OfficialSampleManager:
                     files=python_runtime_files(source_root), entry_module=installation.entry_module or "server",
                     interpreter_fingerprint=self._environment.get("JIEJIAN_RUNTIME_FINGERPRINT", "0" * 64))
                 with log_path.open("ab", buffering=0) as log_stream:
+                    from product.backend.infra.runtime.generated_files import register_generated_file
+                    register_generated_file(self._paths.root, log_path, 'sample-log')
                     process = self._process_launcher(
                         child_environment,
                         "product.backend.infra.runtime.process.controlled.target",
@@ -404,6 +406,8 @@ class OfficialSampleManager:
             process = None
             try:
                 with runtime.log_path.open("ab", buffering=0) as stream:
+                    from product.backend.infra.runtime.generated_files import register_generated_file
+                    register_generated_file(self._paths.root, runtime.log_path, 'sample-log')
                     process = self._process_launcher(environment, "product.backend.infra.runtime.process.controlled.target",
                         "--manifest", str(launch_root / "launch.json"), "--", "--runtime-root", str(runtime.runtime_root),
                         "--port", str(urlsplit(runtime.origin).port), role=ProcessEnvironmentRole.SAMPLE,

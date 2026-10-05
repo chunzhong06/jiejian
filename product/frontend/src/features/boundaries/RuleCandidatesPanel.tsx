@@ -105,11 +105,10 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     finally { inFlight.current = false; if (generation === current.current) setBusy(false) }
   }
 
-  if (loading) return <section className="rule-candidates" aria-label="读取规则候选"><Spin size="small" /> 正在读取对话中的规则候选</section>
-  if (!selected) return <section className="rule-candidates" aria-label="对话规则候选">
-    <div className="rule-candidates-heading"><div><h2>对话中的规则</h2><p>在原 Agent 中确认约定后，让它保存到界鉴；正式生效前由你审阅。</p></div><Button onClick={() => setEpoch(value => value + 1)}>读取候选</Button></div>
+  if (loading) return <section className="rule-candidates-inbox" aria-label="读取规则候选"><Spin size="small" /> 正在读取规则候选</section>
+  if (!selected) return <section className="rule-candidates-inbox" aria-label="对话规则候选">
+    <div className="rule-candidates-heading"><div><h2>规则候选{!error && !!context?.candidates.length && <span> · 本页 {context.candidates.length} 条</span>}</h2><p>{error ? '读取后核对尚未批准的约定。' : context?.candidates.length ? '以下约定尚未生效，审阅并批准后才会更新权限。' : '暂无待审候选。开发工具保存新的约定后，可在这里读取。'}</p></div><Button onClick={() => setEpoch(value => value + 1)}>读取候选</Button></div>
     {error && <Alert type="warning" message={error} />}
-    {!error && context?.candidates.length === 0 && <p className="editorial-muted">尚无待审候选，也可以继续使用下方的人工规则入口。</p>}
     {context?.candidates.map(item => <div className="rule-candidate-row" key={item.candidate_id}><p>{item.original_text}</p><Button type="link" onClick={() => void select(item.candidate_id, item.revision)}>审阅</Button></div>)}
     {context?.next_offset != null && <Button loading={busy} onClick={() => void nextPage()}>下一页候选</Button>}
   </section>
@@ -118,7 +117,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   const confirmed = selected.assessment === 'ALREADY_CONFIRMED'
   const leave = () => {setSelected(undefined); onExit?.()}
   const permissions = new Map(content.permissions.map(item => [item.item_id, item]))
-  return <section className="rule-candidates" aria-label="审阅对话规则">
+  return <section className="rule-candidates work-surface" aria-label="审阅对话规则">
     <div className="rule-candidates-heading"><h2>{selected.decision ? '查看当时的业务约定' : confirmed ? '沿用已有业务约定' : '确认这条业务约定'}</h2><StatusBadge kind="rule">{confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div>
     <p className="rule-candidate-original">{content.original_text}</p>
     <p className="editorial-muted">{selected.candidate.submitted_via === 'MCP' ? 'Agent 整理' : '本机整理'} · 修订 {selected.candidate.revision}。保存和准备都不代表检查通过。</p>

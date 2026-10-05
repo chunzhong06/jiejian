@@ -21,7 +21,6 @@ import re
 import shutil
 import subprocess
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -170,6 +169,8 @@ class IdentityPreparationManager:
             process: subprocess.Popen[bytes] | None = None
             try:
                 with log_path.open("ab") as stderr:
+                    from product.backend.infra.runtime.generated_files import register_generated_file
+                    register_generated_file(self._paths.root, log_path, 'identity-log')
                     process = self._process_launcher(
                         self._environment,
                         "product.backend.infra.identity.process",
@@ -352,6 +353,10 @@ class IdentityPreparationManager:
         self._terminal[preparation_id] = view
         if view.status is not IdentityPreparationStatus.FAILED and cleanup_complete:
             shutil.rmtree(active.controls.root, ignore_errors=True)
+        elif cleanup_complete:
+            # 进程树及临时凭据已收口；失败诊断目录可以由用户的闲置清理回收。
+            from product.backend.infra.runtime.maintenance_assets import mark_runtime_idle
+            mark_runtime_idle(self._paths.root, active.controls.root, "identity-preparation")
         return view
 
     def _commit_result(

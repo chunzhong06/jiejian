@@ -54,15 +54,6 @@ class RecordingStatusView(BaseModel):
     ]
 
 
-def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON key")
-        result[key] = value
-    return result
-
-
 class RecordingFinalizationView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 

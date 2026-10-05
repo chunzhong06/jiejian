@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import time
 from collections.abc import Callable, Mapping
@@ -23,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
+from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle
 from product.backend.core.verification.differential import TwinExecutionRole
 from product.backend.infra.execution.port import TargetCleanupIssue
 from product.backend.infra.execution.registry import TargetRuntimeRegistry

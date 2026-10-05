@@ -41,7 +41,7 @@ export function DeliveryFacts({ projectId, change, acceptanceOnly = false, chang
       {verification?.repair_status && <p>原题复验：{repairLabels[verification.repair_status as keyof typeof repairLabels] ?? verification.repair_status}</p>}
       {verification?.run_id && <p>只对应这批交付关联的检查；查看记录不会再次提交检查。</p>}
 
-      <p className="editorial-muted">登记修改不表示权限通过；开发需求继续在原客户端讨论。</p>
+      <p className="editorial-muted">登记修改不表示权限通过；开发需求继续在开发客户端讨论。</p>
       <Button type="link" onClick={() => onNavigate('/tests?change_id=' + encodeURIComponent(change.manifest.change_id) + '&materials=1')}>核对本批检查材料</Button>
     </section>}
   </div>

@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
@@ -24,6 +23,7 @@ from urllib.parse import parse_qsl, urlsplit
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.workflows.recording.json_locations import read_json_location
 from product.protocols.recording.flow_draft import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, FlowDraft, FlowDraftResourceCandidate, FlowDraftReviewCommand, FlowDraftStep, FlowDraftVariable, FlowDraftVariableStatus, flow_draft_source_choice_id
 from product.protocols.web.workflow import ValueSlotConsumer
 
@@ -172,7 +172,7 @@ class FlowDraftReviewer:
                 None,
             )
         else:
-            value = cls._json_location_value(step.json_body, candidate.location)
+            value = read_json_location(step.json_body, candidate.location)
         if (
             isinstance(value, str)
             and value.startswith("{")
@@ -180,21 +180,6 @@ class FlowDraftReviewer:
         ):
             return value[1:-1]
         return None
-
-    @staticmethod
-    def _json_location_value(value: Any, path: str) -> Any:
-        current = value
-        for field, offset in re.findall(
-            r"\.([A-Za-z_][A-Za-z0-9_-]*)|\[([0-9]+)\]",
-            path,
-        ):
-            key: str | int = field if field else int(offset)
-            try:
-                current = current[key]
-            except (KeyError, IndexError, TypeError):
-                return None
-        return current
-
 
     def _confirm_variable(
         self,

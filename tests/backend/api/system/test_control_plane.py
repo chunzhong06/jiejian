@@ -81,6 +81,8 @@ def test_system_maintenance_api_previews_and_preserves_product_data(tmp_path: Pa
     cache_marker = app.state.context.paths.assistant_cache / "rebuild.bin"
     data_marker.write_text("keep", encoding="utf-8")
     cache_marker.write_bytes(b"cache")
+    from product.backend.infra.runtime.generated_files import register_generated_file
+    register_generated_file(var_dir,cache_marker,'assistant-cache')
     # 此用例只验证显式 API；后台维护的并发与失败由相邻两项独立覆盖。
     app.state.context.maintenance.startup_maintenance = lambda: {"status": "completed"}
 

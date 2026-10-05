@@ -15,7 +15,7 @@ export function ApplicationSwitcher({
   onSelect: (project: ProjectDto) => void
   onConnectNew: () => void
 }) {
-  const currentLabel = selected ? selected.name?.trim() || '未命名应用' : '选择应用'
+  const currentLabel = selected ? selected.name?.trim() || '未命名应用' : '选择待测应用'
   const items = [
     ...projects.map((project) => ({
       key: project.project_id,
@@ -41,7 +41,7 @@ export function ApplicationSwitcher({
     destroyOnHidden
     trigger={['click']}
   >
-    <Button className="application-switcher" aria-label={`切换应用，当前：${selected ? currentLabel : '尚未选择'}`}>
+    <Button type="text" className="application-switcher" aria-label={`切换应用，当前：${selected ? currentLabel : '尚未选择'}`}>
       <span className="application-switcher-label">{currentLabel}</span><DownOutlined />
     </Button>
   </Dropdown>

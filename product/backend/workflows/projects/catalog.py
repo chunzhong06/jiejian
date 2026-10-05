@@ -41,9 +41,3 @@ class ProjectCatalog:
                 for record in work.projects.list_all()
                 if include_archived or record.status is not ProjectStatus.ARCHIVED
             ]
-
-    def current_observations(self, project_id: str) -> tuple[str, ...]:
-        """为契约治理提供当前项目已经接入的最小观察能力。"""
-
-        self.get(project_id)
-        return ("resource_state",)

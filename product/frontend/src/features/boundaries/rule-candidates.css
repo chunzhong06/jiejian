@@ -1,9 +1,9 @@
 /* 候选沿用公共正文轴与控件，只安排原约定、例子和单一决定的层次。 */
-.rule-candidates { margin-block: var(--space-24); padding-block: var(--space-24); border-block: var(--line-width) solid var(--color-border); }
+.rule-candidates { margin-block: 0; padding: var(--space-24); }
 .rule-candidates-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); }
 .rule-candidates-heading h2 { margin: 0; }
 .rule-candidates-heading p { margin-block: var(--space-8); }
-.rule-candidate-original { font-size: 1.25rem; line-height: 1.7; overflow-wrap: anywhere; }
+.rule-candidate-original { font-size: var(--font-local); line-height: 1.8; overflow-wrap: anywhere; background: var(--color-primary-light); padding: var(--space-16); border-radius: var(--radius-small); margin-block: var(--space-20); }
 .rule-candidate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-16); padding-block: var(--space-16); border-bottom: var(--line-width) solid var(--color-border); }
 .rule-candidate-row p { margin: 0; overflow-wrap: anywhere; }
 .rule-example-table { margin-block: var(--space-24); }
@@ -12,3 +12,7 @@
 .rule-candidates .task-action-bar:has(.ant-btn-primary) { position: static; margin-block-start: var(--space-16); }
 .rule-candidate-row > .product-status { justify-self: start; }
 @media (max-width: 600px) { .rule-candidates-heading { align-items: flex-start; flex-wrap: wrap; } .rule-candidate-row { grid-template-columns: minmax(0, 1fr); } }
+.rule-candidates-inbox { padding-block:var(--space-20);border-top:1px solid var(--color-border); }
+.rule-candidates-inbox h2 { font-size:var(--font-body);font-weight:var(--weight-medium); }
+.rule-candidates-inbox p { color:var(--color-secondary);font-size:var(--font-secondary); }
+.rule-candidates-inbox .ant-alert { margin-top:var(--space-16); }

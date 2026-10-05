@@ -20,6 +20,7 @@
 
 [打开源码](../../../../../scripts/start.ps1) · PowerShell词法提取；动态dot-source未静态确定。
 
+- `param $Browser`
 - `param $DisplaySpinnerAscii`
 - `param $DisplaySpinnerProcess`
 - `param $DisplaySpinnerStage`

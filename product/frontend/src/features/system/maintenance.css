@@ -1,0 +1,12 @@
+/* 清理预览沿用共享按钮、色彩和展开动效，长路径在内容列内换行。 */
+.runtime-maintenance { width:min(100%,var(--layout-summary));min-width:0;margin-block:var(--space-32);margin-inline:auto; }
+.maintenance-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-24); }
+.maintenance-heading h2 { margin-top:0; }
+.maintenance-heading p,.maintenance-file small,.maintenance-selection small { color:var(--color-secondary); }
+.maintenance-heading > div { min-width:0; }
+.maintenance-categories > div { display:grid;grid-template-columns:1fr auto auto;gap:var(--space-24);padding-block:var(--space-16);border-bottom:1px solid var(--color-border); }
+.maintenance-file { display:grid;gap:var(--space-8);padding-block:var(--space-12);overflow-wrap:anywhere; }
+.maintenance-actions { display:flex;justify-content:flex-end;margin-top:var(--space-24); }
+.maintenance-selection { max-height:50vh;overflow:auto;display:grid;gap:var(--space-16);padding:var(--space-8); }
+.maintenance-selection small { display:block;overflow-wrap:anywhere; }
+@media(max-width:600px){.maintenance-heading{flex-direction:column}.maintenance-categories > div{gap:var(--space-12)}}

@@ -1,10 +1,11 @@
 // AI 辅助设置抽屉；只呈现单一默认模型连接，秘密只短暂驻留表单。
 
-import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Drawer, Form, Input, Select, Switch } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Alert, Button, Drawer, Form, Input, Select, Switch } from 'antd'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/assistance/llm'
 import { ApiError } from '../../api/http'
+import './settings.css'
 
 const providerOptions: { label: string; value: LLMProvider }[] = [
   { label: 'OpenAI', value: 'openai' },
@@ -32,6 +33,7 @@ export function LLMSettingsDrawer({
   onError: (error: ApiError) => void
 }) {
   const [form] = Form.useForm<FormValues>()
+  const formId = useId()
   const [editing, setEditing] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<LLMModelCatalog | null>(null)
   const [saving, setSaving] = useState(false)
@@ -45,7 +47,7 @@ export function LLMSettingsDrawer({
   const resetForm = () => {
     form.resetFields()
     form.setFieldsValue({
-      provider: 'openai', model: '', reasoning_effort: null, secret: undefined,
+      provider: 'openai', model: undefined, reasoning_effort: null, secret: undefined,
     })
     setEditing(null); setCatalog(null)
   }
@@ -72,9 +74,9 @@ export function LLMSettingsDrawer({
     initializedRef.current = true
   }, [open, aiSettings?.default_profile_name, profiles])
 
-  const changeProvider = (provider: LLMProvider) => {
+  const changeProvider = () => {
     setCatalog(null)
-    form.setFieldsValue({ model: '', reasoning_effort: null })
+    form.setFieldsValue({ model: undefined, reasoning_effort: null })
   }
 
   const discover = async () => {
@@ -129,24 +131,24 @@ export function LLMSettingsDrawer({
   const modelOptions = catalog?.models.map((item) => ({ label: item.display_name ? `${item.display_name}（${item.model}）` : item.model, value: item.model }))
     ?? (currentModel ? [{ label: currentModel, value: currentModel }] : [])
   const currentProfile = editing ? profiles.find((item) => item.profile_name === editing) : undefined
+  const close = () => {
+    form.setFieldValue('secret', undefined)
+    initializedRef.current = false
+    resetForm()
+    onClose()
+  }
 
-  return <Drawer className="llm-settings-drawer" title="AI 辅助" open={open} onClose={() => { form.setFieldValue('secret', undefined); initializedRef.current = false; resetForm(); onClose() }} width="min(600px, 100vw)" destroyOnClose>
-    <Form className="llm-settings-form" form={form} layout="vertical" onFinish={save}>
-      <div className="llm-settings-stack">
+  return <Drawer className="llm-settings-drawer" title="界鉴 AI 辅助设置" open={open} onClose={close} width="min(560px, 100vw)" destroyOnHidden
+    footer={<div className="llm-settings-actions"><Button onClick={close}>取消</Button><Button type="primary" htmlType="submit" form={formId} loading={saving}>保存并检查连接</Button></div>}>
+    <Form id={formId} className="llm-settings-form" form={form} layout="vertical" onFinish={save}>
+      <section className="llm-settings-section" aria-label="连接模型服务">
+        <div className="llm-settings-heading"><div><h2>连接模型服务</h2><p>供界鉴解释和整理已有事实，使用一个默认模型连接。</p></div><StatusBadge kind="lifecycle" tone={currentProfile?.connection_status === 'unavailable' ? 'warning' : 'neutral'}>{statusLabel(currentProfile)}</StatusBadge></div>
+        <div className="llm-settings-toggle-row"><label htmlFor={`${formId}-enabled`}>启用 AI 辅助</label><Switch id={`${formId}-enabled`} checked={enabled} onChange={(value) => void toggle(value)} /></div>
+        <Form.Item name="provider" label="供应商" rules={[{ required: true }]}><Select options={providerOptions} onChange={changeProvider} /></Form.Item>
+        <Form.Item name="secret" label="API Key（只写入，不回显）" extra="通过受控渠道保存；关闭窗口会清除本次输入。"><Input.Password autoComplete="new-password" /></Form.Item>
+        <div className="llm-settings-models"><Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item><Button className="llm-settings-discover" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button></div>
         <Alert type="info" showIcon message="AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。" />
-        <Card size="small" title="连接模型服务">
-          <div className="llm-settings-section">
-            <div className="llm-settings-toggle-row"><Switch checked={enabled} onChange={(value) => void toggle(value)} /><span>AI 辅助</span></div>
-            <div className="llm-settings-fields">
-              <Form.Item name="provider" label="供应商" rules={[{ required: true }]}><Select options={providerOptions} onChange={changeProvider} /></Form.Item>
-              <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
-            </div>
-            <Button className="llm-settings-discover" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
-            <Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item>
-            <div className="llm-settings-actions"><StatusBadge kind="lifecycle" tone={currentProfile?.connection_status === 'unavailable' ? 'warning' : 'neutral'}>{statusLabel(currentProfile)}</StatusBadge><Button type="primary" htmlType="submit" loading={saving}>保存并检查连接</Button></div>
-          </div>
-        </Card>
-      </div>
+      </section>
     </Form>
   </Drawer>
 }

@@ -40,7 +40,7 @@
 - `build_target_runtime_registry() -> TargetRuntimeRegistry`
 - `execute_attempt(input_path, staging_dir, environ, finished_at_us) -> int`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.differential`、`product.backend.infra.execution.port`、`product.backend.infra.execution.registry`、`product.backend.infra.execution.web.runtime`、`product.backend.infra.runtime.runner.case_orchestrator`、`product.backend.infra.runtime.runner.executor`、`product.backend.infra.runtime.runner.progress`、`product.backend.infra.runtime.runner.result_builder`、`product.backend.infra.runtime.runner.staging`、`product.protocols`、`pydantic`、`time`
+静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.differential`、`product.backend.infra.execution.port`、`product.backend.infra.execution.registry`、`product.backend.infra.execution.web.runtime`、`product.backend.infra.runtime.runner.case_orchestrator`、`product.backend.infra.runtime.runner.executor`、`product.backend.infra.runtime.runner.progress`、`product.backend.infra.runtime.runner.result_builder`、`product.backend.infra.runtime.runner.staging`、`product.protocols`、`pydantic`、`time`
 
 ### `product/backend/infra/runtime/runner/executor.py`
 
@@ -102,6 +102,6 @@
 - `class RunnerSupervisor`
 - `RunnerSupervisor.run_job(self, job_id) -> StagedAttempt &#124; None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`logging`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.requests.execution`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.control`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.storage`、`product.protocols`、`subprocess`、`time`、`typing`、`uuid`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`logging`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.requests.execution`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.control`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.storage`、`product.protocols`、`subprocess`、`time`、`typing`、`uuid`
 
 <!-- GENERATED:END -->

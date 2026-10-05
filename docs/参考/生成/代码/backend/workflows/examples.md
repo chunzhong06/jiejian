@@ -54,7 +54,7 @@
 - `class OfficialScenarioInstaller`
 - `OfficialScenarioInstaller.install(self, project_id, endpoint, export_action_id, view_action_id, owner_identity_id, member_identity_id, source_fingerprint, runtime_instance_id, synchronous_export) -> tuple[str, str]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`itertools`、`json`、`pathlib`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.models`、`product.backend.workflows.recording.credentials`、`product.backend.workflows.recording.lifecycle`、`product.backend.workflows.recording.project_submission`、`product.backend.workflows.recording.submission`、`product.protocols`、`作用域内：product.backend.workflows.preparation.demonstrations`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`pathlib`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.workflows.recording.credentials`、`product.backend.workflows.recording.lifecycle`、`product.backend.workflows.recording.project_submission`、`product.backend.workflows.recording.submission`、`product.protocols`、`作用域内：product.backend.workflows.preparation.demonstrations`
 
 ### `product/backend/workflows/examples/preset_delivery.py`
 

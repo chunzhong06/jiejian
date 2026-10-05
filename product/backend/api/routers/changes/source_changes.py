@@ -10,7 +10,6 @@ from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.core.development import ContextId, OperationId, TaskId
 from product.protocols.checks.execution_request import Hash
-from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.composition import ApplicationCore
 
 

@@ -72,8 +72,8 @@ export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onErr
       {uncertain && <Alert type="warning" message="操作回执或页面同步尚未确认" description="先核对当前实现和修改记录，不重复应用变更。" action={<Button onClick={async () => { try { const next = await experienceApi.status(); await onChanged(next); await read(); const applied = next.scenario_version === pendingTarget.current; const recorded = pendingTarget.current === 'FIXED' ? next.repair_change_id : next.vulnerable_change_id; setCanResumeRegistration(applied && !recorded); if (applied && recorded) setUncertain(false) } catch (error) { onError(error as ApiError) } }}>核对当前状态</Button>}/>}
       {uncertain && canResumeRegistration && <Button loading={busy} onClick={() => void apply(true)}>恢复本批交付登记</Button>}
       {live.retrying && <p role="status">暂时无法同步演练事实，正在重试。</p>}
-    </div><aside><h3>持续保留的业务要求</h3><ul><li>负责人可以导出自己的项目包</li><li>成员不能导出其他人的完整项目包</li><li>成员仍可查看日常协作资料</li></ul><p>{journey.reason}</p>{journey.evidence_limited && <p>当前使用受限观察条件，可在应用与环境中恢复。</p>}</aside></div>}
-    <footer><p>预设演练沿用同一套修改记录与检查流程。预设修改明确标注来源，不表示 Codex 已编写代码；真实开发继续在原客户端进行。</p></footer>
+    </div><aside><h3>持续保留的业务要求</h3><ul><li>负责人可以导出自己的项目包</li><li>成员不能导出其他人的完整项目包</li><li>成员仍可查看日常协作资料</li></ul><p>{journey.reason}</p>{journey.evidence_limited && <p>当前使用受限观察条件，可在待测应用中恢复。</p>}</aside></div>}
+    <footer><p>预设演练沿用同一套修改记录与检查流程。预设修改明确标注来源，不表示 Codex 已编写代码；真实开发继续在开发客户端进行。</p></footer>
     <Modal open={confirm !== null} title={confirm === 'FIXED' ? '应用预设修复？' : '应用预设异步优化？'} okText="应用代码变更" cancelText="取消" onCancel={() => setConfirm(null)} onOk={() => void apply()} confirmLoading={busy}>
       <p>{confirm === 'FIXED' ? '将授权检查移到派发之前，保留后台导出。' : '将同步导出改为后台队列执行，界鉴会记录这次真实源码变化。'}</p><p>权限要求与历史结果保留；变更不会自动执行检查或产生安全结论。</p>
     </Modal>

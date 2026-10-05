@@ -1,21 +1,21 @@
 // 当前检查工作区：准备、显式提交、有限状态刷新和只读故事共享同一项目事实。
-import { Alert, Button, Space, Spin, Typography } from 'antd'
+import { LoadingState } from '../../shared/ui/LoadingState'
+import { Alert, Button, Typography } from 'antd'
 import { useCallback, useContext, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
 import { ApiError } from '../../api/http'
 import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory } from '../../api/checks/currentChecks'
 import { lifecycleLabel } from '../../shared/presentation/execution'
-import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
+import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from '../results/CurrentResultStory'
+import { CheckProgressPanel } from './CheckProgressPanel'
 import { ResultOverviewHeader, ResultScope } from '../results/overview/ResultOverview'
 import { SourceIdentityPanel } from '../changes/delivery/SourceIdentityPanel'
 
-const verdictLabels = { PASS: '本次权限要求已得到验证', BLOCK: '已确认不应发生的业务后果', INCONCLUSIVE: '现有证据不足以完成判断' }
-const progressLabels = { PREPARING: '正在准备本次执行', EXECUTING: '正在执行并观察业务结果', FINALIZING: '正在核验并保存结果' }
 const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.run.lifecycle)
 
 export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedMaterials?: boolean; requestedTaskId?: string | null; requestedRunId?: string | null; requestedCaseId?: string | null; changeId?: string | null; onBackToHistory?: () => void }) {
@@ -39,7 +39,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const navigateCheck = (path: string) => {
     const [route, search] = path.split('?')
     const query = new URLSearchParams(search)
-    if (route === '/tests' && changeId && !query.has('run_id') && !query.has('change_id')) query.set('change_id', changeId)
+    if (route === '/tests' && changeId && !query.has('run_id')) query.set('change_id', changeId)
     onNavigate(route + (query.size ? `?${query}` : ''))
   }
   const [status, setStatus] = useState<CheckStatus | null>(null)
@@ -49,6 +49,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const completionPending = Boolean(story && observedRunning.current.has(story.run_id) && openedResult !== story.run_id)
   useTaskGuard(Boolean(status && active(status)) || completionPending || busy || submissionUncertain)
   const [runFailed, setRunFailed] = useState(false)
+  const [runLoading, setRunLoading] = useState(false)
   const [pollPaused, setPollPaused] = useState(false)
   const [workspaceSyncFailed, setWorkspaceSyncFailed] = useState(false)
   const [refreshEpoch, setRefreshEpoch] = useState(0)
@@ -100,7 +101,10 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     let valid = true
     let timer: ReturnType<typeof setTimeout> | undefined
     let failures = 0, pendingRead = false
-    setStatus(null); setStory(null); setRunFailed(false); setPollPaused(false)
+    // 同一轮刷新保留已读取的展示节点，进度条才能从旧值衔接；切换记录仍清除旧事实。
+    setStatus(previous => previous?.run.run_id === selected && previous.run.project_id === project.project_id ? previous : null)
+    setStory(previous => previous?.run_id === selected && previous.project_id === project.project_id ? previous : null)
+    setRunFailed(false); setPollPaused(false); setRunLoading(true)
     const read = async () => {
       if (!valid || pendingRead) return
       clearTimeout(timer); pendingRead = true
@@ -127,7 +131,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       } catch (error) { if (valid) {
         if (error instanceof ApiError && ['STATE_PRECONDITION','ARTIFACT_MANIFEST','API_VERSION_UNSUPPORTED'].includes(error.code)) { setStatus(null); setStory(null); setRunFailed(true); onError(error) }
         else { setPollPaused(true); failures += 1; timer = setTimeout(() => void read(), Math.min(30000, 2000 * 2 ** Math.min(failures,3))) }
-      } } finally { pendingRead = false }
+      } } finally { pendingRead = false; if (valid) setRunLoading(false) }
     }
     const resume = () => { if (document.visibilityState === 'visible') void read() }
     window.addEventListener('online', resume); window.addEventListener('focus', resume)
@@ -186,68 +190,51 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const primaryAction = selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
     : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
     : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
-  return <EditorialPage label="权限验证工作区">
+  return <EditorialPage label="权限验证工作区" width={!story ? 'summary' : undefined}>
     {selectedMode && !(story && !completionPending) && <div className="result-return"><Button type="link" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>← 返回检查记录</Button></div>}
     {selectedMode && story && !completionPending ? <>
-      <div className="result-location"><Button type="text" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>检查历史</Button><span>/</span><span>本轮结果</span></div>
+      <div className="result-location"><Button type="link" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>检查历史</Button><span>/</span><span>本轮结果</span></div>
       <ResultOverviewHeader story={story} onNavigate={onNavigate} action={story.verdict === 'INCONCLUSIVE' ? { label: '查看准备条件', onClick: () => onNavigate('/tests?materials=1' + (story.change_context ? '&change_id=' + encodeURIComponent(story.change_context.change_id) : '')) } : undefined}/>
-    </> : <EditorialHeader eyebrow={selectedMode ? '检查历史 / 本轮结果' : '当前工作 / 权限检查'} title={headline}/>}
-    {!selectedMode && <section className="task-focus" aria-label="当前检查判断"><p className="editorial-eyebrow task-focus-label">当前需要你做</p><h2>{running ? '查看本轮检查进展' : preview?.can_execute ? '确认范围，开始本轮检查' : '准备本轮验证材料'}</h2>
-      {props.workspace?.source_change && <p className="editorial-muted">最近代码变化：{props.workspace.source_change.reason} · {props.workspace.source_change.submitted_by || '来源未提供'}</p>}
+    </> : <EditorialHeader eyebrow={selectedMode ? '检查记录 / 本轮结果' : project.name || '当前应用'} title={headline}/>}
+    {!selectedMode && <section className="task-focus" aria-label="当前检查判断"><div className="task-focus-layout"><div className="task-focus-copy"><h2>{preview?.can_execute || running ? '本轮检查范围' : '本轮准备情况'}</h2>
+      {props.workspace?.source_change && (!changeId || props.workspace.source_change.change_id === changeId) && <p className="editorial-muted">最近代码变化：{props.workspace.source_change.reason} · {props.workspace.source_change.submitted_by || '来源未提供'}</p>}
       {preview && <><p>本次范围包含 {preview.action_count} 项业务动作、{preview.case_count} 项验证。开始前会重新核对准备条件。</p><ul className="check-scope-list">{preview.actions.map((action) => <li key={action.action_id}><strong>{props.workspace?.actions.find((item) => item.action_id === action.action_id && item.action_revision === action.action_revision)?.display_name ?? '本轮已确认的业务动作'}</strong><span>正常对照与拒绝验证</span></li>)}</ul></>}
-      <p className="editorial-muted">只有显式开始检查才会执行目标操作；材料齐备本身不是安全结论。</p>
-      {primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}
-      <p className="task-next"><span>接下来</span>{running ? '执行结束后，查看已发布的结果与证据。' : preview?.can_execute ? '界鉴将执行本轮检查，并把结果保存在检查历史中。' : '按当前缺口准备材料，再核对本轮检查条件。'}</p>
+      </div>
+      {primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}</div>
     </section>}
-    {selectedMode && status?.progress && status.result_integrity !== 'VALID' && !story && <FlowSpine label="本轮权限验证过程" steps={[
-      {key:'prepare',title:'冻结本轮权限与测试材料',state:status.progress.phase === 'PREPARING' ? 'current' : 'complete',detail:<p>正在准备本次执行，尚无安全结论。</p>},
-      {key:'execute',title:'执行正常对照与拒绝验证，观察真实业务结果',state:status.progress.phase === 'EXECUTING' ? 'current' : status.progress.phase === 'FINALIZING' ? 'complete' : 'future',detail:<>
-        <p role="status">{progressLabels[status.progress.phase]} · 已处理 {status.progress.completed_cases} / {status.progress.planned_cases} 项验证。进度不代表安全结论。</p>
-        {/* 最近进度只定位冻结的计划题目；不能把计划账号或计数补成实际执行事实。 */}
-        {status.progress.current_case ? <section aria-label="当前处理的权限考题">
-          <h3>{status.progress.current_case.expectation === 'ALLOW' ? '正常对照' : '拒绝验证'} · {status.progress.current_case.action_label}</h3>
-          <p>计划操作账号：{status.progress.current_case.planned_subject_label}；资源所有者：{status.progress.current_case.planned_resource_owner_label}。</p>
-          <p>本题将观察：{status.progress.current_case.effect_labels.join('、') || '本题冻结的业务结果'}。</p>
-          <details><summary>核对本题资源引用</summary><code>{status.progress.current_case.resource_id}</code></details>
-        </section> : <p className="editorial-muted">当前考题说明暂不可用，执行进度仍以服务端为准。</p>}
-        <ol className="editorial-muted" aria-label="尚待发布的观察事实"><li>页面响应：未确认</li><li>后台执行：未确认</li><li>最终业务结果：未确认</li></ol>
-        <p className="editorial-muted">这里显示最近进度对应的计划考题；实际账号、请求回应和业务结果将在本轮证据发布后说明。</p>
-      </>},
-      {key:'publish',title:'核验并发布本轮证据与结论',state:status.progress.phase === 'FINALIZING' ? 'current' : 'future',detail:<p>正在核验已取得的事实，发布完成后才展示判断。</p>},
-    ]} />}
+    {selectedMode && status && (status.progress || active(status)) && status.result_integrity !== 'VALID' && !story && <CheckProgressPanel status={status} paused={pollPaused}>
+      {active(status) && status.job && <Button disabled={busy || status.job.cancel_requested} onClick={async () => {
+      setBusy(true)
+      try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
+    }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
+    </CheckProgressPanel>}
     {selectedMode && workspaceSyncFailed && <p role="status">检查记录已读取，工作台状态暂未同步。<Button onClick={() => void syncWorkspace(`retry:${selected}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
-    {!selectedMode && loading && <Spin />}
+    {!selectedMode && loading && <LoadingState page>正在读取检查状态…</LoadingState>}
     {!selectedMode && readFailed && <Alert className="flow-feedback" type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
     {!selectedMode && submissionUncertain && <Alert className="flow-feedback" type="warning" showIcon message="检查请求已发出，但尚未收到确认。请先读取检查记录；再次确认会使用同一次请求。" />}
     {selectedMode && pollPaused && <Alert className="flow-feedback" type="info" showIcon message={status?.result_integrity === 'VALID' && !story ? '检查已完成，但结果暂时无法读取，正在自动重试。不会重新执行检查。' : '暂时无法获取最新进度，正在自动重试。保留上次读取的状态。'} />}
     {selectedMode && !story && status && !active(status) && status.result_integrity === 'NOT_PUBLISHED' && <Alert className="flow-feedback" type="info" showIcon message="本次没有发布可用安全结论。执行停止或失败不代表发现权限问题。" />}
-    {changeId && !selectedMode && <Alert className="flow-feedback" type="info" showIcon message="本次检查关联所选代码变化，将执行完整当前权限考题。" />}
-    {selectedMode && status && active(status) && status.job && <Button disabled={busy || status.job.cancel_requested} onClick={async () => {
-      setBusy(true)
-      try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
-    }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
+    {changeId && !selectedMode && <p className="editorial-muted">本轮对应所选修改批次，覆盖完整当前权限要求。</p>}
     {completionPending && story && <section className="task-focus" aria-label="本轮检查完成">
       <p className="editorial-eyebrow task-focus-label" role="status">检查已完成，结果已保存。</p>
       <h2>{story.judgement}</h2>
       <p>{story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? '下一步：核对原问题与必须保留的正常业务，查看修复依据。' : '查看本轮结果与证据，了解检查结论及适用范围。'}</p>
       <div className="task-focus-actions">
         <Button type={story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? 'default' : 'primary'} onClick={() => setOpenedResult(story.run_id)}>查看本轮结果</Button>
-        {story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) && <Button type="primary" onClick={() => onNavigate('/changes')}>查看修复依据</Button>}
+        {story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) && <Button type="primary" onClick={() => onNavigate('/changes?repair_reference=' + encodeURIComponent(story.actions.find(action => action.repair_requirement)!.repair_requirement!.repair_fingerprint))}>查看修复依据</Button>}
       </div>
     </section>}
     {selectedMode && story && !completionPending && <>
       <nav className="result-review-views" aria-label="本轮结果视图"><button aria-current={resultView === 'result' ? 'page' : undefined} onClick={() => setResultView('result')}>检查结果 <span>{story.actions.length}</span></button><button aria-current={resultView === 'source' ? 'page' : undefined} onClick={() => setResultView('source')}>源码对应</button><ResultScope story={story}/></nav>
-      {resultView === 'source' && <SourceIdentityPanel key={story.run_id} projectId={project.project_id} recordId={story.run_id} kind="runs" onNavigate={onNavigate} onIntegrityError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/>}
+      {resultView === 'source' && <SourceIdentityPanel key={story.run_id} projectId={project.project_id} recordId={story.run_id} kind="runs" onIntegrityError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/>}
       <div hidden={resultView !== 'result'}><WorkPageVisible.Provider value={visible && resultView === 'result'}><CurrentResultStory key={story.run_id} embedded story={story} requestedCaseId={props.requestedCaseId} onCaseChange={caseId => onNavigate(`/tests?run_id=${encodeURIComponent(story.run_id)}${caseId ? '&case_id=' + encodeURIComponent(caseId) : ''}`)} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/></WorkPageVisible.Provider></div>
-      <div className="result-record-actions"><Button type="text" onClick={() => setRefreshEpoch(value => value + 1)}>刷新检查结果</Button></div>
+      <div className="result-record-actions">{resultView === 'source' && <Button onClick={() => onNavigate('/changes')}>查看当前代码变化</Button>}<Button loading={runLoading} onClick={() => setRefreshEpoch(value => value + 1)}>刷新检查结果</Button></div>
     </>}
     {!selectedMode && <>
-      <Button onClick={showMaterials} disabled={busy}>管理准备材料</Button>
       {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
-      <Button type="link" onClick={() => onNavigate('/history')}>查看全部检查历史</Button>
     </>}
-    {!(selectedMode && story && !completionPending) && <TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
-      refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: loading || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}
-      />}
+    {!(selectedMode && story && !completionPending) && <div className="check-footer">{!selectedMode && <nav className="check-related-actions" aria-label="检查相关内容">{(running || preview?.can_execute) && <Button type="link" onClick={showMaterials} disabled={busy}>管理准备材料</Button>}<Button type="link" onClick={() => onNavigate('/history')}>查看全部检查历史</Button></nav>}<TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
+      refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: (selectedMode ? runLoading : loading) || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}
+      /></div>}
   </EditorialPage>
 }

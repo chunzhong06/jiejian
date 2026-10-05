@@ -17,7 +17,7 @@
 
 - `CurrentResultStory`
 
-静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/format/time`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../assistant/AssistantPanel`、`./investigation/DiagnosisSummary`、`./investigation/ExecutionPath`、`./investigation/trace-investigation.css`、`./investigation/tracePresentation`、`./observations/ObservationSources`、`./observations/observationPresentation`、`./overview/ProofCoverage`、`./overview/ResultOverview`、`./overview/result-review.css`、`./testing.css`、`antd`、`react`
+静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`../assistant/AssistantPanel`、`../changes/repair/RepairComparison`、`./investigation/DiagnosisSummary`、`./investigation/ExecutionPath`、`./investigation/trace-investigation.css`、`./investigation/tracePresentation`、`./observations/EvidenceRecords`、`./observations/ObservationSources`、`./observations/observationPresentation`、`./overview/ProofCoverage`、`./overview/ResultOverview`、`./overview/result-review.css`、`./testing.css`、`antd`、`react`
 
 ### `product/frontend/src/features/results/investigation/DiagnosisSummary.test.tsx`
 
@@ -60,13 +60,20 @@
 
 - `breakpointLabels`
 - `precisionDescriptions`
-- `precisionLabels`
 - `traceEventContext`
 - `traceEventLabel`
 - `traceKindLabels`
 - `traceLimitations`
 
 静态import / dot-source：`../../../api/checks/currentChecks`
+
+### `product/frontend/src/features/results/observations/EvidenceRecords.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/results/observations/EvidenceRecords.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `EvidenceRecords`
+
+静态import / dot-source：`../../../api/checks/currentChecks`、`../../../shared/format/time`、`./observationPresentation`
 
 ### `product/frontend/src/features/results/observations/observationPresentation.test.ts`
 

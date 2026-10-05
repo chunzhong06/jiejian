@@ -39,7 +39,7 @@
   display: block;
   color: var(--color-text);
   font-size: var(--font-body);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   margin-top: var(--space-8);
 }
 
@@ -63,7 +63,7 @@
 
 .environment-focus {
   display: grid;
-  grid-template-columns: 128px minmax(0,1fr);
+  grid-template-columns: minmax(0,1fr) auto;
   gap: var(--space-32);
   align-items: center;
   border: 1px solid var(--color-border);
@@ -71,20 +71,6 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-focus);
   padding: var(--space-32);
-}
-
-.environment-illustration {
-  display: grid;
-  place-items: center;
-  align-self: stretch;
-  font-size: 64px;
-  color: var(--color-secondary);
-}
-
-.environment-focus-body {
-  border-left: 1px solid var(--color-border);
-  padding-left: var(--space-32);
-  min-width: 0;
 }
 
 .environment-focus h2 {
@@ -104,13 +90,6 @@
 
 .environment-focus .workbench-sample-entry>p {
   display: none;
-}
-
-.environment-focus .workbench-sample-entry>.ant-btn {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-on-accent);
-  margin-top: var(--space-12);
 }
 
 .environment-retention {
@@ -155,11 +134,11 @@
 .environment-controls .sample-environment { margin: 0; padding: 0; }
 .environment-controls .sample-environment h3 { margin: 0 0 var(--space-12); }
 .environment-controls .sample-environment details { margin-top: var(--space-16); }
-.editorial-page[aria-label="应用环境"] { gap: var(--space-20); }
-.editorial-page[aria-label="应用环境"] > .environment-details { margin-top: 0; padding-block: var(--space-16); }
-.editorial-page[aria-label="应用环境"] > .application-management { display:flex; align-items:center; justify-content:space-between; gap:var(--space-20); margin-top:0; padding-top:var(--space-20); }
-.editorial-page[aria-label="应用环境"] > .application-management p { margin-bottom:0; }
-@media(max-width:600px) { .editorial-page[aria-label="应用环境"] > .application-management { align-items:stretch; flex-direction:column; } }
+.editorial-page[aria-label="应用与环境"] { gap: var(--space-20); }
+.editorial-page[aria-label="应用与环境"] > .environment-details { margin-top: 0; padding-block: var(--space-16); }
+.editorial-page[aria-label="应用与环境"] > .application-management { display:flex; align-items:center; justify-content:space-between; gap:var(--space-20); margin-top:0; padding-top:var(--space-20); }
+.editorial-page[aria-label="应用与环境"] > .application-management p { margin-bottom:0; }
+@media(max-width:600px) { .editorial-page[aria-label="应用与环境"] > .application-management { align-items:stretch; flex-direction:column; } }
 
 @media(max-width:760px) {
   .environment-facts {
@@ -190,19 +169,9 @@
   }
 }
 
-@media(max-width:760px) {
-  .environment-illustration {
-    font-size: 48px;
-    justify-self: stretch;
-  }
-}
 
-@media(max-width:760px) {
-  .environment-focus-body {
-    padding: 0;
-    border: 0;
-  }
-}
+
+
 
 @media(max-width:760px) {
   .environment-focus h2 {
@@ -224,7 +193,13 @@
 @media(max-width:650px){.environment-recovery{padding:20px}.environment-retained{grid-template-columns:1fr;gap:16px}.environment-retained>div+div{border-left:0;border-top:1px solid var(--color-border);padding:20px 0 0}.environment-recovery .ant-btn{min-height:44px}}
 
 /* 下一步沿用共用操作层级，次级在左、主操作在右；插图独立居中，不承担按钮装饰。 */
-.environment-focus-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-12);margin-top:var(--space-24);}
+.environment-focus-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-12);margin:0;}
+.environment-focus-copy p:last-child{margin-bottom:0;max-width:64ch;}
 .environment-support-link{text-align:right;margin-top:var(--space-12);}
-.environment-focus .workbench-sample-entry{display:grid;justify-items:end;margin-top:var(--space-16);}
+.environment-focus .workbench-sample-entry{display:grid;justify-items:end;margin:0;}
 .environment-focus .workbench-sample-entry>.ant-alert{justify-self:stretch;}
+
+/* 全新示例的说明与启动操作成一组；主动作在当前区域右侧。 */
+.sample-start-row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-32); }
+.sample-start-copy { flex:1; min-width:0; }
+@media(max-width:700px) { .sample-start-row { flex-wrap:wrap; }.sample-start-row > .ant-btn { margin-left:auto; } }

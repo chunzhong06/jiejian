@@ -23,24 +23,16 @@ export function RecordingCaptureCard({ recording, onRefresh }: {
 }) {
   const phase = String(recording.capture_phase ?? '')
   const actionName = recording.action?.display_name ?? '这个业务动作'
-  const captureGuide = phase === 'AWAITING_CAPTURE'
-    ? <div className="recording-capture-guide">
-      <ol>
-        <li><span className="flow-number">1</span><div><Typography.Text strong>浏览器已打开</Typography.Text><Typography.Text type="secondary">请进入要执行操作的页面。</Typography.Text><Typography.Text type="secondary">现在的浏览和登录不会写进业务流程。</Typography.Text></div></li>
-        <li><span className="flow-number" aria-current="step">2</span><div><Typography.Text strong>准备开始记录</Typography.Text><Typography.Text type="secondary">确认浏览器已经停在正确页面后，从页面底部开始记录。</Typography.Text></div></li>
-        <li><span className="flow-number">3</span><div><Typography.Text strong>在浏览器里正常完成一次“{actionName}”</Typography.Text><Typography.Text type="secondary">完成后不要关闭浏览器。</Typography.Text></div></li>
-        <li><span className="flow-number">4</span><div><Typography.Text strong>回到界鉴</Typography.Text><Typography.Text type="secondary">完成业务动作后，在这里确认。</Typography.Text></div></li>
-      </ol>
-    </div>
-    : phase === 'CAPTURING'
-      ? <Alert type="warning" showIcon message={`正在记录“${actionName}”`} description="请在浏览器里正常完成一次这个业务动作。完成后不要关闭浏览器，再回到界鉴点击“我已完成这个操作”。" />
-      : null
+  const captureGuide = phase === 'AWAITING_CAPTURE' || phase === 'CAPTURING'
+    ? <div className="recording-capture-guide"><h2>{phase === 'CAPTURING' ? `到录制窗口完成一次“${actionName}”` : '在录制窗口确认账号与资源'}</h2>
+      <p>{phase === 'CAPTURING' ? '操作完成后回到这里，点击“我已完成这个操作”结束记录。' : '准备好后在下方开始记录。开始前的登录与页面准备不会被采集。'}</p>
+      <p className="editorial-muted">请保持录制窗口打开。</p></div> : null
   const phaseContent = phase === 'AWAITING_CAPTURE'
     ? captureGuide
     : phase === 'CAPTURING'
       ? captureGuide
       : <Alert type={recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在启动有界 Chromium，请稍候。' : phase === 'STOPPING' ? `正在整理刚才的操作并寻找真正执行“${actionName}”的请求…` : recording.state === 'CANCELLED' ? '本次事件已丢弃，没有生成流程草稿。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
-  return <section className="recording-capture"><h2>{`录制「${actionName}」`}</h2><Space direction="vertical" className="full-width" size="middle">
+  return <section className="recording-capture"><Space direction="vertical" className="full-width" size="middle">
     {phaseContent}
     <RecordingProgress job={recording.job ?? undefined} onRefresh={onRefresh} />
   </Space></section>

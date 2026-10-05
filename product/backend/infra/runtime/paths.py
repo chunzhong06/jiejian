@@ -58,6 +58,11 @@ class RuntimePaths:
         return self.root / "runtime"
 
     @property
+    def gui_browser(self) -> Path:
+        """GUI 专用持久配置；与测试身份、录制及 Runner 会话隔离。"""
+        return self.runtime / "gui-browser"
+
+    @property
     def build_runtime(self) -> Path:
         return self.runtime / "build"
 

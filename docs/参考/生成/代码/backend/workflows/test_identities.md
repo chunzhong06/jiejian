@@ -36,7 +36,7 @@
 - `IdentityPreparationManager.cancel(self, preparation_id) -> IdentityPreparationView`
 - `IdentityPreparationManager.close(self) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`enum`、`json`、`pathlib`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.infra.identity.control`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.secrets`、`product.backend.workflows.test_identities.service`、`product.protocols`、`product.protocols.web.target`、`pydantic`、`re`、`shutil`、`subprocess`、`threading`、`time`、`urllib.parse`、`uuid`
+静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`enum`、`json`、`pathlib`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.infra.identity.control`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.secrets`、`product.backend.workflows.test_identities.service`、`product.protocols`、`product.protocols.web.target`、`pydantic`、`re`、`shutil`、`subprocess`、`threading`、`urllib.parse`、`uuid`、`作用域内：product.backend.infra.runtime.generated_files`、`作用域内：product.backend.infra.runtime.maintenance_assets`
 
 ### `product/backend/workflows/test_identities/service.py`
 

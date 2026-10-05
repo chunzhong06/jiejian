@@ -13,6 +13,7 @@ describe('修复要求与交付', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     const navigate = vi.fn()
     render(<RepairDelivery task={task('REPAIR_REQUIRED')} onNavigate={navigate} onBack={vi.fn()} onViewChange={vi.fn()} />)
+    fireEvent.click(screen.getByText('查看完整修复说明'))
     fireEvent.click(screen.getByRole('button', { name: '复制修复依据' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
     expect(writeText.mock.calls[0][0]).toContain('run-old')
@@ -26,13 +27,15 @@ describe('修复要求与交付', () => {
   it('服务端允许复验时从原题直接携带精确变化引用，不登记或提交检查', () => {
     const onNavigate = vi.fn()
     render(<RepairDelivery task={task('READY_TO_VERIFY')} onNavigate={onNavigate} onBack={vi.fn()} onViewChange={vi.fn()}/>)
-    fireEvent.click(screen.getByRole('button', { name: '复验原题' }))
-    expect(onNavigate).toHaveBeenCalledWith('/tests?change_id=chg')
+    fireEvent.click(screen.getByRole('button', { name: '准备复验原题' }))
+    expect(onNavigate).toHaveBeenCalledWith('/tests?materials=1&change_id=chg')
   })
   it.each<RepairStatus>(['REPAIR_REQUIRED', 'CHANGE_SUBMITTED', 'READY_TO_VERIFY', 'VERIFIED', 'NOT_VERIFIED', 'INCONCLUSIVE', 'STALE'])('遵守 %s 状态，不从已登记修改推断通过', status => {
     render(<RepairDelivery task={task(status)} onNavigate={vi.fn()} onBack={vi.fn()} onViewChange={vi.fn()}/>)
-    expect(screen.getByRole('heading', { name: '需要消除的后果' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '必须保留的正常业务' })).toBeInTheDocument()
+    if (status !== 'VERIFIED') {
+      expect(screen.getByRole('heading', { name: '需要消除的后果' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '必须保留的正常业务' })).toBeInTheDocument()
+    }
     expect(screen.getAllByText(/读取资料/).length).toBeGreaterThan(0)
     if (status === 'VERIFIED') expect(screen.getByText('原题与要求保留的业务通过验证')).toBeInTheDocument()
     else expect(screen.queryByText('原题与要求保留的业务通过验证')).not.toBeInTheDocument()

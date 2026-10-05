@@ -14,10 +14,10 @@ class McpActions(GuiSession):
     def mcp_forget(self):
         self._goto("/tools")
         self.page.get_by_role("button", name="管理连接", exact=True).click()
-        self.page.get_by_role("dialog", name="管理连接", exact=True).get_by_role("button", name="删除连接凭据", exact=True).click()
+        self.page.get_by_role("region", name="管理连接", exact=True).get_by_role("button", name="删除连接凭据", exact=True).click()
         self._response("/api/mcp/access/forget", lambda: self.page.get_by_role("dialog", name="确认删除连接凭据？", exact=True)
             .get_by_role("button", name=re.compile(r"^确\s*认$")).click())
-        self.page.get_by_role("dialog", name="管理连接", exact=True).wait_for(state="hidden")
+        self.page.get_by_role("region", name="管理连接", exact=True).wait_for(state="hidden")
 
     def mcp_level(self, project, level):
         from tests.acceptance.sample_test.harness.state import SampleTestError
@@ -50,18 +50,18 @@ class McpActions(GuiSession):
 
     def mcp_change(self, change):
         from tests.acceptance.sample_test.harness.state import SampleTestError
-        self._goto("/changes?view=deliveries&change_id=" + change["change_id"])
+        self._goto("/changes?change_id=" + change["change_id"])
         # 精确深链选中本次修改；不再经过已撤掉的手工任务管理入口。
-        entry = self.page.locator("article.light-detail")
+        entry = self.page.get_by_role("region", name="最新一批修改", exact=True)
         entry.get_by_role("heading", name=change["reason"], exact=True).wait_for()
-        entry.get_by_text("登记来源：" + change["submitted_by"], exact=True).wait_for()
+        entry.get_by_text(change["submitted_by"], exact=True).wait_for()
         if self.page.get_by_role("region", name="登记本地修改", exact=True).count():
             raise SampleTestError("GUI_MCP_MANUAL_FORM_NOT_CLOSED")
         self.capture("mcp-change")
         self.records.append(dict(event="mcp-change", status="PASSED", project_id=change["project_id"], change_id=change["change_id"]))
 
     def dismiss_completion(self):
-        close = self.page.get_by_role("button", name="关闭检查完成提示", exact=True)
+        close = self.page.get_by_role("button", name="关闭检查提示", exact=True)
         if close.count():
             close.click()
 

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from product.backend.core.boundaries.proposals import ACTION_ITEM_ID_PATTERN, ACTOR_ITEM_ID_PATTERN, EFFECT_ITEM_ID_PATTERN, INTENT_ID_PATTERN, PERMISSION_ITEM_ID_PATTERN, BoundaryProposalBundle, BoundaryProposalDecision, ProposalCandidateKind, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
+from product.backend.core.boundaries.proposals import ACTION_ITEM_ID_PATTERN, ACTOR_ITEM_ID_PATTERN, INTENT_ID_PATTERN, PERMISSION_ITEM_ID_PATTERN, BoundaryProposalBundle, BoundaryProposalDecision, ProposalCandidateKind, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
 from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, BusinessActionOperationKind, BusinessActionRevision, BusinessActorRevision, BusinessRevisionState
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision

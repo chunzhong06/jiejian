@@ -35,24 +35,6 @@ def _options(context: click.Context | None = None):
     return current.find_root().obj
 
 
-def set_command_mode(mode: str) -> None:
-    """为仍接受旧命令位置选项的入口设置统一展示模式。"""
-
-    global _configured_presentation
-    _configured_presentation = mode
-    context = _root_context()
-    if context is not None:
-        context.find_root().meta["presentation_mode"] = mode
-
-
-def force_machine_mode() -> None:
-    global _configured_machine_only
-    _configured_machine_only = True
-    context = _root_context()
-    if context is not None:
-        context.find_root().meta["machine_only"] = True
-
-
 def presentation_mode(context: click.Context | None = None) -> str:
     if _configured_machine_only:
         return "json"

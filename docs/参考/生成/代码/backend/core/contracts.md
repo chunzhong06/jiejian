@@ -9,14 +9,6 @@
 [打开源码](../../../../../../product/backend/core/contracts/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
-### `product/backend/core/contracts/execution_binding.py`
-
-[打开源码](../../../../../../product/backend/core/contracts/execution_binding.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `resolve_execution_contract(record, governed) -> PermissionContract`
-
-静态import / dot-source：`__future__`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.permissions`、`typing`
-
 ### `product/backend/core/contracts/lifecycle.py`
 
 [打开源码](../../../../../../product/backend/core/contracts/lifecycle.py) · Python AST；作用域内import不表示每次调用均执行。

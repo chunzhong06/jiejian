@@ -33,6 +33,7 @@
 - `function Invoke-External`
 - `function Read-State`
 - `function Read-Toolchain`
+- `function Register-StartupTemporary`
 - `function Restore-CallerEnvironment`
 - `function Save-CallerEnvironment`
 - `function Save-State`

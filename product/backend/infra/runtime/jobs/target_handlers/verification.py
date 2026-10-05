@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage import JobRecord, StorageUnitOfWork
+from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.handlers import JobHandler
 from product.backend.infra.artifacts.run_packages import StagedAttempt

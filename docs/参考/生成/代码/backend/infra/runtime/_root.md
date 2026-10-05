@@ -17,10 +17,8 @@
 
 - `class DoctorCheck`
 - `class DoctorReport`
-- `browser_availability() -> str`
 - `runtime_environment_details() -> dict[str, Any]`
 - `run_doctor(config_path, cli_overrides, project_root) -> DoctorReport`
-- `human_lines(report) -> tuple[str, ...]`
 
 静态import / dot-source：`__future__`、`importlib.metadata`、`ipaddress`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.redaction`、`product.backend.infra.runtime.logging`、`product.backend.infra.runtime.process.controlled.identity`、`product.backend.infra.runtime.settings`、`pydantic`、`shutil`、`socket`、`sqlite3`、`subprocess`、`sys`、`tempfile`、`typing`、`作用域内：playwright.sync_api`、`作用域内：re`
 
@@ -28,19 +26,34 @@
 
 [打开源码](../../../../../../../product/backend/infra/runtime/frontend_assets.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `_MAX_ASSET_BYTES`
+- `_MAX_TOTAL_BYTES`
 - `frontend_asset_identity(directory) -> dict`
 
 静态import / dot-source：`hashlib`、`json`、`pathlib`、`product.protocols.runtime.frontend_assets`、`pydantic`
+
+### `product/backend/infra/runtime/generated_files.py`
+
+[打开源码](../../../../../../../product/backend/infra/runtime/generated_files.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_ROOTS`
+- `register_generated_file(var_dir, path, producer) -> bool`
+- `generated_file_owner(var_dir, path) -> str &#124; None`
+- `forget_generated_file(var_dir, path, producer) -> None`
+
+静态import / dot-source：`__future__`、`hashlib`、`json`、`os`、`pathlib`、`uuid`
 
 ### `product/backend/infra/runtime/logging.py`
 
 [打开源码](../../../../../../../product/backend/infra/runtime/logging.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `class OwnedRotatingFileHandler`
+- `OwnedRotatingFileHandler.doRollover(self)`
 - `class JsonFormatter`
 - `JsonFormatter.format(self, record) -> str`
 - `configure_logging(level, stream, trace_id, var_dir, console, known_secrets) -> stdlib_logging.Logger`
 
-静态import / dot-source：`__future__`、`collections.abc`、`datetime`、`json`、`logging`、`logging.handlers`、`pathlib`、`product.backend.core.redaction`、`product.backend.infra.runtime.paths`、`sys`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`datetime`、`json`、`logging`、`logging.handlers`、`pathlib`、`product.backend.core.redaction`、`product.backend.infra.runtime.generated_files`、`product.backend.infra.runtime.paths`、`sys`、`typing`
 
 ### `product/backend/infra/runtime/maintenance.py`
 
@@ -56,12 +69,37 @@
 - `class MaintenancePlan`
 - `class LocalMaintenanceService`
 - `LocalMaintenanceService.status(self) -> dict[str, object]`
-- `LocalMaintenanceService.operate(self, operation, confirmed, dry_run, plan_id) -> dict[str, object]`
+- `LocalMaintenanceService.operate(self, operation, confirmed, dry_run, plan_id, item_ids) -> dict[str, object]`
 - `LocalMaintenanceService.preview(self, operation) -> dict[str, object]`
-- `LocalMaintenanceService.execute(self, plan_id, expected_scope) -> dict[str, object]`
+- `LocalMaintenanceService.execute(self, plan_id, expected_scope, item_ids) -> dict[str, object]`
+- `LocalMaintenanceService.outcome(self, plan_id) -> dict[str, object]`
 - `LocalMaintenanceService.startup_maintenance(self) -> dict[str, object]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`contextlib`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.lock`、`secrets`、`shutil`、`time`
+静态import / dot-source：`__future__`、`collections.abc`、`contextlib`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.generated_files`、`product.backend.infra.runtime.maintenance_assets`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.lock`、`secrets`、`shutil`、`time`、`作用域内：product.backend.infra.runtime.maintenance_assets`、`作用域内：product.backend.infra.runtime.process.tree`
+
+### `product/backend/infra/runtime/maintenance_assets.py`
+
+[打开源码](../../../../../../../product/backend/infra/runtime/maintenance_assets.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `linked(path) -> bool`
+- `safe_tree(path, root) -> bool`
+- `read_record(path) -> dict &#124; None`
+- `children(path) -> list[Path]`
+- `overlaps(path, protected) -> bool`
+- `component_in_use(path) -> bool`
+- `exclusive_file(path)`
+- `class Asset`
+- `source_references(var_dir) -> tuple[Path, ...] &#124; None`
+- `class StartupAssets`
+- `StartupAssets.locked(self)`
+- `StartupAssets.retain_live_references(self) -> None`
+- `StartupAssets.close(self) -> None`
+- `StartupAssets.references(self) -> tuple[set[Path], bool]`
+- `StartupAssets.scan(self) -> list[Asset]`
+- `mark_runtime_idle(var_dir, path, producer) -> None`
+- `register_startup_assets(var_dir, development_root) -> None`
+
+静态import / dot-source：`__future__`、`contextlib`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.lock`、`uuid`、`作用域内：ctypes`、`作用域内：playwright`
 
 ### `product/backend/infra/runtime/paths.py`
 
@@ -75,6 +113,7 @@
 - `RuntimePaths.reports(self) -> Path`
 - `RuntimePaths.artifact_checks(self) -> Path`
 - `RuntimePaths.runtime(self) -> Path`
+- `RuntimePaths.gui_browser(self) -> Path`
 - `RuntimePaths.build_runtime(self) -> Path`
 - `RuntimePaths.frontend_dist(self) -> Path`
 - `RuntimePaths.worker_runtime(self) -> Path`

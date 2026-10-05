@@ -30,7 +30,7 @@ class NodeRuntimeActivation:
             snapshot=work.source_changes.snapshot(delivery.current_snapshot_id)
             previous_load=work.runtime_loads.latest(project_id)
             if snapshot is None or snapshot.project_id!=project_id or previous_load is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在应用与环境中确认启动方式')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在“待测应用”中确认启动方式')
             _,manifest=read_node_manifest(self.runtime.var_dir,previous_load)
             understanding=work.application_understanding.get(project_id)
             preview=self.runtime.preview(project_id,entry=manifest.entry,port=manifest.port,revision=understanding.revision)

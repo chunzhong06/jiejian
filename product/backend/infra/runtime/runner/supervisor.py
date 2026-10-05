@@ -27,16 +27,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import (
-    CleanupIssueCode,
-    RunnerFailurePhase,
-    RunnerInput,
-    RunnerResult,
-    RunnerResultType,
-    canonical_runner_json_bytes,
-)
+from product.protocols import CleanupIssueCode, RunnerFailurePhase, RunnerInput, RunnerResult, canonical_runner_json_bytes
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailureCode, FatalFailure, RetryableFailureCode, RetryableFailure

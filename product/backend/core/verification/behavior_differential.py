@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

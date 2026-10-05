@@ -8,8 +8,9 @@ export function ProofCoverage({ rows, onEvidence }: { rows: StoryProofCoverage[]
   return <section className="result-proof-coverage" aria-label="本轮要求与证据对应">
     {rows.map((row, index) => <article className="result-proof-row" key={`${row.proof_fingerprint}:${row.effect_id}:${index}`} aria-label={`${row.business_label}的证据对应`}>
       <div className="result-proof-title"><h4>{row.business_label}</h4><span>{row.required_level === 'VERDICT_REQUIRED' ? '必要证明' : '辅助材料'}</span></div>
-      <p><strong>{labels[row.observed_state]}</strong>{row.source_label !== row.business_label && <span> · {row.source_label}</span>}</p>
-      {row.limitations.map(text => <p key={text} className="editorial-muted">{text}</p>)}
+      <div className="result-proof-reading"><p className="result-proof-outcome"><span>本轮观察：</span><strong>{labels[row.observed_state]}</strong></p>{row.source_label !== row.business_label && <p>观察来源：{row.source_label}</p>}
+        {row.limitations.map(text => <p key={text} className="editorial-muted">{text}</p>)}
+      </div>
       <div className="result-proof-links">
         {!!row.evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.evidence_refs)}>查看必要证明记录</Button>}
         {!!row.supporting_evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.supporting_evidence_refs)}>查看辅助观察记录</Button>}

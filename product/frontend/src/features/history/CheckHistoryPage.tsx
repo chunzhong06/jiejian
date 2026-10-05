@@ -102,13 +102,13 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   return <>
     <div hidden={Boolean(requestedRunId)}>
       <EditorialPage label="项目检查历史">
-        <EditorialHeader eyebrow="协作空间 / 已发布记录" title="检查记录"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
+        <EditorialHeader eyebrow={project.name || '当前应用'} title="检查记录"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
         <div className="history-surface"><form className="history-toolbar" onSubmit={event => { event.preventDefault(); setOptions(previous => ({ ...previous, query: query.trim() })) }}>
           <SearchField aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
           <Button htmlType="submit" aria-label="搜索">搜索</Button>
           <Select aria-label="筛选检查结论" value={options.verdict ?? ''} options={[{ value: '', label: '全部结论' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} onChange={value => setOptions(previous => ({ ...previous, query: query.trim(), verdict: value ? value as CheckHistoryQuery['verdict'] : undefined }))} />
           <Select aria-label="筛选执行状态" value={options.lifecycle ?? ''} options={[{ value: '', label: '全部执行状态' }, ...['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].map(value => ({ value, label: lifecycleLabel(value) }))]} onChange={value => setOptions(previous => ({ ...previous, lifecycle: value ? value as CheckHistoryQuery['lifecycle'] : undefined }))} />
-          {filtered && <Button type="text" onClick={clear}>清除筛选</Button>}
+          {filtered && <Button type="link" onClick={clear}>清除筛选</Button>}
         </form>
         {newRecords && <div className="history-update" role="status">有新的检查记录<Button onClick={()=>void load()}>显示新记录</Button></div>}
         {live.retrying && <p role="status">暂时无法同步记录，正在重试。已有记录仍可查看。</p>}

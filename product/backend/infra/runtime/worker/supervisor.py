@@ -23,7 +23,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from product.backend.core.lifecycle import JobState
-from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.recovery import JobRecovery
@@ -96,6 +95,14 @@ class LocalWorkerSupervisor:
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    def active_runtime_paths(self) -> tuple[Path, ...]:
+        """启动责任先于进程建立；仅保护当前 Job 的运行目录和日志。"""
+        job_id = self._job_id
+        if job_id is None:
+            return ()
+        paths = RuntimePaths(self.var_dir)
+        return (paths.jobs / job_id, paths.worker_logs / f"{job_id}.log", paths.worker_runtime)
 
     @property
     def capabilities(self) -> tuple[str, ...]:

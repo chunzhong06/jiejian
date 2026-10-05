@@ -11,8 +11,10 @@
  *   页面不收集密码；登录只发生在独立浏览器，API 只返回非秘密状态
  * ============================================================================= */
 
+import { LoadingState } from '../../shared/ui/LoadingState'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Modal, Select, Space, Spin, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Modal, Select, Space, Typography } from 'antd'
+import { KeyOutlined } from '@ant-design/icons'
 import { ApiError } from '../../api/http'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import type { ProjectDto } from '../../api/applications/projects'
@@ -208,11 +210,18 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     },
   })
 
-  if (loading) return <EditorialPage><Spin /> 正在读取测试账号…</EditorialPage>
+  if (loading) return <EditorialPage><LoadingState page>正在读取测试账号…</LoadingState></EditorialPage>
 
-  return <EditorialPage label="测试账号登录准备">
+  // 仅持久保存已确认、同步无缺口的当前登录任务进入终态；不从准备状态推断权限通过。
+  if (initialPreparation && preparation?.status === 'PREPARED' && !syncError) return <EditorialPage label="测试账号登录准备" width="summary"><section className="identity-complete">
+    <KeyOutlined className="identity-complete-icon" aria-hidden="true" /><p className="editorial-eyebrow">当前测试账号的登录准备</p><h1>登录状态已准备</h1>
+    <p>实际执行身份将在检查时再次核验。下一步按最新材料状态继续。</p>
+    <Button type="primary" onClick={onBack}>返回检查准备</Button>
+  </section></EditorialPage>
+
+  return <EditorialPage label="测试账号登录准备" width={initialPreparation ? 'summary' : undefined}>
     {modalContext}
-    <EditorialHeader eyebrow="验证 · 真实账号" title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}><p className="editorial-muted">{preparation ? preparationStatus(preparation) : '只处理当前账号，其他有效准备仍然保留'}</p></EditorialHeader>
+    <EditorialHeader eyebrow={project.name || '当前应用'} title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}>{!initialPreparation && <p className="editorial-muted">{preparation ? preparationStatus(preparation) : '按业务角色准备测试账号'}</p>}</EditorialHeader>
     {!initialPreparation && <><section className="identity-overview"><header><h2>添加测试账号</h2><p className="editorial-muted">选择账号所属角色并起一个便于识别的名称，然后在账号列表中打开登录浏览器。</p></header>
       {roles.length > 0 && <div className="identity-create">
         <label><span>所属业务角色</span><Select aria-label="选择已确认业务主体" value={selectedRole} onChange={setSelectedRole} options={roles.map((role) => ({ value: role.actor_id, label: role.display_name }))} /></label>
@@ -239,7 +248,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </section>
 
     </>}
-    {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><p className="editorial-eyebrow">当前需要你处理</p><h2>在已打开的浏览器中完成登录</h2>
+    {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><h2>在已打开的浏览器中完成登录</h2>
       <p>测试账号：{preparationIdentity?.label ?? '当前测试账号'}</p><p className="editorial-muted">正常完成密码、单点登录或多因素认证，然后回到这里确认。</p><p>保存完成前，请保持登录窗口打开。</p>
       <div className="confirmation-actions"><Button loading={busy} onClick={() => void cancel()}>取消准备</Button><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div>
       <p className="editorial-muted">只保存当前应用所需的有限登录状态，不保存密码。实际执行身份在检查中核验。</p>

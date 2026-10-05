@@ -229,8 +229,10 @@ def test_source_analysis_requires_authorization_and_recovers_candidates(
         restarted.close()
 
 
+@pytest.mark.parametrize("analysis_method", ("analyze_source", "analyze_source_for_change"))
 def test_candidate_decisions_and_manual_items_survive_source_reanalysis(
     tmp_path: Path,
+    analysis_method: str,
 ) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -296,7 +298,7 @@ def test_candidate_decisions_and_manual_items_survive_source_reanalysis(
             "roles = ['auditor']\n@app.post('/reports')\ndef create_report(): pass\n",
             encoding="utf-8",
         )
-        rescanned = application.application_understanding.analyze_source(
+        rescanned = getattr(application.application_understanding, analysis_method)(
             connected.project.project_id,
             revision=current.revision,
         )

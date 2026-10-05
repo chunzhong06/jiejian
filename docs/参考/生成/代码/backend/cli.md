@@ -47,8 +47,9 @@
 
 [打开源码](../../../../../product/backend/cli/commands/system.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `class GuiBrowser`
 - `class ServeReadinessStatus`
-- `serve_command(context, host, port, open_browser, frontend_dir, official_sample_root) -> None`
+- `serve_command(context, host, port, open_browser, browser, frontend_dir, official_sample_root) -> None`
 - `doctor_command(context) -> None`
 - `maintenance_clean_assistant_command(context, confirm) -> None`
 - `maintenance_clean_logs_command(context, confirm) -> None`
@@ -56,7 +57,28 @@
 - `maintenance_clean_all_command(context, confirm) -> None`
 - `maintenance_repair_command(context, confirm) -> None`
 
-静态import / dot-source：`__future__`、`enum`、`logging`、`os`、`pathlib`、`product.backend.cli.bootstrap`、`product.backend.cli.presentation`、`product.backend.core.errors`、`product.backend.infra.runtime.diagnostics`、`time`、`typer`、`作用域内：httpx`、`作用域内：ipaddress`、`作用域内：product.backend.api`、`作用域内：product.backend.infra.runtime.serve_lock`、`作用域内：threading`、`作用域内：uvicorn`、`作用域内：webbrowser`、`动态引用：webbrowser`
+静态import / dot-source：`__future__`、`enum`、`logging`、`os`、`pathlib`、`product.backend.cli.bootstrap`、`product.backend.cli.presentation`、`product.backend.core.errors`、`product.backend.infra.runtime.diagnostics`、`time`、`typer`、`作用域内：httpx`、`作用域内：ipaddress`、`作用域内：product.backend.api`、`作用域内：product.backend.cli.gui_browser`、`作用域内：product.backend.cli.gui_console`、`作用域内：product.backend.infra.runtime.serve_lock`、`作用域内：threading`、`作用域内：uvicorn`、`动态引用：webbrowser`
+
+### `product/backend/cli/gui_browser.py`
+
+[打开源码](../../../../../product/backend/cli/gui_browser.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class GuiBrowserSession`
+- `GuiBrowserSession.closed(self) -> bool`
+- `GuiBrowserSession.adopt(self, process) -> bool`
+- `GuiBrowserSession.close(self) -> None`
+- `open_gui_browser(url, var_dir, session, system_browser) -> bool`
+
+静态import / dot-source：`__future__`、`logging`、`os`、`pathlib`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`subprocess`、`threading`、`urllib.parse`、`webbrowser`、`作用域内：ctypes`
+
+### `product/backend/cli/gui_console.py`
+
+[打开源码](../../../../../product/backend/cli/gui_console.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `console_key_reader() -> Callable[[], str &#124; None] &#124; None`
+- `run_gui_console(open_browser, stopped, is_stopping, emit, read_key, monotonic) -> None`
+
+静态import / dot-source：`__future__`、`collections.abc`、`os`、`sys`、`threading`、`time`、`作用域内：msvcrt`
 
 ### `product/backend/cli/localization.py`
 
@@ -73,8 +95,6 @@
 [打开源码](../../../../../product/backend/cli/presentation.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `configure_presentation(mode, machine_only) -> None`
-- `set_command_mode(mode) -> None`
-- `force_machine_mode() -> None`
 - `presentation_mode(context) -> str`
 - `_FIELD_LABELS`
 - `_DOCTOR_LABELS`

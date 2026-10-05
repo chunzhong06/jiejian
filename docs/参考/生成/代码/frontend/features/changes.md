@@ -22,14 +22,14 @@
 
 - `ChangesPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/changes/development`、`../../api/changes/sourceChanges`、`../../api/checks/repairs`、`../../api/http`、`../../shared/format/time`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./changes.css`、`./delivery/DeliveryFacts`、`./delivery/SourceIdentityPanel`、`./registration/ChangeRegistration`、`./repair/RepairDelivery`、`./runtime/ChangeRuntimeAction`、`./styles/collaboration.css`、`./styles/delivery.css`、`./styles/lightweight.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/changes/development`、`../../api/changes/sourceChanges`、`../../api/checks/repairs`、`../../api/http`、`../../shared/format/time`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`./SourceChangeImpact`、`./changes.css`、`./delivery/DeliveryFacts`、`./delivery/SourceIdentityPanel`、`./registration/ChangeRegistration`、`./repair/RepairDelivery`、`./runtime/ChangeRuntimeAction`、`./styles/collaboration.css`、`./styles/delivery.css`、`antd`、`react`
 
 ### `product/frontend/src/features/changes/delivery/DeliveryFacts.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/changes/delivery/DeliveryFacts.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../../api/changes/sourceChanges`、`../tasks/TaskRecords`、`./DeliveryFacts`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../../api/changes/sourceChanges`、`./DeliveryFacts`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/changes/delivery/DeliveryFacts.tsx`
 
@@ -99,7 +99,7 @@
 - `RepairDelivery`
 - `RepairTask`
 
-静态import / dot-source：`../../../api/changes/sourceChanges`、`../../../api/checks/repairs`、`../../../shared/ui/Editorial`、`../styles/lightweight.css`、`./RepairComparison`、`antd`、`react`
+静态import / dot-source：`../../../api/changes/sourceChanges`、`../../../api/checks/repairs`、`../../../shared/styles/collections.css`、`../../../shared/ui/Editorial`、`../../../shared/ui/StatusBadge`、`./RepairComparison`、`antd`、`react`
 
 ### `product/frontend/src/features/changes/runtime/ChangeRuntimeAction.test.tsx`
 
@@ -116,6 +116,21 @@
 
 静态import / dot-source：`../../../api/changes/development`、`../../../api/http`、`../pendingOperations`、`antd`、`react`
 
+### `product/frontend/src/features/changes/SourceChangeImpact.test.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/changes/SourceChangeImpact.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../api/changes/sourceChanges`、`./SourceChangeImpact`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/features/changes/SourceChangeImpact.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/changes/SourceChangeImpact.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `SourceChangeImpact`
+
+静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../api/changes/sourceChanges`、`../../api/http`、`../../api/preparation/preparation`、`../../shared/runtime/visibility`、`../../shared/ui/StatusBadge`、`antd`、`react`
+
 ### `product/frontend/src/features/changes/styles/collaboration.css`
 
 [打开源码](../../../../../../product/frontend/src/features/changes/styles/collaboration.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
@@ -124,40 +139,5 @@
 ### `product/frontend/src/features/changes/styles/delivery.css`
 
 [打开源码](../../../../../../product/frontend/src/features/changes/styles/delivery.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
-
-
-### `product/frontend/src/features/changes/styles/lightweight.css`
-
-[打开源码](../../../../../../product/frontend/src/features/changes/styles/lightweight.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
-
-
-### `product/frontend/src/features/changes/tasks/development.css`
-
-[打开源码](../../../../../../product/frontend/src/features/changes/tasks/development.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
-
-
-### `product/frontend/src/features/changes/tasks/DevelopmentTaskPanel.test.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/changes/tasks/DevelopmentTaskPanel.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-
-静态import / dot-source：`../../../api/changes/development`、`./DevelopmentTaskPanel`、`@testing-library/react`、`vitest`
-
-### `product/frontend/src/features/changes/tasks/DevelopmentTaskPanel.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/changes/tasks/DevelopmentTaskPanel.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `DevelopmentTaskPanel`
-
-静态import / dot-source：`../../../api/changes/development`、`../../../api/http`、`../../../shared/format/time`、`../../../shared/ui/StatusBadge`、`../pendingOperations`、`./development.css`、`antd`、`react`
-
-### `product/frontend/src/features/changes/tasks/TaskRecords.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/changes/tasks/TaskRecords.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `TaskDeliveryIndex`
-- `TaskHistory`
-
-静态import / dot-source：`../../../api/changes/development`、`../../../api/http`、`../../../shared/format/time`、`antd`、`react`
 
 <!-- GENERATED:END -->

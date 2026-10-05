@@ -34,20 +34,7 @@ from product.backend.core.redaction import redact_known_secrets
 from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, TargetType
 from product.protocols.web.identity import AuthTargetScope
 from product.protocols.web.target import WebTargetDefinition, WebTargetScope
-from product.protocols.web.workflow import (
-    EmptyBody,
-    FormUrlEncodedBody,
-    HTTP_TEMPLATE_MAX_BYTES,
-    HttpOutcome,
-    HttpOutcomeClassifier,
-    HttpParameter,
-    HttpRequestTemplate,
-    JsonBody,
-    MultipartBody,
-    ResponseExtractor,
-    ResponseExtractorKind,
-    ValueSlot,
-)
+from product.protocols.web.workflow import EmptyBody, FormUrlEncodedBody, HTTP_TEMPLATE_MAX_BYTES, HttpOutcomeClassifier, HttpParameter, HttpRequestTemplate, JsonBody, MultipartBody, ResponseExtractor, ResponseExtractorKind, ValueSlot
 
 if TYPE_CHECKING:
     from product.backend.infra.execution.web.identity import HttpIdentityRuntime

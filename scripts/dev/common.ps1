@@ -72,6 +72,17 @@ function Enter-PrepareLock {
     }
 }
 
+function Register-StartupTemporary([string]$Path) {
+    # 只标记共享启动临时根内已建立的目录；调用方持有 prepare lock。
+    $root = [IO.Path]::GetFullPath((Join-Path $script:DevelopmentRoot "temp"))
+    $target = [IO.Path]::GetFullPath($Path)
+    if (-not $target.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "启动临时目录越界" }
+    $directory = Get-Item -LiteralPath $target
+    if (($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "启动临时目录不能是链接" }
+    $record = [ordered]@{ schema_version = "1"; kind = "startup-temporary"; name = $directory.Name }
+    [IO.File]::WriteAllText((Join-Path $target ".startup-owned.json"), ($record | ConvertTo-Json -Compress), $script:Utf8NoBom)
+}
+
 function Exit-PrepareLock {
     if ($null -ne $script:PrepareLock) {
         $script:PrepareLock.Dispose()

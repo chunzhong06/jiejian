@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import (
-    BigInteger,
-    CheckConstraint,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-)
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from product.backend.infra.storage.base import Base
@@ -82,32 +75,17 @@ class RunRow(Base):
 #   Execution / Results → RunRepository → Run ORM rows
 # =============================================================================
 
-import hashlib
 import json
-import re
 import time
-from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from collections.abc import Sequence
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    field_validator,
-    model_validator,
-)
-from sqlalchemy import Select, and_, func, or_, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from pydantic import Field, model_validator
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from product.backend.core.identifiers import EVIDENCE_ID_PATTERN, JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
-from product.backend.core.lifecycle import ContractStatus
-from product.backend.core.verification.permissions import PermissionContract
-from product.backend.core.recording.models import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
-from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.infra.storage.base import StorageRecord, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
 class RunRecord(StorageRecord):
     run_id: str = Field(pattern=RUN_ID_PATTERN)

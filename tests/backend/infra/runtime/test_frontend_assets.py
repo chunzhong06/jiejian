@@ -29,6 +29,32 @@ def test_identity_is_confirmed_only_when_served_bytes_match(tmp_path):
     assert '不一致' in result['reason']
 
 
+def test_large_bundled_font_is_verified_and_tampering_is_rejected(tmp_path):
+    root = tmp_path/'frontend'
+    manifest = write_frontend(root)
+    # 覆盖真实可变中文字体超过旧 16 MiB 上限的情况。
+    content = b'font-data' * (20*1024*1024//9)
+    font = root/'assets/font.ttf'
+    font.write_bytes(content)
+    manifest['assets'].append({'path': 'assets/font.ttf', 'sha256': hashlib.sha256(content).hexdigest()})
+    (root/'frontend-manifest.json').write_text(json.dumps(manifest), encoding='utf8')
+    assert frontend_asset_identity(root)['status'] == 'CONFIRMED'
+    with font.open('r+b') as handle:
+        handle.write(b'changed')
+    assert frontend_asset_identity(root)['status'] == 'UNCONFIRMED'
+
+
+def test_oversized_asset_still_has_a_bounded_rejection(tmp_path):
+    root = tmp_path/'frontend'
+    manifest = write_frontend(root)
+    with (root/'assets/oversize.ttf').open('wb') as handle:
+        handle.truncate(33*1024*1024)
+    manifest['assets'].append({'path': 'assets/oversize.ttf', 'sha256': '0'*64})
+    (root/'frontend-manifest.json').write_text(json.dumps(manifest), encoding='utf8')
+    result = frontend_asset_identity(root)
+    assert result['status'] == 'UNCONFIRMED' and '大小上限' in result['reason']
+
+
 @pytest.mark.parametrize('update',[
     {'schema_version':'2'}, {'secret':'must-not-be-returned'},
     {'assets':[{'path':'../outside','sha256':'a'*64}]},

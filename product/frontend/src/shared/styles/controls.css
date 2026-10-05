@@ -1,13 +1,14 @@
 /* 页面与Portal共用控件语义；feature样式只安排布局，不重新定义按钮与状态外观。 */
 [data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled) {
   color: var(--color-primary-ink);
-  border-color: var(--color-primary-border);
-  background: var(--color-surface);
+  border-color: var(--color-control-border);
+  background: transparent;
+  border-radius: var(--radius-medium);
   box-shadow: none;
 }
 [data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
   border-color: var(--color-primary);
-  background: var(--color-primary-light);
+  background: color-mix(in srgb,var(--color-primary) 4%,transparent);
 }
 [data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):active { background: var(--color-surface-hover); }
 [data-product=jiejian] .ant-btn-link:not(:disabled) { color: var(--color-primary-ink); }
@@ -21,8 +22,10 @@
 }
 [data-product=jiejian] .ant-btn-link.ant-btn-dangerous:not(:disabled):is(:hover,:active,:focus) { color: var(--color-danger); }
 [data-product=jiejian] .ant-btn-link:focus:not(:focus-visible) { outline: none; }
+/* 路由标题用程序焦点供读屏定位；它不是可操作控件，不绘制浏览器默认黑框。 */
+[data-product=jiejian] .editorial-heading-row h1[tabindex="-1"]:focus { outline:none; }
 [data-product=jiejian] :is(button,a,input,textarea,[role=combobox],summary):focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-focus);
   outline-offset: 3px;
 }
 [data-product=jiejian] a:not(.ant-btn):is(:hover,:focus-visible) {
@@ -43,11 +46,11 @@
   gap: var(--space-8);
   padding: var(--space-4) var(--space-8);
   border: var(--line-width) solid transparent;
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-tag);
   color: var(--color-neutral);
   background: var(--color-neutral-light);
   font-size: var(--font-secondary);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   line-height: 1.6;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -85,7 +88,7 @@
 [data-product=jiejian] .product-view-tabs { display: flex; flex-wrap: wrap; gap: var(--space-24); padding: 0; border: 0; border-bottom: var(--line-width) solid var(--color-border); }
 [data-product=jiejian] .product-view-tabs > .ant-btn { padding: var(--space-12) 0; height: auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-secondary); box-shadow: none; }
 [data-product=jiejian] .product-view-tabs > .ant-btn:not(:disabled):hover { color: var(--color-primary-ink); background: transparent; }
-[data-product=jiejian] .product-view-tabs > .ant-btn[aria-pressed=true] { color: var(--color-text); font-weight: 600; border-bottom-color: var(--color-primary); }
+[data-product=jiejian] .product-view-tabs > .ant-btn[aria-pressed=true] { color: var(--color-text); font-weight: var(--weight-strong); border-bottom-color: var(--color-primary); }
 [data-product=jiejian] .product-view-tabs > .ant-btn:disabled { color: var(--color-disabled); }
 @media(max-width:600px) {
   .product-search.ant-input-affix-wrapper { width: 100%; flex-basis: 100%; min-height: var(--control-large); }

@@ -3,11 +3,8 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, normalize_llm_base_url, reasoning_options_for
-from product.backend.infra.llm.adapters.base import LLMAdapter, LLMHttpRequest, LLMHttpResponse, LLMTransportError, json_body, max_output_tokens
+from product.backend.infra.llm.adapters.base import LLMHttpRequest, LLMHttpResponse, LLMTransportError, json_body, max_output_tokens, parse_json_response
 
 
 class OpenAICompatibleAdapter:
@@ -61,7 +58,7 @@ class OpenAICompatibleAdapter:
 
     def parse_response(self, response: LLMHttpResponse) -> str:
         _raise_for_status(response.status_code)
-        payload = _parse_json(response.body)
+        payload = parse_json_response(response.body)
         choices = payload.get("choices")
         if not isinstance(choices, list) or len(choices) != 1:
             raise LLMTransportError("invalid_response")
@@ -70,16 +67,6 @@ class OpenAICompatibleAdapter:
         if not isinstance(content, str) or not content.strip():
             raise LLMTransportError("invalid_response")
         return content
-
-
-def _parse_json(body: bytes) -> dict[str, Any]:
-    try:
-        value = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        raise LLMTransportError("invalid_response") from None
-    if not isinstance(value, dict):
-        raise LLMTransportError("invalid_response")
-    return value
 
 
 def _raise_for_status(status_code: int) -> None:

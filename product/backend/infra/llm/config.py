@@ -20,7 +20,6 @@ import ipaddress
 import posixpath
 import re
 from enum import StrEnum
-from typing import Literal
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator

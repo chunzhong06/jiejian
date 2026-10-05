@@ -132,6 +132,8 @@ function Write-SourceReceipt {
         if (Test-Path -LiteralPath $receiptPath -PathType Leaf) { Remove-Item -LiteralPath $receiptPath -Force }
         [IO.File]::Move($temporary, $receiptPath)
     } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+    # prepare lock 仍持有；登记完成之前不能让清理器看见未受保护的新环境。
+    Invoke-External "source-assets" @($script:Python, "-B", "-c", "import sys; from pathlib import Path; from product.backend.infra.runtime.maintenance_assets import register_startup_assets; register_startup_assets(Path(sys.argv[1]), Path(sys.argv[2]))", $script:VarDir, $script:DevelopmentRoot)
     Write-Host ("源码运行环境回执：{0}" -f $receiptPath) -ForegroundColor Green
 }
 

@@ -5,32 +5,16 @@ from __future__ import annotations
 import json
 import hashlib
 from collections.abc import Callable
-from itertools import pairwise
 from pathlib import Path
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording.models import RecordingPurpose, RecordingState, RecordingStateEvent
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.models import ClaimJob
 from product.backend.workflows.recording.credentials import RecordingCredentialProvider
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
-from product.backend.workflows.recording.project_submission import (
-    ProjectRecordingService,
-    ProjectRecordingSubmission,
-)
+from product.backend.workflows.recording.project_submission import ProjectRecordingService
 from product.backend.workflows.recording.submission import RecordingSubmission
-from product.protocols import (
-    ConfirmFlowDraftResource,
-    ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariableChoice,
-    RecordingCleanupStatus,
-    RecordingEvent,
-    RecordingEventKind,
-    RecordingRunnerResult,
-    RecordingRunnerResultType,
-    ValueSlotConsumer,
-    flow_draft_source_choice_id,
-)
+from product.protocols import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, RecordingEvent, RecordingEventKind, ValueSlotConsumer, flow_draft_source_choice_id
 
 
 SAMPLE_PROJECT_ID = "campus-digital-museum"
@@ -252,25 +236,6 @@ def _event(
         body=body,
     )
 
-
-def _recording_state_events(now_us: int) -> tuple[RecordingStateEvent, ...]:
-    states = (
-        RecordingState.CREATED,
-        RecordingState.STARTING,
-        RecordingState.RECORDING,
-        RecordingState.CLEANING,
-        RecordingState.PROCESSING,
-    )
-    return tuple(
-        RecordingStateEvent(
-            sequence=index,
-            source=source,
-            target=target,
-            operator="OFFICIAL_SCENARIO_SETUP",
-            occurred_at_us=now_us + index + 1,
-        )
-        for index, (source, target) in enumerate(pairwise(states), start=1)
-    )
 
 __all__ = [
     "EXPORT_ACTION_KEY",

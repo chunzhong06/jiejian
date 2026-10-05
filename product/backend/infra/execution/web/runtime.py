@@ -70,12 +70,7 @@ from product.protocols.web.profile import (
     WebExecutionSnapshot,
     required_web_secret_refs,
 )
-from product.protocols.web.workflow import (
-    CASE_SUBJECT_IDENTITY,
-    HttpOutcome,
-    ValueSlotSource,
-    build_baseline_fingerprint,
-)
+from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY, ValueSlotSource, build_baseline_fingerprint
 
 
 def _json_bytes(value: Any) -> bytes:

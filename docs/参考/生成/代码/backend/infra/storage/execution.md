@@ -31,7 +31,7 @@
 - `JobControlRepository.complete_runtime_load(self, job_id, load_id, request_hash, attempt, lease_owner, fencing_token, now_us) -> JobRecord &#124; None`
 - `JobControlRepository.complete_preflight(self, job_id, preflight_id, request_hash, attempt, lease_owner, fencing_token, now_us) -> JobRecord &#124; None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage.execution.jobs`、`product.backend.infra.storage.execution.runs`、`product.backend.infra.storage.preparation.recordings`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage.base`、`product.backend.infra.storage.execution.jobs`、`product.backend.infra.storage.execution.runs`、`product.backend.infra.storage.preparation.recordings`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`typing`
 
 ### `product/backend/infra/storage/execution/jobs.py`
 
@@ -57,7 +57,7 @@
 - `JobEventRepository.append(self, record) -> None`
 - `JobEventRepository.list_for_job(self, job_id) -> tuple[JobEventRecord, ...]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`re`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`time`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`time`
 
 ### `product/backend/infra/storage/execution/profiles.py`
 
@@ -89,6 +89,6 @@
 - `RunRepository.has_after_for_project(self, project_id, created_at_us, run_id) -> bool`
 - `RunRepository.list_finished_for_project(self, project_id) -> tuple[RunRecord, ...]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`re`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`time`、`typing`
+静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`time`
 
 <!-- GENERATED:END -->

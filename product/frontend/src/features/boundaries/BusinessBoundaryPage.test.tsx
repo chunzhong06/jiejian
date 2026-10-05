@@ -64,6 +64,18 @@ approvedBoundary.permission_intents = command.proposed_permissions.map((item, in
 approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, reason_codes: [] }))
 
 describe('业务边界页面', () => {
+  it('已有权限先展示生效版本，待审提案只有显式选择才打开', async () => {
+    mockApi.current.mockResolvedValue(approvedBoundary)
+    mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null}]})
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    await screen.findByRole('heading',{name:'权限版本 1'})
+    expect(screen.getByRole('region',{name:'当前权限清单'})).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'确认这组业务边界'})).not.toBeInTheDocument()
+    expect(mockApi.proposal).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button',{name:'审阅提案 1'}))
+    await screen.findByRole('checkbox',{name:'我已核对本次变更和沿用的业务要求'})
+    expect(mockApi.proposal).toHaveBeenCalledWith('app_demo',proposal.proposal_id)
+  })
   it('深链只读取指定提案，不自动取最后一份', async () => {
     const other = {...proposal,proposal_id:`bpr_${'6'.repeat(32)}`}
     mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null},{proposal:other,decision:null}]})
@@ -119,7 +131,7 @@ describe('业务边界页面', () => {
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
     expect(onFeedback).toHaveBeenCalledWith('权限变更已批准，正在同步当前工作。')
     expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
-    expect(screen.getByText('当前规则已确认')).toBeInTheDocument()
+    expect(screen.getByRole('heading', {name:'权限版本 1'})).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新读取下一步' }))
     await waitFor(() => expect(screen.queryByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).not.toBeInTheDocument())
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
@@ -211,7 +223,7 @@ describe('业务边界页面', () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
     expect(await screen.findByText('当前业务版本需要重新确认权限；原权限仍保留为历史。')).toBeInTheDocument()
     expect(screen.getByText('当前权限尚未确认')).toBeInTheDocument()
-    expect(screen.getByText('需要确认当前权限')).toBeInTheDocument()
+    expect(screen.getByText('部分业务动作仍需确认权限，详见下方清单。')).toBeInTheDocument()
   })
 
   it('已确认权限且完整允许对照存在时不显示旧检查链占位提示', async () => {

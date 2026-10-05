@@ -20,7 +20,7 @@
 - `AssistantCache.write_success(self, subject_id, template_id, fingerprint, provider, profile, model, reasoning_setting, suggestions, generated_at_us) -> None`
 - `AssistantCache.write_failure(self, subject_id, template_id, fingerprint, code, retry_after_us) -> None`
 
-静态import / dot-source：`__future__`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.workflows.assistant.templates`、`tempfile`、`typing`
+静态import / dot-source：`__future__`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.workflows.assistant.templates`、`tempfile`、`typing`、`作用域内：product.backend.infra.runtime.generated_files`
 
 ### `product/backend/workflows/assistant/current_surfaces.py`
 

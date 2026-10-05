@@ -335,9 +335,17 @@ def test_v2_candidate_scoped_approval_and_live_inspection(tmp_path: Path) -> Non
             revision=understanding.revision,
             decision=CandidateDecision.REJECTED,
         )
-        stale = core.business_boundaries.view(project_id).action_bindings[0]
+        after = core.business_boundaries.view(project_id)
+        stale = after.action_bindings[0]
         assert stale.status is ImplementationBindingStatus.STALE
         assert stale.reason_codes == ("CANDIDATE_REJECTED",)
+        # 实现定位过期来自实时读取，不能顺带修改用户已确认的权限或历史绑定。
+        assert after.permission_intents == boundary.permission_intents
+        assert after.policy_epoch == boundary.policy_epoch
+        with core.uow_factory() as work:
+            assert work.business_boundaries.action_binding(
+                boundary.actions[0].action_id, boundary.actions[0].revision
+            ) == binding
     finally:
         core.close()
 

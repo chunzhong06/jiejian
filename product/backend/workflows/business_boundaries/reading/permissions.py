@@ -56,9 +56,6 @@ class PermissionIntentService:
     ) -> None:
         self._uow_factory = uow_factory
 
-    def current_intents(self, project_id: str) -> tuple[PermissionIntentRevision, ...]:
-        with self._uow_factory() as work:
-            return work.permission_intents.list_latest(project_id)
 
     def history(self, project_id: str, intent_id: str) -> PermissionIntentHistoryView:
         with self._uow_factory() as work:
@@ -95,20 +92,11 @@ class PermissionIntentService:
             ),
         )
 
-    def policy_snapshot(self, project_id: str):
-        raise JiejianError(
-            ErrorCode.STATE_PRECONDITION,
-            "当前尚不支持根据业务边界权限运行检查",
-            details={"project_id": project_id},
-        )
 
 
-def _required_confirmation_count(_: PermissionIntentMatrixView) -> int:
-    return 0
 
 
 __all__ = [
     "PermissionIntentActionView", "PermissionIntentCellStatus", "PermissionIntentCellView",
     "PermissionIntentHistoryView", "PermissionIntentMatrixView", "PermissionIntentService",
-    "_required_confirmation_count",
 ]

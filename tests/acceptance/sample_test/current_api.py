@@ -100,13 +100,16 @@ def prepare_current(client, project, *, initial=False, gui=None):
         _assert_rebind(proposal, before)
         gui.approve(project, proposal) if gui is not None else _approve(client, project, proposal)
     prepared = gui.prepare() if gui is not None else client.call("POST", "/api/experience/official-sample/prepare")
-    if not prepared.get("scenario_prepared"):
-        materials = client.call("GET", f"/api/projects/{project}/preparation")
-        preview = client.call("GET", f"/api/projects/{project}/check-preview")
-        # Sample 的安装标记不是普通准备真源；只接受同项目确实仍齐备且可执行的现有材料。
-        if (materials.get("project_id") != project or materials.get("preparation_complete") is not True
-                or preview.get("project_id") != project or preview.get("can_execute") is not True):
-            _error("SAMPLE_PREPARATION_INCOMPLETE: " + str(prepared.get("pending_tasks", [])))
+    # 安装回执和复用路径都必须核对普通真源；历史安装标记不能跳过当前材料检查。
+    materials = client.call("GET", f"/api/projects/{project}/preparation")
+    preview = client.call("GET", f"/api/projects/{project}/check-preview")
+    if (materials.get("project_id") != project or materials.get("preparation_complete") is not True
+            or preview.get("project_id") != project or preview.get("can_execute") is not True):
+        from .reporting.diagnostics import preparation_facts
+        facts = preparation_facts(project, materials, preview)
+        if gui is not None:
+            (gui.audit_dir / "preparation-failure.json").write_text(json.dumps(facts, ensure_ascii=False, indent=2), encoding="utf-8")
+        _error("SAMPLE_PREPARATION_INCOMPLETE: " + json.dumps(facts, ensure_ascii=False))
     if _policy(_boundary(client, project)) != _policy(before) or project_run_ids(client, project) != before_runs:
         _error("SAMPLE_PREPARATION_CHANGED_POLICY_OR_RUNS")
     return prepared
@@ -114,6 +117,21 @@ def prepare_current(client, project, *, initial=False, gui=None):
 
 def project_run_ids(client, project):
     return [item["run"]["run_id"] for item in client.call("GET", f"/api/projects/{project}/runs")]
+
+
+def recover_run_for_cleanup(client, project, before_runs, state):
+    """未知提交只补查所属运行供清理；补查失败不覆盖最初错误。"""
+    try:
+        added = set(project_run_ids(client, project)) - before_runs
+        if len(added) == 1:
+            run_id = added.pop()
+            status = client.call("GET", f"/api/runs/{run_id}")
+            if status.get("run", {}).get("project_id") == project:
+                state.active_run_id = run_id
+                state.active_run_job_id = (status.get("job") or {}).get("job_id")
+    except Exception:
+        # 补查仅服务失败清理；读失败不能替换首个未知写入回执，也不能诱导再次提交。
+        return
 
 
 def switch_current(client, project, version, *, reference=None, gui=None):
@@ -163,11 +181,7 @@ def run_current(client, project, state, *, name, expected, change_id=None, gui=N
     except Exception as exc:
         if gui is not None:
             # GUI写入回执未知只定位本轮新增Run供精确清理，不用API再提交第二轮。
-            added = set(project_run_ids(client, project)) - prior_runs
-            if len(added) == 1:
-                state.active_run_id = added.pop()
-                current = client.call("GET", f"/api/runs/{state.active_run_id}")
-                state.active_run_job_id = (current.get("job") or {}).get("job_id")
+            recover_run_for_cleanup(client, project, prior_runs, state)
             raise
         if "无法访问" not in str(exc):
             raise

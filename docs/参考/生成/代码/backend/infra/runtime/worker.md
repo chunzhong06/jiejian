@@ -64,10 +64,11 @@
 - `class LocalWorkerSupervisor`
 - `LocalWorkerSupervisor.start(self) -> None`
 - `LocalWorkerSupervisor.is_running(self) -> bool`
+- `LocalWorkerSupervisor.active_runtime_paths(self) -> tuple[Path, ...]`
 - `LocalWorkerSupervisor.capabilities(self) -> tuple[str, ...]`
 - `LocalWorkerSupervisor.recovered_jobs(self) -> int`
 - `LocalWorkerSupervisor.stop(self, timeout) -> None`
 
-静态import / dot-source：`__future__`、`logging`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.execution.web.check_runtime`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.dispatch`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.queue`、`product.backend.infra.runtime.jobs.recovery`、`product.backend.infra.runtime.jobs.requests.checks`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`product.backend.infra.storage`、`product.protocols`、`threading`、`time`、`uuid`、`作用域内：product.backend.infra.artifacts.checks.check_packages`、`作用域内：product.backend.infra.artifacts.checks.check_publication`、`作用域内：product.backend.infra.runtime.jobs.models`
+静态import / dot-source：`__future__`、`logging`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.execution.web.check_runtime`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.dispatch`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.queue`、`product.backend.infra.runtime.jobs.recovery`、`product.backend.infra.runtime.jobs.requests.checks`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`product.protocols`、`threading`、`time`、`uuid`、`作用域内：product.backend.infra.artifacts.checks.check_packages`、`作用域内：product.backend.infra.artifacts.checks.check_publication`、`作用域内：product.backend.infra.runtime.jobs.models`
 
 <!-- GENERATED:END -->

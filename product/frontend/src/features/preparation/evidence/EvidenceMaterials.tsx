@@ -1,9 +1,10 @@
 // 已保存材料的只读说明；查询失败或跨项目切换时撤下旧快照，不推导执行条件。
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Spin } from 'antd'
+import { Alert, Button, Empty } from 'antd'
 import { ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons'
 import { ApiError } from '../../../api/http'
 import { preparationApi, type EvidenceMaterialDetail } from '../../../api/preparation/preparation'
+import { LoadingState } from '../../../shared/ui/LoadingState'
 import { EditorialHeader, EditorialPage } from '../../../shared/ui/Editorial'
 import './evidence-materials.css'
 import { SupplementalMaterials } from '../supplemental/SupplementalMaterials'
@@ -46,21 +47,21 @@ export function EvidenceMaterials({ projectId, actionId, onBack }: {
   const snapshotChanged = effect?.reason_codes.includes('EVIDENCE_SNAPSHOT_CHANGED')
   if (supplemental && current) return <SupplementalMaterials key={`${projectId}:${actionId}`} projectId={projectId} actionId={actionId} actionRevision={current.action_revision} actionLabel={current.action_label} onBack={() => setSupplemental(false)}/>
   return <EditorialPage label="证明要求与材料">
-    <div className="proof-page-actions"><Button icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>返回准备材料</Button><Button icon={<ReloadOutlined aria-hidden="true" />} loading={loading} onClick={() => setRevision(value => value + 1)}>刷新材料详情</Button></div>
+    <div className="evidence-material-page-actions"><Button icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>返回准备材料</Button><Button icon={<ReloadOutlined aria-hidden="true" />} loading={loading} onClick={() => setRevision(value => value + 1)}>刷新材料详情</Button></div>
     <EditorialHeader eyebrow="当前工作 / 证明材料" title="看清每项结果的证明依据"><p className="editorial-muted">查看已保存的材料、来源声明与当前缺口。</p></EditorialHeader>
-    <h2 className="proof-action-title" ref={title} tabIndex={-1}>{current?.action_label ?? '证明要求与材料'}</h2>
+    <h2 className="evidence-material-action-title" ref={title} tabIndex={-1}>{current?.action_label ?? '证明要求与材料'}</h2>
     {current && <p className="editorial-muted">已有业务记录也可以单独登记，供补充阅读。<Button type="link" onClick={() => setSupplemental(true)}>管理补充材料</Button></p>}
-    {loading && <div role="status" className="proof-loading"><Spin /> 正在读取当前材料…</div>}
+    {loading && <LoadingState>正在读取当前材料…</LoadingState>}
     {failed && <Alert className="flow-feedback" type="warning" showIcon message="材料详情暂时无法读取" description="旧快照已撤下。请刷新重试；这不会修改材料或发起检查。" />}
     {current && !current.effects.length && <Empty description="当前动作没有需要说明的结果证明材料" />}
-    {!!current?.effects.length && <div className="proof-workspace">
-      <nav className="proof-index" aria-label="业务结果索引"><p className="editorial-eyebrow">需要证明的业务结果</p>{current.effects.map((item, index) => <button key={item.effect_id} aria-current={selected === item.effect_id ? 'true' : undefined} onClick={() => setSelected(item.effect_id)}><span className="proof-index-number">{String(index + 1).padStart(2, '0')}</span><span><strong>{item.business_label}</strong><small>{statuses[item.material_status]}</small></span></button>)}</nav>
-      {effect && <article className="proof-detail" aria-label={`${effect.business_label}的证明材料`}>
+    {!!current?.effects.length && <div className="evidence-material-workspace">
+      <nav className="evidence-material-index" aria-label="业务结果索引"><p className="editorial-eyebrow">需要证明的业务结果</p>{current.effects.map((item, index) => <button key={item.effect_id} aria-current={selected === item.effect_id ? 'true' : undefined} onClick={() => setSelected(item.effect_id)}><span className="evidence-material-index-number">{String(index + 1).padStart(2, '0')}</span><span><strong>{item.business_label}</strong><small>{statuses[item.material_status]}</small></span></button>)}</nav>
+      {effect && <article className="evidence-material-detail" aria-label={`${effect.business_label}的证明材料`}>
         <header><p className="editorial-eyebrow">当前材料 · {statuses[effect.material_status]}</p><h2>{effect.business_label}</h2><p className="editorial-muted">对应业务对象：{effect.resource_concept}</p></header>
-        <section className="proof-source"><span className="editorial-eyebrow">已有材料</span><h3>{snapshotChanged ? '材料快照需要重新读取' : effect.source_label}</h3><p>{snapshotChanged ? '材料在读取期间发生了变化，当前来源尚未确认。请刷新查看。' : effect.source_kind === 'REGISTERED_OBSERVER' ? effect.registered_source_available === true ? '当前环境中已找到此来源。' : effect.registered_source_available === false ? '当前环境中未找到此来源。' : '当前环境尚不能确认此来源是否可用。' : effect.source_kind === 'RECORDED_OBSERVATION' ? '已保存的观察材料只说明准备情况，实际观察以每轮发布的证据为准。' : '尚无可用于说明这项业务结果的已保存材料。'}</p></section>
-        {effect.source_kind === 'REGISTERED_OBSERVER' && <section><h3>来源声明了什么能力</h3><dl className="proof-capabilities"><div><dt>确认观察窗口结束<small>区分“尚未出现”和“观察已结束”。</small></dt><dd>{capability(effect.closure_supported)}</dd></div><div><dt>对应本次业务资源<small>核对观察是否属于指定的业务对象。</small></dt><dd>{capability(effect.resource_correlation_supported)}</dd></div></dl></section>}
-        {!!effect.reason_codes.length && <section className="proof-limitations"><h3>当前限制</h3>{[...new Set(effect.reason_codes.map(code => reasons[code] ?? '材料与当前准备条件尚未完全对应，请结合准备页的具体缺口查看。'))].map(text => <p key={text}>{text}</p>)}</section>}
-        <footer className="proof-boundary"><strong>材料与声明不等于检查结论</strong><p>这里说明已有材料。某次操作实际发生了什么，以及能够支持什么判断，请查看该轮检查记录中的证据。</p></footer>
+        <section className="evidence-material-source"><span className="editorial-eyebrow">已有材料</span><h3>{snapshotChanged ? '材料快照需要重新读取' : effect.source_label}</h3><p>{snapshotChanged ? '材料在读取期间发生了变化，当前来源尚未确认。请刷新查看。' : effect.source_kind === 'REGISTERED_OBSERVER' ? effect.registered_source_available === true ? '当前环境中已找到此来源。' : effect.registered_source_available === false ? '当前环境中未找到此来源。' : '当前环境尚不能确认此来源是否可用。' : effect.source_kind === 'RECORDED_OBSERVATION' ? '已保存的观察材料只说明准备情况，实际观察以每轮发布的证据为准。' : '尚无可用于说明这项业务结果的已保存材料。'}</p></section>
+        {effect.source_kind === 'REGISTERED_OBSERVER' && <section><h3>来源声明了什么能力</h3><dl className="evidence-material-capabilities"><div><dt>确认观察窗口结束<small>区分“尚未出现”和“观察已结束”。</small></dt><dd>{capability(effect.closure_supported)}</dd></div><div><dt>对应本次业务资源<small>核对观察是否属于指定的业务对象。</small></dt><dd>{capability(effect.resource_correlation_supported)}</dd></div></dl></section>}
+        {!!effect.reason_codes.length && <section className="evidence-material-limitations"><h3>当前限制</h3>{[...new Set(effect.reason_codes.map(code => reasons[code] ?? '材料与当前准备条件尚未完全对应，请结合准备页的具体缺口查看。'))].map(text => <p key={text}>{text}</p>)}</section>}
+        <footer className="evidence-material-boundary"><strong>材料与声明不等于检查结论</strong><p>这里说明已有材料。某次操作实际发生了什么，以及能够支持什么判断，请查看该轮检查记录中的证据。</p></footer>
       </article>}
     </div>}
   </EditorialPage>

@@ -29,7 +29,7 @@ export function ChangeRegistration({ projectId, repair, requestedRepair, onSaved
     locked.current=true;setBusy(true)
     try {const result=await developmentApi.receipt(projectId,'DELIVER',pending.current.operation_id)
       if(!alive.current)return
-      if(!result){setRetryReady(!legacy.current);setMessage(legacy.current?'尚未查到旧版回执，请用原客户端查询或恢复原操作。':'尚未查到成功回执。可查询，或填写原登记内容后用同一操作重试；不会另建记录。');return}
+      if(!result){setRetryReady(!legacy.current);setMessage(legacy.current?'尚未查到旧版回执，请用发起登记的客户端查询或恢复原操作。':'尚未查到成功回执。可查询，或填写原登记内容后用同一操作重试；不会另建记录。');return}
       if(result.project_id!==projectId || result.operation_id!==pending.current.operation_id || !result.change_id)throw new ApiError('STATE_PRECONDITION','登记回执关联不一致。')
       clearPendingOperation(projectId,scope,pending.current.operation_id);pending.current=null;setUncertain(false)
       setMessage('已找回本次登记，无需再次填写。');await onSaved(result.change_id)
@@ -57,7 +57,7 @@ export function ChangeRegistration({ projectId, repair, requestedRepair, onSaved
       setRetryReady(false);setUncertain(Boolean(pending.current));onError(error as ApiError)
     }}finally{locked.current=false;if(alive.current)setBusy(false)}
   }
-  return <section className="light-registration" aria-label="登记本地修改"><header><h2>登记本地修改</h2><p>开发需求继续在原客户端讨论。这里只记录源码变化及沿用的权限范围。</p></header>
+  return <section className="light-registration" aria-label="登记本地修改"><header><h2>登记本地修改</h2><p>开发需求继续在开发客户端讨论。这里只记录源码变化及沿用的权限范围。</p></header>
     {uncertain&&<Alert type="warning" showIcon message="上次登记回执尚未确认" description={legacy.current?'发现旧版登记的未确认操作，先读取原回执。':'先查询原操作，不重新登记。'} action={<Button loading={busy} onClick={()=>void query()}>查询登记回执</Button>}/>}
     {message&&<p role="status">{message}</p>}{!preview&&!failed&&<Spin aria-label="正在核对登记范围"/>}{failed&&<Button onClick={()=>void load()}>重新读取登记范围</Button>}
     {preview&&<p className="light-meta">沿用权限版本 {preview.policy_epoch} · {preview.permission_count} 条已确认要求</p>}

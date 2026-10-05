@@ -76,7 +76,7 @@
 - `class JobState`
 - `class DomainModel`
 
-静态import / dot-source：`__future__`、`enum`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`enum`、`pydantic`
 
 ### `product/backend/core/redaction.py`
 

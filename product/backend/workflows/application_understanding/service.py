@@ -58,7 +58,7 @@ class ApplicationConnectionView(BaseModel):
 
 
 class ApplicationUnderstandingService:
-    """以 revision 防止网络探测期间的并发确认覆盖。"""
+    """以 revision 防止并发确认覆盖；绑定有效性由业务边界和准备读取实时核对。"""
 
     def __init__(
         self,
@@ -74,15 +74,6 @@ class ApplicationUnderstandingService:
         self.analyzer = analyzer or ApplicationUnderstandingAnalyzer()
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._reserved_control_origin = reserved_control_origin
-        self._permission_binding_refresher: Callable[[str], None] | None = None
-
-    def set_permission_binding_refresher(
-        self,
-        refresher: Callable[[str], None],
-    ) -> None:
-        """安装源码理解变化后的权限实现绑定失效器。"""
-
-        self._permission_binding_refresher = refresher
 
     def connect(
         self,
@@ -222,7 +213,6 @@ class ApplicationUnderstandingService:
             )
             work.application_understanding.replace(updated)
             work.commit()
-        self._refresh_permission_bindings(project_id)
         return updated
 
     def endpoint_status(
@@ -291,7 +281,6 @@ class ApplicationUnderstandingService:
         return self._analyze_source(
             project_id,
             revision=revision,
-            refresh_permission_bindings=True,
         )
 
     def analyze_source_for_change(
@@ -300,12 +289,11 @@ class ApplicationUnderstandingService:
         *,
         revision: int,
     ) -> ApplicationUnderstanding:
-        """供变化编排形成真实快照；不刷新权限绑定，后续只读检查 current Actor/Action 映射。"""
+        """变化编排复用同一受控扫描与 revision 事务，后续按当前事实核验映射。"""
 
         return self._analyze_source(
             project_id,
             revision=revision,
-            refresh_permission_bindings=False,
         )
 
     def inspect_source_fingerprint(self, project_id: str) -> str:
@@ -361,7 +349,7 @@ class ApplicationUnderstandingService:
         return updated
 
     def _analyze_source(
-        self, project_id: str, *, revision: int, refresh_permission_bindings: bool,
+        self, project_id: str, *, revision: int,
     ) -> ApplicationUnderstanding:
         """执行同一受控扫描；调用者不能改变扫描根、忽略规则或预算。"""
         before, result = self.scan_source(project_id, revision=revision)
@@ -369,8 +357,6 @@ class ApplicationUnderstandingService:
             work.acquire_write_lock()
             updated = self.apply_source_analysis(work, before, result)
             work.commit()
-        if refresh_permission_bindings:
-            self._refresh_permission_bindings(project_id)
         return updated
 
     def decide_role(
@@ -442,7 +428,6 @@ class ApplicationUnderstandingService:
             updated = self._save_candidate_update(work, current,
                 role_candidates=tuple(roles[item.candidate_id] for item in current.role_candidates),
                 action_candidates=tuple(actions[item.candidate_id] for item in current.action_candidates))
-        self._refresh_permission_bindings(project_id)
         return updated
 
     def add_manual_role(
@@ -487,7 +472,6 @@ class ApplicationUnderstandingService:
                     )
                 ),
             )
-        self._refresh_permission_bindings(project_id)
         return updated
 
     def add_manual_action(
@@ -529,7 +513,6 @@ class ApplicationUnderstandingService:
                     )
                 ),
             )
-        self._refresh_permission_bindings(project_id)
         return updated
 
     def _decide_candidate(
@@ -603,12 +586,7 @@ class ApplicationUnderstandingService:
                 else {"action_candidates": next_candidates}
             )
             updated = self._save_candidate_update(work, current, **updates)
-        self._refresh_permission_bindings(project_id)
         return updated
-
-    def _refresh_permission_bindings(self, project_id: str) -> None:
-        if self._permission_binding_refresher is not None:
-            self._permission_binding_refresher(project_id)
 
     def _current_for_update(
         self,

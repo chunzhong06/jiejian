@@ -34,7 +34,6 @@
 [打开源码](../../../../../../product/backend/api/errors.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `jiejian_error_handler(request, exc) -> JSONResponse`
-- `request_validation_error_handler(request, exc) -> JSONResponse`
 - `validation_error_handler(request, exc) -> JSONResponse`
 
 静态import / dot-source：`__future__`、`fastapi`、`fastapi.exceptions`、`fastapi.responses`、`product.backend.core.errors`、`pydantic`

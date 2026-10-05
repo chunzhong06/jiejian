@@ -1,6 +1,6 @@
 /* 统一 AI 辅助面板；冷读取只看缓存，模型调用必须由用户点击触发。 */
 
-import { Button, List, Space, Tag, Typography } from 'antd'
+import { Button, List, Space, Typography } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { assistantApi, type AssistantFocus, type AssistantSurfaceView, type ProjectAssistantSurface } from '../../api/assistance/assistant'
 import type { ErrorDiagnosis } from '../../api/http'

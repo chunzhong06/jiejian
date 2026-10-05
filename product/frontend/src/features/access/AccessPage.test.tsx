@@ -1,6 +1,6 @@
 // 验证应用接入页只保留正式接入向导，不再暴露旧 Profile 注册或项目管理面板。
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AccessPage } from './AccessPage'
 
@@ -26,7 +26,7 @@ describe('AccessPage', () => {
       onContinue={onContinue}
     />)
 
-    expect(screen.getByRole('heading', { name: '确认应用与业务动作，再建立权限' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '接入本地应用' })).toBeInTheDocument()
     expect(screen.getByTestId('application-setup')).toHaveTextContent('正式应用接入向导')
     expect(screen.queryByText(/Profile|注册并校验|当前工作概览|项目列表/i)).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText(/profiles\\profile\.json/i)).not.toBeInTheDocument()

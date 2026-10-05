@@ -32,18 +32,7 @@ from product.backend.workflows.onboarding.discovery import (
 
 
 
-from .models import (
-    AnalysisModel,
-    ApplicationAnalysisResult,
-    SourceAnalysisLimits,
-    _CONFIDENCE_RANK,
-    _Finding,
-    _IGNORED_DIRECTORIES,
-    _METHOD_LABEL,
-    _OPENAPI_NAMES,
-    _SENSITIVE_FILE,
-    _SOURCE_SUFFIXES,
-)
+from .models import ApplicationAnalysisResult, SourceAnalysisLimits, _CONFIDENCE_RANK, _Finding, _IGNORED_DIRECTORIES, _METHOD_LABEL, _OPENAPI_NAMES, _SENSITIVE_FILE, _SOURCE_SUFFIXES
 
 from .javascript import JavaScriptAnalysisMixin
 from .openapi import OpenApiAnalysisMixin

@@ -17,6 +17,10 @@
 
 - `LLMSettingsDrawer`
 
-静态import / dot-source：`../../api/assistance/llm`、`../../api/http`、`../../shared/ui/StatusBadge`、`antd`、`react`
+静态import / dot-source：`../../api/assistance/llm`、`../../api/http`、`../../shared/ui/StatusBadge`、`./settings.css`、`antd`、`react`
+
+### `product/frontend/src/features/settings/settings.css`
+
+[打开源码](../../../../../../product/frontend/src/features/settings/settings.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 <!-- GENERATED:END -->

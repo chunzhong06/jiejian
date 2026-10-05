@@ -2,7 +2,6 @@
 from __future__ import annotations
 from product.backend.core.applications.models import ApplicationUnderstanding
 from product.backend.core.boundaries.entities import ImplementationBindingStatus, boundary_sha256
-from product.backend.core.boundaries.semantics import PermissionExpectation
 from product.backend.workflows.workspace.models import ActionWorkspaceView, ActorWorkspaceView, PrimaryTaskKind, PrimaryTaskView, WorkspaceAreaView, WorkspaceJourney, WorkspaceJourneyStep
 
 _TASK_PRESENTATION: dict[str, tuple[str, str]] = {

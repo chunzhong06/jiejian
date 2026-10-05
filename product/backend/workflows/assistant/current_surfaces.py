@@ -12,7 +12,7 @@ from product.backend.core.identifiers import RECORDING_ID_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.recording.models import RecordingState
 from product.backend.workflows.assistant.surfaces import ResolvedAssistantSurface, _entity, _short, _unique_short
-from product.backend.workflows.assistant.templates import AssistantEntityType as EntityType, AssistantFact, AssistantTemplateId as Template, build_surface_input
+from product.backend.workflows.assistant.templates import AssistantEntityType as EntityType, AssistantTemplateId as Template, build_surface_input
 from product.backend.workflows.preparation.models import PreparationStatus
 from product.backend.workflows.recording.source import require_recording_source
 

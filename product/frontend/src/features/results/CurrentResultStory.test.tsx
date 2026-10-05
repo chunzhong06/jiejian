@@ -1,9 +1,9 @@
 // 验证 R3 总览、单项导航与证据归属隔离；重排界面不能改变服务端结论。
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoryTraceEvent } from '../../api/checks/currentChecks'
 import { CurrentResultStory } from './CurrentResultStory'
-import { story, outcome } from '../../testing/fixtures/results'
+import { story, outcome, observation } from '../../testing/fixtures/results'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
 const api = vi.hoisted(() => ({ evidence: vi.fn() }))
 vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
@@ -16,6 +16,28 @@ const inspectTrace = () => { inspect(); fireEvent.click(screen.getByRole('button
 const openSource = () => { const button=screen.getByRole('button',{name:'查看资源状态证据'}); button.focus(); fireEvent.click(button) }
 
 describe('结果总览与单项调查', () => {
+  it('所选证明按操作前后与恢复分组，保留全部对应观察并排除其他要求', async () => {
+    const value=story()
+    value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof',required_level:'VERDICT_REQUIRED',source_label:'导出文件',observed_state:'CONFIRMED',evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
+    api.evidence.mockResolvedValue({...evidence(),observations:[
+      {...observation,phase:'BASELINE',reason_codes:['OBSERVATION_UNINTERPRETED']},
+      observation,
+      {...observation,phase:'EVENTUAL',window_end_us:300},
+      {...observation,phase:'RECOVERY',reason_codes:['OBSERVATION_UNINTERPRETED']},
+      {...observation,effect_id:'unrelated',reason_codes:['EFFECT_PROJECTOR_UNSUPPORTED']},
+      {...observation,proof_fingerprint:'old',reason_codes:['OBSERVER_PHASE_UNAVAILABLE']},
+    ]})
+    render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
+    fireEvent.click(screen.getByRole('button',{name:'查看必要证明记录'}))
+    const records=await screen.findByRole('region',{name:'观察记录'})
+    expect(within(records).getByRole('region',{name:'操作前'})).toHaveTextContent('初始对照记录')
+    expect(within(within(records).getByRole('region',{name:'操作后'})).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(records).getByRole('region',{name:'恢复后'})).toHaveTextContent('恢复对照记录')
+    expect(records).not.toHaveTextContent('不能用于判断该业务后果')
+    expect(records).not.toHaveTextContent('本阶段不采集')
+    expect(within(screen.getByRole('region',{name:'已发布证据'})).getAllByText('导出文件',{exact:true})).toHaveLength(1)
+  })
+
   it('默认总览不展开单项或路径，返回恢复原行焦点并提供精确 Case 回调', () => {
     const value=story();value.actions[0].execution_path={complete:true,reason_codes:[],evidence_refs:['ev1'],events:[node]}
     const change=vi.fn();render(<CurrentResultStory story={value} onError={vi.fn()} onCaseChange={change}/>)
@@ -143,4 +165,31 @@ describe('结果总览与单项调查', () => {
     expect(screen.getByText('新判断语义')).toHaveClass('is-neutral')
     expect(screen.queryByText('符合要求')).not.toBeInTheDocument()
   })
+})
+
+it('有问题时收起已通过项，展开和返回保留可读的原检查项', () => {
+  const value=story();value.actions.push({...value.actions[0],case_id:'safe',display_name:'正常资料查看',judgement:'本次权限要求已得到验证'})
+  render(<CurrentResultStory story={value} onError={vi.fn()}/>)
+  expect(screen.queryByRole('button',{name:'查看第 2 项依据'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'查看已通过的检查 · 1 项'}))
+  fireEvent.click(screen.getByRole('button',{name:'查看第 2 项依据'}))
+  fireEvent.click(screen.getByRole('button',{name:'← 返回 2 项结果'}))
+  expect(screen.getByRole('button',{name:'查看第 2 项依据'})).toHaveFocus()
+})
+it('全部通过时完整展示每项，普通PASS不出现修复完成入口', () => {
+  const value=story();value.verdict='PASS';value.actions[0].judgement='本次权限要求已得到验证'
+  render(<CurrentResultStory story={value} onError={vi.fn()}/>)
+  expect(screen.getByRole('button',{name:'查看第 1 项依据'})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:/查看已通过的检查/})).not.toBeInTheDocument()
+  expect(screen.queryByRole('region',{name:'修复前后'})).not.toBeInTheDocument()
+})
+it('复验结果使用精确原题对照，底部动作指向原Run和本次修改', () => {
+  const value=story(),navigate=vi.fn();value.change_context={change_id:'fixed'}
+  value.repair_verification={repair_reference:'repair',source_run_id:'original',run_id:value.run_id,status:'NOT_VERIFIED',reason_codes:[]}
+  value.actions[0].repair_comparison=[{role:'DENY',source_case_id:'original-case',action_label:'导出项目',subject_label:'成员',resource_owner_label:'负责人',resource_id:'resource',effect_labels:['生成交付包'],before_verdict:'VULNERABLE',before_evidence_refs:[],after_run_id:value.run_id,after_case_id:'c1',after_verdict:'VULNERABLE',match_status:'MATCHED'}]
+  render(<CurrentResultStory story={value} onError={vi.fn()} onNavigate={navigate}/>)
+  expect(screen.getByRole('heading',{level:1,name:'原问题仍然存在'})).toBeInTheDocument()
+  expect(screen.getByRole('region',{name:'修复前后'})).toHaveTextContent('生成交付包')
+  fireEvent.click(screen.getByRole('button',{name:'查看原检查结果'}));expect(navigate).toHaveBeenLastCalledWith('/history?run_id=original')
+  fireEvent.click(screen.getByRole('button',{name:'查看本次修改'}));expect(navigate).toHaveBeenLastCalledWith('/changes?change_id=fixed')
 })

@@ -91,9 +91,27 @@ describe('当前检查工作区', () => {
     const question=await screen.findByRole('region',{name:'当前处理的权限考题'})
     expect(within(question).getByRole('heading',{name:'拒绝验证 · 导出项目资料'})).toBeInTheDocument()
     expect(within(question).getByText(/计划操作账号：另一个成员乙；资源所有者：负责人甲/)).toBeInTheDocument()
-    expect(screen.getByRole('list',{name:'尚待发布的观察事实'})).toHaveTextContent('页面响应：未确认后台执行：未确认最终业务结果：未确认')
+    expect(screen.getByText('结果在证据发布后给出')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar',{name:'已处理检查项'})).toHaveAttribute('aria-valuenow','2')
     expect(screen.queryByText('验证通过')).not.toBeInTheDocument()
     expect(api.story).not.toHaveBeenCalled();expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('同一轮手动刷新保留进度节点，响应返回后才衔接计数', async () => {
+    const running = status({run:{...status().run,lifecycle:'RUNNING',verdict:null},result_integrity:'NOT_PUBLISHED',progress:{phase:'EXECUTING',completed_cases:1,planned_cases:3,current_case:null}})
+    api.status.mockResolvedValue(running)
+    render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    const bar = await screen.findByRole('progressbar',{name:'已处理检查项'})
+    let reply!: (value: typeof running) => void
+    api.status.mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
+    fireEvent.click(screen.getByRole('button',{name:'刷新检查结果'}))
+    await waitFor(() => expect(reply).toBeDefined())
+    expect(screen.getByRole('progressbar')).toBe(bar)
+    expect(bar).toHaveAttribute('aria-valuenow','1')
+    reply({...running,progress:{...running.progress!,completed_cases:2}})
+    await waitFor(() => expect(bar).toHaveAttribute('aria-valuenow','2'))
+    expect(screen.getByRole('progressbar')).toBe(bar)
+    expect(api.submit).not.toHaveBeenCalled()
   })
 
   it('证据不足明确缺口与新检查，资源所有者不冒充实际身份', async () => {
@@ -148,6 +166,7 @@ describe('当前检查工作区', () => {
     api.preview.mockResolvedValue({ ...ready, can_execute: false })
     render(<CurrentTestsPage {...props()} />)
     expect(await screen.findByRole('button', { name: '准备检查材料' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '管理准备材料' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '开始检查' })).not.toBeInTheDocument()
   })
   it('显式提交前范围漂移时先展示最新预览，不执行旧计划', async () => {
@@ -207,6 +226,7 @@ describe('当前检查工作区', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('已处理 1 / 2')
     expect(api.story).not.toHaveBeenCalled(); expect(api.submit).not.toHaveBeenCalled()
     api.status.mockResolvedValue(status())
+    await waitFor(() => expect(screen.getByRole('button', { name: '刷新检查结果' })).not.toHaveClass('ant-btn-loading'))
     fireEvent.click(screen.getByRole('button', { name: '刷新检查结果' }))
     expect(await screen.findByText('检查已完成，结果已保存。')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: '本轮检查完成' })).getByRole('heading', { name: '确认禁止的交付包已经生成' })).toBeInTheDocument()

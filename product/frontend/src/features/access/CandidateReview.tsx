@@ -69,6 +69,11 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
       if (alive.current) { setUncertain(true); setIssue('提交结果需要核对。当前选择已保留，请先读取当前事实。') }
     } finally { sending.current = false; if (alive.current) setBusy(false) }
   }
+  // 草稿回读与放弃紧邻本步确认；页面级刷新和重新分析仍由父页面承担。
+  const editingActions = <>
+    {uncertain && <Button loading={busy} onClick={()=>void recover()}>核对保存结果</Button>}
+    {(dirty || uncertain || changed) && <Popconfirm title="放弃本次未确认的编辑并读取最新业务信息？" onConfirm={async()=>{ const next=await projectsApi.understanding(base.project_id).catch(()=>null);if (!alive.current)return;if(next){setBase(next);setEdits({});setReview(false);setUncertain(false);setIssue(undefined);onApplied(next)}else setIssue('最新信息读取失败，当前编辑继续保留。') }}><Button disabled={busy}>放弃本次编辑并刷新</Button></Popconfirm>}
+  </>
   return <section className="application-step candidate-workspace" aria-label="审阅业务候选">
     <header><p className="editorial-eyebrow">{review ? '第 2 步 / 核对总览' : '第 1 步 / 整理业务'}</p><h2 ref={heading} tabIndex={-1}>{review ? '核对业务总览' : '整理权限组与业务动作'}</h2><p className="editorial-muted">{review ? '一起核对两类业务信息，确认后保存。正式权限规则仍需单独批准。' : '先调整应用里有哪些权限组、可以做哪些事，再统一确认。'}</p></header>
     {receipt && <TaskReceipt message={receipt} />}
@@ -86,10 +91,9 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
       </section>
     })}
     {staleReview}
-    <details className="application-manual-section"><summary>没有找到？手工补充</summary><p>手工补充会立即保存；请先确认或放弃上方正在编辑的选择。</p><fieldset disabled={dirty || busy || uncertain}>{manual}</fieldset></details>
-    {changes.length > 0 && <div className="candidate-step-footer"><div><strong>核对本次整理</strong><p>已纳入 {choices.filter(item=>item.kind==='ROLE' && item.decision==='CONFIRMED').length} 个权限组、{choices.filter(item=>item.kind==='ACTION' && item.decision==='CONFIRMED').length} 项业务动作</p></div><Button ref={nextButton} type="primary" disabled={busy || uncertain || changed || changes.length > 256 || changes.some(item=>!item.display_name.trim())} onClick={()=>setReview(true)}>下一步：核对业务总览</Button></div>}</>}
-    {review && <section className="candidate-batch-review" aria-label="本次选择完整摘要"><div className="candidate-review-columns">{(['ROLE','ACTION'] as const).map(kind=><section key={kind}><h3>{kind==='ROLE'?'权限组':'业务动作'}</h3>{(['CONFIRMED','REJECTED','PROPOSED'] as const).map(decision=>{const items=choices.filter(item=>item.kind===kind&&item.decision===decision);return <div key={decision}><h4>{decision==='CONFIRMED'?'纳入':decision==='REJECTED'?'排除':'保留待审'} · {items.length}</h4>{items.length ? <ul>{items.map(item=><li key={item.candidate_id}>{item.display_name}</li>)}</ul> : <p className="editorial-muted">无</p>}</div>})}</section>)}</div><div className="candidate-step-footer"><Button disabled={busy} onClick={()=>setReview(false)}>返回修改</Button><Button type="primary" loading={busy} disabled={uncertain || changed} onClick={()=>void submit()}>确认这些业务信息</Button></div></section>}
-    {uncertain && <Button loading={busy} onClick={()=>void recover()}>核对保存结果</Button>}
-    {(dirty || uncertain || changed) && <Popconfirm title="放弃本次未确认的编辑并读取最新业务信息？" onConfirm={async()=>{ const next=await projectsApi.understanding(base.project_id).catch(()=>null);if (!alive.current)return;if(next){setBase(next);setEdits({});setReview(false);setUncertain(false);setIssue(undefined);onApplied(next)}else setIssue('最新信息读取失败，当前编辑继续保留。') }}><Button disabled={busy}>放弃本次编辑并刷新</Button></Popconfirm>}
+    <details className="application-manual-section"><summary>没有找到？手工补充</summary><p className="application-manual-note">手工补充会立即保存；请先确认或放弃上方正在编辑的选择。</p><fieldset className="application-manual-fields" disabled={dirty || busy || uncertain}>{manual}</fieldset></details>
+    {(changes.length > 0 || dirty || uncertain || changed) && <div className="candidate-step-footer">{changes.length > 0 && <div><strong>核对本次整理</strong><p>已纳入 {choices.filter(item=>item.kind==='ROLE' && item.decision==='CONFIRMED').length} 个权限组、{choices.filter(item=>item.kind==='ACTION' && item.decision==='CONFIRMED').length} 项业务动作</p></div>}<div className="candidate-step-actions">{editingActions}{changes.length > 0 && <Button ref={nextButton} type="primary" disabled={busy || uncertain || changed || changes.length > 256 || changes.some(item=>!item.display_name.trim())} onClick={()=>setReview(true)}>下一步：核对业务总览</Button>}</div></div>}</>}
+    {review && <section className="candidate-batch-review" aria-label="本次选择完整摘要"><div className="candidate-review-columns">{(['ROLE','ACTION'] as const).map(kind=><section key={kind}><h3>{kind==='ROLE'?'权限组':'业务动作'}</h3>{(['CONFIRMED','REJECTED','PROPOSED'] as const).map(decision=>{const items=choices.filter(item=>item.kind===kind&&item.decision===decision);return <div key={decision}><h4>{decision==='CONFIRMED'?'纳入':decision==='REJECTED'?'排除':'保留待审'} · {items.length}</h4>{items.length ? <ul>{items.map(item=><li key={item.candidate_id}>{item.display_name}</li>)}</ul> : <p className="editorial-muted">无</p>}</div>})}</section>)}</div><div className="candidate-step-footer"><Button disabled={busy} onClick={()=>setReview(false)}>返回修改</Button><div className="candidate-step-actions">{editingActions}<Button type="primary" loading={busy} disabled={uncertain || changed} onClick={()=>void submit()}>确认这些业务信息</Button></div></div></section>}
+
   </section>
 }

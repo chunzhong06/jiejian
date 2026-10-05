@@ -34,8 +34,8 @@ export function AccessPage({
   const [step, setStep] = useState(0)
   useEffect(() => setStep(0), [selected?.project_id])
   return (
-    <EditorialPage label="应用接入任务">
-      <EditorialHeader eyebrow="当前工作 / 应用接入" title={step === 4 ? '连接已确认，接下来整理业务' : selected ? '确认应用与业务动作，再建立权限' : '从你的本地应用开始'}><p className="editorial-muted">{step === 4 ? '先确认谁可以对哪些资源做什么。' : '选择本地应用，确认访问地址，再审阅找到的业务动作。'}</p></EditorialHeader>
+    <EditorialPage label="应用接入任务" width="form">
+      <EditorialHeader eyebrow={selected?.name || '当前应用'} title={step === 4 ? '审阅识别到的业务' : '接入本地应用'}><p className="editorial-muted">{step === 4 ? '先确认谁可以对哪些资源做什么。' : '选择本地应用，确认访问地址，再审阅找到的业务动作。'}</p></EditorialHeader>
       {onProvidedBoundary && <p className="editorial-muted">这个应用已提供一份业务权限提案。<Button type="link" onClick={onProvidedBoundary}>审阅已提供的权限提案</Button></p>}
       <ApplicationSetup selected={selected} endpointStatus={endpointStatus} officialSampleAvailable={officialSampleAvailable} officialSampleBusy={officialSampleBusy} onStartOfficialSample={onStartOfficialSample} onConnected={onConnected} onChanged={onUnderstandingChanged} onBack={onBack} onContinue={onContinue} onStageChanged={setStep} />
     </EditorialPage>

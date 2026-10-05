@@ -261,9 +261,6 @@ class BusinessBoundaryRepository:
         row = _scalar(self._session, select(BusinessActorRevisionRow).where(BusinessActorRevisionRow.actor_id == actor_id, BusinessActorRevisionRow.revision == revision))
         return None if row is None else self._actor_revision(row)
 
-    def list_actor_revisions(self, project_id: str) -> tuple[BusinessActorRevision, ...]:
-        rows = _scalars(self._session, select(BusinessActorRevisionRow).where(BusinessActorRevisionRow.project_id == project_id).order_by(BusinessActorRevisionRow.actor_id, BusinessActorRevisionRow.revision))
-        return tuple(self._actor_revision(row) for row in rows)
 
     def list_actors(self, project_id: str) -> tuple[BusinessActor, ...]:
         rows = _scalars(self._session, select(BusinessActorRow).where(BusinessActorRow.project_id == project_id).order_by(BusinessActorRow.actor_id))

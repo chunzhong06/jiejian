@@ -14,7 +14,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultManifest, ArtifactScanResult, parse_artifact_check_request, parse_artifact_result_manifest, parse_artifact_scan_result
+from product.protocols.artifacts import ArtifactCheckRequest, ArtifactScanResult, parse_artifact_check_request, parse_artifact_result_manifest, parse_artifact_scan_result
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 

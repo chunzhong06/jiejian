@@ -185,10 +185,8 @@
 - `class PermissionIntentMatrixView`
 - `class PermissionIntentHistoryView`
 - `class PermissionIntentService`
-- `PermissionIntentService.current_intents(self, project_id) -> tuple[PermissionIntentRevision, ...]`
 - `PermissionIntentService.history(self, project_id, intent_id) -> PermissionIntentHistoryView`
 - `PermissionIntentService.matrix(self, project_id) -> PermissionIntentMatrixView`
-- `PermissionIntentService.policy_snapshot(self, project_id)`
 
 静态import / dot-source：`__future__`、`collections.abc`、`enum`、`product.backend.core.boundaries.permissions`、`product.backend.core.errors`、`product.backend.infra.storage`、`pydantic`
 

@@ -39,7 +39,7 @@
 - `run_async_task_observer(spec, correlation, phase, attempt_dir, parent_environ, python_executable) -> AsyncTaskObserverResult`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`hashlib`、`httpx`、`json`、`os`、`pathlib`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`product.protocols.web.target`、`subprocess`、`time`、`typing`、`urllib.parse`
+静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`hashlib`、`httpx`、`json`、`os`、`pathlib`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.observers.artifacts`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`product.protocols.web.target`、`subprocess`、`time`、`typing`、`urllib.parse`
 
 ### `product/backend/infra/observers/adapters/audit_log.py`
 
@@ -83,7 +83,7 @@
 - `run_audit_log_observer(spec, correlation, phase, attempt_dir, parent_environ, python_executable, start_cursors) -> AuditLogObserverResult`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`argparse`、`ctypes`、`ctypes.wintypes`、`dataclasses`、`hashlib`、`json`、`msvcrt`、`os`、`pathlib`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`stat`、`subprocess`、`time`、`typing`
+静态import / dot-source：`__future__`、`argparse`、`ctypes`、`ctypes.wintypes`、`dataclasses`、`hashlib`、`json`、`msvcrt`、`os`、`pathlib`、`product.backend.infra.observers.artifacts`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`stat`、`subprocess`、`time`、`typing`
 
 ### `product/backend/infra/observers/adapters/azure_blob.py`
 
@@ -128,7 +128,7 @@
 - `run_azure_blob_observer(spec, correlation, phase, attempt_dir, parent_environ, python_executable) -> BlobObserverResult`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`hashlib`、`httpx`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`subprocess`、`time`、`typing`、`urllib.parse`、`xml.etree.ElementTree`
+静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`hashlib`、`httpx`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.observers.artifacts`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`subprocess`、`time`、`typing`、`urllib.parse`、`xml.etree.ElementTree`
 
 ### `product/backend/infra/observers/adapters/azure_queue.py`
 
@@ -166,7 +166,7 @@
 - `run_azure_queue_observer(spec, correlation, phase, attempt_dir, parent_environ, python_executable) -> QueueObserverResult`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`argparse`、`base64`、`dataclasses`、`hashlib`、`httpx`、`json`、`math`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`subprocess`、`time`、`typing`、`urllib.parse`、`xml.etree.ElementTree`
+静态import / dot-source：`__future__`、`argparse`、`base64`、`dataclasses`、`httpx`、`json`、`math`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.observers.artifacts`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`re`、`subprocess`、`time`、`typing`、`urllib.parse`、`xml.etree.ElementTree`
 
 ### `product/backend/infra/observers/adapters/json_source.py`
 
@@ -179,11 +179,10 @@
 - `strict_json(raw, limit)`
 - `scalar(data, path, key)`
 - `mapped_values(raw, config)`
-- `preflight_source_checks(raw, config, resource_id, owner_subject_id, contract)`
 - `class JsonHistoryFact`
 - `project_history(before, after, operation_id, subject_id, resource_id, owner_id)`
 
-静态import / dot-source：`__future__`、`dataclasses`、`json`、`math`、`product.protocols.preparation.proof_sources`、`re`
+静态import / dot-source：`__future__`、`dataclasses`、`json`、`math`、`re`
 
 ### `product/backend/infra/observers/adapters/owner_api.py`
 
@@ -216,7 +215,15 @@
 - `run_sqlite_observer(spec, correlation, phase, attempt_dir, parent_environ, python_executable) -> SqliteObserverResult`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`json`、`os`、`pathlib`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`subprocess`、`time`、`typing`、`作用域内：sqlite3`、`作用域内：urllib.parse`
+静态import / dot-source：`__future__`、`argparse`、`dataclasses`、`json`、`os`、`pathlib`、`product.backend.infra.observers.artifacts`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.protocols.observer`、`subprocess`、`time`、`typing`、`作用域内：sqlite3`、`作用域内：urllib.parse`
+
+### `product/backend/infra/observers/artifacts.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/artifacts.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `write_atomic(path, payload) -> None`
+
+静态import / dot-source：`os`、`pathlib`
 
 ### `product/backend/infra/observers/checks/__init__.py`
 

@@ -16,14 +16,12 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.lifecycle import RunLifecycle, RunVerdict
-from product.backend.core.reports.repair import RepairRequirementView, RepairVerification, RepairVerificationStatus
+from product.backend.core.lifecycle import RunLifecycle
+from product.backend.core.reports.repair import RepairVerification
 from product.backend.core.verification.breakpoints import (
     BreakpointLocator,
     BreakpointPrecision,
@@ -31,15 +29,11 @@ from product.backend.core.verification.breakpoints import (
     BreakpointType,
 )
 from product.backend.core.verification.continuity import AuthorizationContinuityState
-from product.backend.core.verification.facts import (
-    ExecutionOutcome,
-    ObservedEffect,
-    TemporalClosure,
-)
+from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.reports.trace import build_execution_traces
 from product.protocols.runner.execution_request import ChangeVerificationContext, PermissionPolicySnapshot, build_permission_policy_snapshot
-from product.protocols.observer import ObserverOutcomeStatus, ObserverType
+from product.protocols.observer import ObserverOutcomeStatus
 
 
 

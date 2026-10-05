@@ -9,7 +9,20 @@ from pathlib import Path
 import pytest
 
 from product.backend.infra.runtime.maintenance import LocalMaintenanceService
+from product.backend.infra.runtime.generated_files import register_generated_file, generated_file_owner
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
+
+
+def test_gui_profile_is_not_temporary_or_damaged_runtime(tmp_path: Path) -> None:
+    service = LocalMaintenanceService(tmp_path / "var", session_started_at=time.time() + 60)
+    profile = service.paths.gui_browser
+    profile.mkdir(parents=True)
+    for name in ("Preferences", "browser.tmp", "state.partial", ".invalid"):
+        (profile / name).write_text("browser-owned", encoding="utf-8")
+    for scope in ("clear-all", "repair-runtime"):
+        plan = service.preview(scope)
+        service.execute(str(plan["plan_id"]), expected_scope=scope)
+    assert all((profile / name).is_file() for name in ("Preferences", "browser.tmp", "state.partial", ".invalid"))
 
 
 def test_local_maintenance_status_and_clear_all_preserve_product_facts(
@@ -29,6 +42,8 @@ def test_local_maintenance_status_and_clear_all_preserve_product_facts(
     for path in (assistant, log, temporary, data, runtime, development):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"proof")
+    register_generated_file(var_dir,assistant,'assistant-cache')
+    register_generated_file(var_dir,log,'app-log')
 
     status = service.status()
     preview = service.preview("clear-all")
@@ -37,9 +52,10 @@ def test_local_maintenance_status_and_clear_all_preserve_product_facts(
     assert set(status["entries"]) == {"assistant", "logs", "temporary"}
     assert status["entries"]["assistant"]["files"] == 1
     assert status["entries"]["logs"]["categories"]["app"]["files"] == 1
-    assert status["entries"]["temporary"]["files"] == 1
-    assert preview["estimated_bytes"] == 15
-    assert not assistant.exists() and not log.exists() and not temporary.exists()
+    assert status["entries"]["temporary"]["files"] == 0
+    assert preview["estimated_bytes"] == 10
+    assert not assistant.exists() and not log.exists() and temporary.exists()
+    assert any(item['relative_path'] == 'temp/orphan.bin' and item['state'] == 'UNKNOWN' for item in status['inventory'])
     assert data.read_bytes() == b"proof"
     assert runtime.read_bytes() == b"proof"
     assert development.read_bytes() == b"proof"
@@ -81,13 +97,10 @@ def test_runtime_repair_protects_active_sample_and_worker_paths(tmp_path: Path) 
     finally:
         worker_lock.release()
 
-    assert {item["relative_path"] for item in preview["targets"]} == {
-        partial.relative_to(var_dir).as_posix(),
-        invalid.relative_to(var_dir).as_posix(),
-    }
-    assert not partial.exists() and not invalid.exists()
+    assert preview["targets"] == []
+    assert partial.exists() and invalid.exists()
     assert active_partial.is_file() and sample_probe.is_file() and worker_partial.is_file()
-    assert result["requires_restart"] is True
+    assert result["requires_restart"] is False
 
 
 def test_startup_maintenance_applies_each_log_category_retention_and_orphan_age(
@@ -102,10 +115,12 @@ def test_startup_maintenance_applies_each_log_category_retention_and_orphan_age(
     for index in range(22):
         path = service.paths.app_logs / f"app-{index:02d}.log"
         path.write_text(str(index), encoding="utf-8")
+        register_generated_file(service.paths.root,path,'app-log')
         os.utime(path, (now - index, now - index))
         app_logs.append(path)
     old_worker = service.paths.worker_logs / "old.log"
     old_worker.write_text("old", encoding="utf-8")
+    register_generated_file(service.paths.root,old_worker,'worker-log')
     old = now - 15 * 24 * 60 * 60
     os.utime(old_worker, (old, old))
     expired = service.paths.temp / "expired"
@@ -116,14 +131,23 @@ def test_startup_maintenance_applies_each_log_category_retention_and_orphan_age(
     os.utime(expired, (orphaned, orphaned))
     partial = service.paths.assistant_cache / ".tmp-response"
     partial.write_bytes(b"partial")
+    os.utime(partial, (orphaned, orphaned))
+    register_generated_file(service.paths.root,partial,'assistant-cache')
+    # 未登记文件既不删除，也不能挤占产品日志的保留名额。
+    manual = [service.paths.app_logs / f"manual-{index}.log" for index in range(21)]
+    for path in manual:
+        path.write_text("keep", encoding="utf-8")
 
     result = service.startup_maintenance()
 
-    assert len(list(service.paths.app_logs.glob("*.log"))) == 20
+    assert sum(path.exists() for path in app_logs) == 20
+    assert all(path.is_file() for path in manual)
     assert not old_worker.exists()
-    assert not expired.exists() and active.is_dir()
+    assert expired.exists() and active.is_dir()
     assert not partial.exists()
-    assert str(expired) in result["removed"]
+    assert generated_file_owner(service.paths.root, partial) is None
+    assert generated_file_owner(service.paths.root, old_worker) is None
+    assert str(expired) not in result["removed"]
 
 
 def test_manual_temporary_cleanup_excludes_development_validation_runtime(
@@ -147,16 +171,17 @@ def test_manual_temporary_cleanup_excludes_development_validation_runtime(
     preview = service.preview("clear-temporary")
     result = service.execute(str(preview["plan_id"]))
 
-    assert not product_temporary.exists()
+    assert product_temporary.exists()
     assert active.is_dir() and orphaned_sample.is_dir() and orphaned_identity.is_dir()
     assert test_probe.is_dir() and process_gate.is_file()
-    assert result["removed"] == [product_temporary.relative_to(tmp_path / "var").as_posix()]
+    assert result["removed"] == []
 
 
 def test_manual_log_cleanup_keeps_current_session_logs(tmp_path: Path) -> None:
     service = LocalMaintenanceService(tmp_path / "var")
     current = service.paths.app_logs / "current.log"
     current.write_text("active", encoding="utf-8")
+    register_generated_file(service.paths.root,current,'app-log')
 
     status = service.status()
     result = service.operate("clear-logs", confirmed=True, dry_run=False)
@@ -168,12 +193,14 @@ def test_manual_log_cleanup_keeps_current_session_logs(tmp_path: Path) -> None:
 
 def test_confirm_executes_only_frozen_plan_and_leaves_new_candidate(tmp_path: Path) -> None:
     service = LocalMaintenanceService(tmp_path / "var")
-    planned = service.paths.temp / "planned.bin"
-    added_later = service.paths.temp / "added-later.bin"
+    planned = service.paths.assistant_cache / "planned.bin"
+    added_later = service.paths.assistant_cache / "added-later.bin"
     planned.write_bytes(b"planned")
+    register_generated_file(service.paths.root,planned,'assistant-cache')
 
-    preview = service.preview("clear-temporary")
+    preview = service.preview("clear-assistant-cache")
     added_later.write_bytes(b"later")
+    register_generated_file(service.paths.root,added_later,'assistant-cache')
     result = service.execute(str(preview["plan_id"]))
 
     assert result["counts"]["DELETED"] == 1
@@ -189,6 +216,8 @@ def test_confirm_reports_missing_and_changed_candidates_without_deleting(
     changed = service.paths.assistant_cache / "changed.bin"
     missing.write_bytes(b"old")
     changed.write_bytes(b"old")
+    register_generated_file(service.paths.root,missing,'assistant-cache')
+    register_generated_file(service.paths.root,changed,'assistant-cache')
     preview = service.preview("clear-assistant-cache")
     missing.unlink()
     changed.write_bytes(b"changed")
@@ -211,6 +240,7 @@ def test_confirm_isolates_occupied_and_failed_items(
     deleted = service.paths.assistant_cache / "deleted.bin"
     for path in (occupied, failed, deleted):
         path.write_bytes(path.name.encode("utf-8"))
+        register_generated_file(service.paths.root,path,'assistant-cache')
     preview = service.preview("clear-assistant-cache")
     original_remove = service._remove_under
 

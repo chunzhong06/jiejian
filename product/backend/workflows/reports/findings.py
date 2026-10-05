@@ -26,7 +26,7 @@ from typing import Any
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.protocols import RunnerResult
-from product.backend.infra.storage import BaseReportFinalizationState, FindingFinalizationState, RunFinalizationRecord, StorageUnitOfWork
+from product.backend.infra.storage import BaseReportFinalizationState, FindingFinalizationState, RunFinalizationRecord
 from product.backend.infra.storage.results.findings import FindingOccurrenceRecord, FindingRecord
 from product.backend.core.verification.findings import Finding, FindingIdentity, FindingInput, FindingOccurrence, OccurrenceStatus, occurrence_id_for
 

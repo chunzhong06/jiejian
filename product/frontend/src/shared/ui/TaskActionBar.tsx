@@ -36,7 +36,7 @@ export function TaskActionBar({
       {back && <Button aria-label={back.ariaLabel ?? back.label} aria-busy={Boolean(back.loading)} onClick={back.onClick} disabled={back.disabled} loading={back.loading}>{back.label}</Button>}
       {refresh && <Button aria-label={refresh.ariaLabel ?? refresh.label} aria-busy={Boolean(refresh.loading)} onClick={refresh.onClick} disabled={refresh.disabled} loading={refresh.loading}>{refresh.label}</Button>}
       {restart && (restart.confirm
-        ? <Popconfirm title={restart.confirm.title} description={restart.confirm.description} okText={restart.confirm.okText} cancelText={restart.confirm.cancelText} onConfirm={restart.onClick}><Button danger={restart.danger} disabled={restart.disabled} loading={restart.loading}>{restart.label}</Button></Popconfirm>
+        ? <Popconfirm title={restart.confirm.title} description={restart.confirm.description} okText={restart.confirm.okText} cancelText={restart.confirm.cancelText} okButtonProps={{danger:restart.danger}} onConfirm={restart.onClick}><Button danger={restart.danger} disabled={restart.disabled} loading={restart.loading}>{restart.label}</Button></Popconfirm>
         : <Button danger={restart.danger} onClick={restart.onClick} disabled={restart.disabled} loading={restart.loading}>{restart.label}</Button>)}
       {primary && <Button type="primary" aria-label={primary.ariaLabel ?? primary.label} aria-busy={Boolean(primary.loading)} htmlType={primary.submitForm ? 'submit' : 'button'} form={primary.submitForm} onClick={primary.onClick} disabled={primary.disabled} loading={primary.loading}>{primary.label}</Button>}
     </Space>

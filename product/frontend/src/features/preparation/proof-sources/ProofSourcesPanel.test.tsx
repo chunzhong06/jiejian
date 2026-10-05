@@ -37,7 +37,7 @@ it('预检查可用只展示采用入口，不自动采用',async () => {
 it('取消的预检查即使残留可用报告也不显示采用入口',async () => {
   api.context.mockResolvedValue({...initial(),sources:[{...source,preflight:{preflight_id:'cancelled',state:'CANCELLED',current_basis:true,report:{assessment:'USABLE',checks:[]}}}]})
   render(<ProofSourcesPanel {...props}/>)
-  await screen.findByRole('heading',{name:'让规则有据可验'})
+  await screen.findByRole('heading',{name:'核对结果证明'})
   expect(screen.queryByRole('button',{name:'预览采用影响'})).not.toBeInTheDocument()
   expect(api.write).not.toHaveBeenCalled()
 })
@@ -52,7 +52,7 @@ it('网络响应丢失后跨刷新只查询同一回执',async () => {
   const operation = api.write.mock.calls[0][2].operation_id
   await waitFor(() => expect(screen.getByRole('button',{name:'返回核对'})).toBeEnabled())
   view.unmount();render(<ProofSourcesPanel {...props}/>);
-  await screen.findByRole('heading',{name:'让规则有据可验'})
+  await screen.findByRole('heading',{name:'核对结果证明'})
   // 未确认操作在界面中持续显现，不能因刷新变为可再次提交。
   expect(screen.getByRole('button',{name:'确认读取范围'})).toBeDisabled()
   expect(api.write).toHaveBeenCalledTimes(1)

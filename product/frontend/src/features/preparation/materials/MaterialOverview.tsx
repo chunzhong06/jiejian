@@ -7,10 +7,11 @@ import type { ActionPreparation, MaterialReference, PreparationItem } from '../.
 import type { PreparationMaterialAdvice } from '../../../api/preparation/preparationGuidance'
 import './materials.css'
 
-export function MaterialOverview({ action, effectName, currentStage, taskTitle, taskWhy, primary, onIdentity, onMaterial, children, returnKind, showFocus = true, outdated = false, advice }: {
+export function MaterialOverview({ action, effectName, currentStage, taskTitle, taskWhy, primary, onIdentity, onMaterial, onProofSources, children, returnKind, showFocus = true, outdated = false, advice }: {
   action: ActionPreparation; effectName: (id: string) => string; currentStage?: number
   taskTitle?: string; taskWhy?: string; primary: ReactNode; onIdentity: () => void
   onMaterial: (reference: MaterialReference, label: string) => void; children?: ReactNode
+  onProofSources?: () => void
   returnKind?: string
   showFocus?: boolean
   outdated?: boolean
@@ -43,9 +44,9 @@ export function MaterialOverview({ action, effectName, currentStage, taskTitle, 
         <div className="material-row" role="row"><span role="cell" className="material-row-title">{group.icon}{group.title}</span>
           <span role="cell"><StatusBadge kind="preparation" tone={(complete(group.items) || status(group.items) === '无需准备') && !outdated ? 'neutral' : 'warning'}>{outdated ? '上次：' : ''}{status(group.items)}</StatusBadge></span>
           <span role="cell" className="material-row-summary">{group.items.map(item => item.label).join('、') || '当前动作没有此项要求'}</span>
-          <span role="cell"><Button type="link" aria-expanded={expanded === group.key} onClick={() => setExpanded(value => value === group.key ? undefined : group.key)}>{currentStage === index ? '处理' : '查看'}</Button></span></div>
-        {expanded === group.key && <div className="material-row-detail">{group.items.map((item, i) => <div key={i}><div><strong>{item.label}</strong><p className="editorial-muted">{!outdated ? details(group.key, item)?.reason ?? status([item]) : `上次：${status([item])}`}</p></div>
-          {group.key === 'identity' ? <Button onClick={onIdentity}>管理测试账号</Button> : item.reference && item.value.status !== 'NOT_REQUIRED' ? <Button data-material-key={`${item.reference.kind}:${item.reference.member_id ?? ''}`} onClick={() => onMaterial(item.reference!, item.label)}>查看与更新</Button> : <span className="editorial-muted">{item.value.status === 'NOT_REQUIRED' ? '不需要额外材料' : '先确认所需账号'}</span>}</div>)}</div>}
+          <span role="cell"><Button type="link" aria-expanded={expanded === group.key} onClick={() => setExpanded(value => value === group.key ? undefined : group.key)}>{expanded === group.key ? '收起' : currentStage === index ? '处理' : '查看'}</Button></span></div>
+        {expanded === group.key && <div className="material-row-detail">{group.items.map((item, i) => <div key={i} className="material-detail-item"><div className="material-detail-copy">{group.items.length > 1 && <strong>{item.label}</strong>}<p className="editorial-muted">{!outdated ? details(group.key, item)?.reason ?? status([item]) : `上次：${status([item])}`}</p></div>
+          {group.key === 'identity' ? <Button onClick={onIdentity}>管理测试账号</Button> : item.reference && item.value.status !== 'NOT_REQUIRED' ? <Button data-material-key={`${item.reference.kind}:${item.reference.member_id ?? ''}`} onClick={() => onMaterial(item.reference!, item.label)}>查看与更新</Button> : <span className="editorial-muted">{item.value.status === 'NOT_REQUIRED' ? '不需要额外材料' : '先确认所需账号'}</span>}</div>)}{group.key === 'evidence' && onProofSources && <div className="material-source-entry"><p className="editorial-muted">通过独立业务记录确认结果。</p><Button onClick={onProofSources}>核对证明来源</Button></div>}</div>}
       </div>)}
     </div>
     <details className="material-dependencies"><summary>查看材料依赖与适用范围</summary><p>材料仅用于当前应用和这项业务修订。账号、资源所有者、源码或目标地址变化后，界鉴会重新核对相关材料。</p><p>已保存的录制不等于本轮检查事实。正式检查会重新执行并形成独立证据。</p>{children}</details>

@@ -24,7 +24,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _ID_PATTERN = r"^[a-z][a-z0-9_-]{0,63}$"
 _TEXT_PATTERN = r"^[a-z][a-z0-9_.:-]{0,127}$"
@@ -37,14 +37,7 @@ _SECRET_OR_URL = re.compile(
 )
 
 
-from .models import (
-    ActionDefinition, BatchAuthorizationMode, BatchPermissionRule,
-    BatchResourceExpectation, CoverageDimension, PermissionContext,
-    PermissionExpectation, PermissionModel, PermissionRule, RelationFact,
-    RelationType, ResourceDefinition, SecurityEffectDefinition,
-    SecurityEffectKind, SubjectDefinition, WorkflowTransition,
-    _ordered_unique, _safe_text,
-)
+from .models import ActionDefinition, BatchPermissionRule, CoverageDimension, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition, _ordered_unique, _safe_text
 
 class PermissionContract(PermissionModel):
     schema_version: Literal["1"] = "1"

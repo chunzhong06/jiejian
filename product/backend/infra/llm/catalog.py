@@ -3,13 +3,10 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlencode
 
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.llm.adapters.base import LLMHttpRequest, LLMTransport, LLMTransportError
+from product.backend.infra.llm.adapters.base import LLMHttpRequest, LLMTransport, LLMTransportError, parse_json_response
 from product.backend.infra.llm.adapters.openai_compatible import _raise_for_status
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, reasoning_options_for
 
@@ -77,7 +74,7 @@ class LLMModelCatalogService:
             page_url = url if next_token is None else f"{url}?{urlencode({'pageToken': next_token})}"
             response = self._send_get(LLMProviderType.GEMINI, page_url, secret, max_output_bytes=1_048_576)
             _raise_for_status(response.status_code)
-            payload = _parse_json(response.body)
+            payload = parse_json_response(response.body)
             models = payload.get("models")
             if not isinstance(models, list):
                 raise LLMTransportError("invalid_response")
@@ -130,7 +127,7 @@ class LLMModelCatalogService:
         return self._parse_openai_style(provider, response.body)
 
     def _parse_openai_style(self, provider: LLMProviderType, body: bytes) -> LLMModelCatalog:
-        payload = _parse_json(body)
+        payload = parse_json_response(body)
         values = payload.get("data")
         if not isinstance(values, list):
             raise LLMTransportError("invalid_response")
@@ -188,13 +185,3 @@ def _catalog(provider: LLMProviderType, models: list[LLMModelOption], *, truncat
         raise LLMTransportError("invalid_response")
     deduplicated = {item.model: item for item in models}
     return LLMModelCatalog(provider, tuple(deduplicated[key] for key in sorted(deduplicated)), truncated=truncated)
-
-
-def _parse_json(body: bytes) -> dict[str, Any]:
-    try:
-        value = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        raise LLMTransportError("invalid_response") from None
-    if not isinstance(value, dict):
-        raise LLMTransportError("invalid_response")
-    return value

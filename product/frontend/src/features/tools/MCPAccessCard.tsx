@@ -1,6 +1,7 @@
 // AI 工具连接面板：用服务端可观测状态引导三类 MCP 客户端完成连接，并管理逐应用的本次允许范围。
 
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { EditorialHeader } from '../../shared/ui/Editorial'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, List, Modal, Radio, Segmented, Space, Typography } from 'antd'
 import {
@@ -299,7 +300,7 @@ export function MCPAccessCard({
   }
 
   return <div className="mcp-access-shell connection-page">
-    <header className="connection-header"><div><p className="editorial-eyebrow">修改与验证 / 连接</p><h2>把开发工具接入工作流</h2><p>读取权限要求，登记每批修改，带着证据继续验证。</p></div>
+    <header className="connection-header"><EditorialHeader eyebrow="开发工具连接" title="连接与授权"><p className="editorial-muted">配置开发客户端，让它在授权范围内读取规则、登记修改和获取检查事实。</p></EditorialHeader>
       {view?.paired && <Button aria-expanded={managementOpen} onClick={() => setManagementOpen(!managementOpen)}>{managementOpen ? '收起连接管理' : '管理连接'}</Button>}
     </header>
     <section className={`connection-status is-${copy.type}`} aria-label="连接事实">
@@ -312,7 +313,6 @@ export function MCPAccessCard({
     {showSetup ? <section className="connection-setup" aria-label="客户端配置">
       <header className="connection-setup-heading"><div><h3>三步完成连接</h3><p>选择要配置的客户端。这里的选择不会改变实际连接，也不会改写客户端设置。</p></div><Segmented className="mcp-client-selector" aria-label="选择 MCP 客户端" options={clientOptions} value={selectedClient} onChange={value => { setSelectedClient(value as MCPClientKey); setCheckMessage(null) }}/></header>
       <div className="connection-guide-intro"><strong>{guide.label}</strong><span>{guide.description}</span><a href={guide.source} target="_blank" rel="noreferrer">官方配置说明 ↗</a></div>
-      {selectedClient !== 'codex' && <p className="connection-validation-note">配置依据已核验；此客户端尚未完成本机实测。连接验证以实际请求为准。</p>}
       <ol className="connection-steps" aria-label={`${guide.label} 连接步骤`}>
         <li><div className="connection-step-title"><span aria-hidden>01</span><h4>准备本机连接</h4><div>{view?.paired ? <StatusBadge kind="preparation">界鉴已准备好</StatusBadge> : <Button type="primary" loading={busy || view === null} onClick={() => void updateCredential(mcpAccessApi.pair)}>准备本机连接</Button>}</div></div><p>界鉴生成本机连接凭据。准备完成后，仍需客户端发出有效请求。</p></li>
         <li><div className="connection-step-title"><span aria-hidden>02</span><h4>在 {guide.label} 中添加 jiejian</h4></div><p>{guide.openLocation} {guide.configInstruction}</p>
@@ -324,12 +324,11 @@ export function MCPAccessCard({
           {checkMessage && <Alert className="mcp-check-result" type={state === 'CONNECTED' ? 'success' : state === 'CREDENTIAL_REJECTED' ? 'error' : 'info'} showIcon message={checkMessage}/>}
         </li>
       </ol>
-    </section> : <section className="connection-permissions" aria-label="应用授权"><h3>AI 工具这次可以做什么</h3><p>权限要求和历史长期保留。每次打开界鉴后，客户端默认只查看；更多操作由你逐应用授权。</p>
+    </section> : <section className="connection-permissions" aria-label="应用授权"><h3>AI 工具这次可以做什么</h3><p>每次打开界鉴后，客户端默认只查看；更多操作由你逐应用授权。</p>
       <List dataSource={projects} locale={{ emptyText: '尚未接入应用；接入后可设置本次允许范围。' }} renderItem={project => { const level = grants.get(project.project_id) ?? 'READ'; return <List.Item actions={view?.accepting_connections ? [<Button key="grant" onClick={() => openGrant(project)}>调整这次允许范围</Button>] : undefined}><List.Item.Meta title={projectLabel(project)}/><StatusBadge kind="lifecycle" tone="info">{levelLabels[level]}</StatusBadge></List.Item> }}/>
-      <div className="connection-routine"><span><b>1. 保留权限约定</b>候选由你确认，已有规则沿用</span><span><b>2. 准备可检验的规则</b>Agent 补缺口，你确认必要范围</span><span><b>3. 修改、检查与继续开发</b>复用材料，保留每批证据</span></div>
     </section>}
     {managementOpen && <section className="connection-management" aria-label="管理连接"><h3>管理本机连接</h3><p>当前连接凭据由所有客户端共用。更新或删除会影响使用此凭据的客户端。</p><Space wrap>{state === 'PAUSED' ? <Button loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复接受连接</Button> : <Button loading={busy} onClick={() => void updateView(mcpAccessApi.pause, true)}>暂停本次连接</Button>}<Button disabled={busy} onClick={() => setConfirmAction('rotate')}>重新生成连接凭据</Button><Button danger disabled={busy} onClick={() => setConfirmAction('forget')}>删除连接凭据</Button></Space></section>}
-    <p className="connection-boundary">AI 工具不能批准或更改权限规则，也不能改变界鉴的检查结论。复制说明不会发送消息，连接不表示 Agent 正在编码。</p>
+    <p className="connection-boundary">AI 工具不能批准权限规则，也不能改变检查结论。</p>
 
     <Modal
       open={confirmAction !== null}

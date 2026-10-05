@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from product.backend.infra.llm.adapters.base import (
@@ -12,6 +11,7 @@ from product.backend.infra.llm.adapters.base import (
     LLMTransportError,
     json_body,
     max_output_tokens,
+    parse_json_response,
 )
 from product.backend.infra.llm.adapters.openai_compatible import _raise_for_status
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, reasoning_options_for
@@ -95,7 +95,7 @@ class DeepSeekAdapter:
 
     def parse_response(self, response: LLMHttpResponse) -> str:
         _raise_for_status(response.status_code)
-        payload = _parse_json(response.body)
+        payload = parse_json_response(response.body)
         if payload.get("object") == "response":
             return _parse_responses_output(payload)
         choices = payload.get("choices")
@@ -143,13 +143,3 @@ def _responses_max_output_tokens(
     # DeepSeek Responses 把 reasoning 和最终正文计入同一 token 上限；字节硬限仍在传输层独立生效。
     reasoning_aware_budget = min(profile.max_output_bytes // 8, 4_096)
     return max(visible_budget, reasoning_aware_budget)
-
-
-def _parse_json(body: bytes) -> dict[str, Any]:
-    try:
-        value = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        raise LLMTransportError("invalid_response") from None
-    if not isinstance(value, dict):
-        raise LLMTransportError("invalid_response")
-    return value

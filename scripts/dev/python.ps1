@@ -95,6 +95,7 @@ function Resolve-Uv($Toolchain) {
         $downloadRoot = Join-Path $script:DevelopmentRoot ("temp\uv-{0}" -f [guid]::NewGuid().ToString("N"))
         $partial = Join-Path $script:DevelopmentRoot ("cache\downloads\.tmp-{0}-{1}" -f [guid]::NewGuid().ToString("N"), [string]$metadata.asset)
         New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
+        Register-StartupTemporary $downloadRoot
         New-Item -ItemType Directory -Path (Split-Path -Parent $partial) -Force | Out-Null
         try {
             $uri = "https://github.com/astral-sh/uv/releases/download/{0}/{1}" -f $version, [string]$metadata.asset

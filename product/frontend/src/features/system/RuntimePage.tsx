@@ -1,12 +1,12 @@
-// 运行环境页：展示当前实际运行时，并通过后端同一服务维护三类本地可删除数据。
+// 运行环境页：展示当前实际运行时，并通过同一维护服务管理闲置运行文件。
 
-import { useEffect, useRef, useState } from 'react'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import './runtime.css'
-import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Typography } from 'antd'
+import { Alert, Card, Col, Descriptions, Row, Statistic, Typography } from 'antd'
 import { LLMProfile } from '../../api/assistance/llm'
-import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system/system'
+import { SystemStatus } from '../../api/system/system'
+import { MaintenancePanel } from './MaintenancePanel'
 import { frontendBuildId, frontendIdentityState } from '../../shared/runtime/buildIdentity'
 
 function label(value: unknown) {
@@ -14,82 +14,14 @@ function label(value: unknown) {
   return raw === 'available' || raw === 'running' ? '可用' : raw === 'unavailable' ? '不可用' : raw === 'stopped' ? '不可用' : '未知'
 }
 
-function bytes(value: number | undefined) {
-  if (value === undefined) return '未读取'
-  if (value === 0) return '0 B'
-  const units = ['B', 'KiB', 'MiB', 'GiB']
-  let size = value
-  let index = 0
-  while (size >= 1024 && index < units.length - 1) { size /= 1024; index += 1 }
-  return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
-}
-
-const operationLabels: Record<MaintenanceOperation, string> = {
-  'clear-assistant-cache': '清空 AI 辅助缓存',
-  'clear-logs': '清理历史运行日志',
-  'clear-temporary': '清理临时运行文件',
-  'clear-all': '清理全部可删除内容',
-  'repair-runtime': '修复运行环境',
-}
-
-const logCategoryLabels: Record<string, string> = {
-  startup: '启动', app: '应用', workers: '执行器', runner: '检查运行', recording: '录制',
-  'identity-preparations': '账号准备', 'official-samples': '官方示例',
-}
-
 export function RuntimePage({ status, profiles, failed }: { status: SystemStatus; profiles: LLMProfile[]; failed: boolean }) {
   const model = failed ? '未知' : profiles.some((profile) => profile.enabled && profile.secret_configured) ? '已配置' : '未知'
   const environment = status.environment
   const python = environment?.python
   const issues = Array.isArray(python?.issues) ? python.issues : []
-  const [maintenance, setMaintenance] = useState<MaintenanceStatus | null>(null)
-  const [preview, setPreview] = useState<MaintenanceOperationResult | null>(null)
-  const [selectedOperation, setSelectedOperation] = useState<MaintenanceOperation | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
-  const [completed, setCompleted] = useState<MaintenanceOperationResult | null>(null)
-
-  const [reading, setReading] = useState(true)
-  const [readFailed, setReadFailed] = useState(false)
-  const readEpoch = useRef(0)
-  const refreshMaintenance = async () => {
-    const epoch = ++readEpoch.current
-    setReading(true)
-    try {
-      const next = await systemApi.maintenanceStatus()
-      if (epoch !== readEpoch.current) return
-      setMaintenance(next); setMaintenanceError(null); setReadFailed(false)
-    } catch (error) {
-      if (epoch === readEpoch.current) { setMaintenanceError((error as Error).message); setReadFailed(true) }
-    } finally { if (epoch === readEpoch.current) setReading(false) }
-  }
-  useEffect(() => { void refreshMaintenance(); return () => { readEpoch.current += 1 } }, [])
-  // 读取失败保留旧数值但明确其时效；没有取得数据时不能用零值替代未知。
-  const canMaintain = Boolean(maintenance) && !reading && !readFailed
-
-
-  const showPreview = async (operation: MaintenanceOperation) => {
-    if (!canMaintain || busy) return
-    setBusy(true); setMaintenanceError(null); setCompleted(null)
-    try {
-      const result = await systemApi.maintenanceOperation(operation, { confirmed: false, dry_run: true })
-      setSelectedOperation(operation); setPreview(result)
-    } catch (error) { setMaintenanceError((error as Error).message) }
-    finally { setBusy(false) }
-  }
-  const execute = async () => {
-    if (!selectedOperation || !preview) return
-    setBusy(true); setMaintenanceError(null)
-    try {
-      const result = await systemApi.maintenanceOperation(selectedOperation, { confirmed: true, dry_run: false, plan_id: preview.plan_id })
-      setCompleted(result); setMaintenance(result.status); setPreview(null); setSelectedOperation(null)
-    } catch (error) { setMaintenanceError((error as Error).message) }
-    finally { setBusy(false) }
-  }
-
-  return <EditorialPage label="系统与运行环境">
-    <EditorialHeader eyebrow="系统状态" title="系统与运行环境"><p className="editorial-muted">查看服务是否可用，按明确范围维护本地运行数据。</p></EditorialHeader>
-    <Card title="运行环境" className="runtime-panel">
+  return <EditorialPage label="界鉴运行与维护">
+    <EditorialHeader eyebrow="界鉴自身" title="界鉴运行与维护"><p className="editorial-muted">查看界鉴的服务、执行器和浏览器组件，维护本工具的缓存与日志。</p></EditorialHeader>
+    <Card title="界鉴运行状态" className="runtime-panel">
       <Typography.Paragraph type="secondary">以下信息来自当前服务进程，用于确认界鉴没有误用用户级 Python 包或另一套工具链。</Typography.Paragraph>
       {python?.user_site_on_sys_path && <Alert type="error" showIcon message="检测到用户级 Python 包来源" description="请退出界鉴并重新运行 start.cmd，让启动器恢复项目环境隔离。" />}
       {issues.length > 0 && <Alert type="warning" showIcon message="运行环境存在异常" description={issues.join('；')} />}
@@ -102,7 +34,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       </Row>
       <details className="runtime-details"><summary>查看运行版本与组件详情</summary><Descriptions bordered size="small" column={1}>
         <Descriptions.Item label="界鉴版本">{status.version ?? '未提供'}</Descriptions.Item>
-        <Descriptions.Item label="页面资源对应">{frontendIdentityState(status.frontend_identity) === 'CURRENT' ? '当前页面与服务资源一致' : frontendIdentityState(status.frontend_identity) === 'UPDATE_AVAILABLE' ? '当前页面需要刷新以加载新资源' : '尚未确认页面资源身份'}<div className="editorial-muted">页面：{frontendBuildId?.slice(0,12) ?? '未提供'} · 服务：{status.frontend_identity?.build_id?.slice(0,12) ?? '未确认'}</div></Descriptions.Item>
+        <Descriptions.Item label="页面资源对应">{frontendIdentityState(status.frontend_identity) === 'CURRENT' ? '当前页面与服务资源一致' : frontendIdentityState(status.frontend_identity) === 'UPDATE_AVAILABLE' ? '当前页面需要刷新以加载新资源' : (status.frontend_identity?.reason ?? '服务尚未提供页面版本信息，请重启界鉴后查看')}<div className="editorial-muted">页面：{frontendBuildId?.slice(0,12) ?? '未提供'} · 服务：{status.frontend_identity?.build_id?.slice(0,12) ?? '未取得'}</div></Descriptions.Item>
         <Descriptions.Item label="运行模式">{environment?.runtime_mode === 'development' ? '源码运行' : environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
         <Descriptions.Item label="Python">{python?.version ?? '未提供'} · {python?.environment_type ?? '来源未知'}</Descriptions.Item>
         <Descriptions.Item label="Python 可执行文件"><Typography.Text copyable>{python?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>
@@ -122,39 +54,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       <StatusBadge kind="lifecycle" tone={python?.ok === false ? 'danger' : 'info'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</StatusBadge>
     </Card>
 
-    <Card title="本地运行数据维护" className="runtime-maintenance" extra={<Button loading={reading} disabled={busy} onClick={() => void refreshMaintenance()}>刷新状态</Button>}>
-      <div className="feedback-stack">
-      <Typography.Paragraph type="secondary">这里只维护当前实例可安全删除的缓存、历史日志和临时文件；开发工具与构建缓存不在范围内。</Typography.Paragraph>
-      {maintenanceError && <Alert type="error" showIcon message={readFailed ? '维护状态暂时无法读取' : '维护操作失败'} description={maintenanceError} closable onClose={() => setMaintenanceError(null)} />}
-      {readFailed && maintenance && <Typography.Text type="secondary">下方保留上次读取的数据，刷新成功后才能继续维护。</Typography.Text>}
-      {completed && <Alert type={completed.counts.FAILED > 0 ? 'warning' : 'success'} showIcon message="维护操作已完成" description={`成功清理 ${completed.counts.DELETED} 项，安全跳过 ${completed.counts.ALREADY_MISSING + completed.counts.SKIPPED_IN_USE + completed.counts.SKIPPED_CHANGED} 项，失败 ${completed.counts.FAILED} 项。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
-      {completed?.results.some((item) => item.status !== 'DELETED') && <Collapse items={[{ key: 'maintenance-results', label: '查看跳过与失败原因', children: <Space direction="vertical">{completed.results.filter((item) => item.status !== 'DELETED').map((item) => <Typography.Text key={item.item_id}>{item.label}：{item.reason}</Typography.Text>)}</Space> }]} />}
-      <Row gutter={[12, 12]}>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="AI 辅助缓存" value={bytes(maintenance?.entries.assistant.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.assistant.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-assistant-cache')}>清空 AI 辅助缓存</Button></div></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="历史运行日志" value={bytes(maintenance?.entries.logs.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.logs.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-logs')}>清理历史运行日志</Button></div></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="临时运行文件" value={bytes(maintenance?.entries.temporary.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.temporary.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-temporary')}>清理临时运行文件</Button></div></Card></Col>
-      </Row>
-      {maintenance?.entries.logs.categories && <Collapse items={[{ key: 'logs', label: '查看日志分类占用', children: <Descriptions size="small" column={1}>{Object.entries(maintenance.entries.logs.categories).map(([name, entry]) => <Descriptions.Item key={name} label={logCategoryLabels[name] ?? name}>{bytes(entry.bytes)} · {entry.files} 个文件</Descriptions.Item>)}</Descriptions> }]} />}
-      <Alert type="info" showIcon message="产品事实始终保留" description={`不受影响：${maintenance?.protected.data ?? 'var/data'}；应用、权限配置、数据库、证据、报告和凭据不会进入普通清理。`} />
-      <Space className="confirmation-actions" wrap>
-        <Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-all')}>清理全部可删除内容</Button>
-        <Button disabled={busy || !canMaintain} onClick={() => void showPreview('repair-runtime')}>修复运行环境</Button>
-      </Space>
-      </div>
-    </Card>
+    <MaintenancePanel/>
 
-    <Modal
-      open={preview !== null}
-      title={selectedOperation ? operationLabels[selectedOperation] : '维护预览'}
-      okText="确认执行"
-      cancelText="取消"
-      confirmLoading={busy}
-      onCancel={() => { setPreview(null); setSelectedOperation(null) }}
-      onOk={() => void execute()}
-    >
-      <Typography.Paragraph>预计处理 {preview?.targets.length ?? 0} 项，共 {bytes(preview?.estimated_bytes)}。确认时只处理这份固定计划。</Typography.Paragraph>
-      {(preview?.targets ?? []).slice(0, 8).map((target) => <Typography.Paragraph key={target.item_id}><Typography.Text>{target.label}</Typography.Text> · {target.relative_path} · {bytes(target.estimated_bytes)}</Typography.Paragraph>)}
-      <Alert type="warning" showIcon message="确认范围" description="只处理以上可删除内容；不会删除应用、权限配置、数据库、证据、报告和凭据。" />
-    </Modal>
+    <footer className="editorial-muted runtime-license">界面字体 MiSans · <a href={new URL('../../assets/fonts/misans/MiSans-LICENSE.pdf', import.meta.url).href} target="_blank" rel="noreferrer">字体许可</a></footer>
   </EditorialPage>
 }

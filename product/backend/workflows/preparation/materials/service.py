@@ -6,7 +6,7 @@ from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.preparation.bindings import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding
 from product.backend.core.recording.models import RecordingState, RecordingPurpose
-from product.backend.workflows.preparation.materials.models import MaterialChange, MaterialReference, PreparationDraft
+from product.backend.workflows.preparation.materials.models import MaterialReference, PreparationDraft
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 
 

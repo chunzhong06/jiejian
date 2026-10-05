@@ -14,21 +14,6 @@
 [打开源码](../../../../../../product/frontend/src/features/environment/environment.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
-### `product/frontend/src/features/environment/EnvironmentHistory.test.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/environment/EnvironmentHistory.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-
-静态import / dot-source：`./EnvironmentHistory`、`@testing-library/react`、`react`、`vitest`
-
-### `product/frontend/src/features/environment/EnvironmentHistory.tsx`
-
-[打开源码](../../../../../../product/frontend/src/features/environment/EnvironmentHistory.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `EnvironmentHistory`
-
-静态import / dot-source：`../../api/applications/projects`、`../../api/checks/currentChecks`、`../../api/http`、`../../shared/ui/Editorial`、`../changes/delivery/SourceIdentityPanel`、`../history/CheckHistoryPage`、`../results/CurrentResultStory`、`antd`、`react`
-
 ### `product/frontend/src/features/environment/EnvironmentPage.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/environment/EnvironmentPage.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -42,7 +27,7 @@
 
 - `EnvironmentPage`
 
-静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/http`、`../../api/system/system`、`../../api/workspace`、`../../shared/format/time`、`../../shared/ui/Editorial`、`../access/ControlledRuntimePanel`、`./EnvironmentHistory`、`./OfficialSamplePanel`、`./environment.css`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/http`、`../../api/workspace`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../access/ControlledRuntimePanel`、`./OfficialSamplePanel`、`./environment.css`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/features/environment/OfficialDevelopmentJourney.test.tsx`
 

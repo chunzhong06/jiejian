@@ -6,6 +6,7 @@
 # =============================================================================
 
 from __future__ import annotations
+from product.backend.infra.observers.artifacts import write_atomic as _write_atomic
 
 import json
 import os
@@ -57,15 +58,6 @@ def _secret_name(spec: ObserverSpec) -> str:
     if not hasattr(locator, "database_secret_ref"):
         raise ValueError("sqlite observer requires a database secret reference")
     return locator.database_secret_ref.removeprefix("env:")
-
-
-def _write_atomic(path: Path, payload: bytes) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    try:
-        temporary.write_bytes(payload)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _validate_output_binding(invocation: ObserverInvocation, envelope: ObservationEnvelope) -> None:

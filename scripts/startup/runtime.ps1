@@ -167,13 +167,21 @@ function Invoke-External(
                             Stop-WaitIndicator
                             Write-Host ""
                             Write-Host "界鉴已经启动，但未能自动打开网页。" -ForegroundColor Yellow
-                            Write-Host "请在浏览器访问 http://127.0.0.1:8765/" -ForegroundColor Gray
+                            Write-Host ("请在浏览器访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Gray
                             Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
                             Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
                         } elseif ($line.EndsWith("startup-failed")) {
                             $script:ServeStartupFailed = $true
                             Stop-WaitIndicator
                             Write-Host "界鉴服务在就绪前停止。" -ForegroundColor Red
+                        }
+                    }
+                    if ($Stage -eq "serve" -and $script:ServeReadyObserved) {
+                        switch ($line) {
+                            "__JIEJIAN_GUI_STATUS__:controls-ready" { Write-Host "[G] 重新打开 GUI    [Ctrl+C] 退出界鉴" -ForegroundColor Cyan }
+                            "__JIEJIAN_GUI_STATUS__:opened" { Write-Host "已发送 GUI 打开请求。" -ForegroundColor Cyan }
+                            "__JIEJIAN_GUI_STATUS__:open-failed" { Write-Host ("未能打开 GUI；可按 G 重试，或访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Yellow }
+                            "__JIEJIAN_GUI_STATUS__:input-unavailable" { Write-Host ("终端快捷键不可用；可访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Yellow }
                         }
                     }
                 } |

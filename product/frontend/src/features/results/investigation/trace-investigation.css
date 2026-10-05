@@ -1,9 +1,4 @@
 /* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
-@media(prefers-reduced-motion:no-preference) {
-  .result-evidence-panel {
-    animation: work-surface-arrive var(--motion-normal) var(--ease-standard);
-  }
-}
 
 .diagnosis-summary {
   border: var(--line-width) solid var(--color-border);
@@ -62,7 +57,7 @@
 
 .execution-path-heading h3 {
   margin: var(--space-8) 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   font-size: 16px;
 }
 
@@ -105,6 +100,10 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-secondary);
+}
+
+.path-view-switch button:not([aria-pressed=true]):is(:hover,:focus-visible) {
+  background: var(--color-surface-hover);
 }
 
 .path-view-switch button[aria-pressed=true] {
@@ -173,11 +172,11 @@
 
 .path-node-copy > span {
   font-size: var(--font-body);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .path-node strong {
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   color: var(--path-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -190,8 +189,9 @@
   font-size: 18px;
 }
 
-.path-node:hover {
-  border-color: var(--path-line);
+/* 节点本身有诊断底色，用原色与悬停色混合，保持断裂标记可辨。 */
+.path-node:is(:hover,:focus-visible) {
+  background: color-mix(in srgb,var(--path-node-bg) 45%,var(--color-surface-hover));
 }
 
 .path-node[aria-pressed=true] {
@@ -200,8 +200,8 @@
 }
 
 .path-node-breakpoint {
+  --path-node-bg: var(--color-danger-light);
   border: 2px solid var(--color-danger-mark);
-  background: var(--color-danger-light);
 }
 
 .path-node-endpoint {
@@ -406,7 +406,7 @@
 
 .path-event-list strong {
   font-size: var(--font-secondary);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   color: var(--path-secondary);
   margin: var(--space-4) var(--space-8);
   overflow-wrap: anywhere;
@@ -414,7 +414,7 @@
 
 .path-event-list small {
   font-size: var(--font-secondary);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   color: var(--path-secondary);
   margin: var(--space-4) var(--space-8);
   overflow-wrap: anywhere;
@@ -422,29 +422,10 @@
 
 .path-event-list p {
   font-size: var(--font-secondary);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   color: var(--path-secondary);
   margin: var(--space-4) var(--space-8);
   overflow-wrap: anywhere;
-}
-
-.result-evidence-panel {
-  position: sticky;
-  top: calc(var(--layout-header) + var(--space-24));
-  max-height: calc(100dvh - var(--layout-header) - var(--space-48));
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: var(--line-width) solid var(--color-border);
-  padding: var(--space-24);
-  min-width: 0;
-  overflow-wrap: anywhere;
-  background: var(--color-surface-subtle);
-  box-shadow: none;
-  border-radius: 10px;
-}
-
-.result-evidence-panel:focus {
-  outline: none;
 }
 
 .evidence-panel-header {
@@ -459,7 +440,7 @@
   font-size: var(--font-body);
   margin: 0;
   color: var(--color-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .evidence-panel-footer {
@@ -498,25 +479,4 @@
 
 .path-node-copy>span {
   font-size: 13px;
-}
-
-.result-evidence-panel h2 {
-  font-size: 19px;
-}
-
-.result-causal-workspace .execution-path {
-  border: 0;
-  box-shadow: none;
-  border-radius: 0;
-}
-
-.result-causal-workspace .result-evidence-panel {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  border: 0;
-  border-left: 1px solid var(--color-border);
-  border-radius: 0;
-  max-height: 740px;
-  overflow: auto;
 }

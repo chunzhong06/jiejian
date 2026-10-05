@@ -1,4 +1,4 @@
-# 验证准备依赖装配不启动进程，并在关闭失败时保留监督事实与数据库。
+# 验证准备依赖装配不启动进程，关闭失败时保留监督事实、数据库与运行版本引用。
 
 import io
 import subprocess
@@ -29,7 +29,7 @@ def test_core_constructs_preparation_readers_without_starting_processes(tmp_path
         core.close()
 
 
-@pytest.mark.parametrize("failure", ["worker", "runtime", "sample", "manager", "secrets", None])
+@pytest.mark.parametrize("failure", ["worker", "runtime", "sample", "manager", "secrets", "assets", None])
 def test_core_close_orders_resources_and_does_not_dispose_after_failure(failure):
     events = []
     core = ApplicationCore.__new__(ApplicationCore)
@@ -46,14 +46,15 @@ def test_core_close_orders_resources_and_does_not_dispose_after_failure(failure)
     core.identity_preparations = SimpleNamespace(close=step("manager"))
     core.runtime_secrets = SimpleNamespace(clear=step("vault"))
     core.engine = SimpleNamespace(dispose=step("engine"))
+    core.maintenance = SimpleNamespace(assets=SimpleNamespace(close=step("assets")))
     if failure:
         with pytest.raises(JiejianError):
             core.close()
-        order = ["worker", "runtime", "sample", "manager", "vault", "secrets", "engine"]
+        order = ["worker", "runtime", "sample", "manager", "vault", "secrets", "engine", "assets"]
         assert events == order[:order.index(failure) + 1]
     else:
         core.close()
-        assert events == ["worker", "runtime", "sample", "manager", "vault", "secrets", "engine"]
+        assert events == ["worker", "runtime", "sample", "manager", "vault", "secrets", "engine", "assets"]
 
 
 def test_manager_cleanup_failure_protects_active_paths_and_engine(tmp_path, monkeypatch):
@@ -95,10 +96,12 @@ def test_manager_cleanup_failure_protects_active_paths_and_engine(tmp_path, monk
     # 根已退出但尚未清理的树与 journal 仍由 maintenance 保护。
     process.returncode = 1
     assert manager.active_runtime_paths() == (active.controls.root,)
-    monkeypatch.setattr(core.worker, "is_running", lambda: True)
+    # Worker 接管 Job 后即保护精确目录和日志，不把整个 runtime 作为活动范围。
+    job_id = "job_" + "a" * 32
+    monkeypatch.setattr(core.worker, "_job_id", job_id)
     paths = core.maintenance._active_runtime_paths()
-    assert paths == (core.paths.runtime, core.paths.worker_logs, core.paths.recording_logs, active.controls.root)
-    monkeypatch.setattr(core.worker, "is_running", lambda: False)
+    assert paths == (core.paths.jobs / job_id, core.paths.worker_logs / f"{job_id}.log", core.paths.worker_runtime, active.controls.root)
+    monkeypatch.setattr(core.worker, "_job_id", None)
     failure[0] = False
     core.close()
     disposed.assert_called_once()

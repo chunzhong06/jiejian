@@ -15,5 +15,5 @@ export function RetainedWorkPages({ activeKey, children }: { activeKey: string |
   useLayoutEffect(() => {
     window.scrollTo({ top: activeKey ? positions.current.get(activeKey) ?? 0 : 0, behavior: 'instant' })
   }, [activeKey])
-  return <>{Array.from(pages.current, ([key, page]) => <WorkPageVisible.Provider key={key} value={key === activeKey}><div hidden={key !== activeKey}>{page}</div></WorkPageVisible.Provider>)}{!activeKey && children}</>
+  return <>{Array.from(pages.current, ([key, page]) => <WorkPageVisible.Provider key={key} value={key === activeKey}><div className="retained-work-page" hidden={key !== activeKey}>{page}</div></WorkPageVisible.Provider>)}{!activeKey && children}</>
 }

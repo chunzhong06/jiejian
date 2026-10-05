@@ -5,7 +5,7 @@
 .sample-development h3{font-size:var(--font-body);margin:0 0 var(--space-12)}
 .sample-development-label{color:var(--color-secondary);font-size:var(--font-secondary)}
 .sample-development-steps{display:flex;flex-wrap:wrap;gap:var(--space-24);margin:0;padding:var(--space-16) var(--space-24);list-style:decimal inside;background:var(--color-surface-subtle);color:var(--color-secondary)}
-.sample-development-steps [aria-current=step]{color:var(--color-text);font-weight:600}
+.sample-development-steps [aria-current=step]{color:var(--color-text);font-weight:var(--weight-strong)}
 .sample-development-body{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:var(--space-32);padding:var(--space-24)}
 .sample-development-body>div,.sample-development-body>aside{min-width:0}
 .sample-development-loading{display:flex;align-items:center;justify-content:center;gap:var(--space-12);min-height:120px;padding:var(--space-24);color:var(--color-secondary)}

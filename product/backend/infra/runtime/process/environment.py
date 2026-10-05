@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import subprocess
 import sys
@@ -490,18 +491,30 @@ def spawn_python_module(
         *arguments,
     ]
     process: subprocess.Popen[Any] | None = None
+    process_temp = None
+    if environment.get("JIEJIAN_VAR_DIR"):
+        process_temp = RuntimePaths(Path(environment["JIEJIAN_VAR_DIR"])).temp / f"process-{uuid4().hex}"
+        process_temp.mkdir()
+        environment["TEMP"] = environment["TMP"] = str(process_temp)
     try:
         # 运行时解析默认 Popen，使模块级测试替身可见；真实入口仍由进程树模块识别原生句柄。
         launcher = subprocess.Popen if popen is None else popen
         process = spawn_managed_process(
             command,
             popen=launcher,
-            tree_name=tree_name,
+            # 无业务指定名称的辅助进程也需要可回读的内核树身份，供退出后回收临时文件。
+            tree_name=tree_name or f"Local\\JiejianProcess-{uuid4().hex}",
             cwd=str(working_directory),
             env=environment,
             **kwargs,
         )
         controller = controller_for(process)
+        if process_temp is not None and controller is not None and controller.kernel_identity:
+            # 先登记内核树，再放行子进程；清理器不依赖可能被复用的 PID。
+            (process_temp / ".runtime-process.json").write_text(json.dumps({
+                "schema_version":"1", "kind":"runtime-process", "name":process_temp.name,
+                "kernel_identity":controller.kernel_identity,
+            }), encoding="utf-8")
         if before_release is not None:
             if controller is None:
                 raise JiejianError(

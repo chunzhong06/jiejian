@@ -6,7 +6,7 @@ import { ApiError } from '../../../api/http'
 const read = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/changes/sourceIdentity', () => ({ sourceIdentityApi: { read } }))
 const value = () => ({ project_id: 'p1', run_id: 'r1', change_id: null, comparison: 'CHANGED', recorded: { fingerprint: 'a'.repeat(64), snapshot_id: 's1', file_count: 3, git_status: 'NOT_RECORDED' }, current_fingerprint: 'b'.repeat(64), current_git: { status: 'AVAILABLE', head: 'f'.repeat(40), has_local_changes: true }, observed_at_us: 1, target_version: 'NOT_INDEPENDENTLY_IDENTIFIED' })
-const props = { projectId: 'p1', recordId: 'r1', kind: 'runs' as const, onNavigate: vi.fn() }
+const props = { projectId: 'p1', recordId: 'r1', kind: 'runs' as const }
 describe('源码对应', () => {
   beforeEach(() => { vi.clearAllMocks(); read.mockResolvedValue(value()) })
   it('分开表达历史内容、当前修改与未知部署版本', async () => {

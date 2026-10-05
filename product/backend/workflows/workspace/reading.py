@@ -14,7 +14,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.recording.source import require_persisted_recording_source
 from product.backend.workflows.preparation.models import PreparationStatus
-from product.backend.workflows.workspace.models import WorkspaceLatestResult, WorkspaceSourceChange, WorkspaceDevelopment
+from product.backend.workflows.workspace.models import WorkspaceLatestResult, WorkspaceSourceChange
 from product.backend.workflows.checks.reading.story_text import JUDGEMENTS
 
 

@@ -5,7 +5,7 @@
 #   受控源码快照、Agent 变更声明、真实 diff 与权限影响评估的 SQLite 聚合。
 #
 # 职责
-#   幂等保存不可变快照｜按一次 change 聚合保存路径变化、修复引用和逐 Intent 影响｜稳定回读最近事实。
+#   幂等保存不可变源码快照｜按精确 ID 回读既有变更声明、差异和影响评估。
 #
 # 边界
 #   不保存源码正文、文本 diff、完整 RepairContract、Git 凭据或每文件/每 Intent 独立行；Repository 不提交事务。
@@ -273,51 +273,6 @@ class SourceChangeRepository:
         )
         return None if row is None else self._snapshot(row)
 
-    def add_change(
-        self,
-        manifest: ChangeManifest,
-        change_set: SourceChangeSet,
-        assessment: ChangeImpactAssessment,
-    ) -> None:
-        if not (
-            manifest.change_id == change_set.change_id == assessment.change_id
-            and manifest.project_id == change_set.project_id == assessment.project_id
-            and change_set.change_fingerprint == assessment.change_fingerprint
-        ):
-            raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "代码变化聚合身份不一致")
-        manifest_values = manifest.model_dump(
-            mode="json",
-            exclude={"claimed_paths", "repair_reference"},
-        )
-        manifest_values["claimed_paths_json"] = _canonical_json(list(manifest.claimed_paths))
-        manifest_values["repair_reference_json"] = (
-            None
-            if manifest.repair_reference is None
-            else _canonical_json(manifest.repair_reference.model_dump(mode="json"))
-        )
-        change_values = change_set.model_dump(
-            mode="json",
-            exclude={"added_paths", "modified_paths", "removed_paths"},
-        )
-        change_values["added_paths_json"] = _canonical_json(list(change_set.added_paths))
-        change_values["modified_paths_json"] = _canonical_json(list(change_set.modified_paths))
-        change_values["removed_paths_json"] = _canonical_json(list(change_set.removed_paths))
-        assessment_values = assessment.model_dump(
-            mode="json",
-            exclude={"reason_codes", "impacts"},
-        )
-        assessment_values["reason_codes_json"] = _canonical_json(list(assessment.reason_codes))
-        assessment_values["impacts_json"] = _canonical_json(
-            [item.model_dump(mode="json") for item in assessment.impacts]
-        )
-        payload = (manifest_values, change_values, assessment_values)
-        ensure_storage_payload_safe(payload, self._known_secrets)
-        self._session.add(ChangeManifestRow(**manifest_values))
-        # 三个聚合 Row 不建立 ORM relationship；先落主行，保持 SQLite 外键顺序。
-        _flush(self._session)
-        self._session.add(SourceChangeSetRow(**change_values))
-        self._session.add(ChangeImpactAssessmentRow(**assessment_values))
-        _flush(self._session)
 
     def manifest(self, change_id: str) -> ChangeManifest | None:
         row = _scalar(
@@ -342,60 +297,8 @@ class SourceChangeRepository:
         )
         return None if row is None else self._assessment(row)
 
-    def latest_assessment(self, project_id: str) -> ChangeImpactAssessment | None:
-        row = _scalar(
-            self._session,
-            select(ChangeImpactAssessmentRow)
-            .where(ChangeImpactAssessmentRow.project_id == project_id)
-            .order_by(
-                ChangeImpactAssessmentRow.created_at_us.desc(),
-                ChangeImpactAssessmentRow.change_id.desc(),
-            )
-            .limit(1),
-        )
-        return None if row is None else self._assessment(row)
 
-    def latest_manifest_for_repair(
-        self,
-        project_id: str,
-        reference: RepairContractReference,
-    ) -> ChangeManifest | None:
-        """按既有时间索引有界读取最近一条精确修复引用声明。"""
 
-        encoded = _canonical_json(reference.model_dump(mode="json"))
-        row = _scalar(
-            self._session,
-            select(ChangeManifestRow)
-            .where(
-                ChangeManifestRow.project_id == project_id,
-                ChangeManifestRow.repair_reference_json == encoded,
-            )
-            .order_by(
-                ChangeManifestRow.created_at_us.desc(),
-                ChangeManifestRow.change_id.desc(),
-            )
-            .limit(1),
-        )
-        return None if row is None else self._manifest(row)
-
-    def list_assessments(
-        self,
-        project_id: str,
-        *,
-        limit: int = 50,
-    ) -> tuple[ChangeImpactAssessment, ...]:
-        """按新到旧读取项目代码变化；调用者负责补齐同一聚合的声明和真实差异。"""
-
-        rows = self._session.scalars(
-            select(ChangeImpactAssessmentRow)
-            .where(ChangeImpactAssessmentRow.project_id == project_id)
-            .order_by(
-                ChangeImpactAssessmentRow.created_at_us.desc(),
-                ChangeImpactAssessmentRow.change_id.desc(),
-            )
-            .limit(limit)
-        ).all()
-        return tuple(self._assessment(row) for row in rows)
 
     @staticmethod
     def _snapshot(row: SourceRevisionSnapshotRow) -> SourceRevisionSnapshot:

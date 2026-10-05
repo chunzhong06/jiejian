@@ -5,7 +5,6 @@ import json
 import re
 import math
 
-from product.protocols.preparation.proof_sources import ProofCheckItem
 
 HISTORY_FIELDS=frozenset({'resource_id','owner_id','state','version','effect_count','history_generation',
     'operation_id','operation_resource_id','operation_subject_id','operation_before_version','operation_after_version',
@@ -68,24 +67,6 @@ def mapped_values(raw,config):
     return {key:scalar(data,path,key) for key,path in config.mappings.items()},data
 
 
-def preflight_source_checks(raw,config,*,resource_id,owner_subject_id,contract):
-    try:
-        values,_=mapped_values(raw,config)
-        checks=[ProofCheckItem(code='MAPPING_READABLE',status='CONFIRMED',mapping_key=key) for key in config.mappings]
-        matching=values['resource_id']==resource_id and values['owner_id']==owner_subject_id
-        checks.append(ProofCheckItem(code='RESOURCE_OWNER_MATCH' if matching else 'RESOURCE_OWNER_MISMATCH',
-            status='CONFIRMED' if matching else 'MISSING'))
-        checks.append(ProofCheckItem(code='SOURCE_CONTRACT_VERIFIED' if contract is not None else 'CONTRACT_UNVERIFIED',
-            status='CONFIRMED' if contract is not None else 'UNSUPPORTED'))
-        if config.source_contract_id=='SYNC_RESOURCE_HISTORY_V1':
-            completed=(values['operation_resource_id']==resource_id and values['operation_state']=='completed'
-                and values['unfinished_effects']==0 and values['operation_after_version']==values['version']
-                and values['operation_before_version']<=values['operation_after_version'])
-            checks.append(ProofCheckItem(code='OPERATION_RECORD_COMPLETE' if completed else 'COMPLETION_UNCONFIRMED',
-                status='CONFIRMED' if completed else 'MISSING'))
-        return tuple(checks)
-    except SourceReadError as error:
-        return (ProofCheckItem(code=error.code,status='MISSING',mapping_key=error.mapping_key),)
 
 
 @dataclass(frozen=True)

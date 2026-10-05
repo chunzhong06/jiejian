@@ -27,6 +27,8 @@ export type MaintenanceStatus = {
   entries: { assistant: MaintenanceEntry; logs: MaintenanceEntry; temporary: MaintenanceEntry }
   protected: { data: string; applications: boolean; permissions: boolean; database: boolean; evidence: boolean; reports: boolean; credentials: boolean; active_runtime: boolean; current_session_logs: boolean; development_root_included: boolean }
   last_successful_operation?: { operation?: string; completed_at?: number } | null
+  inventory?: Array<{category:string;label:string;relative_path:string;state:'CLEANABLE'|'PROTECTED'|'UNKNOWN';reason:string;bytes:number|null;files:number|null}>
+  ownership_policy?: string
 }
 export type MaintenanceOperation = 'clear-assistant-cache' | 'clear-logs' | 'clear-temporary' | 'clear-all' | 'repair-runtime'
 export type MaintenanceOperationResult = {
@@ -39,7 +41,7 @@ export type MaintenanceOperationResult = {
   dry_run: boolean
   confirmed?: boolean
   estimated_bytes: number
-  targets: Array<{ item_id: string; label: string; relative_path: string; estimated_bytes: number }>
+  targets: Array<{ item_id: string; label: string; relative_path: string; estimated_bytes: number; category?:string }>
   removed: string[]
   results: Array<{ item_id: string; label: string; relative_path: string; status: 'DELETED' | 'ALREADY_MISSING' | 'SKIPPED_IN_USE' | 'SKIPPED_CHANGED' | 'FAILED'; reason: string }>
   counts: Record<'DELETED' | 'ALREADY_MISSING' | 'SKIPPED_IN_USE' | 'SKIPPED_CHANGED' | 'FAILED', number>
@@ -51,6 +53,7 @@ export type MaintenanceOperationResult = {
 export const systemApi = {
   status: () => request<SystemStatus>('/api/system/status'),
   maintenanceStatus: () => request<MaintenanceStatus>('/api/system/maintenance'),
-  maintenanceOperation: (operation: MaintenanceOperation, body: { confirmed: boolean; dry_run: boolean; plan_id?: string }) => request<MaintenanceOperationResult>(`/api/system/maintenance/${operation}`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
+  maintenanceOperation: (operation: MaintenanceOperation, body: { confirmed: boolean; dry_run: boolean; plan_id?: string; item_ids?:string[] }) => request<MaintenanceOperationResult>(`/api/system/maintenance/${operation}`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
+  maintenanceOutcome: (planId:string) => request<{state:'COMPLETED'|'PENDING'|'UNKNOWN';result:MaintenanceOperationResult|null}>(`/api/system/maintenance/plans/${encodeURIComponent(planId)}`),
   shutdown: () => request<{ status: 'stopping'; message: string }>('/api/system/shutdown', { method: 'POST' }),
 }

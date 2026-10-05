@@ -7,7 +7,6 @@ export const breakpointLabels = {
   AUTHORIZATION_BYPASS: '业务操作绕过了权限检查', IDENTITY_SUBSTITUTION: '执行身份发生替换',
   AUTHORITY_EXPANSION: '后台执行的权限范围扩大', COMPENSATION_MASKING: '后续恢复掩盖了已经发生的后果',
 }
-export const precisionLabels = { EXACT: '精确定位', RANGE: '范围定位', VIOLATION_ONLY: '仅确认后果' }
 export const precisionDescriptions = {
   EXACT: '已发布证据支持定位到所标记的节点。',
   RANGE: '现有证据只能确定一个区间，不能指定其中某个节点。',

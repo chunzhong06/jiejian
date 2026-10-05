@@ -406,27 +406,6 @@ def _playwright_check() -> DoctorCheck:
     )
 
 
-def browser_availability() -> str:
-    """Probe the local Playwright executable path without launching Chromium."""
-
-    try:
-        version("playwright")
-        from playwright.sync_api import sync_playwright
-
-        playwright = sync_playwright().start()
-        try:
-            executable = Path(playwright.chromium.executable_path)
-            return "available" if executable.is_file() else "unavailable"
-        finally:
-            playwright.stop()
-    except PackageNotFoundError:
-        return "unavailable"
-    except (OSError, RuntimeError):
-        return "unknown"
-    except Exception:
-        return "unknown"
-
-
 def runtime_environment_details() -> dict[str, Any]:
     """生成 GUI 可展示的当前进程环境身份，不执行浏览器或目标请求。"""
 
@@ -564,15 +543,3 @@ def run_doctor(
         extra={"component": "doctor", "event_code": "DOCTOR_COMPLETED"},
     )
     return report
-
-
-def human_lines(report: DoctorReport) -> tuple[str, ...]:
-    lines = []
-    for check in report.checks:
-        if check.required:
-            marker = "通过" if check.ok else "失败"
-        else:
-            marker = "可用" if check.ok else "可选"
-        lines.append(f"[{marker}] {check.name}: {check.message}")
-    lines.append("必要检查全部通过" if report.ok else "存在必要检查失败")
-    return tuple(lines)

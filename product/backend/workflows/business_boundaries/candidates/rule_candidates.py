@@ -133,7 +133,7 @@ class RuleCandidateService:
             unchanged = all({item.item_id: item for item in getattr(merged, name)}
                 == {item.item_id: item for item in getattr(draft, name)} for name in ("actors", "actions", "permissions"))
         except (JiejianError, ValidationError):
-            issues.append({"code": "AMBIGUOUS_REFERENCE", "message": "业务引用或当前修订不一致，请回到原Agent修订"})
+            issues.append({"code": "AMBIGUOUS_REFERENCE", "message": "业务引用或当前修订不一致，请回到开发客户端中的 Agent 修订"})
         proposal_id = work.rule_candidates.proposal_id(value.candidate_id, value.revision)
         decision = None if proposal_id is None else work.business_boundaries.decision_for_proposal(proposal_id)
         # 已作决定的候选是历史输入；不能因自身批准推进基线而提示用户再次修改同一候选。

@@ -6,6 +6,7 @@
 # =============================================================================
 
 from __future__ import annotations
+from product.backend.infra.observers.artifacts import write_atomic as _write_atomic
 
 import hashlib
 import json
@@ -112,15 +113,6 @@ def _secret_name(spec: ObserverSpec) -> str:
     if not isinstance(locator, StructuredAuditLogLocator):
         raise ValueError("audit observer requires an audit locator")
     return locator.authorized_root_ref.removeprefix("env:")
-
-
-def _write_atomic(path: Path, payload: bytes) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    try:
-        temporary.write_bytes(payload)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _failure_envelope(
@@ -280,18 +272,6 @@ def _open_snapshot(
         except (UnboundLocalError, AttributeError):
             pass
         return None
-
-
-def _cursor_anchor(path: Path, offset: int) -> tuple[int, int, str] | None:
-    if offset <= 0:
-        return None
-    start = max(0, offset - 256)
-    with path.open("rb") as handle:
-        handle.seek(start)
-        data = handle.read(offset - start)
-    if len(data) != offset - start:
-        return None
-    return start, len(data), hashlib.sha256(data).hexdigest()
 
 
 def _cursor_payload(file_name: str, base_offset: int, data: bytes, next_offset: int) -> dict[str, Any]:

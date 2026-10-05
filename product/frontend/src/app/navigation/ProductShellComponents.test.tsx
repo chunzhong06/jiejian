@@ -1,9 +1,9 @@
 // 验证产品壳直接消费长期工作区状态，并保留键盘焦点和明确主动作。
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApplicationSwitcher } from './ApplicationSwitcher'
-import { DesktopModuleNavigation, MobileModuleNavigation } from './ModuleNavigation'
+import { ModuleNavigation } from './ModuleNavigation'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 
 const areas = [
@@ -15,35 +15,35 @@ const areas = [
 
 describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
-    render(<DesktopModuleNavigation route="/permissions" areas={areas} onNavigate={vi.fn()} />)
+    render(<ModuleNavigation route="/permissions" areas={areas} onNavigate={vi.fn()} />)
     expect(screen.queryByText('专项工作')).not.toBeInTheDocument()
-    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['概览', '权限要求', '修改与验证', '检查记录'])
-    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /概览.*持续更新/ }))
+    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['总览', '权限', '检查', '源码改动'])
+    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: '总览' }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
     expect(document.querySelector('.module-navigation-utilities')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '退出界鉴' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /权限.*规则已建立/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('button', { name: /检查记录.*当前不可检查/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '权限' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: '检查' })).toBeInTheDocument()
     expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
   })
 
-  it('窄屏直接提供三个导航入口，不再嵌套抽屉', () => {
+  it('宽窄屏共用四个直接入口，历史归入检查', () => {
     const onNavigate=vi.fn()
-    render(<MobileModuleNavigation route="/history" areas={areas} onNavigate={onNavigate}/>)
+    render(<ModuleNavigation route="/history" areas={areas} onNavigate={onNavigate}/>)
     expect(screen.queryByRole('button',{name:'打开持续验证工作区'})).not.toBeInTheDocument()
-    expect(screen.getByRole('button',{name:/检查记录.*当前不可检查/})).toHaveAttribute('aria-current','page')
-    const permissions=screen.getByRole('button',{name:/权限要求.*规则已建立/})
+    expect(screen.getByRole('button',{name:'检查'})).toHaveAttribute('aria-current','page')
+    const permissions=screen.getByRole('button',{name:'权限'})
     permissions.focus();expect(permissions).toHaveFocus();fireEvent.click(permissions)
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })
 
-  it('代码变化深链归入 修改与验证，概览仍是独立入口', () => {
-    render(<MobileModuleNavigation route="/changes" areas={areas} onNavigate={vi.fn()}/>)
-    expect(screen.getByRole('button',{name:/修改与验证/})).toHaveAttribute('aria-current','page')
-    expect(screen.getByRole('button',{name:/概览/})).not.toHaveAttribute('aria-current')
+  it('代码变化深链归入源码改动，总览仍是独立入口', () => {
+    render(<ModuleNavigation route="/changes" areas={areas} onNavigate={vi.fn()}/>)
+    expect(screen.getByRole('button',{name:'源码改动'})).toHaveAttribute('aria-current','page')
+    expect(screen.getByRole('button',{name:'总览'})).not.toHaveAttribute('aria-current')
   })
 
   it('应用切换只返回服务端列表中的应用，并保留接入新应用入口', async () => {

@@ -27,7 +27,7 @@ from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
-from product.protocols import CleanupIssueCode, RunnerFailurePhase, RunnerResult
+from product.protocols import CleanupIssueCode, RunnerFailurePhase
 from product.backend.infra.artifacts.run_packages import ValidatedPublication, evidence_records_for_publication, final_run_dir, validate_published_run
 from product.backend.infra.runtime.jobs.requests.execution import ExecutionRequestStore
 from product.protocols.runner.execution_request import ExecutionRequestDocument

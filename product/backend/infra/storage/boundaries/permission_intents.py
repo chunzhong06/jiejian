@@ -137,8 +137,6 @@ class PermissionIntentRepository:
         rows = _scalars(self._session, select(PermissionIntentRevisionRow).where(PermissionIntentRevisionRow.project_id == project_id).order_by(PermissionIntentRevisionRow.intent_id, PermissionIntentRevisionRow.revision))
         return tuple(self._revision(row) for row in rows)
 
-    def list_revisions(self, project_id: str) -> tuple[PermissionIntentRevision, ...]:
-        return self.list_history(project_id)
 
     def list_latest(self, project_id: str) -> tuple[PermissionIntentRevision, ...]:
         latest: dict[str, PermissionIntentRevision] = {}

@@ -4,6 +4,19 @@
 
 <!-- GENERATED:START -->
 
+### `product/frontend/src/features/system/maintenance.css`
+
+[打开源码](../../../../../../product/frontend/src/features/system/maintenance.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/features/system/MaintenancePanel.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/system/MaintenancePanel.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `MaintenancePanel`
+
+静态import / dot-source：`../../api/http`、`../../api/system/system`、`./maintenance.css`、`antd`、`react`
+
 ### `product/frontend/src/features/system/runtime.css`
 
 [打开源码](../../../../../../product/frontend/src/features/system/runtime.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
@@ -22,6 +35,6 @@
 
 - `RuntimePage`
 
-静态import / dot-source：`../../api/assistance/llm`、`../../api/system/system`、`../../shared/runtime/buildIdentity`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./runtime.css`、`antd`、`react`
+静态import / dot-source：`../../api/assistance/llm`、`../../api/system/system`、`../../shared/runtime/buildIdentity`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./MaintenancePanel`、`./runtime.css`、`antd`
 
 <!-- GENERATED:END -->

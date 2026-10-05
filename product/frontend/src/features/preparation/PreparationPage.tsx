@@ -1,8 +1,9 @@
 // 动作级检查准备：展示现场材料，操作顺序与定位只消费最新 Workspace 主任务。
+import { LoadingState } from '../../shared/ui/LoadingState'
 import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
 import { useContext, useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Radio, Select, Space, Spin } from 'antd'
+import { Alert, Button, Empty, Radio, Select, Space } from 'antd'
 import { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/applications/projects'
 import { preparationApi, type AllowControlRequirement, type MaterialReference, type MaterialRecordingContext, type PreparationDraft, type PreparationView } from '../../api/preparation/preparation'
@@ -259,9 +260,9 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   if (mode === 'recording' && (recordingTask || materialRecording)) return <RecordingPage key={`${project.project_id}:${materialRecording?.context_id ?? recordingTask?.task_id}`} project={project} task={recordingTask} materialContext={materialRecording}
     effectName={currentWorkspace?.actions.find((item) => item.action_id === (materialRecording ?? recordingTask)?.business_action_id)?.effect_catalog.find((item) => item.effect_id === (materialRecording ?? recordingTask)?.effect_id)?.business_label}
     onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} />
-  if (loading) return <EditorialPage><Spin />正在读取检查准备材料…</EditorialPage>
+  if (loading) return <EditorialPage><LoadingState page>正在读取检查准备材料…</LoadingState></EditorialPage>
   if (requestedActionId && preparation && !preparation.actions.some(item=>item.action_id===requestedActionId)) return <EditorialPage><EditorialHeader title="这项业务的材料已不在当前范围"/><p>原链接指向的动作已经变化，未替换成另一项业务。</p><Button onClick={()=>onNavigate('/permissions')}>核对权限要求</Button></EditorialPage>
-  if (!preparation) return <EditorialPage><EditorialHeader eyebrow="工作台 / 检查材料" title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><Button loading={busy} onClick={() => void refresh()}>重新读取材料</Button></EditorialPage>
+  if (!preparation) return <EditorialPage><EditorialHeader eyebrow={project.name || '当前应用'} title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><Button loading={busy} onClick={() => void refresh()}>重新读取材料</Button></EditorialPage>
   const task = currentWorkspace?.primary_task
   const nextAction = guidance?.state === 'CURRENT' && guidance.next_action?.task_id === task?.task_id ? guidance.next_action : undefined
   const chosenActionId = preparation?.actions.find(action => action.action_id === selectedAction)?.action_id
@@ -271,12 +272,11 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const currentStage = task?.task_kind === 'REVIEW_RECORDING' ? task.recording_purpose === 'OBSERVATION' ? 3 : task.recording_purpose === 'RECOVERY' ? 4 : 1 : task ? taskStage[task.task_kind] : undefined
   const providedAvailable = Boolean(onProvidedMaterials && !preparation?.preparation_complete && task?.route === '/tests' && currentStage !== undefined)
   const guidedProof = !providedAvailable && task?.task_kind === 'COMPLETE_EFFECT_EVIDENCE' && nextAction?.kind !== task.task_kind ? nextAction : undefined
-  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? guidedProof ? <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying} onClick={() => onNavigate(guidedProof.gui_url.slice(1))}>{guidedProof.handler === 'AGENT' ? '让 Agent 完善这项证明' : '前往处理'}</Button> : <Button type={providedAvailable ? 'default' : 'primary'} loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
+  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? guidedProof ? <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying} onClick={() => onNavigate(guidedProof.gui_url.slice(1))}>{guidedProof.handler === 'AGENT' ? '让 Agent 完善这项证明' : '核对证明来源'}</Button> : <Button type={providedAvailable ? 'default' : 'primary'} loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
     {task.task_kind === 'PREPARE_TEST_IDENTITY' ? task.test_identity_id ? '打开登录浏览器' : '创建账号并登录' : task.route === '/tests' && currentStage !== undefined ? '继续准备这项材料' : task.action_label ?? '前往处理'}
   </Button> : null
-  return <EditorialPage label="检查材料">
-    <EditorialHeader eyebrow="工作台 / 检查材料" title="检查材料"><p className="editorial-muted">只更新需要处理的部分</p></EditorialHeader>
-    <div className="proof-toolbar"><p className="editorial-muted">已有材料继续沿用；需要结果证明时，可让 Agent 整理来源。</p><Button onClick={() => setProofSources(true)}>准备证明来源</Button></div>
+  return <EditorialPage label="检查材料" width="summary">
+    <EditorialHeader eyebrow={project.name || '当前应用'} title="检查准备"/>
     {!!preparation?.actions.length && <Select className="materials-action-picker" aria-label="选择业务动作" disabled={busy}
       value={chosenActionId} onChange={id => void selectAction(id)}
       options={preparation.actions.map(action => ({ value: action.action_id, label: action.display_name }))} />}
@@ -307,6 +307,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
           effectName={id => business?.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果'}
           taskTitle={syncError ? '材料已保存，正在同步下一步' : current ? nextAction?.title ?? task?.title : undefined} taskWhy={syncError ? '正在读取最新任务，不需要重新准备已经保存的材料。' : current ? nextAction?.reason ?? task?.why_now : undefined}
           primary={current ? <>{primaryButton}{providedAvailable && <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task?.can_execute} onClick={() => void installProvidedMaterials()}>使用已提供的测试材料</Button>}</> : <Button type="primary" onClick={() => onNavigate('/tests')}>核对检查条件</Button>}
+          onProofSources={() => setProofSources(true)}
           onIdentity={() => { setLogin(undefined); setMode('identities') }} onMaterial={(reference, label) => void openMaterial(reference, label)} returnKind={returnMaterial?.action_id === action.action_id ? returnMaterial.kind : undefined}>
           <h3>已确认的权限</h3>{action.permissions.map(permission => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}
           <AssistantPanel projectId={project.project_id} surface="preparation-explanation" focus={{ business_action_id: action.action_id }} title="理解这项动作的准备要求" actionLabel="解释准备缺口" />

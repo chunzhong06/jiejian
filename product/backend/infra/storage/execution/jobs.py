@@ -184,32 +184,18 @@ class JobEventRow(Base):
 #   Execution services → JobRepository / JobEventRepository → Job ORM rows
 # =============================================================================
 
-import hashlib
 import json
-import re
 import time
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    field_validator,
-    model_validator,
-)
-from sqlalchemy import Select, and_, or_, func, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from pydantic import Field, field_validator, model_validator
+from sqlalchemy import and_, or_, func, select
 from sqlalchemy.orm import Session
 
-from product.backend.core.identifiers import EVIDENCE_ID_PATTERN, JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
-from product.backend.core.lifecycle import ContractStatus
-from product.backend.core.verification.permissions import PermissionContract
-from product.backend.core.recording.models import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
+from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
-from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
+from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
 class JobRecord(StorageRecord):
     job_id: str = Field(pattern=JOB_ID_PATTERN)

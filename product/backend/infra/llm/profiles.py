@@ -22,10 +22,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.llm.adapters.base import LLMAdapter, LLMInvokeResult, LLMTransport, LLMTransportError
+from product.backend.infra.llm.adapters.base import LLMTransport, LLMTransportError
 from product.backend.infra.llm.catalog import LLMModelCatalog, LLMModelCatalogService
-from product.backend.infra.llm.config import AIAssistanceSettings, LLMProfileConfig, LLMProviderType, reasoning_options_for
-from product.backend.infra.secrets import SecretStore, credential_ref, default_secret_store
+from product.backend.infra.llm.config import AIAssistanceSettings, LLMProfileConfig, LLMProviderType
+from product.backend.infra.secrets import SecretStore, default_secret_store
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.llm.provider import (
     ResolvedLLMProvider, _ConnectionState, _error_for_transport,

@@ -10,16 +10,15 @@
 .connection-support p, .connection-support dd, .connection-support details { color: var(--color-secondary); font-size: var(--font-secondary); }
 .connection-support dl { margin: var(--space-20) 0; display: grid; gap: var(--space-16); }
 .connection-support dl > div { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: var(--space-16); }
-.connection-support dt { font-size: var(--font-secondary); font-weight: 600; }
+.connection-support dt { font-size: var(--font-secondary); font-weight: var(--weight-strong); }
 .connection-support dd { margin: 0; }
 .connection-support summary { cursor: pointer; }
 @media(max-width:600px) { .connection-support { padding: var(--space-16); } .connection-support-heading { align-items: start; } .connection-support dl > div { grid-template-columns: minmax(0,1fr); gap: var(--space-4); } }
-
 .access-next-surface {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-large);
-  padding: var(--space-32);
+  padding:var(--space-24);
   box-shadow: var(--shadow-focus);
 }
 
@@ -71,15 +70,15 @@
 .access-facts dd {
   margin: 0;
 }
-
 .access-next-task h2 {
-  font-size: 26px;
+  font-size:22px;
 }
 
 /* 宽屏将已确认事实和下一步并排；窄屏按相同阅读顺序恢复上下布局。 */
+
 .access-next-layout {
   display: grid;
-  gap: var(--space-32);
+  gap:var(--space-24);
 }
 
 .access-connection-summary, .access-next-task { min-width: 0; }
@@ -185,13 +184,11 @@
   display: grid;
   gap: 20px;
 }
-
 .application-setup > .application-step {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-large);
-  padding: var(--space-24);
-}
+  padding: var(--space-24);box-shadow:var(--shadow-focus);}
 
 .endpoint-list {
   width: 100%;
@@ -200,55 +197,6 @@
 .application-discovery {
   display: grid;
   gap: var(--space-8);
-}
-
-.application-understanding-grid {
-  display: grid;
-  gap: var(--space-16);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.application-understanding-grid > section {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  display: grid;
-  gap: var(--space-8);
-  min-width: 0;
-  padding: var(--space-16) 0;
-}
-
-.application-understanding-grid h4 {
-  margin: 0;
-}
-
-.application-understanding-kicker {
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .06em;
-}
-
-.application-understanding-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-8);
-  min-height: 24px;
-}
-
-.application-understanding-details {
-  border-top: var(--line-width) solid var(--color-border);
-  padding-top: var(--space-16);
-}
-
-.application-understanding-details > summary {
-  cursor: pointer;
-  margin-bottom: var(--space-16);
-}
-
-.application-review-details {
-  display: grid;
-  gap: var(--space-24);
 }
 
 .candidate-row {
@@ -321,27 +269,39 @@
   padding: var(--space-16) 0;
 }
 
-.application-manual-section > .ant-typography {
-  margin: 0 0 var(--space-12);
+.application-manual-section > .application-manual-note {
+  margin: var(--space-20) 0;
+  color: var(--color-secondary);
+  font-size: var(--font-secondary);
 }
 
 .application-manual {
-  align-items: center;
+  align-items: end;
   display: grid;
   gap: var(--space-12);
-  grid-template-columns: minmax(280px, 680px) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   width: 100%;
+}
+
+.application-manual-field {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.application-manual-field > span:first-child {
+  font-weight: var(--weight-medium);
+}
+
+.candidate-workspace .application-manual-fields {
+  display: grid;
+  gap: var(--rhythm-fieldGap);
+  margin: 0;
 }
 
 .application-manual-path {
   max-width: 680px;
   width: 100%;
-}
-
-@media (max-width: 600px) {
-  .application-understanding-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 600px) {
@@ -402,13 +362,15 @@
   gap: var(--space-24);
 }
 
-.candidate-workspace > .ant-btn {
-  justify-self: start;
-}
-
 .application-setup > .task-action-bar {
   position: static;
+  margin-top: 0;
+  padding-top: var(--space-16);
+  border-top: var(--line-width) solid var(--color-border);
 }
+.access-review-surface .candidate-workspace { padding-bottom:0; }
+.candidate-step-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:var(--space-12); margin-left:auto; }
+@media(max-width:600px) { .candidate-step-actions { width:100%; } }
 
 .candidate-workspace header h2 {
   margin: var(--space-8) 0;
@@ -453,9 +415,8 @@
   margin: var(--space-12) 0;
   min-width: 0;
 }
-
 .candidate-batch-review {
-  padding: var(--space-24);
+  padding:var(--space-20);
   background: var(--color-surface-subtle);
   border-radius: var(--radius-medium);
 }
@@ -499,3 +460,11 @@
     padding: var(--space-16);
   }
 }
+
+/* 接入页整组限宽，审阅正文沿用父容器；不再单独居中造成标题和正文错轴。 */
+.candidate-workspace { width:100%; margin:0; }
+.access-next-task { display:grid; grid-template-columns:minmax(0,1fr); }
+.access-next-task > .ant-btn { justify-self:end; }
+.access-next-surface > .ant-btn { justify-self:end; }
+.candidate-step-footer { flex-wrap:wrap; }
+.candidate-step-footer > .ant-btn:last-child { margin-left:auto; }

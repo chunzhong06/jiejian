@@ -139,7 +139,7 @@
 - `spawn_python_module(source, module, *arguments, role, secret_names, extra_environment, cwd, popen, python_executable, tree_name, before_release, **kwargs) -> subprocess.Popen[Any]`
 - `run_python_module(source, module, *arguments, role, cwd, timeout_seconds, secret_names, extra_environment, python_executable) -> subprocess.CompletedProcess[str]`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`enum`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`re`、`subprocess`、`sys`、`types`、`typing`、`uuid`
+静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`enum`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`re`、`subprocess`、`sys`、`types`、`typing`、`uuid`
 
 ### `product/backend/infra/runtime/process/exclusive_file.py`
 
