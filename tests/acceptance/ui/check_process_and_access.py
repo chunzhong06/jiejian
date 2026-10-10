@@ -1,7 +1,8 @@
 # 核对生产前端的接入、检查阶段与协助入口；API由本地夹具拦截，不停止用户实例。
 import json
 import re
-from urllib.parse import urlparse
+from copy import deepcopy
+from urllib.parse import parse_qs, urlparse
 from playwright.sync_api import expect
 from tests.acceptance.ui.hover_feedback import permission_editor
 
@@ -108,7 +109,7 @@ def verify_source_and_assist(browser, origin, out, report):
         candidate_id = 'rcd_' + '1' * 32
         permission = {'item_id':'p1', 'subject_actor_item_id':'member', 'resource_owner_actor_item_id':'member',
                       'business_action_item_id':'download', 'relation':'OWNS', 'protected_effect_item_ids':['received']}
-        meaning = {'candidate':{'candidate_id':candidate_id, 'project_id':project['project_id'], 'revision':1,
+        meaning = {'candidate':{'candidate_id':candidate_id, 'project_id':project['project_id'], 'revision':2,
             'basis_id':'rb_ui_current', 'submitted_via':'MCP', 'content':{'original_text':'成员可以预览公开内容，下载范围需要确认。',
             'actors':[{'item_id':'member','display_name':'成员'}],
             'actions':[{'item_id':'download','display_name':'下载展示版','effect_catalog':[{'item_id':'received','business_label':'展示版完整收到'}]}],
@@ -119,6 +120,11 @@ def verify_source_and_assist(browser, origin, out, report):
                     {'option_id':'deny','label':'仅允许在线预览','explanation':'可以查看公开内容，不提供下载。','replacements':[{**permission,'expectation':'DENY'}]}]}]}},
             'assessment':'NEEDS_CHANGES','issues':[{'code':'NEEDS_DECISION','message':'含义仍待核对'}], 'decision':None,
             'proposal_id':None, 'scenario_decisions':[], 'reuse':{'message':'正式批准后再核对当前材料。','actions':[]}}
+        old_meaning = deepcopy(meaning)
+        old_meaning['candidate']['revision'] = 1
+        old_meaning['candidate']['content']['scenarios'] = []
+        old_meaning['candidate']['content']['unresolved_questions'] = ['成员能否下载公开展示版？']
+        old_meaning['issues'] = [{'code':'NEEDS_CLARIFICATION','message':'成员能否下载公开展示版？'}]
 
         def api(route):
             target = urlparse(route.request.url).path
@@ -146,7 +152,7 @@ def verify_source_and_assist(browser, origin, out, report):
             elif target.endswith("/rule-context"):
                 data = {"project_id": project["project_id"], "basis_id": "rb_ui_current", "candidates": [], "next_offset": None}
             elif target.endswith('/rule-candidates/' + candidate_id):
-                data = meaning
+                data = old_meaning if parse_qs(urlparse(route.request.url).query).get('revision') == ['1'] else meaning
             elif '/business-boundaries/rules/' in target:
                 data = {'project_id':project['project_id'],'intent_id':'pin_'+'1'*32,'revision':1,'current':True,
                     'expectation':'ALLOW','sentence':'成员可以下载自己的公开展示版。','action_id':'download','action_revision':1,
@@ -181,6 +187,7 @@ def verify_source_and_assist(browser, origin, out, report):
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
             page.screenshot(path=str(out / f"source-only-{width}-{theme}.png"), full_page=True)
             page.goto(origin + "/#/permissions")
+            page.get_by_role('button', name='整理权限候选', exact=True).click()
             inbox = page.get_by_role("region", name="对话规则候选", exact=True)
             expect(inbox.get_by_role("button", name="读取候选", exact=True)).to_be_visible()
             inbox.get_by_role("button", name="Agent 协助", exact=True).click()
@@ -191,11 +198,23 @@ def verify_source_and_assist(browser, origin, out, report):
             expect(page.locator('.agent-assist-panel pre')).to_contain_text("jiejian_rule_context")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
             page.screenshot(path=str(out / f"agent-assist-{width}-{theme}.png"), full_page=True)
-            page.get_by_role("button", name="打开开发工具", exact=True).click()
-            page.get_by_role("button", name="返回刚才的任务", exact=True).click()
+            page.get_by_role("button", name="连接 Agent", exact=True).click()
+            connection = page.get_by_role('dialog', name='连接 Agent', exact=True)
+            expect(connection.get_by_role('heading', name='你正在使用哪个客户端？')).to_be_visible()
+            page.keyboard.press('Escape')
+            expect(connection).to_have_count(0)
             expect(page.get_by_role("button", name="Agent 协助", exact=True)).to_be_visible()
-            assert page.url.endswith("#/permissions")
+            assert 'view=candidates' in page.url
             page.goto(origin + '/#/permissions?candidate=' + candidate_id + '&revision=1')
+            next_step = page.get_by_role('region', name='候选修订下一步', exact=True)
+            expect(next_step.get_by_role('heading', name='还有 1 条问题等待 Agent 整理')).to_be_visible()
+            expect(page.get_by_role('region', name='含义核对', exact=True)).to_have_count(0)
+            next_step.screenshot(path=str(out / f'rule-revision-next-{width}-{theme}.png'))
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+            refresh = page.get_by_role('button', name='读取候选', exact=True)
+            refresh.focus()
+            refresh.press('Enter')
+            expect(page).to_have_url(re.compile(r'revision=2'))
             choices = page.get_by_role('region', name='含义核对', exact=True)
             expect(choices.get_by_role('radio')).to_have_count(4)
             assert choices.get_by_role('radio').evaluate_all('(items) => items.every(item => !item.checked)')

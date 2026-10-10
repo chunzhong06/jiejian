@@ -51,13 +51,13 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     return () => { current.current += 1 }
   }, [projectId, requestedId, requestedRevision, epoch, archived])
 
-  const select = async (id: string, revision: number) => {
+  const select = async (id: string, revision?: number) => {
     if (inFlight.current) return
     const generation = ++current.current
     setLoading(true); setError(undefined)
     try {
       const item = await ruleCandidatesApi.show(projectId, id, revision)
-      if (generation === current.current) { setSelected(item); onSelected(id, revision) }
+      if (generation === current.current) { setSelected(item); setNotice(undefined); onSelected(id, item.candidate.revision) }
     } catch { if (generation === current.current) setError('这条候选无法读取，请重新核对。') }
     finally { if (generation === current.current) setLoading(false) }
   }
@@ -98,9 +98,12 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
       if (latest.candidate.revision !== selected.candidate.revision || latest.visibility?.archived) {setNotice('候选已有变化，请核对最新内容后继续。'); return}
       await navigator.clipboard.writeText([`请补充界鉴项目 ${projectId} 的规则候选 ${latest.candidate.candidate_id}，修订 ${latest.candidate.revision}。`,
         '先调用 jiejian_rule_context 和 jiejian_rule_candidate_show 读取最新内容，再读取 jiejian_application_understanding 沿用已确认的角色和动作。',
-        ...latest.issues.map(item => `需要处理：${item.message}`),
+        ...latest.issues.map(item => `需要处理${item.path ? `（${item.path}）` : ''}：${item.message}`),
+        ...(latest.revision_guidance ?? []),
+        ...latest.candidate.content.unresolved_questions.map((question,index) => `旧问题 ${index+1}（candidate.content.unresolved_questions[${index}]，转换情境时question逐字保留）：${question}`),
+        ...latest.candidate.content.unsupported_constraints.map((constraint,index) => `能力限制 ${index+1}（独立核对，不能靠情境选择消除）：${constraint}`),
         '用 jiejian_rule_candidate_save 更新原候选，保留完整业务要求和受保护结果。缺失的业务约定请向我提问，不要猜测或删减。',
-        '正式边界为空也可以保存首次候选；不需要我先手工建立相同边界。保存后给出界鉴审阅入口，不能替我批准。'].join('\n'))
+        '保存带情境的新修订后，给出返回的review_url；我会点击“读取候选”，在“含义核对”处理，再审阅完整变更。不要让我在尚未生成情境时寻找确认按钮。不能替我批准。'].join('\n'))
       if (generation === current.current) setNotice('补充请求已复制，请粘贴到原 Agent 对话中；保存后点击“读取候选”。')
     } catch { if (generation === current.current) setError('暂时无法复制补充请求，请重新读取候选后重试。') }
     finally {inFlight.current=false; if(generation===current.current)setBusy(false)}
@@ -172,9 +175,15 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   }
 
   // 整理和读取在同一候选区交接；已有读取按钮时，展开内容不再生成第二个读取入口。
+  // 初次深链保留指定历史修订；用户显式读取时查询最新头，避免永远停在旧rev。
+  const readLatest = () => {
+    const id = selected?.candidate.candidate_id ?? requestedId
+    if (id) void select(id)
+    else setEpoch(value => value + 1)
+  }
   const sourceOverview = context && !archived && <RulePreparationProgress context={context}/>
   const heading = (content: ReactNode) => {
-    const refresh = <Button type={copiedRequest ? 'primary' : 'default'} disabled={busy || Boolean(operation)} onClick={() => setEpoch(value => value + 1)}>读取候选</Button>
+    const refresh = <Button type={copiedRequest ? 'primary' : 'default'} disabled={busy || Boolean(operation)} onClick={readLatest}>读取候选</Button>
     if (!onNavigate || selected?.visibility?.archived) return <div className="rule-candidates-heading"><div>{selected ? content : sourceOverview}</div>{refresh}</div>
     return <AgentAssistEntry aside projectId={projectId} contextKey={`rules:${requestedId ?? ''}:${requestedRevision ?? ''}`}
       heading={selected ? content : sourceOverview || <div><h2>当前权限约定</h2><p>整理候选、核对具体要求，再由你决定是否批准。</p></div>} actions={refresh} primary={!selected && !archived && !context?.candidates.length && !copiedRequest} onCopied={() => setCopiedRequest(true)}
@@ -209,12 +218,19 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   const isArchived = selected.visibility?.archived ?? false
   const leave = () => {setSelected(undefined); setNotice(undefined); setEpoch(value=>value+1); onExit?.()}
   const permissions = new Map(content.permissions.map(item => [item.item_id, item]))
+  const pendingQuestions = content.unresolved_questions.filter(question => !content.scenarios?.some(scene => scene.question === question))
+  const needsMeaning = content.scenarios?.some(scene => !['SELECT','DISMISS','CORRECT'].includes(selected.scenario_decisions?.find(state => state.scenario_id === scene.scenario_id)?.status ?? 'NEEDS_DECISION'))
   return <section className="rule-candidates work-surface" aria-label="审阅对话规则">
     {heading(<div className="rule-candidates-title"><h2>{isArchived ? '查看已归档候选' : selected.decision ? '查看当时的业务约定' : confirmed ? '沿用已有业务约定' : '确认这条业务约定'}</h2><StatusBadge kind="rule">{isArchived ? '已归档' : confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div>)}
     <p className="rule-candidate-original">{content.original_text}</p>
     <p className="editorial-muted">{selected.candidate.submitted_via === 'MCP' ? 'Agent 整理' : '本机整理'} · 修订 {selected.candidate.revision}。保存和准备都不代表检查通过。</p>
     {isArchived && <Alert type="info" message="这条候选已归档，恢复后可以继续整理。原修订与决定记录保留。"/>}
     {notice && <p role="status" className="rule-candidate-notice">{notice}</p>}
+    {!isArchived && !selected.decision && selected.assessment==='NEEDS_CHANGES' && <section className="rule-revision-next" aria-label="候选修订下一步">
+      <h3>{pendingQuestions.length ? `还有 ${pendingQuestions.length} 条问题等待 Agent 整理` : needsMeaning ? '请在下方核对含义' : '请先补充候选'}</h3>
+      <p>{pendingQuestions.length ? '这些问题还没有形成可供你核对的情境。点击“复制补充请求”交给原 Agent；它保存新修订后，点击“读取候选”。' : needsMeaning ? '逐处选择、说明实际要求或标记暂不确定，并保存。需要 Agent 修改时，点击“复制补充请求”；它保存后再读取候选。' : '点击“复制补充请求”，让原 Agent 按下方问题或你的纠正补充；保存新修订后，点击“读取候选”。已经保存的选择无需重复确认。'}</p>
+      <p className="editorial-muted">情境保存后会出现“含义核对”；问题处理完成后，才能继续审阅完整变更。已有明确要求与取证缺口分别保留，保存选择不会自动补齐证据或批准权限。</p>
+    </section>}
     <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
     <div className="rule-example-table" role="table" aria-label="具体情形与要求">
       {content.examples.map((example, index) => <div className="rule-candidate-row" role="row" key={index}><p role="cell">{example.description}</p><span role="cell">{example.uncovered_reason ?? (permissions.get(example.permission_item_id ?? '')?.expectation === 'DENY' ? '应当拒绝' : permissions.has(example.permission_item_id ?? '') ? '应当允许' : '沿用已确认规则')}</span></div>)}

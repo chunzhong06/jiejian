@@ -50,9 +50,10 @@
 
 [打开源码](../../../../../../product/backend/workflows/preparation/bindings/reuse.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `material_reuse_read(work)`
 - `recorded_material_reusable(work, binding, understanding, var_dir)`
 
-静态import / dot-source：`product.backend.infra.observers.records.source_contracts`
+静态import / dot-source：`contextlib`、`contextvars`、`product.backend.infra.observers.records.source_contracts`
 
 ### `product/backend/workflows/preparation/bindings/service.py`
 
@@ -70,7 +71,7 @@
 - `PreparationBindingService.inspect(self, action, contract, identities, work) -> ActionTechnicalPreparationView`
 - `PreparationBindingService.inspect_item(self, work, binding, action, understanding, missing_reason)`
 
-静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`pathlib`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.core.recording.models`、`product.backend.workflows.preparation.bindings.recording_candidates`、`product.backend.workflows.preparation.bindings.sources`、`product.backend.workflows.preparation.models`、`product.backend.workflows.recording.source`、`product.backend.workflows.test_identities.service`、`typing`、`作用域内：product.backend.workflows.preparation.materials.evidence_models`
+静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`pathlib`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.core.recording.models`、`product.backend.workflows.preparation.bindings.recording_candidates`、`product.backend.workflows.preparation.bindings.sources`、`product.backend.workflows.preparation.models`、`product.backend.workflows.recording.source`、`product.backend.workflows.test_identities.service`、`typing`、`作用域内：product.backend.workflows.preparation.bindings.reuse`、`作用域内：product.backend.workflows.preparation.materials.evidence_models`
 
 ### `product/backend/workflows/preparation/bindings/sources.py`
 

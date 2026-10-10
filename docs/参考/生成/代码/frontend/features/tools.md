@@ -32,7 +32,7 @@
 
 - `MCPAccessCard`
 
-静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./clientGuides`、`./connections.css`、`antd`、`react`
+静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/runtime/useLiveRead`、`../../shared/ui/AgentConnectionDialog`、`../../shared/ui/Editorial`、`./connections.css`、`antd`、`react`
 
 ### `product/frontend/src/features/tools/ToolsPage.test.tsx`
 

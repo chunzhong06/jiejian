@@ -114,7 +114,7 @@ Execution Case
 - Runner 调度与投影：`product/backend/infra/runtime/runner/`
 - 当前 CHECK 的本地描述解析（不负责独立格式的运行提交）：`product/backend/workflows/checks/local_observer_wiring.py`
 - Observer outcome：`product/protocols/observer/result.py`；权限三态消费：`product/backend/core/verification/permissions/evaluation.py`
-- 结果展示：`product/backend/workflows/reports/presentation/`
+- 结果展示：`product/backend/workflows/checks/reading/story.py`、`product/backend/workflows/checks/reading/observation_reading.py`
 - 路径构建：`product/backend/workflows/reports/trace.py`；只消费冻结 request snapshot 与已发布 Evidence
 - Adapter 直接测试：`tests/backend/infra/observers/`
 - outcome/INCONCLUSIVE 直接测试：`tests/protocols/observer/test_observer_result.py`、`tests/backend/core/verification/permissions/test_evaluation.py`

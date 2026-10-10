@@ -12,17 +12,17 @@
 
 | 要改什么 | 先看哪里 | 事实所有者或直接测试 |
 | --- | --- | --- |
-| FastAPI 组合、启动/关闭、Worker 生命周期 | `product/backend/api/app.py` | `tests/backend/api/system/test_control_plane.py` |
+| FastAPI 组合、启动/关闭、Worker 生命周期 | `product/backend/api/app.py` | `tests/backend/composition/`、`tests/e2e/test_worker_runner_publication.py` |
 | 资源路由与 DTO 映射 | `product/backend/api/routers/` | `tests/backend/api/` |
-| API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/system/test_control_plane.py` |
-| Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/system/test_control_plane.py` |
+| API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/`中受影响资源的直接测试 |
+| Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/workflows/changes/test_source_identity.py`、`tests/backend/api/preparation/test_proof_preparation.py` |
 | MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp/server.py` | `tests/backend/api/system/test_mcp.py` |
-| Human GUI 权限草稿、审批与 Agent proposal 路由 | `product/backend/api/routers/boundaries/permission_intents.py` | `tests/backend/api/boundaries/test_business_boundaries.py`、权限草稿 API 测试 |
+| Human GUI 权限草稿、审批与 Agent proposal 路由 | `product/backend/api/routers/boundaries/business_boundaries.py` | `tests/backend/api/boundaries/test_business_boundaries.py`、`tests/backend/api/boundaries/test_rule_candidate_decisions.py` |
 | MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/agent_access/service.py`、`product/backend/api/routers/system/mcp_access.py` | `tests/backend/api/system/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/composition/application.py` | `tests/backend/composition/`、`tests/architecture/test_storage_composition.py` |
 | Action Workspace、唯一 PrimaryTask 与动作级权限/实现摘要 | `product/backend/workflows/workspace/` | `tests/backend/workflows/workspace/test_service.py`、`tests/backend/api/test_workspace.py` |
 | 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/system.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_current_cli.py` |
-| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/system/test_control_plane.py`、`tests/backend/cli/test_current_cli.py` |
+| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/cli/test_current_cli.py` |
 
 ## 正常修改路线
 
@@ -61,7 +61,7 @@ Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `sche
 优先运行受影响 Router 的直接测试，再按变化补以下最小邻域：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/system/test_control_plane.py tests/backend/cli/test_current_cli.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/system/test_frontend_identity.py tests/backend/cli/test_current_cli.py
 ```
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。

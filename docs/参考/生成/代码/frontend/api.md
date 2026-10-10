@@ -369,11 +369,15 @@
 
 [打开源码](../../../../../product/frontend/src/api/system/mcp.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
+- `AgentClient`
+- `AgentConnection`
 - `MCPAccessCredentialView`
 - `MCPAccessLevel`
 - `MCPAccessView`
 - `MCPConnectionState`
 - `MCPProjectGrant`
+- `agentClients`
+- `agentConnectionsApi`
 - `mcpAccessApi`
 
 静态import / dot-source：`../http`

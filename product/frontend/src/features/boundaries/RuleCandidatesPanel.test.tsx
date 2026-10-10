@@ -91,6 +91,53 @@ it('有未覆盖条件时禁用提案入口，并明确解释', async () => {
   expect(screen.getByRole('button',{name:'复制补充请求'})).toBeEnabled()
 })
 
+it('旧问题明确等待Agent保存情境，补充请求携带原问题和服务端修订指引', async () => {
+  const question='曾开放后撤回仍违规，如何保留这一要求？'
+  const original={...item,assessment:'NEEDS_CHANGES',revision_guidance:['情境选择本身不会建立历史证据。'],
+    candidate:{...item.candidate,content:{...item.candidate.content,unresolved_questions:[question]}},
+    issues:[{code:'NEEDS_CLARIFICATION',message:question,path:'candidate.content.unresolved_questions[0]'}]}
+  api.show.mockResolvedValue(original)
+  const copy=vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}})
+  render(<RuleCandidatesPanel projectId="app_a" requestedId="rcd_a" requestedRevision={1} onSelected={vi.fn()} onProposal={vi.fn()}/> )
+  expect(await screen.findByRole('heading',{name:'还有 1 条问题等待 Agent 整理'})).toBeInTheDocument()
+  expect(screen.queryByRole('region',{name:'含义核对'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'复制补充请求'}))
+  await waitFor(()=>expect(copy).toHaveBeenCalledOnce())
+  expect(copy.mock.calls[0][0]).toContain(question)
+  expect(copy.mock.calls[0][0]).toContain('question逐字保留')
+  expect(copy.mock.calls[0][0]).toContain('情境选择本身不会建立历史证据')
+  expect(copy.mock.calls[0][0]).toContain('保存带情境的新修订后')
+  expect(api.decide).not.toHaveBeenCalled()
+  expect(api.propose).not.toHaveBeenCalled()
+})
+
+it('指定旧修订进入后显式读取最新候选，出现含义核对并更新精确引用', async () => {
+  const old={...item,assessment:'NEEDS_CHANGES',candidate:{...item.candidate,content:{...item.candidate.content,unresolved_questions:['能否下载展示版？']}},issues:[]}
+  const latest={...meaning(),candidate:{...meaning().candidate,revision:2}}
+  api.show.mockImplementation((_project:string,_id:string,revision?:number)=>Promise.resolve(revision===1?old:latest))
+  const selected=vi.fn()
+  render(<RuleCandidatesPanel projectId="app_a" requestedId="rcd_a" requestedRevision={1} onSelected={selected} onProposal={vi.fn()}/> )
+  await screen.findByRole('heading',{name:'还有 1 条问题等待 Agent 整理'})
+  expect(api.show).toHaveBeenCalledWith('app_a','rcd_a',1)
+  fireEvent.click(screen.getByRole('button',{name:'读取候选'}))
+  await screen.findByRole('heading',{name:'能否下载展示版？'})
+  expect(api.show).toHaveBeenLastCalledWith('app_a','rcd_a',undefined)
+  expect(selected).toHaveBeenLastCalledWith('rcd_a',2)
+  expect(screen.queryByRole('heading',{name:'还有 1 条问题等待 Agent 整理'})).not.toBeInTheDocument()
+  expect(api.decide).not.toHaveBeenCalled()
+})
+
+it('选择已保存但仍有能力限制时引导补充，不要求重复确认', async () => {
+  api.show.mockResolvedValue({...meaning(),scenario_decisions:[{scenario_id:'scene',status:'SELECT',decision:{decision_id:'d1',option_id:'deny'}}],
+    issues:[{code:'RULE_KIND_UNSUPPORTED',message:'跨检查窗口的历史记录尚未确认'}]})
+  render(<RuleCandidatesPanel projectId="app_a" requestedId="rcd_a" onSelected={vi.fn()} onProposal={vi.fn()}/> )
+  expect(await screen.findByRole('heading',{name:'请先补充候选'})).toBeInTheDocument()
+  expect(screen.queryByRole('heading',{name:'请在下方核对含义'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'继续审阅完整变更'})).not.toBeInTheDocument()
+  expect(screen.getByText('跨检查窗口的历史记录尚未确认')).toBeInTheDocument()
+})
+
 it('刷新后恢复URL中的原操作引用，只查询不重新提交', async () => {
   api.receipt.mockResolvedValue({status:'FOUND',candidate:{...item,proposal_id:'bpr_saved'}})
   const onProposal=vi.fn().mockResolvedValue(undefined)

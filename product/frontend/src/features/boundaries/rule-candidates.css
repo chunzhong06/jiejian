@@ -47,6 +47,9 @@
 .rule-candidates-inbox > .rule-candidate-row > .ant-btn { justify-self:center; }
 .rule-candidates-inbox > .ant-segmented { margin-block:var(--space-20) var(--space-8); }
 .rule-candidate-notice { padding:var(--space-16);background:var(--color-primary-light);border-radius:var(--radius-small); }
+.rule-revision-next { margin-block:var(--space-24);padding-block:var(--space-16);border-block:1px solid var(--color-border);overflow-wrap:anywhere; }
+.rule-revision-next h3 { margin-block:0 var(--space-12); }
+.rule-revision-next p { margin-block:var(--space-12) 0; }
 @media(max-width:600px){.rule-candidate-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-candidates-inbox > .rule-candidate-row{grid-template-columns:minmax(0,1fr)}.rule-candidates-inbox > .rule-candidate-row > .ant-btn{justify-self:end}.rule-candidate-summary-heading{flex-wrap:wrap}}
 .rule-meaning{margin-block:var(--space-24);padding-block:var(--space-16);border-block:1px solid var(--color-border)}
 .rule-meaning-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-12);width:100%;margin-block:var(--space-16)}

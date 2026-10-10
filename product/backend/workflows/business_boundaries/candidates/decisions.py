@@ -8,6 +8,28 @@ from product.backend.core.boundaries.candidate_scenarios import CandidateApprova
 from product.backend.core.errors import ErrorCode, JiejianError
 
 
+CANDIDATE_REVISION_GUIDANCE = [
+    "修订前调用jiejian_rule_context，再用jiejian_rule_candidate_show不指定revision读取最新候选；保存携带最新expected_basis_id和expected_revision。",
+    "逐条处理旧content.unresolved_questions：尚未处理的原样保留；转入scenarios时，question须逐字保留旧问题（包括标点），不能只保留大意或一次清空全部问题。",
+    "先由Agent保存带情境的新修订，再由用户打开返回的review_url，在“含义核对”选择、纠正或暂存待定；保存情境前不要求用户在空白界面作决定。",
+    "情境options只表达真实业务歧义，每组选项替换同一组现有权限项；replacements.item_id复用content.permissions中的item_id，不创建新的替换标识。",
+    "original_excerpt须摘自original_text，occurrence为该摘录的出现序号。每处情境有2至4个真实选项；scenario_id在候选内唯一，option_id在情境内唯一。",
+    "业务要求已明确时，不编造相反选项或把取证能力缺口改成业务选择。保留原始要求与未解决问题，向用户说明缺口；情境选择本身不会建立历史证据。",
+    "unsupported_constraints与unresolved_questions分别处理；不能将真实不支持的要求移入情境后冒充已支持。用户未约定的允许不自动变成禁止，Agent额外增加的限制应说明并交由人纠正。",
+    "原始允许、禁止及受保护结果必须保留。曾开放后撤回仍违规的要求不能降为只检查最终状态；内部文件与公开文件分别建模，不擅自增加隔离要求。",
+    "响应未知时只用jiejian_rule_operation查询原SAVE操作键；明确拒绝时按报错定位修正并回读最新候选，不能通过新建候选、归档或删减要求绕过核对。",
+]
+
+
+def _edit_error(current, reason, message, issues, recovery):
+    # 错误只带持久记录的索引与受控标识，原问题可能含秘密，不回显到异常正文。
+    return JiejianError(ErrorCode.STATE_PRECONDITION, message, details={
+        "reason": reason, "candidate_id": current.candidate_id, "revision": current.revision,
+        "issues": issues, "recovery": recovery,
+        "review_url": f"#/permissions?project_id={current.project_id}&candidate={current.candidate_id}&revision={current.revision}",
+    })
+
+
 def scenario_state(work, value, *, extra=None):
     """按候选内指纹读取最后一次人的决定；较新纠正不能复活更早的选择。"""
     history = work.rule_candidates.decisions(value.project_id, value.candidate_id, value.revision) if getattr(value.content, "scenarios", ()) else ()
@@ -77,21 +99,34 @@ def check_candidate_edit(work, current, incoming):
     state_by_id = {item["scenario_id"]: item for item in states}
     # 旧候选只有问题文字；升级时先转成同名情境，不能清空字段就假称歧义已解决。
     new_questions = {item.question for item in incoming.scenarios}
-    for question in set(current.content.unresolved_questions) - set(incoming.unresolved_questions):
+    missing = []
+    for index, question in enumerate(current.content.unresolved_questions):
+        if question in incoming.unresolved_questions:
+            continue
         resolved = any(scene.question == question and state_by_id[scene.scenario_id]["status"] in {"SELECT", "DISMISS"}
             for scene in old_scenes.values())
         if question not in new_questions and not resolved:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "已登记的问题仍需人核对，请先转成对应情境")
-    for scenario_id, old in old_scenes.items():
+            missing.append({"code": "QUESTION_REVIEW_REQUIRED", "question_number": index + 1, "path": f"candidate.content.unresolved_questions[{index}]",
+                "target_path": "candidate.content.scenarios[].question", "match": "EXACT_TEXT"})
+    if missing:
+        positions = "、".join(str(item["question_number"]) for item in missing)
+        raise _edit_error(current, "CANDIDATE_QUESTION_REVIEW_REQUIRED",
+            f"修订未保存：旧候选第 {positions} 条待核对问题被移除，但尚无对应情境或人的决定。",
+            missing, "读取本错误revision对应的旧候选，按issues.path定位；保留未处理问题，或以逐字相同的question保存情境。保存成功后，用户再到候选详情的“含义核对”处理；原修订保持不变。")
+    for index, (scenario_id, old) in enumerate(old_scenes.items()):
         new = incoming_scenes.get(scenario_id)
         if new is None and state_by_id[scenario_id]["status"] not in {"SELECT", "DISMISS"}:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "已有情境不能静默删除，请由用户明确结束不适用的情境")
+            raise _edit_error(current, "CANDIDATE_SCENARIO_REVIEW_REQUIRED", "修订未保存：已有未决情境不能静默删除。",
+                [{"code": "SCENARIO_REVIEW_REQUIRED", "path": f"candidate.content.scenarios[{index}]", "scenario_id": scenario_id}],
+                "保留这处情境；请用户在候选详情的“含义核对”作选择或纠正。不适用时由用户填写原因并明确结束该问题，Agent不能代替人的决定。")
         if new is not None and new.scenario_fingerprint == old.scenario_fingerprint and state_by_id[scenario_id]["status"] == "SELECT":
             actual = {item.item_id: item for item in incoming.permissions}
             for option in old.options:
                 if option.option_id == state_by_id[scenario_id]["decision"].option_id:
                     if any(item.item_id not in conflicts and actual.get(item.item_id) != replacements.get(item.item_id) for item in option.replacements):
-                        raise JiejianError(ErrorCode.STATE_PRECONDITION, "已选择的要求发生变化，请更新对应情境并重新核对")
+                        raise _edit_error(current, "CANDIDATE_SELECTED_REQUIREMENT_CHANGED", "修订未保存：权限变化与已保存的人的选择不一致。",
+                            [{"code": "SELECTED_REQUIREMENT_CHANGED", "path": f"candidate.content.scenarios[{index}]", "scenario_id": scenario_id}],
+                            "保留已选择的权限要求；确需修改时，更新对应情境及选项后保存，再由用户重新核对，不能沿用旧选择。")
 
 
 def validate_approval_source(work, proposal, current_basis):

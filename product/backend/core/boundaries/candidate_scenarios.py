@@ -7,6 +7,7 @@ import unicodedata
 from typing import Literal
 
 from pydantic import Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from product.backend.core.boundaries.entities import BoundaryModel, boundary_sha256
 from product.backend.core.boundaries.proposals import ProposedPermissionItem
@@ -29,7 +30,7 @@ class RuleScenarioOption(BoundaryModel):
     @model_validator(mode="after")
     def unique_replacements(self):
         if len({item.item_id for item in self.replacements}) != len(self.replacements):
-            raise ValueError("一个选项不能重复替换同一权限项")
+            raise PydanticCustomError("scenario_replacement_duplicate", "一个选项不能重复替换同一权限项")
         return self
 
 
@@ -43,10 +44,10 @@ class RuleScenarioInput(BoundaryModel):
     @model_validator(mode="after")
     def bounded_options(self):
         if len({item.option_id for item in self.options}) != len(self.options):
-            raise ValueError("同一情境的选项标识不能重复")
+            raise PydanticCustomError("scenario_option_duplicate", "同一情境的选项标识不能重复")
         item_sets = [{item.item_id for item in option.replacements} for option in self.options]
         if any(items != item_sets[0] for items in item_sets):
-            raise ValueError("同一情境的各选项必须替换同一组权限项")
+            raise PydanticCustomError("scenario_replacement_set_mismatch", "同一情境的各选项必须替换同一组权限项")
         return self
 
 
@@ -60,7 +61,7 @@ def freeze_scenario(scenario: RuleScenarioInput, content) -> RuleScenario:
     original = normalized_rule_text(content.original_text)
     excerpt = normalized_rule_text(scenario.original_excerpt)
     if not excerpt or original.count(excerpt) < scenario.occurrence:
-        raise ValueError("情境摘录及出现序号必须对应规则原话")
+        raise PydanticCustomError("scenario_excerpt_mismatch", "情境摘录及出现序号必须对应规则原话")
     payload = scenario.model_dump(mode="json", include=set(RuleScenarioInput.model_fields))
     text_hash = hashlib.sha256(original.encode("utf-8")).hexdigest()
     fingerprint = boundary_sha256({"original_text_hash": text_hash, "scenario": payload,

@@ -156,7 +156,7 @@ def build_mcp_control(
 
     @server.tool(name="jiejian_rule_candidate_save", structured_output=True)
     def rule_candidate_save(ctx: Context, project_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-        """保存用户希望长期保留的规则候选及具体例子；不能批准、采用材料或开始检查。"""
+        """保存待审候选，不能批准或开始检查。修订前读取context/show的revision_guidance；旧问题保留原文，或以逐字相同的question转成情境。先保存情境，再请用户按review_url核对；失败按details.issues定位，不删减业务要求。"""
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
         return _json(_invoke(lambda: context.rule_candidates.save(project_id,
             RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), submitted_via="MCP"), input_model=RuleCandidateSave))

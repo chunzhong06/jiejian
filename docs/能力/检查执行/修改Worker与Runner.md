@@ -13,7 +13,7 @@
 | 当前 CHECK 子进程监管 | `product/backend/infra/runtime/check_runner/supervisor.py` | `tests/backend/infra/runtime/jobs/` |
 | 当前 Case 执行与验证 | `product/backend/infra/execution/check_executor.py` | `tests/backend/infra/execution/` |
 | 来源观察 | `product/backend/infra/observers/checks/check_runtime.py` | `tests/backend/infra/observers/` |
-| 请求持久化与严格发布 | `product/backend/infra/runtime/jobs/requests/checks.py`、`product/backend/infra/artifacts/checks/check_publication.py` | `tests/backend/infra/runtime/jobs/`、`tests/backend/infra/artifacts/` |
+| 请求持久化与严格发布 | `product/backend/infra/runtime/jobs/requests/checks.py`、`product/backend/infra/artifacts/checks/check_publication.py` | `tests/backend/infra/runtime/jobs/publication/`、`tests/backend/infra/runtime/jobs/results/` |
 | 录制子进程 | `product/backend/infra/recording/` | `tests/backend/infra/recording/` |
 
 API 接受和查询请求；Worker 持有 Job 租约与 fencing，启动独立 Runner；Runner 消费冻结 request/bundle，在受控范围内执行并形成 CheckEvidence/CheckRunnerResult；Worker 验证发布，再由 Reader/Story 只读投影。进度、退出码与日志不是安全结论。

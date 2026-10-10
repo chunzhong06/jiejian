@@ -53,7 +53,7 @@
 - `CurrentSourceChangeService.latest_for_repair(self, project_id, reference)`
 - `CurrentSourceChangeService.context(self, project_id, change_id)`
 - `CurrentSourceChangeService.view(self, project_id, change_id)`
-- `CurrentSourceChangeService.inspect_revalidation(self, project_id, change_id)`
+- `CurrentSourceChangeService.inspect_revalidation(self, project_id, change_id, preparation_preview)`
 
 静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`product.backend.core.changes.models`、`product.backend.core.checks.plan`、`product.backend.core.checks.repair`、`product.backend.core.errors`、`product.protocols.checks.execution_request`、`pydantic`、`time`、`typing`、`uuid`、`作用域内：product.backend.core.checks.repair`、`作用域内：product.backend.workflows.changes.observations`、`作用域内：product.backend.workflows.checks.service`
 

@@ -107,7 +107,7 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 | 当前结果/执行路径/检查历史 | `product/backend/workflows/checks/reading/story.py`、`product/backend/workflows/checks/reading/results.py` |
 | ServeLock 与 CLI bootstrap | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` |
 | GUI API/控制壳 | `product/frontend/src/api/`、`product/frontend/src/app/` |
-| 直接测试 | `tests/backend/cli/test_current_cli.py`、`tests/backend/api/system/test_control_plane.py`、`tests/backend/api/system/test_mcp.py`、对应前端测试 |
+| 直接测试 | `tests/backend/cli/test_current_cli.py`、`tests/backend/api/system/test_frontend_identity.py`、`tests/backend/api/system/test_mcp.py`、对应资源与前端测试 |
 
 ## 版本边界
 

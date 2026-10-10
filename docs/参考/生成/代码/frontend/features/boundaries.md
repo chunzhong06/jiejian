@@ -27,7 +27,7 @@
 
 - `BusinessBoundaryPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./PermissionRuleRows`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/RulePreparationStages`、`../../shared/ui/SearchField`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./PermissionRuleRows`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/definitions/BoundaryObjectsWorkspace.tsx`
 
@@ -124,6 +124,14 @@
 [打开源码](../../../../../../product/frontend/src/features/boundaries/rule-candidates.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
+### `product/frontend/src/features/boundaries/RuleCandidateList.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RuleCandidateList.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RuleCandidateList`
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../shared/ui/StatusBadge`、`antd`
+
 ### `product/frontend/src/features/boundaries/RuleCandidatesPanel.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/boundaries/RuleCandidatesPanel.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -137,7 +145,7 @@
 
 - `RuleCandidatesPanel`
 
-静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentAssistEntry`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleMeaningReview`、`./rule-candidates.css`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentAssistEntry`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleCandidateList`、`./RuleMeaningReview`、`./RulePreparationProgress`、`./rule-candidates.css`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/RuleCoveragePreview.test.tsx`
 
@@ -176,6 +184,14 @@
 - `RuleMeaningReview`
 
 静态import / dot-source：`../../api/boundaries/ruleCandidates`、`antd`、`react`
+
+### `product/frontend/src/features/boundaries/RulePreparationProgress.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RulePreparationProgress.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RulePreparationProgress`
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../shared/ui/RulePreparationStages`
 
 ### `product/frontend/src/features/boundaries/rules/PermissionRuleForm.tsx`
 

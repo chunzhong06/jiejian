@@ -28,6 +28,7 @@ export function RuleMeaningReview({ value, busy, onSave, readOnly=false }: {valu
     <div className="rule-candidates-heading"><h3>含义核对</h3>{scenarios.length>1&&<span>{index+1} / {scenarios.length}</span>}</div>
     <p className="editorial-muted">对应原话：{scenario.original_excerpt}</p>
     <h3>{scenario.question}</h3>
+    <p className="editorial-muted">按原始业务要求核对；选项不符合原意时，请选“不是这个意思”并说明。保存选择后仍需审阅完整变更。</p>
     {recorded?.status!=='NEEDS_DECISION'&&recorded?.decision&&<p role="status">{recorded.status==='SELECT'?'已保存你的选择，可在下方修改。':recorded.status==='DEFER'?'已标记为暂不确定，明确后再继续审阅。':recorded.status==='DISMISS'?'你已说明这处情境不适用。':`你的纠正：${recorded.decision.correction}`}</p>}
     <Radio.Group className="rule-meaning-options product-choice-cards" aria-label={scenario.question} value={choice} disabled={busy} onChange={event=>setChoice(event.target.value)}>
       {scenario.options.map(item=><Radio value={item.option_id} key={item.option_id}><strong>{item.label}</strong><span>{item.explanation}</span></Radio>)}

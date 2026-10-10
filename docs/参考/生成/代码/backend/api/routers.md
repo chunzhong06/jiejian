@@ -214,10 +214,11 @@
 
 [打开源码](../../../../../../product/backend/api/routers/system/mcp_access.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `class ClientConnectRequest`
 - `class MCPProjectGrantRequest`
-- `build_mcp_access_router(context, access) -> APIRouter`
+- `build_mcp_access_router(context, access, connections) -> APIRouter`
 
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.workflows.agent_access.service`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.workflows.agent_access.connections`、`product.backend.workflows.agent_access.service`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/system/system.py`
 

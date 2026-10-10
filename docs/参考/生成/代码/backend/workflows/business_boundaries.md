@@ -20,6 +20,7 @@
 
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/decisions.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `CANDIDATE_REVISION_GUIDANCE`
 - `scenario_state(work, value, extra)`
 - `decision_digest(states)`
 - `pending_scenario_issues(states, conflicts)`

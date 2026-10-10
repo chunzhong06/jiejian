@@ -55,6 +55,51 @@ def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
                     saved = await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": request})
                     assert saved.structured_content["assessment"] == "REVIEWABLE"
                     assert core.business_boundaries.view(project).policy_epoch == 0
+                    # SDK须收到精确修订和字段位置，而不是候选原文或泛泛的返回GUI提示。
+                    revision_request = deepcopy(request)
+                    revision_request.update(operation_id=uuid4().hex, candidate_id=saved.structured_content['candidate']['candidate_id'], expected_revision=1)
+                    revision_request['content']['unresolved_questions']=['secret-canary-question-one', 'secret-canary-question-two']
+                    await client.call_tool('jiejian_rule_candidate_save', {'project_id':project,'candidate':revision_request})
+                    revision_request.update(operation_id=uuid4().hex, expected_revision=2)
+                    revision_request['content']['unresolved_questions']=[]
+                    with pytest.raises(MCPError) as revision_failure:
+                        await client.call_tool('jiejian_rule_candidate_save', {'project_id':project,'candidate':revision_request})
+                    diagnostic=revision_failure.value.data
+                    assert diagnostic['details']['reason']=='CANDIDATE_QUESTION_REVIEW_REQUIRED'
+                    assert diagnostic['details']['revision']==2
+                    assert [issue['path'] for issue in diagnostic['details']['issues']]==[
+                        'candidate.content.unresolved_questions[0]','candidate.content.unresolved_questions[1]']
+                    assert '保存成功后' in diagnostic['recovery']
+                    assert 'secret-canary' not in str(revision_failure.value) + str(diagnostic)
+                    latest=(await client.call_tool('jiejian_rule_candidate_show', {'project_id':project,'candidate_id':revision_request['candidate_id']})).structured_content
+                    assert latest['candidate']['revision']==2
+                    assert latest['revision_guidance']==context['revision_guidance']
+                    permission=deepcopy(content['permissions'][0])
+                    base_scene={'scenario_id':'rsc_'+'1'*16,'original_excerpt':content['original_text'],'question':'如何确认发布范围？',
+                        'options':[{'option_id':'rop_'+str(index)*16,'label':label,'explanation':label,'replacements':[deepcopy(permission)]}
+                            for index,label in [(1,'核对公开资料'),(2,'核对内部资料')]]}
+                    cases=[('excerpt','scenario_excerpt_mismatch','content.scenarios[0].original_excerpt'),
+                        ('outside','scenario_replacement_outside','content.scenarios[0].options[0].replacements'),
+                        ('set','scenario_replacement_set_mismatch','content.scenarios[0].options'),
+                        ('replacement','scenario_replacement_duplicate','content.scenarios[0].options[0].replacements'),
+                        ('option','scenario_option_duplicate','content.scenarios[0].options'),
+                        ('scenario','scenario_id_duplicate','content.scenarios')]
+                    for fault,code,path in cases:
+                        invalid=deepcopy(request);invalid['operation_id']=uuid4().hex
+                        scene=deepcopy(base_scene);invalid['content']['scenarios']=[scene]
+                        if fault=='excerpt':scene['original_excerpt']='secret-canary-unmatched-excerpt'
+                        elif fault=='outside':
+                            for option in scene['options']:option['replacements'][0]['item_id']='pperm_'+'2'*16
+                        elif fault=='set':scene['options'][0]['replacements'][0]['item_id']='pperm_'+'2'*16
+                        elif fault=='replacement':scene['options'][0]['replacements'].append(deepcopy(permission))
+                        elif fault=='option':scene['options'][1]['option_id']=scene['options'][0]['option_id']
+                        elif fault=='scenario':invalid['content']['scenarios'].append(deepcopy(scene))
+                        with pytest.raises(MCPError) as scene_failure:
+                            await client.call_tool('jiejian_rule_candidate_save', {'project_id':project,'candidate':invalid})
+                        issues=scene_failure.value.data['details']['issues']
+                        assert issues[0]['code']==code
+                        assert issues[0]['path']=='candidate.'+path
+                        assert 'secret-canary' not in str(scene_failure.value)+str(scene_failure.value.data)
                     effect["effect_kind"] = "STATE_MUTATION"
                     assert not validator.is_valid(request)
                     with pytest.raises(MCPError) as wrong_kind:

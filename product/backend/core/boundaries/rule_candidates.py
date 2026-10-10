@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from product.backend.core.boundaries.entities import BoundaryModel
 from product.backend.core.boundaries.proposals import (
@@ -78,13 +79,18 @@ class RuleCandidateContentInput(LegacyRuleCandidateContent):
     @model_validator(mode="after")
     def scenario_references(self):
         if len({item.scenario_id for item in self.scenarios}) != len(self.scenarios):
-            raise ValueError("情境标识不能重复")
+            raise PydanticCustomError("scenario_id_duplicate", "情境标识不能重复")
         permission_ids = {item.item_id for item in self.permissions}
-        for scenario in self.scenarios:
-            freeze_scenario(scenario, self)
-            for option in scenario.options:
+        for scenario_index, scenario in enumerate(self.scenarios):
+            try:
+                freeze_scenario(scenario, self)
+            except PydanticCustomError as exc:
+                # 公开错误只补有限位置，原话及替换正文不进入异常上下文。
+                raise PydanticCustomError(exc.type, exc.message_template, {"scenario_index": scenario_index}) from None
+            for option_index, option in enumerate(scenario.options):
                 if not {item.item_id for item in option.replacements} <= permission_ids:
-                    raise ValueError("选项只能替换当前候选内的权限项")
+                    raise PydanticCustomError("scenario_replacement_outside", "选项只能替换当前候选内的权限项",
+                        {"scenario_index": scenario_index, "option_index": option_index})
         return self
 
 

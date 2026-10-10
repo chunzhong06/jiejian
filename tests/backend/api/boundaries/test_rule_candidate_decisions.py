@@ -217,3 +217,46 @@ def test_old_question_must_enter_human_review_before_removal(tmp_path):
         assert updated['assessment']=='NEEDS_CHANGES'
         _,selected=decide(client,prefix,updated)
         assert selected['assessment']=='REVIEWABLE'
+
+
+@pytest.mark.parametrize('conversion', ['none', 'partial', 'paraphrased'])
+def test_revision_reports_every_unmapped_question_without_losing_original_requirements(tmp_path, conversion):
+    with TestClient(create_app(tmp_path/'var',start_worker=False,environ={})) as client:
+        project=_project(client,tmp_path/'source');prefix=f'/api/projects/{project}/business-boundaries'
+        content=scenario_content(); first_scene=content.pop('scenarios')[0]
+        second_scene={**deepcopy(first_scene),'scenario_id':'rsc_2222222222222222','question':'评审能否发布负责人的公开资料？'}
+        content['unresolved_questions']=[first_scene['question'],second_scene['question']]
+        content['unsupported_constraints']=['跨检查窗口的历史记录尚未确认']
+        _,first=_save(client,prefix,content)
+        incoming=deepcopy(content);incoming['unresolved_questions']=[]
+        incoming['scenarios']=[] if conversion=='none' else [deepcopy(first_scene)]
+        if conversion=='paraphrased':
+            incoming['scenarios'][0]['question']='是否允许评审发布负责人的资料？'
+        operation=uuid4().hex
+        command={'operation_id':operation,'candidate_id':first['candidate']['candidate_id'],'expected_revision':1,
+            'expected_basis_id':first['candidate']['basis_id'],'content':incoming}
+        rejected=client.post(prefix+'/rule-candidates',json=command)
+        assert rejected.status_code==409
+        details=rejected.json()['error']['details']
+        assert details['reason']=='CANDIDATE_QUESTION_REVIEW_REQUIRED'
+        assert [item['question_number'] for item in details['issues']]==([2] if conversion=='partial' else [1,2])
+        assert details['revision']==1 and details['candidate_id']==first['candidate']['candidate_id']
+        assert details['review_url']==first['review_url']
+        assert '保存成功后' in details['recovery']
+        latest=client.get(f"{prefix}/rule-candidates/{first['candidate']['candidate_id']}").json()['data']
+        assert latest['candidate']==first['candidate']
+        assert client.get(f'{prefix}/rule-operations/SAVE/{operation}').json()['data']['status']=='UNKNOWN'
+
+        # 完整迁移先保存待人核对的rev2；原文、禁止结果和真实能力限制均不因转换消失。
+        incoming['scenarios']=[first_scene,second_scene]
+        _,updated=_save(client,prefix,incoming,candidate_id=first['candidate']['candidate_id'],expected_revision=1)
+        assert updated['candidate']['revision']==2
+        for field in ('original_text','permissions','actions','unsupported_constraints'):
+            assert updated['candidate']['content'][field]==first['candidate']['content'][field]
+        assert updated['assessment']=='NEEDS_CHANGES'
+        assert propose(client,prefix,updated).status_code==409
+        _,selected=decide(client,prefix,updated)
+        _,selected=decide(client,prefix,selected,scenario_index=1)
+        assert selected['assessment']=='NEEDS_CHANGES'
+        assert any(issue['code']=='RULE_KIND_UNSUPPORTED' for issue in selected['issues'])
+        assert client.get(prefix).json()['data']['policy_epoch']==0

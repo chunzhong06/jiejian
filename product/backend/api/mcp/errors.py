@@ -26,13 +26,17 @@ def _recovery_for(code: str) -> str:
 
 def _as_mcp_error(exc: JiejianError) -> MCPError:
     payload = exc.to_dict()
+    details = payload.get("details", {})
+    recovery = _recovery_for(exc.code)
+    if details.get("reason") in {"CANDIDATE_QUESTION_REVIEW_REQUIRED", "CANDIDATE_SCENARIO_REVIEW_REQUIRED", "CANDIDATE_SELECTED_REQUIREMENT_CHANGED"}:
+        recovery = details["recovery"]
     return MCPError(
         code=_ACCESS_ERROR_CODES.get(exc.code, -32010),
         message=str(payload["message"]),
         data={
             "error_code": exc.code,
-            "details": payload.get("details", {}),
-            "recovery": _recovery_for(exc.code),
+            "details": details,
+            "recovery": recovery,
         },
     )
 
@@ -69,12 +73,18 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel]) -> list[dic
         "disclosure_projection_required": "DATA_DISCLOSURE必须填写非空的protected_projection，字段须对应真实业务数据",
         "projection_not_applicable": "只有DATA_DISCLOSURE可以填写protected_projection，其他类型应留空",
         "projection_invalid": "字段清单不得重复，字段名须以英文字母开头且只包含字母、数字、下划线、点或连字符",
+        "scenario_excerpt_mismatch": "original_excerpt须来自original_text原话，occurrence不得超过该摘录实际出现次数；不要为匹配摘录改写原始要求",
+        "scenario_replacement_outside": "replacements.item_id必须复用当前content.permissions中的权限项标识",
+        "scenario_replacement_set_mismatch": "同一情境的每个选项必须替换同一组权限项标识",
+        "scenario_replacement_duplicate": "一个选项不能重复替换同一权限项；不同选项可以引用同一权限项",
+        "scenario_option_duplicate": "同一情境内option_id不能重复",
+        "scenario_id_duplicate": "同一候选内scenario_id不能重复",
         "missing": "缺少必填字段", "extra_forbidden": "包含未声明字段，请对照当前输入格式删除",
         "enum": "值不在允许的枚举中", "string_pattern_mismatch": "字段格式不符合公开约束",
         "too_short": "条目数量不足", "too_long": "条目数量超过上限",
         "string_type": "需要文本", "bool_type": "需要布尔值", "int_type": "需要整数",
     }
-    errors = exc.errors(include_input=False, include_context=False, include_url=False)
+    errors = exc.errors(include_input=False, include_context=True, include_url=False)
     issues = []
     for error in errors:
         location = error["loc"]
@@ -87,6 +97,27 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel]) -> list[dic
         code = error["type"] if error["type"] in explanations else "invalid_value"
         if code in {"disclosure_projection_required", "projection_not_applicable"}:
             path += ".protected_projection"
+        elif code in {"scenario_excerpt_mismatch", "scenario_replacement_outside"}:
+            # 只消费自有校验器产生的两个整数索引，不回显任意ctx或异常对象。
+            context = error.get("ctx", {})
+            scenario_index = context.get("scenario_index")
+            path += ".scenarios"
+            if type(scenario_index) is int and 0 <= scenario_index < 10:
+                path += f"[{scenario_index}]"
+            if code == "scenario_excerpt_mismatch":
+                path += ".original_excerpt"
+            else:
+                option_index = context.get("option_index")
+                path += ".options"
+                if type(option_index) is int and 0 <= option_index < 4:
+                    path += f"[{option_index}]"
+                path += ".replacements"
+        elif code == "scenario_id_duplicate":
+            path += ".scenarios"
+        elif code in {"scenario_option_duplicate", "scenario_replacement_set_mismatch"}:
+            path += ".options"
+        elif code == "scenario_replacement_duplicate":
+            path += ".replacements"
         issues.append({"path": path, "code": code, "message": explanations.get(code, "值不符合当前输入格式或字段组合约束")})
         if len(issues) == 8:
             break

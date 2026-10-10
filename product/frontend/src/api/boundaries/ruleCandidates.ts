@@ -19,7 +19,8 @@ export type RuleCandidateView = {
       unresolved_questions: string[]; unsupported_constraints: string[]; scenarios?: RuleScenario[] }
   }
   assessment: 'REVIEWABLE' | 'NEEDS_CHANGES' | 'DECIDED' | 'ALREADY_CONFIRMED'
-  issues: Array<{code: string; message: string; scenario_id?: string}>
+  issues: Array<{code: string; message: string; scenario_id?: string; path?: string}>
+  revision_guidance?: string[]
   scenario_decisions?: ScenarioDecision[]
   meaning_context?: {actors:Array<{item_id:string;display_name:string}>;actions:Array<{item_id:string;display_name:string;effect_catalog:Array<{item_id:string;business_label:string}>}>}
   approval_mappings?: Array<{permission_item_id: string; intent_id: string; revision: number; scenario_decision_ids: string[]}>

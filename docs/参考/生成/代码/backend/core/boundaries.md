@@ -42,7 +42,7 @@
 - `class CandidateEffectReference`
 - `class CandidateApprovalEntities`
 
-静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`typing`、`unicodedata`
+静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`、`unicodedata`
 
 ### `product/backend/core/boundaries/entities.py`
 
@@ -177,7 +177,7 @@
 - `class RuleCandidateSave`
 - `RuleCandidateSave.paired_revision(self) -> RuleCandidateSave`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`
 
 ### `product/backend/core/boundaries/rule_preview.py`
 

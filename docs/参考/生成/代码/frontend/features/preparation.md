@@ -46,12 +46,20 @@
 
 - `MaterialOverview`
 
-静态import / dot-source：`../../../api/preparation/preparation`、`../../../api/preparation/preparationGuidance`、`../../../shared/ui/StatusBadge`、`./MaterialSuggestions`、`./materials.css`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../../api/preparation/preparation`、`../../../api/preparation/preparationGuidance`、`../../../shared/ui/StatusBadge`、`./MaterialSuggestions`、`./materialStatus`、`./materials.css`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/materials/materials.css`
 
 [打开源码](../../../../../../product/frontend/src/features/preparation/materials/materials.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
+
+### `product/frontend/src/features/preparation/materials/materialStatus.ts`
+
+[打开源码](../../../../../../product/frontend/src/features/preparation/materials/materialStatus.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `materialStatus`
+
+静态import / dot-source：`../../../api/preparation/preparation`
 
 ### `product/frontend/src/features/preparation/materials/MaterialSuggestions.tsx`
 
@@ -140,7 +148,7 @@
 
 - `ProvidedMaterialPreparation`
 
-静态import / dot-source：`./usePreparationBatch`、`antd`
+静态import / dot-source：`../../../api/preparation/preparation`、`../materials/materialStatus`、`./usePreparationBatch`、`antd`
 
 ### `product/frontend/src/features/preparation/proof-sources/ReferenceFilePreparation.test.tsx`
 

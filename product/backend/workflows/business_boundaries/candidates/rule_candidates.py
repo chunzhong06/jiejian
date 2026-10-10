@@ -11,7 +11,7 @@ from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, RuleCandidateSave, freeze_candidate_content
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide, RuleCandidateDecision
 from product.backend.workflows.business_boundaries.candidates.decisions import (
-    check_candidate_edit, decision_digest, pending_scenario_issues, scenario_state, selected_permission_issues,
+    CANDIDATE_REVISION_GUIDANCE, check_candidate_edit, decision_digest, pending_scenario_issues, scenario_state, selected_permission_issues,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.business_boundaries.models import (
@@ -37,6 +37,7 @@ class RuleCandidateService:
             # 不输出源码摘要/绝对路径；这个不透明基线仅涵盖正式业务修订。
             result = {"project_id": project_id, "basis_id": "rb_" + draft.boundary_state_fingerprint,
                 "candidate_input_schema": RuleCandidateSave.model_json_schema(),
+                "revision_guidance": CANDIDATE_REVISION_GUIDANCE,
                 "actors": draft.actors, "actions": draft.actions, "permissions": draft.permissions,
                 "supported_relations": ["OWNS", "SAME_ROLE_OTHER_ACCOUNT", "OTHER_ROLE"],
                 "supported_expectations": ["ALLOW", "DENY"],
@@ -207,10 +208,10 @@ class RuleCandidateService:
         issues.extend(pending_scenario_issues(states, conflicts))
         if value.basis_id != "rb_" + draft.boundary_state_fingerprint:
             issues.append({"code": "CONTEXT_STALE", "message": "正式规则已变化，需要重新核对候选"})
-        for text in content.unsupported_constraints:
-            issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text})
-        for text in content.unresolved_questions:
-            issues.append({"code": "NEEDS_CLARIFICATION", "message": text})
+        for index, text in enumerate(content.unsupported_constraints):
+            issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text, "path": f"candidate.content.unsupported_constraints[{index}]"})
+        for index, text in enumerate(content.unresolved_questions):
+            issues.append({"code": "NEEDS_CLARIFICATION", "message": text, "path": f"candidate.content.unresolved_questions[{index}]"})
         permission_ids = {item.item_id for item in content.permissions}
         known_ids = permission_ids | {item.item_id for item in draft.permissions}
         mapped = {item.permission_item_id for item in content.examples}
@@ -249,6 +250,7 @@ class RuleCandidateService:
                 "decision": None if decision is None else decision.decision, "visibility": visibility}
         # 已作决定的候选是历史输入；不能因自身批准推进基线而提示用户再次修改同一候选。
         return {"candidate": value, "assessment": assessment, "visibility": visibility,
+            "revision_guidance": CANDIDATE_REVISION_GUIDANCE,
             "issues": [] if decision else issues, "proposal_id": proposal_id, "decision": decision,
             "scenario_decisions": states,
             "meaning_context": {"actors": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name} for item in merged.actors],

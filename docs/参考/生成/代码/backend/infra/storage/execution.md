@@ -82,6 +82,7 @@
 - `RunRepository.add(self, record) -> None`
 - `RunRepository.get(self, run_id) -> RunRecord &#124; None`
 - `RunRepository.list_for_project(self, project_id) -> tuple[RunRecord, ...]`
+- `RunRepository.completed_for_source(self, project_id, source_fingerprint, policy_epoch, after_us)`
 - `RunRepository.page_for_project(self, project_id, limit, before_created_at_us, before_run_id, lifecycles) -> tuple[RunRecord, ...]`
 - `RunRepository.has_after_for_project(self, project_id, created_at_us, run_id) -> bool`
 - `RunRepository.list_finished_for_project(self, project_id) -> tuple[RunRecord, ...]`

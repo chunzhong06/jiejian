@@ -9,6 +9,58 @@
 [打开源码](../../../../../../product/backend/workflows/agent_access/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
+### `product/backend/workflows/agent_access/client_config.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/client_config.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `CLIENTS`
+- `class ConnectionProblem`
+- `read_config(path) -> str`
+- `json_patch(text, entry, zcode, fallback) -> str`
+- `toml_patch(text, entry) -> str`
+- `dsh_patch(text, entry) -> str`
+- `trae_link(entry) -> str`
+- `connection_matches(client, text, entry) -> bool`
+
+静态import / dot-source：`__future__`、`base64`、`json`、`pathlib`、`re`、`tomllib`、`urllib.parse`、`yaml`
+
+### `product/backend/workflows/agent_access/connection_files.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/connection_files.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class ConnectionProfile`
+- `ConnectionProfile.loopback_only(cls, value)`
+- `class ConnectionReceipt`
+- `class ConnectionBackup`
+- `protect(value) -> bytes`
+- `unprotect(value) -> bytes`
+- `atomic_write(path, value) -> None`
+- `read_profile(path) -> ConnectionProfile`
+
+静态import / dot-source：`__future__`、`os`、`pathlib`、`pydantic`、`tempfile`、`typing`、`urllib.parse`、`作用域内：win32crypt`
+
+### `product/backend/workflows/agent_access/connections.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/connections.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class AgentConnections`
+- `AgentConnections.install(self, client, profile)`
+- `AgentConnections.status(self, client)`
+- `AgentConnections.restore(self, client)`
+
+静态import / dot-source：`__future__`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.workflows.agent_access.client_config`、`product.backend.workflows.agent_access.connection_files`、`product.backend.workflows.agent_access.connector`、`shutil`、`sys`、`threading`、`uuid`
+
+### `product/backend/workflows/agent_access/connector.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/connector.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `MESSAGES`
+- `class ResumeRejected`
+- `relay(profile, source, destination, secret_store, http, observe, reload_profile)`
+- `main() -> int`
+
+静态import / dot-source：`__future__`、`httpx`、`json`、`mcp.shared.inbound`、`mcp_types`、`pathlib`、`product.backend.infra.secrets`、`product.backend.workflows.agent_access.connection_files`、`product.backend.workflows.agent_access.service`、`sys`、`time`
+
 ### `product/backend/workflows/agent_access/service.py`
 
 [打开源码](../../../../../../product/backend/workflows/agent_access/service.py) · Python AST；作用域内import不表示每次调用均执行。
