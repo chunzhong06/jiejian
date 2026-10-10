@@ -4,13 +4,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import sqlite3
 import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
-from secrets import token_urlsafe
-from threading import Thread
 from typing import Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -26,8 +23,6 @@ def _execute_case(
     case_dir.mkdir(parents=True)
     if case.application_id == "tenant-records":
         return _run_tenant_case(case, case_dir)
-    if case.application_id == "collaboration-space":
-        return _run_official_case(case, case_dir)
     raise sample_validation_models.ValidationSuiteError("VALIDATION_APPLICATION_UNSUPPORTED")
 
 
@@ -118,104 +113,11 @@ def _run_tenant_case(
     return replace(observation, process_cleanup_success=True)
 
 
-def _run_official_case(
-    case: PublicValidationCase,
-    case_dir: Path,
-) -> sample_validation_models._ExecutionObservation:
-    """直接运行现有 Official Sample 业务实现，不启动第二个产品 Sample。"""
-
-    from samples.web.collaboration_space.source.server import (
-        create_collaboration_space_server,
-    )
-
-    selector = case.state_selector
-    passwords = {
-        account: f"validation-{account}-{token_urlsafe(18)}"
-        for account in ("alice", "bob")
-    }
-    sessions = {
-        account: f"session-{account}-{token_urlsafe(18)}"
-        for account in ("alice", "bob")
-    }
-    task_bearer = f"task-{token_urlsafe(24)}"
-    server = create_collaboration_space_server(
-        port=0,
-        runtime_root=case_dir / "state",
-        authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-        blob_observation=str(selector.get("observation")),
-        validation_mode=case.mode,
-        validation_implementation=str(selector.get("implementation")),
-        passwords=passwords,
-        session_material=sessions,
-        queue_sas="sv=validation&sig=" + token_urlsafe(24),
-        blob_sas="sv=validation&sig=" + token_urlsafe(24),
-        task_bearer=task_bearer,
-        owner_observer=f"owner-{token_urlsafe(24)}",
-    )
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    origin = f"http://127.0.0.1:{server.server_port}"
-    observation: sample_validation_models._ExecutionObservation | None = None
-    try:
-        initial_state = _official_state(server.storage)
-        allow_marker = f"{case.case_id}-allow"
-        allow_status, allow_task = _official_action(
-            origin,
-            sessions["alice"],
-            task_bearer,
-            allow_marker,
-        )
-        allow_effect = _official_effect(selector, allow_task, allow_control=True)
-        allow_trace = _official_trace(server.runtime_root, allow_marker)
-        server.reset()
-        deny_marker = f"{case.case_id}-deny"
-        deny_status, deny_task = _official_action(
-            origin,
-            sessions["bob"],
-            task_bearer,
-            deny_marker,
-        )
-        deny_effect = _official_effect(selector, deny_task)
-        trace = _official_trace(server.runtime_root, deny_marker)
-        observation = sample_validation_models._ExecutionObservation(
-            allow_status=allow_status,
-            allow_effect=allow_effect,
-            allow_trace=allow_trace,
-            allow_trace_complete=True,
-            deny_status=deny_status,
-            deny_effect=deny_effect,
-            deny_trace=trace,
-            deny_trace_complete=True,
-            actual_identity_attributed=_identity_matches(allow_trace, "alice") and _identity_matches(trace, "bob"),
-            recovery_success=False,
-        )
-        server.reset()
-        observation = replace(observation, recovery_success=_official_state(server.storage) == initial_state)
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-        if thread.is_alive():
-            raise sample_validation_models.ValidationSuiteError("VALIDATION_OFFICIAL_SAMPLE_NOT_CLOSED")
-    if observation is None:
-        raise sample_validation_models.ValidationSuiteError("VALIDATION_OFFICIAL_OBSERVATION_MISSING")
-    return replace(observation, process_cleanup_success=True)
-
 
 def _identity_matches(records, expected: str) -> bool:
     identities = {item.get("subject_id", item.get("identity")) for item in records if item.get("kind") == "IDENTITY"}
     return identities == {expected}
 
-
-def _official_state(storage) -> tuple:
-    # 用真实业务状态和文件回读确认恢复；进程退出只是独立的资源清理事实。
-    with sqlite3.connect(storage.database_path) as connection:
-        project = tuple(connection.execute("SELECT project_id,owner_id,export_state,latest_task_id,latest_artifact_id,case_id FROM projects ORDER BY project_id"))
-        jobs = tuple(connection.execute("SELECT task_id FROM export_jobs ORDER BY task_id"))
-        members = tuple(connection.execute("SELECT * FROM members ORDER BY project_id,user_id"))
-    files = tuple((directory.name, tuple(sorted(p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file())))
-                  for directory in (storage.audit_dir, storage.queue_dir, storage.tasks_dir, storage.blob_dir))
-    return project, jobs, members, files
 
 
 def _tenant_action(
@@ -318,69 +220,7 @@ def _tenant_events_from_log(
     return tuple(events)
 
 
-def _official_action(
-    origin: str,
-    session: str,
-    task_bearer: str,
-    marker: str,
-) -> tuple[int, Mapping[str, object]]:
-    status, _ = _http_json(
-        origin,
-        "POST",
-        f"/api/projects/{sample_validation_models.OFFICIAL_PROJECT_ID}/exports",
-        {"resource_id": sample_validation_models.OFFICIAL_RESOURCE_ID},
-        headers={
-            "Cookie": f"jiejian_sample_session={session}",
-            "X-Jiejian-Case-ID": marker,
-        },
-        accepted=(202, 403),
-    )
-    deadline = time.monotonic() + 5
-    task: Mapping[str, object] | None = None
-    while time.monotonic() < deadline:
-        task_status, payload = _http_json(
-            origin,
-            "GET",
-            f"/api/tasks/{marker}",
-            headers={"Authorization": f"Bearer {task_bearer}"},
-            accepted=(200,),
-        )
-        if task_status == 200 and isinstance(payload, dict):
-            task = payload
-            if task.get("state") in {"SUCCESS", "FAILED", "NOT_CREATED", "REVOKED"}:
-                return status, task
-        time.sleep(0.02)
-    raise sample_validation_models.ValidationSuiteError("VALIDATION_OFFICIAL_TASK_TIMEOUT")
 
-
-def _official_effect(
-    selector: Mapping[str, object],
-    task: Mapping[str, object],
-    *,
-    allow_control: bool = False,
-) -> ObservedEffect:
-    if selector.get("observation") == "UNAVAILABLE" and not allow_control:
-        return ObservedEffect.UNKNOWN
-    return (
-        ObservedEffect.CONFIRMED
-        if task.get("state") == "SUCCESS"
-        else ObservedEffect.ABSENT
-    )
-
-
-def _official_trace(
-    runtime_root: Path,
-    marker: str,
-) -> tuple[Mapping[str, object], ...]:
-    path = runtime_root / "audit" / "events.jsonl"
-    if not path.is_file():
-        return ()
-    records: list[Mapping[str, object]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        value = json.loads(line)
-        if isinstance(value, dict) and value.get("case_tag") == marker:
-            records.append(value)
-    return tuple(records)
 
 
 def _node_executable() -> Path:

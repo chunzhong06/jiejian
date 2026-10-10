@@ -19,6 +19,39 @@ def command(**changes):
         expected_version=0, changes=(RecordChange(path=("state",), value="changed"),), **changes)
 
 
+def test_trace_requires_own_request_parent_and_committed_operation(tmp_path):
+    from product.protocols.runtime.record_trace import RecordTraceInput,RecordTraceWrite
+    value=store(tmp_path)
+    first=value.open_scope('a'*64,'b'*64)
+    second=value.open_scope('c'*64,'d'*64)
+    def append(scope,kind='ENTRY',parent=None,operation=None):
+        return value.append_trace(RecordTraceWrite(scope_id=scope.scope_id,collection='records',resource_id='item-1',
+            event=RecordTraceInput(kind=kind,semantic_key='test_event',parent_event_id=parent,operation_id=operation,
+                subject_id='person-2',source_component='ordinary_app',source_location='handler')))
+    entry=append(first)
+    with pytest.raises(ValueError,match='trace parent'):
+        append(second,'IDENTITY',entry.event_id)
+    second_entry=append(second)
+    operation=value.transact(command(scope_id=first.scope_id))
+    with pytest.raises(RecordStoreError,match='TRACE_OPERATION_MISMATCH'):
+        append(second,'PERSISTENT_EFFECT',second_entry.event_id,operation.operation_id)
+    committed=append(first,'PERSISTENT_EFFECT',entry.event_id,operation.operation_id)
+    value.close_scope(first.scope_id,True)
+    with pytest.raises(RecordStoreError,match='RECORD_SCOPE_CLOSED'):
+        append(first,'IDENTITY',committed.event_id)
+    value.close()
+    restored=TransactionRecordStore(value.database)
+    try:
+        log=restored.trace_view('records','item-1',first.request_nonce)
+        assert log.scope_state=='COMPLETE' and log.request_digest==first.request_digest
+        assert [item.event_id for item in log.events]==[entry.event_id,committed.event_id]
+        assert log.events[-1].operation_id==operation.operation_id
+        empty=restored.open_scope('e'*64,'f'*64)
+        restored.close_scope(empty.scope_id,True)
+        assert not restored.trace_view('records','item-1',empty.request_nonce).events
+    finally:restored.close()
+
+
 def test_occurrence_history_survives_restoring_final_state_and_restart(tmp_path):
     value = store(tmp_path)
     operation = value.transact(command().model_copy(update={"changes": (
@@ -116,6 +149,29 @@ def test_closed_request_cannot_be_reopened_or_receive_later_writes(tmp_path):
     view=restored.proof_view('records','item-1',request_nonce='a'*64)
     assert view.scope.state=='COMPLETE' and len(view.operations)==1
     restored.close()
+
+
+def test_request_ordinal_is_independent_of_internal_steps_and_closed_receipt_survives(tmp_path):
+    value=store(tmp_path)
+    try:
+        scope=value.open_scope('a'*64,'b'*64)
+        requests=[]
+        for index in range(32):
+            changes=tuple(RecordChange(path=('nested','flag'),value=bool(step%2)) for step in range(index%9))
+            request=command(scope_id=scope.scope_id).model_copy(update={'request_key':f'request-{index}',
+                'expected_version':index,'changes':changes})
+            operation=value.transact(request);requests.append(request)
+            assert operation.scope_ordinal==index and operation.commit_semantics=='ATOMIC_COMMIT'
+        with pytest.raises(RecordStoreError,match='RECORD_REQUEST_LIMIT'):
+            value.transact(requests[-1].model_copy(update={'request_key':'over-limit','expected_version':32}))
+        value.close_scope(scope.scope_id,True)
+        assert value.transact(requests[0]).scope_ordinal==0
+        with pytest.raises(RecordStoreError,match='RECORD_OPERATION_CONFLICT'):
+            value.transact(requests[0].model_copy(update={'subject_id':'different-person'}))
+        view=value.proof_view('records','item-1',request_nonce='a'*64)
+        assert [item.scope_ordinal for item in view.operations]==list(range(32))
+        assert value.read('records','item-1').version==32
+    finally:value.close()
 
 
 @pytest.mark.parametrize("payload", [{"token": "not-a-real-token"}, {"a": float("nan")}, {"a": "x" * 9000}])

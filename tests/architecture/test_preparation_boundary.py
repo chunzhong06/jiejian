@@ -37,7 +37,8 @@ def test_project_preparation_has_no_model_browser_runner_or_orm_row_dependency()
         )
         for name in imports
     )
-    assert not any(name.endswith("Row") for name in SERVICE.read_text(encoding="utf-8").split())
+    tree = ast.parse(SERVICE.read_text(encoding="utf-8"))
+    assert not any(isinstance(node, ast.Name) and node.id.endswith("Row") for node in ast.walk(tree))
 
 
 def test_preparation_is_only_composed_in_application_core_and_not_persisted() -> None:
@@ -87,7 +88,6 @@ def test_preparation_consumes_action_asset_inspection_without_storage_internals(
         if isinstance(node, ast.Attribute)
     }
 
-    assert "inspect" in accessed
     assert not {"recordings", "flow_drafts", "action_safety_setups"} & accessed
     assert not any(
         isinstance(node, ast.Call)

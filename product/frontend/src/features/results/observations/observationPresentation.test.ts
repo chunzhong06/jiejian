@@ -1,7 +1,7 @@
 // 分类展示未知原因，确保过程记录不被翻译成业务结果已确认。
 import { expect, it } from 'vitest'
 import { observationStatus } from './observationPresentation'
-import { observation } from '../../../testing/fixtures/results'
+import { observation } from '../../../shared/testing/results'
 it('不适用阶段不是读取失败，单点状态不是业务效果缺失', () => {
   expect(observationStatus({ ...observation, state:'UNKNOWN', reason_codes:['OBSERVER_PHASE_UNAVAILABLE'] }).label).toBe('本阶段不采集')
   expect(observationStatus({ ...observation, phase:'BASELINE', state:'UNKNOWN', reason_codes:['OBSERVATION_UNINTERPRETED'] }).label).toBe('初始对照记录')

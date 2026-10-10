@@ -64,6 +64,7 @@ class LocalWorkerSupervisor:
         clock_us=None,
         targets: JobTargetRegistry | None = None,
         job_authorized=None,
+        capture_publisher=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
@@ -80,7 +81,8 @@ class LocalWorkerSupervisor:
         self._lease_owner: str | None = None
         self._next_recovery_scan_us = 0
         self._recovered_jobs = 0
-        self._job_authorized = job_authorized or (lambda job: job.preflight_id is None)
+        self._job_authorized = job_authorized or (lambda job: job.preflight_id is None and job.reference_capture_id is None)
+        self._capture_publisher=capture_publisher
 
     def start(self) -> None:
         """幂等启动后台调度；已有存活线程时不创建第二个 Worker。"""
@@ -255,10 +257,14 @@ class LocalWorkerSupervisor:
                 if request is None:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "预检查输入不存在")
                 secret_names = check_secret_names(request)
+            elif job.reference_capture_id is not None:
+                with self._uow_factory() as work:
+                    request=work.proof_artifacts.capture(job.project_id,job.reference_capture_id)
+                if request is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'取样输入不存在')
+                secret_names=check_secret_names(request)
             environment = self._environment_provider(secret_names)
             self._process = WorkerDispatcher(
                 var_dir=self.var_dir,
-                uow_factory=self._uow_factory,
                 environ=environment,
             ).start(
                 job_id=job.job_id,
@@ -433,6 +439,19 @@ class LocalWorkerSupervisor:
         )
 
     def _reconcile_check(self, job) -> bool:
+        if job.reference_capture_id is not None:
+            publisher=self._capture_publisher
+            if publisher is None:return False
+            if not publisher.reports.has_publication(job.reference_capture_id):return False
+            try:
+                report=publisher.reports.publication(job.reference_capture_id)
+                publisher.publish(report,require_active_lease=False)
+            except JiejianError as exc:
+                if not exc.code.startswith(('ARTIFACT_','RUNNER_PROTOCOL_','STATE_PRECONDITION')):raise
+                logger.warning('REFERENCE_CAPTURE_RECONCILIATION_REJECTED',extra={'job_id':job.job_id,'error_code':exc.code})
+                return False
+            self._recovered_jobs+=1
+            return True
         if job.operation_type != "CHECK" or job.run_id is None:
             return False
         from product.backend.infra.artifacts.checks.check_packages import check_final_directory

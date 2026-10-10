@@ -44,6 +44,7 @@ export type CheckBreakpoint = {
   reason_codes?: string[]
 }
 export type StoryTraceEvent = {
+  semantic_key?: string | null
   event_id: string; parent_event_ids: string[]
   kind: 'ENTRY' | 'IDENTITY' | 'AUTHORIZATION' | 'PERSISTENT_EFFECT' | 'MESSAGE' | 'DELEGATION' | 'FINAL_EFFECT' | 'RECOVERY'
   authorization_decision: 'ALLOW' | 'DENY' | null; effect_id: string | null; dispatch_effect_ids: string[]
@@ -72,16 +73,26 @@ export type ActionResultStory = {
 }
 export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null }
 export type CheckEvidence = {
-  schema_version: '1'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
+  schema_version: '1' | '2'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
   trace: { complete: boolean; events: Array<{ event_id: string; parent_event_ids: string[]; kind: string; source_component: string; source_location: string }> } | null
 }
+export type EvidenceRecordLink = {record_id:string;kind:'FACT'|'OUTCOME'|'OBSERVATION'|'TRACE';label:string;proof_fingerprint:string|null;observer_id:string|null;phase:string|null;event_id:string|null}
+export type EvidenceRecordIndex = {project_id:string;run_id:string;case_id:string;action_id:string;evidence_id:string;records:EvidenceRecordLink[]}
+export type EvidenceRecordView = Omit<EvidenceRecordIndex,'records'> & {record:EvidenceRecordLink;summary:string;published_judgement:string;role:'PROOF'|'SUPPORTING';
+  verification:Array<{key:string;title:string;status:'CONFIRMED'|'LIMITED'|'UNKNOWN';text:string;record_refs:string[];source:Record<string,string>;fragment:Record<string,unknown>}>;
+  values:Array<{label:string;before?:unknown;after?:unknown;value?:unknown}>;location:Record<string,string>;fragment:Record<string,unknown>;related_records:EvidenceRecordLink[];limitations:string[]}
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`
 const runPath = (id: string) => `/api/runs/${encodeURIComponent(id)}`
 export type CheckHistoryCursor = { created_at_us: number; run_id: string }
-export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; source_run_id: string | null }
+export type RuleHistoryReference={intent_id:string;revision:number;intent_hash:string}
+export type HistoryCoverage={project_id:string;checkpoint:number;generation:number;processed:number;failed:number;missing:number;status:'COMPLETE'|'INCOMPLETE'|'IN_PROGRESS'|'NEEDS_SCAN'}
+export type RuleHistoryItem=RuleHistoryReference & {expectation:'ALLOW'|'DENY';effective_state:string;relation:string;action_label:string;subject_label:string;owner_label:string;latest_run_id:string|null;case_results:Array<{case_id:string;verdict:'SAFE'|'VULNERABLE'|'INCONCLUSIVE'}>;result_integrity:string;index_matches:boolean}
+export type RuleHistoryPage={project_id:string;items:RuleHistoryItem[];next_cursor:string|null;coverage:HistoryCoverage}
+export type HistoryMaintenanceReceipt={project_id:string;operation_id:string;checkpoint:number;processed:number;failed:number;complete:boolean}
+export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; source_run_id: string | null;matching_cases?:string[];matching_verdicts?:string[] }
 export type CheckHistoryPage = { project_id: string; items: CheckHistoryItem[]; next_cursor: CheckHistoryCursor | null }
-export type CheckHistoryQuery = { query?: string; verdict?: CheckVerdict; lifecycle?: CheckStatus['run']['lifecycle']; cursor?: CheckHistoryCursor | null }
+export type CheckHistoryQuery = { query?: string; verdict?: CheckVerdict; lifecycle?: CheckStatus['run']['lifecycle']; cursor?: CheckHistoryCursor | null;rule?:RuleHistoryReference }
 const statusReads = new Map<string, Promise<CheckStatus>>()
 function readStatus(id: string) {
   const existing = statusReads.get(id)
@@ -97,19 +108,30 @@ export const currentChecksApi = {
     if (options.verdict) query.set('verdict', options.verdict)
     if (options.lifecycle) query.set('lifecycle', options.lifecycle)
     if (options.cursor) { query.set('before_created_at_us', String(options.cursor.created_at_us)); query.set('before_run_id', options.cursor.run_id) }
+    if(options.rule){query.set('intent_id',options.rule.intent_id);query.set('revision',String(options.rule.revision));query.set('intent_hash',options.rule.intent_hash)}
     return request<CheckHistoryPage>(`${projectPath(id)}/check-history?${query}`)
   },
+  historyRules:(projectId:string,after?:string|null,archived=false)=>request<RuleHistoryPage>(`${projectPath(projectId)}/check-history/rules?${new URLSearchParams({limit:'25',include_archived:String(archived),...(after?{after}:{})})}`),
+  historyCoverage:(projectId:string)=>request<HistoryCoverage>(`${projectPath(projectId)}/check-history/index-status`),
+  maintainHistory:(projectId:string,body:{operation_id:string;expected_checkpoint:number;limit:number})=>request<HistoryMaintenanceReceipt>(`${projectPath(projectId)}/check-history/index-maintenance`,{method:'POST',body:JSON.stringify(body)}),
+  historyReceipt:(projectId:string,operationId:string)=>request<{status:'FOUND'|'NOT_FOUND';receipt?:HistoryMaintenanceReceipt}>(`${projectPath(projectId)}/check-history/index-maintenance/${encodeURIComponent(operationId)}`),
   preview: (id: string, changeId?: string | null) => request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
-  list: (id: string) => request<CheckStatus[]>(`${projectPath(id)}/runs`),
+  list: (id: string, activeOnly = false) => request<CheckStatus[]>(`${projectPath(id)}/runs${activeOnly ? '?active_only=true' : ''}`),
   submit: (id: string, fingerprint: string, key: string, changeId?: string | null) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
     method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}) }),
   }),
   cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   status: readStatus,
   story: (id: string) => request<ResultStory>(`${runPath(id)}/result-story`),
+  evidenceBundle:(projectId:string,runId:string,caseId:string,ids:string[])=>{
+    const query=new URLSearchParams({project_id:projectId,case_id:caseId});ids.forEach(id=>query.append('evidence_id',id))
+    return request<{project_id:string;run_id:string;case_id:string;items:Array<{document:CheckEvidence;index:EvidenceRecordIndex}>}>(`${runPath(runId)}/evidence-bundle?${query}`)
+  },
   evidence: async (runId: string, evidenceId: string) => {
     const value = await request<CheckEvidence>(`${runPath(runId)}/evidence/${encodeURIComponent(evidenceId)}`)
-    if (value.schema_version !== '1' || value.run_id !== runId || value.evidence_id !== evidenceId) throw new ApiError('ARTIFACT_MANIFEST', '证据版本或所属检查不一致。')
+    if (!['1','2'].includes(value.schema_version) || value.run_id !== runId || value.evidence_id !== evidenceId) throw new ApiError('ARTIFACT_MANIFEST', '证据版本或所属检查不一致。')
     return value
   },
+  evidenceRecords:(projectId:string,runId:string,evidenceId:string,caseId:string)=>request<EvidenceRecordIndex>(`${runPath(runId)}/evidence/${encodeURIComponent(evidenceId)}/records?${new URLSearchParams({project_id:projectId,case_id:caseId})}`),
+  evidenceRecord:(projectId:string,runId:string,evidenceId:string,caseId:string,recordId:string)=>request<EvidenceRecordView>(`${runPath(runId)}/evidence/${encodeURIComponent(evidenceId)}/records/${encodeURIComponent(recordId)}?${new URLSearchParams({project_id:projectId,case_id:caseId})}`),
 }

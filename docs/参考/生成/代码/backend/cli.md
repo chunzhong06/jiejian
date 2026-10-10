@@ -49,7 +49,7 @@
 
 - `class GuiBrowser`
 - `class ServeReadinessStatus`
-- `serve_command(context, host, port, open_browser, browser, frontend_dir, official_sample_root) -> None`
+- `serve_command(context, host, port, open_browser, launcher_event, browser, frontend_dir, official_sample_root) -> None`
 - `doctor_command(context) -> None`
 - `maintenance_clean_assistant_command(context, confirm) -> None`
 - `maintenance_clean_logs_command(context, confirm) -> None`
@@ -76,9 +76,10 @@
 [打开源码](../../../../../product/backend/cli/gui_console.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `console_key_reader() -> Callable[[], str &#124; None] &#124; None`
+- `launcher_key_reader(event_name)`
 - `run_gui_console(open_browser, stopped, is_stopping, emit, read_key, monotonic) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`os`、`sys`、`threading`、`time`、`作用域内：msvcrt`
+静态import / dot-source：`__future__`、`collections.abc`、`contextlib`、`os`、`sys`、`threading`、`time`、`作用域内：ctypes`、`作用域内：msvcrt`、`作用域内：re`
 
 ### `product/backend/cli/localization.py`
 

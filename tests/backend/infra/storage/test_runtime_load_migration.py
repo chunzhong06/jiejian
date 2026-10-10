@@ -31,7 +31,8 @@ def _prior_with_published_run(tmp_path):
 
 def _snapshot(path):
     with sqlite3.connect(path) as connection:
-        return {name:connection.execute(f"SELECT * FROM {name}").fetchall()
+        connection.row_factory = sqlite3.Row
+        return {name:[dict(row) for row in connection.execute(f"SELECT * FROM {name}")]
             for name in ("runs","jobs","job_events","check_publications")}
 
 
@@ -41,7 +42,8 @@ def test_runtime_load_upgrade_preserves_published_jobs_and_children(tmp_path):
     upgrade_database(path)
     require_current_database(path)
     after = _snapshot(path)
-    assert after["jobs"] == [(*row,None,None) for row in before["jobs"]]
+    # 旧字段逐项原样保留；后续任务目标明确为空，不依赖物理列的尾部顺序。
+    assert after["jobs"] == [row | {'runtime_load_id':None,'preflight_id':None,'reference_capture_id':None} for row in before["jobs"]]
     for name in ("runs","job_events","check_publications"):
         assert after[name] == before[name]
     with sqlite3.connect(path) as connection:

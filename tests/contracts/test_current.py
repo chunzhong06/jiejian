@@ -25,7 +25,7 @@ def test_job_fixture_contract_contains_every_target():
 def test_current_worker_registry_is_explicit():
     from product.backend.infra.runtime.jobs.targets import current_check_and_recording_targets
     targets = current_check_and_recording_targets().target_types
-    assert tuple(item.value for item in targets) == ("PROOF_PREFLIGHT", "RECORDING", "RUN")
+    assert tuple(sorted('CHECK' if item.value == 'RUN' else item.value for item in targets)) == WORKER_CAPABILITIES
 
 
 def test_test_catalog_covers_all_python_and_frontend_tests():

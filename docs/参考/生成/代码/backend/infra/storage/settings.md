@@ -15,15 +15,7 @@
 
 - `class LLMProfileRow`
 - `class AIAssistanceSettingsRow`
-- `class LLMProfileRepository`
-- `LLMProfileRepository.add(self, profile) -> None`
-- `LLMProfileRepository.get(self, profile_name) -> LLMProfileConfig &#124; None`
-- `LLMProfileRepository.list(self) -> tuple[LLMProfileConfig, ...]`
-- `LLMProfileRepository.replace(self, profile) -> None`
-- `class AIAssistanceSettingsRepository`
-- `AIAssistanceSettingsRepository.get(self) -> AIAssistanceSettings`
-- `AIAssistanceSettingsRepository.replace(self, settings) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.infra.llm.config`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
+静态import / dot-source：`__future__`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
 <!-- GENERATED:END -->

@@ -31,6 +31,7 @@
 - `class IdentityPreparationManager`
 - `IdentityPreparationManager.active_runtime_paths(self) -> tuple[Path, ...]`
 - `IdentityPreparationManager.start(self, identity_id) -> IdentityPreparationView`
+- `IdentityPreparationManager.prepare_official(self, identity_id, account, origin) -> IdentityPreparationView &#124; None`
 - `IdentityPreparationManager.status(self, preparation_id) -> IdentityPreparationView`
 - `IdentityPreparationManager.confirm(self, preparation_id) -> IdentityPreparationView`
 - `IdentityPreparationManager.cancel(self, preparation_id) -> IdentityPreparationView`

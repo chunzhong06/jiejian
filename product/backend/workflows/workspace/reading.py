@@ -77,11 +77,13 @@ class WorkspaceReader:
                 revalidation_status=change.revalidation.status,can_execute=change.revalidation.can_execute,
                 reason=change.manifest.reason,created_at_us=change.manifest.created_at_us,
                 submitted_by=change.manifest.submitted_by)
-        repair = repairs.evaluate(project_id)
-        for entry in reader.list_for_project(project_id):
+        readings = reader.project_readings(project_id)
+        repair = repairs.evaluate(project_id, readings=readings)
+        for entry, package in readings:
             if entry.result_integrity != "VALID" or entry.run.policy_epoch != boundary.policy_epoch:
                 continue
-            package = reader.package(entry.run.run_id,project_id=project_id)
+            if package is None:
+                continue
             if package.request.source_fingerprint == understanding.source_fingerprint:
                 latest_result = WorkspaceLatestResult(run_id=entry.run.run_id,verdict=entry.run.verdict.value,
                     policy_epoch=entry.run.policy_epoch,created_at_us=entry.run.created_at_us,

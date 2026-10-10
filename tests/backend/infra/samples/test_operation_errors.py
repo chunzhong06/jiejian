@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.samples.official import OfficialSampleManager
-from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment, write_python_installation_contract
 
 
 def test_stop_keeps_first_termination_error_and_attempts_existing_cleanup(tmp_path, monkeypatch):
@@ -28,7 +28,7 @@ def test_stop_keeps_first_termination_error_and_attempts_existing_cleanup(tmp_pa
 
 def test_start_log_failure_does_not_mask_launch_error(tmp_path, monkeypatch):
     first = JiejianError(ErrorCode.RUNTIME_ENVIRONMENT_INVALID, "启动首错")
-    manager = OfficialSampleManager(tmp_path / "var", Path(__file__).resolve().parents[4] / "samples/web/collaboration_space",
+    manager = OfficialSampleManager(tmp_path / "var", write_python_installation_contract(tmp_path / "installation-contract"),
         runtime_identity_environment(tmp_path / "var"), process_launcher=Mock(side_effect=first))
     monkeypatch.setattr("product.backend.infra.samples.official._append_event", Mock(side_effect=OSError("log failed")))
     with pytest.raises(JiejianError) as error:

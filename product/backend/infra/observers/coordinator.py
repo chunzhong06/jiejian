@@ -15,13 +15,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any, Protocol
 
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-if TYPE_CHECKING:
-    from product.backend.infra.execution.port import TargetCaseSession
 from product.backend.infra.observers.adapters.async_task import run_async_task_observer
 from product.backend.infra.observers.adapters.audit_log import run_audit_log_observer
 from product.backend.infra.observers.adapters.azure_blob import run_azure_blob_observer
@@ -29,6 +27,11 @@ from product.backend.infra.observers.adapters.azure_queue import run_azure_queue
 from product.backend.infra.observers.registry import ObserverRegistry
 from product.backend.infra.observers.adapters.sqlite import run_sqlite_observer
 from product.protocols import AuditLogStartCursor, Correlation, ObservationEnvelope, ObservationPhase, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType
+
+
+class TargetCaseSession(Protocol):
+    """当前观察协调器需要的唯一目标端口；不包含旧Runner生命周期。"""
+    def observe_target(self, spec, binding, correlation, phase): ...
 
 
 def _failure(spec: ObserverSpec, code: str | None = None) -> ObserverOutcome:

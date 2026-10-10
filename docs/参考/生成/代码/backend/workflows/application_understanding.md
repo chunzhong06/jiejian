@@ -108,7 +108,7 @@
 - `ApplicationUnderstandingService.discover_endpoints(self, project_id) -> EndpointDiscoveryResult`
 - `ApplicationUnderstandingService.confirm_endpoint(self, project_id, endpoint, revision) -> ApplicationUnderstanding`
 - `ApplicationUnderstandingService.endpoint_status(self, record) -> Literal['NEEDS_CONFIRMATION', 'CONFIRMED', 'UNAVAILABLE']`
-- `ApplicationUnderstandingService.authorize_source_analysis(self, project_id, revision, for_controlled_start) -> ApplicationUnderstanding`
+- `ApplicationUnderstandingService.authorize_source_analysis(self, project_id, revision) -> ApplicationUnderstanding`
 - `ApplicationUnderstandingService.analyze_source(self, project_id, revision) -> ApplicationUnderstanding`
 - `ApplicationUnderstandingService.analyze_source_for_change(self, project_id, revision) -> ApplicationUnderstanding`
 - `ApplicationUnderstandingService.inspect_source_fingerprint(self, project_id) -> str`

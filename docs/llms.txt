@@ -85,7 +85,7 @@ MCP、原Agent连接、READ/PREPARE/EXECUTE、暂停撤权
 公共格式、独立root、strict reader、canonical/hash、Schema
 → docs/工程/数据与协议/修改公共协议.md
 
-模型服务、Provider、受限解释、权限自然语言草稿
+原Agent统一协作、旧模型能力退出、历史配置保留
 → docs/能力/控制面/修改模型服务.md
 
 Portable、发行结构、构建与打包

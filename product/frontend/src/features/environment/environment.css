@@ -21,6 +21,7 @@
 
 .environment-facts>div {
   display: flex;
+  justify-content: center;
   align-items: flex-start;
   gap: var(--space-12);
   padding-inline: var(--space-20);
@@ -202,4 +203,11 @@
 /* 全新示例的说明与启动操作成一组；主动作在当前区域右侧。 */
 .sample-start-row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-32); }
 .sample-start-copy { flex:1; min-width:0; }
+.sample-management-row { display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-24); }
+.sample-management-row > div:first-child { flex:1 1 340px;min-width:0; }
+.sample-management-row h3 { margin:0; }
+.sample-management-row p { margin:var(--space-8) 0 0;max-width:60ch; }
+.sample-management-actions { margin-inline-start:auto;justify-content:flex-end; }
 @media(max-width:700px) { .sample-start-row { flex-wrap:wrap; }.sample-start-row > .ant-btn { margin-left:auto; } }
+
+@media(max-width:700px) { .environment-facts > div { justify-content:flex-start; } }

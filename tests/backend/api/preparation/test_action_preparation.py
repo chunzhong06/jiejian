@@ -27,11 +27,13 @@ def test_preparation_get_matches_source_without_writes_or_external_calls(tmp_pat
     with TestClient(app) as client:
         # Windows 事件循环先建立自己的 socketpair，再对请求期间的目标网络调用设断言。
         monkeypatch.setattr(socket.socket, "connect", forbidden)
+        statements.clear()
         response = client.get(f"/api/projects/{h.project_id}/preparation")
         assert response.status_code == 200
         assert response.json()["data"] == expected
         assert client.get(f"/api/projects/{h.project_id}/preparation").json() ["data"] == expected
-        assert statements and all(sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
+        # 同一快照中的 BEGIN 不写数据；仍禁止写事务与所有 DML。
+        assert statements and all(sql.strip().upper() == 'BEGIN' or sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
         forbidden.assert_not_called()
         assert transport.mock_calls == []
         assert client.post(f"/api/projects/{h.project_id}/prepare-safe", json={"schema_version": "1"}).status_code == 404

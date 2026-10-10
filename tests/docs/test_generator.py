@@ -47,6 +47,10 @@ def _declared_repository_paths(root: Path, text: str) -> list[tuple[str, Path]]:
     declared: list[tuple[str, Path]] = []
     for value in _REPOSITORY_PATH.findall(text):
         value = value.split("::", 1)[0]
+        # 内联命令还带参数，只核对脚本路径；目录名中的空格保持原样。
+        command = re.fullmatch(r"(.+?\.(?:py|ps1|cmd|bat))\s+.+", value)
+        if command:
+            value = command.group(1)
         # 通配符和动态运行路径不是可确定验证的仓库位置，不进入存在性门禁。
         if any(character in value for character in "*?[]{}"):
             continue
@@ -252,16 +256,13 @@ def test_dev_script_exposes_read_only_and_update_docs_commands() -> None:
 
 
 @pytest.mark.parametrize("guide_name", _HIGH_VALUE_GUIDES)
-def test_high_value_guide_quick_map_repository_paths_exist(guide_name: str) -> None:
-    """高价值 Guide 的快速修改地图不得把开发者指向不存在的静态仓库位置。"""
+def test_high_value_guide_repository_paths_exist(guide_name: str) -> None:
+    """指南应指向现有仓库位置，不限制修改地图的标题与段落摆放。"""
 
     root = Path(__file__).parents[2]
     guide = root / "docs" / guide_name
     text = guide.read_text(encoding="utf-8")
-    marker = "## 快速找到修改位置"
-    assert marker in text, f"{guide_name} 缺少快速修改地图"
-    section = text.split(marker, 1)[1].split("\n## ", 1)[0]
-    declared = _declared_repository_paths(root, section)
+    declared = _declared_repository_paths(root, text)
 
     assert declared, f"{guide_name} 没有声明可检查的静态仓库位置"
     missing = [value for value, path in declared if not path.exists()]
@@ -335,9 +336,11 @@ def test_portable_python_knowledge_route_reaches_builder_and_identity() -> None:
     guide = (root / "docs/工程/运行与交付/修改发布与便携版.md").read_text(encoding="utf-8")
     reference = (root / "docs/工程/运行与交付/Portable运行身份与发行结构.md").read_text(encoding="utf-8")
     assert "docs/工程/运行与交付/Portable运行身份与发行结构.md" in routes
-    for fact in ("start.cmd", "runtime/start.ps1", "runtime/python", "JIEJIAN_RUNTIME_MODE=portable"):
-        assert fact in guide
-        assert fact in reference
+    # 指南负责入口，身份细节由链接的参考文档维护；不要求两篇逐字重复。
+    assert "界鉴.exe" in guide
+    assert "Portable运行身份与发行结构.md" in {
+        target.split('#', 1)[0] for target in re.findall(r'\]\(([^)]+)\)', guide)
+    }
     for value in (
         "scripts/build/portable.py",
         "product/backend/infra/runtime/process/controlled/identity.py",

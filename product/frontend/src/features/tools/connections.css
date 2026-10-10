@@ -1,5 +1,13 @@
 /* 连续步骤与配置阅读区使用同一基线；状态、凭据和授权保持各自清晰的层次。 */
-.connection-page { width: 100%; max-width: var(--layout-content); margin: 0; display: grid; gap: var(--space-24); }
+.connection-page { width: 100%; max-width: var(--layout-content); margin: 0; display: grid; }
+.connection-page > * + * { margin-block-start:var(--space-24); }
+/* 保持内容挂载以衔接关闭；inert 同时退出键盘和读屏操作范围。 */
+.connection-page .connection-management { display:grid;grid-template-rows:0fr;opacity:0;padding:0;margin:0;border:0;transition:grid-template-rows var(--motion-layout) var(--ease-standard),opacity var(--motion-normal); }
+.connection-page .connection-management[data-open=true] { grid-template-rows:1fr;opacity:1;margin-block-start:var(--space-24); }
+.connection-management-content { overflow:hidden;min-height:0; }
+.connection-management-row { display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-24);padding-block:var(--space-20);border-block:1px solid var(--color-border); }
+.connection-management-row > div:first-child { flex:1 1 260px;min-width:0; }
+.connection-management-actions { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-12);margin-inline-start:auto; }
 .connection-header, .connection-setup-heading, .connection-status, .connection-secret { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-24); }
 .connection-page h2, .connection-page h3, .connection-page h4 { margin: 0; color: var(--color-text); }
 .connection-page h2 { font-size: var(--font-titleMin); }
@@ -12,7 +20,7 @@
 .connection-status.is-error { border-left-color: var(--color-danger); }
 .connection-status.is-warning { border-left-color: var(--color-warning); }
 .connection-status-label { display: block; margin-bottom: var(--space-8); font-size: var(--font-secondary); color: var(--color-secondary); }
-.connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); }
+.connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); margin-inline:auto; }
 .connection-facts span { display: grid; gap: var(--space-8); overflow-wrap: anywhere; }
 .connection-facts small { color: var(--color-secondary); }
 .connection-tabs { display: flex; gap: var(--space-8); padding-block: var(--space-12); border-block: 1px solid var(--color-border); }

@@ -12,7 +12,8 @@
  * ============================================================================= */
 
 import { LoadingState } from '../../shared/ui/LoadingState'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 import { Alert, Button, Empty, Input, Modal, Select, Space, Typography } from 'antd'
 import { KeyOutlined } from '@ant-design/icons'
 import { ApiError } from '../../api/http'
@@ -56,6 +57,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
 }) {
   // 静态 Modal.confirm 无法继承主题；账号确认框挂在当前上下文，亮暗切换时与正文同步。
   const [modal, modalContext] = Modal.useModal()
+  const visible = useContext(WorkPageVisible)
   const [roles, setRoles] = useState<BusinessActorRevisionDto[]>([])
   const [identities, setIdentities] = useState<TestIdentityDto[]>([])
   const [selectedRole, setSelectedRole] = useState('')
@@ -105,7 +107,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   }, [project.project_id])
 
   useEffect(() => {
-    if (!preparation || ['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status)) return
+    if (!visible || !preparation || ['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status)) return
     let active = true
     const timer = window.setTimeout(() => {
       void testIdentitiesApi.preparation(preparation.preparation_id).then(async (next) => {
@@ -121,7 +123,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       }).catch((error) => onError(error as ApiError))
     }, 500)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [preparation, project.project_id])
+  }, [preparation, project.project_id, visible])
 
   const preparationIdentity = preparation ? identities.find((identity) => identity.identity_id === preparation.identity_id) : undefined
   const preparedCount = identities.filter((identity) => identity.status === 'PREPARED').length
@@ -210,7 +212,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     },
   })
 
-  if (loading) return <EditorialPage><LoadingState page>正在读取测试账号…</LoadingState></EditorialPage>
+  if (loading) return <EditorialPage width="summary"><LoadingState>正在读取测试账号…</LoadingState><TaskActionBar back={{label:'返回检查准备',onClick:onBack}}/></EditorialPage>
 
   // 仅持久保存已确认、同步无缺口的当前登录任务进入终态；不从准备状态推断权限通过。
   if (initialPreparation && preparation?.status === 'PREPARED' && !syncError) return <EditorialPage label="测试账号登录准备" width="summary"><section className="identity-complete">
@@ -219,7 +221,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     <Button type="primary" onClick={onBack}>返回检查准备</Button>
   </section></EditorialPage>
 
-  return <EditorialPage label="测试账号登录准备" width={initialPreparation ? 'summary' : undefined}>
+  return <EditorialPage label="测试账号登录准备" width="summary">
     {modalContext}
     <EditorialHeader eyebrow={project.name || '当前应用'} title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}>{!initialPreparation && <p className="editorial-muted">{preparation ? preparationStatus(preparation) : '按业务角色准备测试账号'}</p>}</EditorialHeader>
     {!initialPreparation && <><section className="identity-overview"><header><h2>添加测试账号</h2><p className="editorial-muted">选择账号所属角色并起一个便于识别的名称，然后在账号列表中打开登录浏览器。</p></header>
@@ -242,7 +244,12 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
           <Typography.Paragraph>用于验证“{role.display_name}”在合法路径和禁止路径中的真实权限边界。</Typography.Paragraph>
           <div className="identity-role-accounts">{roleIdentities.length === 0
             ? <Typography.Text type="secondary">当前测试账号：尚未添加。请在上方为这个业务主体添加账号。</Typography.Text>
-            : roleIdentities.map((identity) => <div className="identity-account-row" key={identity.identity_id}><div><Space wrap><Typography.Text strong>{identity.label}</Typography.Text>{statusTag(identity)}</Space><Typography.Text type="secondary">{identity.status === 'PREPARED' ? '可以用于业务演示' : identity.status === 'NEEDS_REVIEW' ? '需要清除旧状态后重新登录' : '需要在独立浏览器完成登录'}</Typography.Text></div><Space wrap>{identity.status === 'NOT_PREPARED' && <Button loading={busy} disabled={activeLogin} onClick={() => void start(identity.identity_id)}>打开登录浏览器</Button>}{identity.status === 'PREPARED' && <Button onClick={() => reset(identity)}>清除登录状态</Button>}{identity.status === 'NEEDS_REVIEW' && <Button onClick={() => reset(identity)}>清除旧状态</Button>}<Button danger onClick={() => remove(identity)}>删除</Button></Space></div>)}</div>
+            : roleIdentities.map((identity) => <div className="identity-account-row" key={identity.identity_id}><div><Space wrap><Typography.Text strong>{identity.label}</Typography.Text>{statusTag(identity)}</Space><Typography.Text type="secondary">{identity.status === 'PREPARED' ? '可以用于业务演示' : identity.status === 'NEEDS_REVIEW' ? '需要清除旧状态后重新登录' : '需要在独立浏览器完成登录'}</Typography.Text></div><div className="identity-account-actions">
+              <Button danger onClick={() => remove(identity)}>删除</Button>
+              {identity.status === 'PREPARED' && <Button danger onClick={() => reset(identity)}>清除登录状态</Button>}
+              {identity.status === 'NEEDS_REVIEW' && <Button danger onClick={() => reset(identity)}>清除旧状态</Button>}
+              {identity.status === 'NOT_PREPARED' && <Button type="primary" loading={busy} disabled={activeLogin} onClick={() => void start(identity.identity_id)}>打开登录浏览器</Button>}
+            </div></div>)}</div>
         </article>
       })}</div>
     </section>
@@ -250,7 +257,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </>}
     {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><h2>在已打开的浏览器中完成登录</h2>
       <p>测试账号：{preparationIdentity?.label ?? '当前测试账号'}</p><p className="editorial-muted">正常完成密码、单点登录或多因素认证，然后回到这里确认。</p><p>保存完成前，请保持登录窗口打开。</p>
-      <div className="confirmation-actions"><Button loading={busy} onClick={() => void cancel()}>取消准备</Button><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div>
+      <div className="confirmation-actions"><Button danger loading={busy} onClick={() => void cancel()}>取消准备</Button><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div>
       <p className="editorial-muted">只保存当前应用所需的有限登录状态，不保存密码。实际执行身份在检查中核验。</p>
     </section>}
     {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && !(receipt && preparation.status === 'PREPARED') && <Alert
@@ -258,7 +265,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       showIcon
       message={preparation.status === 'SAVING' ? '正在安全保存这个应用所需的登录状态…' : preparation.status === 'PREPARED' ? '登录状态已准备；界鉴没有保存你的密码' : preparation.message}
       action={<Space>
-        {preparation.status === 'STARTING' && <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>}
+        {preparation.status === 'STARTING' && <Button danger loading={busy} onClick={() => void cancel()}>取消准备</Button>}
         {['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status) && <Button onClick={() => setPreparation(null)}>关闭提示</Button>}
       </Space>}
     />}

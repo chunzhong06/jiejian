@@ -46,6 +46,6 @@
 
 - `ToolsPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`./MCPAccessCard`
+静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`./MCPAccessCard`、`antd`
 
 <!-- GENERATED:END -->

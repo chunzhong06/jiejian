@@ -6,6 +6,7 @@ import pytest
 from tests.fixtures.secrets import InMemorySecretStore
 from tests.fixtures.control_plane import TestClient, create_app
 from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
+from tests.backend.workflows._support_current_official_sample import prepare_proof_sources, use_memory_sample_login
 
 pytestmark = [pytest.mark.e2e, pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
@@ -13,23 +14,27 @@ pytestmark = [pytest.mark.e2e, pytest.mark.database, pytest.mark.process, pytest
 def test_api_worker_runner_publication_reaches_current_story_and_history(tmp_path):
     root = Path(__file__).resolve().parents[2]
     var_dir = tmp_path / 'var'
-    app = create_app(var_dir, start_worker=True, official_sample_root=root / 'samples/web/collaboration_space',
+    app = create_app(var_dir, start_worker=True, official_sample_root=root / 'samples/web/digital_gallery',
         secret_store=InMemorySecretStore(), environ=runtime_identity_environment(var_dir))
+    # 本场景验证发布链；真实 HTTP 登录仍执行，凭据边界与内存库保持一致。
+    core = app.state.context
+    use_memory_sample_login(core)
     with TestClient(app) as client:
         started = client.post('/api/experience/official-sample/start', json={'schema_version':'1', 'consent':True})
         assert started.status_code == 200, started.text
         assert started.json()['data']['scenario_version'] == 'BASELINE'
         project = started.json()['data']['project_id']
-        proposal_response = client.post('/api/experience/official-sample/boundary-proposal')
+        proposal_response = client.post('/api/experience/official-sample/boundary-proposal', json={'exhibition_download':True})
         assert proposal_response.status_code == 200, proposal_response.text
         proposal = proposal_response.json()['data']['proposal']
         approved = client.post(f"/api/projects/{project}/business-boundaries/proposals/{proposal['proposal_id']}/approve",
             json={'schema_version':'1', 'expected_fingerprint':proposal['proposal_fingerprint'], 'reason':'确认受控示例的业务规则'})
         assert approved.status_code == 200, approved.text
         prepared = client.post('/api/experience/official-sample/prepare')
-        assert prepared.status_code == 200 and prepared.json()['data']['scenario_prepared'], prepared.text
+        assert prepared.status_code == 200 and not prepared.json()['data']['scenario_prepared'], prepared.text
+        prepare_proof_sources(core, project)
         preview = client.get(f'/api/projects/{project}/check-preview').json()['data']
-        assert preview['can_execute'] is True and preview['case_count'] == 3
+        assert preview['can_execute'] is True and preview['case_count'] == 5
         submitted = client.post(f'/api/projects/{project}/runs', json={'schema_version':'2',
             'expected_plan_fingerprint':preview['plan_fingerprint'], 'idempotency_key':'api-worker-publication'})
         assert submitted.status_code == 202, submitted.text
@@ -48,9 +53,9 @@ def test_api_worker_runner_publication_reaches_current_story_and_history(tmp_pat
         story = client.get(f'/api/runs/{run_id}/result-story').json()['data']
         assert story['run_id'] == run_id and story['verdict'] == 'PASS'
         deny = [item for item in story['actions'] if item['permission']['expectation'] == 'DENY']
-        # 起始同步实现先授权；异步优化后的 AUTHORIZATION_LATE 由完整开发演练另行验证。
+        # 起始实现先授权；独立提交后撤回的禁止后果由完整开发演练验证。
         assert len(deny) == 1 and deny[0]['repair_requirement'] is None
-        assert len(story['actions']) == 3
+        assert len(story['actions']) == 5
         for item in story['actions']:
             expected = 'ABSENT' if item['permission']['expectation'] == 'DENY' else 'CONFIRMED'
             effects = item['fact_comparison']['effects']

@@ -11,6 +11,22 @@
 
 静态import / dot-source：`product.backend.workflows.preparation.service`
 
+### `product/backend/workflows/preparation/batches.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/batches.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class BatchSource`
+- `class PreparationBatchPlan`
+- `class StartPreparationBatch`
+- `class PreparationBatchService`
+- `PreparationBatchService.preview(self, project, mode)`
+- `PreparationBatchService.start(self, project, command)`
+- `PreparationBatchService.show(self, project, operation)`
+- `PreparationBatchService.cancel(self, project, operation)`
+- `PreparationBatchService.advance(self)`
+
+静态import / dot-source：`hashlib`、`json`、`product.backend.core.errors`、`product.backend.workflows.preparation.proofs.commands`、`product.protocols.preparation.proof_sources`、`product.protocols.runtime.runtime_identity`、`pydantic`、`threading`、`time`、`typing`
+
 ### `product/backend/workflows/preparation/bindings/__init__.py`
 
 [打开源码](../../../../../../product/backend/workflows/preparation/bindings/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -101,7 +117,30 @@
 - `class PreparationGuidanceService`
 - `PreparationGuidanceService.context(self, project_id)`
 
-静态import / dot-source：`product.backend.workflows.preparation.guidance.models`、`urllib.parse`
+静态import / dot-source：`product.backend.core.errors`、`product.backend.workflows.preparation.guidance.models`、`pydantic`、`urllib.parse`
+
+### `product/backend/workflows/preparation/guidance/suggestion_targets.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/guidance/suggestion_targets.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `approved_target(work, project_id, action_id, revision, actor_id, actor_revision, effect_id)`
+- `resolve_target(work, project_id, target, candidates, boundaries)`
+- `validate_existing_references(work, project_id, item, target, facts, recording_references)`
+
+静态import / dot-source：`product.backend.core.errors`
+
+### `product/backend/workflows/preparation/guidance/suggestions.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/guidance/suggestions.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class PreparationSuggestionService`
+- `PreparationSuggestionService.context(self, project_id)`
+- `PreparationSuggestionService.basis(self, project_id)`
+- `PreparationSuggestionService.save(self, project_id, command, submitted_via)`
+- `PreparationSuggestionService.show(self, project_id, suggestion_id, revision)`
+- `PreparationSuggestionService.receipt(self, project_id, operation_id)`
+
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.preparation.suggestions`、`product.backend.workflows.preparation.guidance.suggestion_targets`、`time`、`urllib.parse`、`uuid`
 
 ### `product/backend/workflows/preparation/materials/__init__.py`
 
@@ -179,6 +218,57 @@
 [打开源码](../../../../../../product/backend/workflows/preparation/proofs/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
+### `product/backend/workflows/preparation/proofs/artifact_inputs.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/proofs/artifact_inputs.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class UploadProofArtifact`
+- `class CancelProofArtifact`
+- `class ProofArtifactPreparation`
+- `ProofArtifactPreparation.upload(self, project_id, command, content)`
+- `ProofArtifactPreparation.read(self, project_id, asset_id)`
+- `ProofArtifactPreparation.cancel(self, project_id, command)`
+
+静态import / dot-source：`hashlib`、`product.backend.core.errors`、`product.backend.infra.artifacts.proof_artifacts`、`product.backend.workflows.preparation.proofs.commands`、`product.protocols.checks.business_facts`、`product.protocols.preparation.proof_artifacts`、`pydantic`、`typing`、`作用域内：product.backend.infra.execution.web.check_runtime`
+
+### `product/backend/workflows/preparation/proofs/capture_jobs.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/proofs/capture_jobs.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `capture_inputs_current(work, request, var_dir)`
+- `capture_recovery_gaps(var_dir, work, project_id)`
+- `class ReferenceCaptureJobs`
+- `ReferenceCaptureJobs.submit(self, work, request)`
+- `ReferenceCaptureJobs.publish(self, report, candidate, known_secrets, require_active_lease)`
+- `ReferenceCaptureJobs.read(self, work, project_id, capture_id)`
+
+静态import / dot-source：`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.proof_artifacts`、`product.backend.infra.runtime.jobs.events`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.storage`、`product.backend.workflows.preparation.bindings.sources`、`product.protocols.preparation.proof_sources`、`time`、`uuid`、`作用域内：product.backend.infra.artifacts.capture_baselines`、`作用域内：product.backend.infra.artifacts.capture_guard`
+
+### `product/backend/workflows/preparation/proofs/capture_plan.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/proofs/capture_plan.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class CaptureSelection`
+- `build_capture_plan(proofs, inspector, work, project_id, selection, created_at_us)`
+
+静态import / dot-source：`hashlib`、`json`、`product.backend.core.errors`、`product.backend.infra.recording.request_store`、`product.backend.workflows.checks.runtime_bundle`、`product.backend.workflows.recording.lifecycle`、`product.protocols.checks.execution_request`、`product.protocols.preparation.proof_sources`、`product.protocols.preparation.reference_capture`、`product.protocols.runtime.runtime_identity`、`pydantic`、`types`、`作用域内：product.backend.infra.artifacts.capture_baselines`、`作用域内：product.backend.workflows.preparation.proofs.capture_jobs`、`作用域内：product.protocols.preparation.reference_capture`
+
+### `product/backend/workflows/preparation/proofs/capture_service.py`
+
+[打开源码](../../../../../../product/backend/workflows/preparation/proofs/capture_service.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class StartReferenceCapture`
+- `class CancelReferenceCapture`
+- `class ReferenceCaptureService`
+- `ReferenceCaptureService.preview(self, project_id, selection)`
+- `ReferenceCaptureService.gaps(self, project_id)`
+- `ReferenceCaptureService.start(self, project_id, command)`
+- `ReferenceCaptureService.status(self, project_id, capture_id)`
+- `ReferenceCaptureService.cancel(self, project_id, command)`
+- `ReferenceCaptureService.job_authorized(self, job)`
+
+静态import / dot-source：`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.runtime.jobs.models`、`product.backend.workflows.preparation.proofs.capture_jobs`、`product.backend.workflows.preparation.proofs.capture_plan`、`product.backend.workflows.preparation.proofs.commands`、`product.protocols.preparation.proof_artifacts`、`product.protocols.preparation.reference_capture`、`pydantic`、`typing`、`uuid`、`作用域内：product.backend.workflows.preparation.proofs.capture_jobs`
+
 ### `product/backend/workflows/preparation/proofs/commands.py`
 
 [打开源码](../../../../../../product/backend/workflows/preparation/proofs/commands.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -219,6 +309,7 @@
 - `class PreparationFacts`
 - `class ProofPreparationService`
 - `ProofPreparationService.bind_authority_checker(self, checker)`
+- `ProofPreparationService.basis(self, project_id)`
 - `ProofPreparationService.context(self, project_id)`
 - `ProofPreparationService.show(self, project_id, source_id)`
 - `ProofPreparationService.receipt(self, project_id, kind, operation_id)`
@@ -236,7 +327,7 @@
 - `ProofPreparationService.revoke_scope(self, project_id, command)`
 - `ProofPreparationService.cancel_unauthorized(self)`
 
-静态import / dot-source：`dataclasses`、`product.backend.core.applications.models`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.core.lifecycle`、`product.backend.core.preparation.bindings`、`product.backend.infra.observers.records.source_contracts`、`product.backend.infra.runtime.jobs.models`、`product.backend.workflows.business_boundaries.inspection`、`product.backend.workflows.business_boundaries.models`、`product.backend.workflows.recording.source`、`product.protocols.checks.check_runtime`、`product.protocols.preparation.proof_sources`、`product.protocols.runtime.node_runtime`、`product.protocols.web.request`、`product.protocols.web.target`、`time`、`uuid`、`作用域内：product.backend.core.preparation.bindings`、`作用域内：product.backend.workflows.preparation.bindings.sources`、`作用域内：product.backend.workflows.preparation.proofs.registration`、`作用域内：product.protocols.preparation.proof_sources`
+静态import / dot-source：`dataclasses`、`product.backend.core.applications.models`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.core.lifecycle`、`product.backend.core.preparation.bindings`、`product.backend.infra.observers.records.source_contracts`、`product.backend.infra.runtime.jobs.models`、`product.backend.workflows.business_boundaries.inspection`、`product.backend.workflows.business_boundaries.models`、`product.backend.workflows.recording.source`、`product.protocols.checks.check_runtime`、`product.protocols.preparation.proof_sources`、`product.protocols.runtime.node_runtime`、`product.protocols.web.request`、`product.protocols.web.target`、`time`、`uuid`、`作用域内：product.backend.core.preparation.bindings`、`作用域内：product.backend.infra.artifacts.proof_artifacts`、`作用域内：product.backend.workflows.preparation.bindings.sources`、`作用域内：product.backend.workflows.preparation.proofs.capture_jobs`、`作用域内：product.backend.workflows.preparation.proofs.registration`、`作用域内：product.protocols.preparation.proof_sources`
 
 ### `product/backend/workflows/preparation/service.py`
 
@@ -249,6 +340,7 @@
 - `class PreparationBindingReader`
 - `PreparationBindingReader.inspect(self, action, contract, identities, work) -> ActionTechnicalPreparationView`
 - `class PreparationService`
+- `PreparationService.bind_interruption_reader(self, reader)`
 - `PreparationService.evidence_details(self, project_id, action_id)`
 - `PreparationService.current_plan(self, project_id, engine_version, config_fingerprint)`
 - `PreparationService.build_execution_request_v3(self, project_id, engine_version, config_fingerprint, budget_fingerprint, change_context, repair_context)`

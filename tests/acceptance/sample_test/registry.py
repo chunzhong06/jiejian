@@ -10,7 +10,7 @@ from typing import Mapping
 
 
 _PUBLIC_ID = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")
-_APPLICATIONS = ("collaboration-space", "tenant-records")
+_APPLICATIONS = ("tenant-records",)
 _BREAK_MODES = (
     "object_tenant_check_missing",
     "new_entry_inheritance",
@@ -165,7 +165,7 @@ def load_public_registry(root: Path) -> tuple[PublicValidationCase, ...]:
         for mode in _BREAK_MODES
         for implementation, observation in _STATES
     }
-    if len(cases) != 30 or actual_matrix != expected_matrix:
+    if len(cases) != len(expected_matrix) or actual_matrix != expected_matrix:
         raise ValidationRegistryError("VALIDATION_PUBLIC_MATRIX_INVALID")
     return cases
 

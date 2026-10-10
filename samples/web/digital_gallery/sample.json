@@ -1,0 +1,17 @@
+{
+  "schema_version": "2",
+  "sample_id": "digital-gallery",
+  "display_name": "数字展馆协作空间",
+  "runtime_kind": "NODE_ESM",
+  "source_root": "source",
+  "entry": "app.mjs",
+  "files": [
+    "app.mjs",
+    "assets.mjs",
+    "delivery.mjs",
+    "openapi.json",
+    "page.mjs",
+    "preview.mjs"
+  ],
+  "health_path": "/health"
+}

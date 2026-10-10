@@ -35,11 +35,14 @@ class OfficialScenarioVersion(StrEnum):
     VULNERABLE="VULNERABLE"
     EVIDENCE_LIMITED="EVIDENCE_LIMITED"
     FIXED="FIXED"
+    EXPOSE_REVOKE="EXPOSE_REVOKE"
+    PREVIEW_CHANGED="PREVIEW_CHANGED"
 
 
 class OfficialExperienceView(WireModel):
     available: bool
     display_name: str
+    runtime_kind: Literal["PYTHON", "NODE_ESM"] = "PYTHON"
     unavailable_reason: str | None = None
     active: bool
     experience_id: str | None = None
@@ -50,6 +53,7 @@ class OfficialExperienceView(WireModel):
     scenario_changed_at_us: int | None = None
     vulnerable_change_id: str | None = None
     repair_change_id: str | None = None
+    current_change_id: str | None = None
     evidence_limited: bool = False
     pending_tasks: tuple[str,...] = Field(default=(),max_length=16)
     lifecycle: Literal["NOT_STARTED", "STARTING", "RUNNING", "STOPPING", "STOPPED", "FAILED", "UNKNOWN"] = "NOT_STARTED"
@@ -365,6 +369,8 @@ class OfficialSampleExperience:
         return references
 
     def switch_version(self, *, version, repair_reference=None):
+        if version in {OfficialScenarioVersion.EXPOSE_REVOKE,OfficialScenarioVersion.PREVIEW_CHANGED}:
+            raise JiejianError(ErrorCode.INPUT_INVALID,"这个预设属于Node展馆示例，不能用于旧Python样例")
         with self._lock:
             current=self._require_active()
             self._require_idle(current.project_id)

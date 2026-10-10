@@ -15,7 +15,7 @@ vi.mock('../../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBound
 } }))
 
 const mockApi = vi.hoisted(() => ({
-  experienceStart: vi.fn(), experienceStatus: vi.fn(), experienceHistory: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
+  experienceStart: vi.fn(), experienceStatus: vi.fn(), experienceHistory: vi.fn(), experienceStop:vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
 }))
 
 const currentWorkspace: WorkspaceViewDto = {
@@ -59,13 +59,28 @@ vi.mock('../../api/changes/sourceChanges', () => ({ sourceChangesApi: { list: vi
 vi.mock('../../api/changes/development', () => ({ developmentApi: { current: vi.fn().mockResolvedValue(null) }, newOperationId: () => 'a'.repeat(32) }))
 vi.mock('../../api/checks/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/checks/repairs')>('../../api/checks/repairs'), repairsApi: { project: vi.fn().mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }) } }))
 vi.mock('../../api/preparation/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }), draft: vi.fn().mockResolvedValue({schema_version:'1',revision:0,action_id:null,material:null}) } }))
-vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: { history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}), preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
-vi.mock('../../api/applications/experience', () => ({ experienceApi: { start: mockApi.experienceStart, status: mockApi.experienceStatus, history: mockApi.experienceHistory } }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: { historyRules:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null,coverage:{project_id:'p1',checkpoint:0,generation:0,processed:0,failed:0,missing:0,status:'COMPLETE'}}), history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}), preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../../api/applications/experience', () => ({ experienceApi: { start: mockApi.experienceStart, status: mockApi.experienceStatus, history: mockApi.experienceHistory, stop:mockApi.experienceStop } }))
 vi.mock('../../api/system/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../../api/applications/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
 vi.mock('../../api/system/system', () => ({ systemApi: { shutdown: mockApi.shutdown } }))
 
 describe('CURRENT 应用壳', () => {
+  it('运行官方示例时接入新应用，停止示例并进入空白目录选择步骤',async()=>{
+    const running={available:true,display_name:'协作空间',active:true,project_id:'p1',lifecycle:'RUNNING',recovery_state:'OWNED_RUNNING'}
+    mockApi.experienceStatus.mockResolvedValue(running)
+    mockApi.experienceStop.mockResolvedValue({...running,active:false,lifecycle:'STOPPED',recovery_state:'EXITED'})
+    workspaceState.selectProject.mockImplementation(project=>{workspaceState.selected=project;workspaceState.workspace=null})
+    render(<ControlShell/>)
+    fireEvent.click(await screen.findByRole('button',{name:/切换应用，当前/}))
+    fireEvent.click(await screen.findByText('接入新应用'))
+    expect(await screen.findByRole('heading',{name:'接入本地应用'})).toBeInTheDocument()
+    expect(screen.getByRole('heading',{name:'选择应用文件夹'})).toBeInTheDocument()
+    expect(screen.queryByText('审阅已提供的权限提案')).not.toBeInTheDocument()
+    expect(workspaceState.selectProject).toHaveBeenCalledWith(null)
+    expect(mockApi.experienceStop).toHaveBeenCalledTimes(1)
+    expect(window.location.hash).toBe('#/application?new=1')
+  })
   it('移除官方应用只提交一次移除并回读已停止环境，不残留停止按钮', async () => {
     const running = { available: true, display_name: '协作空间', active: true, project_id: 'p1', experience_id: 'sample', scenario_version: 'FIXED', lifecycle: 'RUNNING', recovery_state: 'OWNED_RUNNING' }
     mockApi.experienceStatus.mockResolvedValue(running)
@@ -114,7 +129,7 @@ describe('CURRENT 应用壳', () => {
     fireEvent.change(await screen.findByLabelText('未提交的权限输入'), {target:{value:'正在整理的资源归属'}})
     fireEvent.click(screen.getByRole('button',{name:'查找入口，Ctrl K'}))
     fireEvent.click(await screen.findByRole('option',{name:/检查记录/}))
-    expect(await screen.findByRole('heading',{name:'检查记录'})).toBeInTheDocument()
+    expect(await screen.findByRole('heading',{name:'检查历史'})).toBeInTheDocument()
     expect(screen.queryByRole('textbox',{name:'未提交的权限输入'})).not.toBeInTheDocument()
     fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:'权限'}))
     expect(await screen.findByLabelText('未提交的权限输入')).toHaveValue('正在整理的资源归属')

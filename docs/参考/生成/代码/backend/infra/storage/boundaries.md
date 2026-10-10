@@ -52,13 +52,6 @@
 [打开源码](../../../../../../../product/backend/infra/storage/boundaries/contracts.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `class ContractVersionRow`
-- `class ContractVersionRepository`
-- `ContractVersionRepository.add(self, contract) -> None`
-- `ContractVersionRepository.get(self, project_id, contract_id, version) -> ContractVersion &#124; None`
-- `ContractVersionRepository.get_active(self, project_id, contract_id) -> ContractVersion &#124; None`
-- `ContractVersionRepository.list_for_contract(self, project_id, contract_id) -> tuple[ContractVersion, ...]`
-- `ContractVersionRepository.list_for_project(self, project_id) -> tuple[ContractVersion, ...]`
-- `ContractVersionRepository.replace(self, contract) -> None`
 
 静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.contracts.models`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.verification.permissions`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
@@ -87,15 +80,23 @@
 - `class RuleCandidateRevisionRow`
 - `class RuleCandidateProposalRow`
 - `class RuleCandidateReceiptRow`
+- `class RuleCandidateDecisionRow`
+- `class RuleCandidateApprovalMappingRow`
 - `class RuleCandidateRepository`
 - `RuleCandidateRepository.get(self, project_id, candidate_id, revision)`
 - `RuleCandidateRepository.list(self, project_id, offset, limit)`
+- `RuleCandidateRepository.head_references(self, project_id)`
 - `RuleCandidateRepository.append(self, value, expected_revision)`
 - `RuleCandidateRepository.proposal_id(self, candidate_id, revision)`
-- `RuleCandidateRepository.link_proposal(self, candidate_id, revision, proposal_id)`
+- `RuleCandidateRepository.link_proposal(self, candidate_id, revision, proposal_id, content_hash, decision_digest)`
+- `RuleCandidateRepository.proposal_source(self, proposal_id)`
+- `RuleCandidateRepository.decisions(self, project_id, candidate_id, revision)`
+- `RuleCandidateRepository.add_decision(self, value)`
+- `RuleCandidateRepository.add_approval_mapping(self, proposal_id, permission_item_id, intent_id, intent_revision, intent_hash, boundary_decision_id, reused, scenario_decision_ids, entity_references)`
+- `RuleCandidateRepository.approval_mappings(self, proposal_id, intent_id, revision)`
 - `RuleCandidateRepository.receipt(self, project_id, kind, operation_id)`
 - `RuleCandidateRepository.add_receipt(self, project_id, kind, operation_id, fingerprint, value)`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
+静态import / dot-source：`__future__`、`json`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
 <!-- GENERATED:END -->

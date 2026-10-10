@@ -1,6 +1,6 @@
 # 保留官方示例的非秘密工作空间与实例所有权；核对记录追加保存，不改写操作历史。
 import json
-from sqlalchemy import BigInteger, ForeignKey, String, Text, select
+from sqlalchemy import BigInteger, ForeignKey, String, Text, select, text
 from sqlalchemy.orm import Mapped, mapped_column
 from product.backend.infra.storage.base import Base, _flush, ensure_storage_payload_safe
 
@@ -10,6 +10,7 @@ class SampleWorkspaceRow(Base):
     workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("projects.project_id", ondelete="RESTRICT"))
     source_root: Mapped[str] = mapped_column(Text)
+    runtime_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="PYTHON", server_default=text("'PYTHON'"))
     scenario_version: Mapped[str] = mapped_column(String(24))
     created_at_us: Mapped[int] = mapped_column(BigInteger)
 

@@ -73,7 +73,7 @@
 
 - `class WorkspaceService`
 - `WorkspaceService.validate_connections(self)`
-- `WorkspaceService.get(self, project_id) -> WorkspaceView`
+- `WorkspaceService.get(self, project_id, prepared) -> WorkspaceView`
 
 静态import / dot-source：`__future__`、`product.backend.workflows.workspace.models`、`product.backend.workflows.workspace.presentation`、`product.backend.workflows.workspace.reading`、`product.backend.workflows.workspace.tasks`
 

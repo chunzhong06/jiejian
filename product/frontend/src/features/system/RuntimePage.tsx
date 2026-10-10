@@ -4,7 +4,6 @@ import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import './runtime.css'
 import { Alert, Card, Col, Descriptions, Row, Statistic, Typography } from 'antd'
-import { LLMProfile } from '../../api/assistance/llm'
 import { SystemStatus } from '../../api/system/system'
 import { MaintenancePanel } from './MaintenancePanel'
 import { frontendBuildId, frontendIdentityState } from '../../shared/runtime/buildIdentity'
@@ -14,23 +13,21 @@ function label(value: unknown) {
   return raw === 'available' || raw === 'running' ? '可用' : raw === 'unavailable' ? '不可用' : raw === 'stopped' ? '不可用' : '未知'
 }
 
-export function RuntimePage({ status, profiles, failed }: { status: SystemStatus; profiles: LLMProfile[]; failed: boolean }) {
-  const model = failed ? '未知' : profiles.some((profile) => profile.enabled && profile.secret_configured) ? '已配置' : '未知'
+export function RuntimePage({ status }: { status: SystemStatus }) {
   const environment = status.environment
   const python = environment?.python
   const issues = Array.isArray(python?.issues) ? python.issues : []
-  return <EditorialPage label="界鉴运行与维护">
+  return <EditorialPage label="界鉴运行与维护" width="summary">
     <EditorialHeader eyebrow="界鉴自身" title="界鉴运行与维护"><p className="editorial-muted">查看界鉴的服务、执行器和浏览器组件，维护本工具的缓存与日志。</p></EditorialHeader>
     <Card title="界鉴运行状态" className="runtime-panel">
-      <Typography.Paragraph type="secondary">以下信息来自当前服务进程，用于确认界鉴没有误用用户级 Python 包或另一套工具链。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">开始检查需要服务、执行器和浏览器都可用。</Typography.Paragraph>
       {python?.user_site_on_sys_path && <Alert type="error" showIcon message="检测到用户级 Python 包来源" description="请退出界鉴并重新运行 start.cmd，让启动器恢复项目环境隔离。" />}
       {issues.length > 0 && <Alert type="warning" showIcon message="运行环境存在异常" description={issues.join('；')} />}
       {status.worker === 'unavailable' && <Alert type="info" showIcon message="检查执行器当前不可用。" description="暂时无法开始新的检查。请核对执行器状态，必要时重新启动界鉴。" />}
       <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}><Statistic title="服务" value={label(status.api)} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="执行" value={label(status.worker)} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="浏览器" value={label(status.browser)} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="模型" value={model} /></Col>
+        <Col xs={24} sm={8}><Statistic title="服务" value={label(status.api)} /></Col>
+        <Col xs={24} sm={8}><Statistic title="执行器" value={label(status.worker)} /></Col>
+        <Col xs={24} sm={8}><Statistic title="浏览器" value={label(status.browser)} /></Col>
       </Row>
       <details className="runtime-details"><summary>查看运行版本与组件详情</summary><Descriptions bordered size="small" column={1}>
         <Descriptions.Item label="界鉴版本">{status.version ?? '未提供'}</Descriptions.Item>
@@ -51,7 +48,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
         </Descriptions.Item>
         <Descriptions.Item label="本次自动恢复任务">{status.recovered_jobs ?? '未读取'}</Descriptions.Item>
       </Descriptions></details>
-      <StatusBadge kind="lifecycle" tone={python?.ok === false ? 'danger' : 'info'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</StatusBadge>
+      {python?.ok === false && <StatusBadge kind="lifecycle" tone="danger">环境需要处理</StatusBadge>}
     </Card>
 
     <MaintenancePanel/>

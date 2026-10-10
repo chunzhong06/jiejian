@@ -42,7 +42,7 @@ function environmentCommand(accessToken: string): string {
 }
 
 function connectionTask(client: string): string {
-  return `请使用 jiejian MCP。新约定先用 jiejian_rule_context 和 jiejian_rule_candidate_save 保存带具体例子的规则候选，并给我界面确认入口。已有规则读取 jiejian_business_boundary 沿用。准备不足时读取 jiejian_preparation_context，复用已有材料，协助保存证明来源和预检查；读取范围、规则批准与来源采用交给我在界鉴确认。开发需求继续在当前对话讨论。完成一批修改后，具备 PREPARE 授权时先读取 jiejian_change_registration_preview，再调用 jiejian_change_register，将返回的 fingerprint 作为 expected_registration_fingerprint，并携带稳定 operation_id，无需另建开发任务或接单。响应不明确先用 jiejian_receipt_show 按 DELIVER 查询原键，不创建新键试探。权限只能由我批准；检查按完整现行权限要求显式执行。普通功能目标需要另行验证。不要索取或回显连接凭据。当前客户端：${client}。`
+  return `请使用 jiejian MCP。从权限或检查材料页的“Agent 协助”复制当前请求，再回到同一页面读取整理结果。应用未运行时先整理规则和材料需求，不能把代码线索当成已验证事实。新约定先用 jiejian_rule_context 和 jiejian_rule_candidate_save 保存带具体例子的规则候选，并给我界面确认入口。已有规则读取 jiejian_business_boundary 沿用。准备不足时读取 jiejian_preparation_context，复用已有材料，协助保存证明来源和预检查；读取范围、规则批准与来源采用交给我在界鉴确认。开发需求继续在当前对话讨论。完成一批修改后，具备 PREPARE 授权时先读取 jiejian_change_registration_preview，再调用 jiejian_change_register，将返回的 fingerprint 作为 expected_registration_fingerprint，并携带稳定 operation_id，无需另建开发任务或接单。响应不明确先用 jiejian_receipt_show 按 DELIVER 查询原键，不创建新键试探。权限只能由我批准；检查按完整现行权限要求显式执行。普通功能目标需要另行验证。不要索取或回显连接凭据。当前客户端：${client}。`
 }
 
 function legacyConnectionState(view: MCPAccessView | null): MCPConnectionState {
@@ -301,14 +301,15 @@ export function MCPAccessCard({
 
   return <div className="mcp-access-shell connection-page">
     <header className="connection-header"><EditorialHeader eyebrow="开发工具连接" title="连接与授权"><p className="editorial-muted">配置开发客户端，让它在授权范围内读取规则、登记修改和获取检查事实。</p></EditorialHeader>
-      {view?.paired && <Button aria-expanded={managementOpen} onClick={() => setManagementOpen(!managementOpen)}>{managementOpen ? '收起连接管理' : '管理连接'}</Button>}
+      {view?.paired && <Button aria-expanded={managementOpen} aria-controls="connection-management" onClick={() => setManagementOpen(!managementOpen)}>{managementOpen ? '收起连接管理' : '管理连接'}</Button>}
     </header>
+    <section id="connection-management" className="connection-management" data-open={managementOpen} inert={!managementOpen} aria-hidden={!managementOpen} aria-label="管理连接"><div className="connection-management-content"><div className="connection-management-row"><div><h3>管理本机连接</h3><p>更新或删除凭据会影响所有使用它的客户端。</p></div><div className="connection-management-actions"><Button danger disabled={busy} onClick={() => setConfirmAction('forget')}>删除连接凭据</Button><Button disabled={busy} onClick={() => setConfirmAction('rotate')}>重新生成连接凭据</Button>{state === 'PAUSED' ? <Button type="primary" loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复接受连接</Button> : <Button danger loading={busy} onClick={() => void updateView(mcpAccessApi.pause, true)}>暂停本次连接</Button>}</div></div></div></section>
     <section className={`connection-status is-${copy.type}`} aria-label="连接事实">
       <div><span className="connection-status-label">{view ? copy.eyebrow : '正在读取状态'}</span><h3>{view ? copy.title : '读取本机连接信息'}</h3><p>{view ? copy.description : '尚未取得服务端状态。'}</p></div>
       {state === 'PAUSED' && <Button type="primary" loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复连接</Button>}
       {state === 'CONNECTED' && <Button type="primary" onClick={() => void copyValue(connectionTask(view?.client_name?.trim() || 'MCP Agent'), '使用说明')}>{copied === '使用说明' ? '使用说明已复制' : '复制使用说明'}</Button>}
     </section>
-    {state === 'CONNECTED' && <div className="connection-facts"><span><small>实际报告的客户端</small><strong>{view?.client_name?.trim() || '名称未提供'}{view?.client_version ? ` · ${view.client_version}` : ''}</strong></span><span><small>最近活动</small><strong>{formatActivity(view?.last_seen_at_us ?? null)}</strong></span><span><small>默认允许范围</small><strong>只查看 · 更多操作仅本次有效</strong></span></div>}
+    {state === 'CONNECTED' && <div className="connection-facts centered-fact-groups"><span><small>实际报告的客户端</small><strong>{view?.client_name?.trim() || '名称未提供'}{view?.client_version ? ` · ${view.client_version}` : ''}</strong></span><span><small>最近活动</small><strong>{formatActivity(view?.last_seen_at_us ?? null)}</strong></span><span><small>默认允许范围</small><strong>只查看 · 更多操作仅本次有效</strong></span></div>}
     <nav className="connection-tabs product-view-tabs" aria-label="连接设置内容"><Button type="text" aria-pressed={showSetup} onClick={() => setShowSetup(true)}>客户端配置</Button><Button type="text" aria-pressed={!showSetup} onClick={() => setShowSetup(false)}>应用授权</Button></nav>
     {showSetup ? <section className="connection-setup" aria-label="客户端配置">
       <header className="connection-setup-heading"><div><h3>三步完成连接</h3><p>选择要配置的客户端。这里的选择不会改变实际连接，也不会改写客户端设置。</p></div><Segmented className="mcp-client-selector" aria-label="选择 MCP 客户端" options={clientOptions} value={selectedClient} onChange={value => { setSelectedClient(value as MCPClientKey); setCheckMessage(null) }}/></header>
@@ -327,7 +328,6 @@ export function MCPAccessCard({
     </section> : <section className="connection-permissions" aria-label="应用授权"><h3>AI 工具这次可以做什么</h3><p>每次打开界鉴后，客户端默认只查看；更多操作由你逐应用授权。</p>
       <List dataSource={projects} locale={{ emptyText: '尚未接入应用；接入后可设置本次允许范围。' }} renderItem={project => { const level = grants.get(project.project_id) ?? 'READ'; return <List.Item actions={view?.accepting_connections ? [<Button key="grant" onClick={() => openGrant(project)}>调整这次允许范围</Button>] : undefined}><List.Item.Meta title={projectLabel(project)}/><StatusBadge kind="lifecycle" tone="info">{levelLabels[level]}</StatusBadge></List.Item> }}/>
     </section>}
-    {managementOpen && <section className="connection-management" aria-label="管理连接"><h3>管理本机连接</h3><p>当前连接凭据由所有客户端共用。更新或删除会影响使用此凭据的客户端。</p><Space wrap>{state === 'PAUSED' ? <Button loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复接受连接</Button> : <Button loading={busy} onClick={() => void updateView(mcpAccessApi.pause, true)}>暂停本次连接</Button>}<Button disabled={busy} onClick={() => setConfirmAction('rotate')}>重新生成连接凭据</Button><Button danger disabled={busy} onClick={() => setConfirmAction('forget')}>删除连接凭据</Button></Space></section>}
     <p className="connection-boundary">AI 工具不能批准权限规则，也不能改变检查结论。</p>
 
     <Modal

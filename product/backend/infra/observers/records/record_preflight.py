@@ -5,6 +5,8 @@ from product.protocols.preparation.proof_sources import ProofCheckItem
 
 
 def managed_source_checks(view, config, *, resource_id, owner_subject_id, contract):
+    if view.schema_version!='2' or (contract is not None and contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1'}):
+        return (ProofCheckItem(code='SOURCE_REQUIRES_MIGRATION',status='UNSUPPORTED'),)
     checks = []
     snapshot = view.snapshot
     payload = snapshot.model_dump(mode='json')

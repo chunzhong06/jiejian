@@ -22,6 +22,10 @@ http.createServer(async (req,res)=>{
   const input={resource_id:'one',subject_id:'principal-b',expected_version:item.version,
     changes:[{path:['phase'],value:'protected'},{path:['phase'],value:'initial'}]};
   if(req.url==='/change') await records.transact(input);
+  if(req.url==='/separate') {
+    await records.transact({...input,changes:[{path:['phase'],value:'protected'}]});
+    await records.transact({...input,expected_version:item.version+1,changes:[{path:['phase'],value:'initial'}]});
+  }
   if(req.url==='/unawaited') records.transact(input).catch(()=>{});
   if(req.url==='/late') setTimeout(()=>records.transact(input).catch(()=>{}),10);
   res.writeHead(403,{'Content-Type':'application/json'});res.end('{"error":"denied"}');
@@ -30,7 +34,7 @@ http.createServer(async (req,res)=>{
 
 
 @pytest.mark.parametrize('route,expected,completion',[
-    ('/deny','ABSENT','COMPLETE'),('/change','CONFIRMED','COMPLETE'),
+    ('/deny','ABSENT','COMPLETE'),('/change','ABSENT','COMPLETE'),('/separate','CONFIRMED','COMPLETE'),
     ('/unawaited','UNKNOWN','INCOMPLETE'),('/late','ABSENT','COMPLETE')])
 def test_request_completion_is_owned_and_publish_restore_is_not_erased(tmp_path,route,expected,completion):
     port=free_port()
@@ -49,7 +53,11 @@ def test_request_completion_is_owned_and_publish_restore_is_not_erased(tmp_path,
             request_digest=hashlib.sha256(('GET\n'+route).encode()).hexdigest(),subject_id='principal-b',
             resource_id='one',owner_id='principal-a',collection='units')
         # 未等待的请求可能先提交，也可能被关闭边界拒绝；两者都不能误报“未发生”。
-        assert fact.state in ({'UNKNOWN','CONFIRMED'} if route=='/unawaited' else {expected})
+        assert fact.state==expected
+        assert view.schema_version=='2'
+        if route=='/separate':
+            assert view.snapshot.data['phase']=='initial'
+            assert [item.scope_ordinal for item in view.operations]==[0,1]
         if route=='/change':
             assert view.snapshot.data['phase']=='initial'
             assert len(view.operations[0].transitions)==2

@@ -1,6 +1,8 @@
 # 准备、执行和证据的真实页面操作。
 from contextlib import ExitStack
 import re
+import time
+from playwright.sync_api import expect
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 from .session import GuiSession
 
@@ -56,6 +58,8 @@ class ChecksActions(GuiSession):
             if len(matches) != 1 or matches[0].get("status") != "READY_TO_VERIFY":
                 raise SampleTestError("GUI_REPAIR_NOT_READY")
             self._goto("/changes?" + urlencode({"repair_reference": matches[0]["contract"]["repair_fingerprint"]}))
+            self.page.get_by_role("button", name="准备复验原题", exact=True).wait_for()
+            self.dismiss_completion()
             self.page.get_by_role("button", name="准备复验原题", exact=True).click()
             def exact_change(url):
                 route, _, query = urlsplit(str(url)).fragment.partition("?")
@@ -68,8 +72,22 @@ class ChecksActions(GuiSession):
             self._mark("repair-via-changes")
         else:
             self._goto("/tests" + ("?" + urlencode({"change_id": change_id}) if change_id else ""))
-        result, body = self._response(f"/api/projects/{project}/runs",
-            lambda: self.page.get_by_role("button", name="开始检查", exact=True).click(), accepted=(202,))
+        import json
+        # 页面先完成权威预览；提交回执的等待只覆盖实际点击之后。
+        ready_at=time.monotonic()
+        expect(self.page.get_by_role('button',name='开始检查',exact=True)).to_be_enabled(timeout=120_000)
+        print(f'检查页面条件读取完成：{time.monotonic()-ready_at:.1f}秒',flush=True)
+        self.dismiss_completion()
+        try:
+            result, body = self._response(f"/api/projects/{project}/runs",
+                lambda: self.page.get_by_role("button", name="开始检查", exact=True).click(), accepted=(202,))
+        except Exception:
+            # 同一按钮的DOM文本用于区分无障碍名称、遮挡与禁用，不记录页面或请求正文。
+            controls=self.page.locator('.task-focus-actions button').evaluate_all("""nodes=>nodes.map(node=>({
+              text:node.textContent,html:node.outerHTML,disabled:node.disabled,
+              hiddenAncestor:!!node.closest('[aria-hidden=true],[inert]')}))""")
+            (self.audit_dir/'submit-control-failed.json').write_text(json.dumps(controls,ensure_ascii=False),encoding='utf-8')
+            raise
         if (body.get("schema_version") != "2" or body.get("change_id") != change_id
                 or body.get("expected_plan_fingerprint") != expected_body["expected_plan_fingerprint"]
                 or not body.get("idempotency_key") or set(body) - {"schema_version", "change_id", "expected_plan_fingerprint", "idempotency_key"}):

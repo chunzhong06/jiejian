@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "ArtifactManifestReference": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^pai_[0-9a-f]{32}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "exclusiveMinimum": 0,
+          "maximum": 4194304,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "asset_id",
+        "sha256",
+        "size"
+      ],
+      "title": "ArtifactManifestReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "const": 1,
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "authorization_id": {
+      "pattern": "^rca_[0-9a-f]{32}$",
+      "title": "Authorization Id",
+      "type": "string"
+    },
+    "baseline_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Baseline Sha256"
+    },
+    "capture_id": {
+      "pattern": "^rpc_[0-9a-f]{32}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "completed_at_us": {
+      "minimum": 0,
+      "title": "Completed At Us",
+      "type": "integer"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "flow_may_have_run": {
+      "default": false,
+      "title": "Flow May Have Run",
+      "type": "boolean"
+    },
+    "identity_matched": {
+      "title": "Identity Matched",
+      "type": "boolean"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "manifest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArtifactManifestReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "plan_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Hash",
+      "type": "string"
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "recovery_verified": {
+      "title": "Recovery Verified",
+      "type": "boolean"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "resource_matched": {
+      "title": "Resource Matched",
+      "type": "boolean"
+    },
+    "restore_may_have_run": {
+      "default": false,
+      "title": "Restore May Have Run",
+      "type": "boolean"
+    },
+    "restored_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Restored Sha256"
+    },
+    "restores_capture_id": {
+      "anyOf": [
+        {
+          "pattern": "^rpc_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Restores Capture Id"
+    },
+    "runtime_matched": {
+      "title": "Runtime Matched",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at_us": {
+      "minimum": 0,
+      "title": "Started At Us",
+      "type": "integer"
+    },
+    "state": {
+      "enum": [
+        "CANDIDATE",
+        "INCOMPLETE",
+        "RECOVERED"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "target_may_have_run": {
+      "title": "Target May Have Run",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "capture_id",
+    "job_id",
+    "fencing_token",
+    "lease_owner",
+    "request_hash",
+    "plan_hash",
+    "authorization_id",
+    "state",
+    "target_may_have_run",
+    "identity_matched",
+    "resource_matched",
+    "runtime_matched",
+    "recovery_verified",
+    "started_at_us",
+    "completed_at_us"
+  ],
+  "title": "ReferenceCaptureReport",
+  "type": "object"
+}

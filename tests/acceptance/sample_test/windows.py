@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,6 +85,31 @@ def window_snapshot() -> frozenset[int]:
     """冻结 Recording 提交前已经存在的可见顶层窗口句柄。"""
 
     return frozenset(item.handle for item in visible_top_level_windows())
+
+
+def belongs_to_login_preparation(process_id: int, preparation_id: str) -> bool:
+    """只读确认窗口属于本轮精确登录 Job，不扩大生产进程恢复的身份白名单。"""
+    if re.fullmatch(r"prep_[0-9a-f]{32}", preparation_id) is None:
+        return False
+    kernel = ctypes.windll.kernel32
+    kernel.OpenJobObjectW.argtypes = [ctypes.c_ulong, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel.OpenJobObjectW.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_bool, ctypes.c_ulong]
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.IsProcessInJob.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+    kernel.IsProcessInJob.restype = ctypes.c_int
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    job = kernel.OpenJobObjectW(4, False, 'identity-preparation-' + preparation_id)
+    if not job:
+        return False
+    process = kernel.OpenProcess(0x1000, False, process_id)
+    try:
+        belongs = ctypes.c_int()
+        return bool(process and kernel.IsProcessInJob(process, job, ctypes.byref(belongs)) and belongs.value)
+    finally:
+        if process:
+            kernel.CloseHandle(process)
+        kernel.CloseHandle(job)
 
 
 def _exists(window: WindowSpecification, title: str, control_type: str) -> bool:

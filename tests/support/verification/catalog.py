@@ -25,6 +25,20 @@ def is_under(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix.rstrip("/") + "/")
 
 
+def ui_scopes(root: Path, requested: list[str], changed: list[str]) -> list[str]:
+    """明确选择优先；未映射的共享样式保守覆盖全部浏览器场景。"""
+    groups = tomllib.loads((root / "tests/suites.toml").read_text(encoding="utf-8"))["ui"]
+    if set(requested) - set(groups) - {"all"}:
+        raise ValueError("UNKNOWN_UI_SCOPE")
+    if requested:
+        return sorted(groups if "all" in requested else set(requested))
+    selected = set()
+    for path in changed:
+        matches = {name for name, group in groups.items() if any(is_under(path, p) for p in group["sources"])}
+        selected |= matches or set(groups)
+    return sorted(selected or groups)
+
+
 def source_files(root: Path) -> list[str]:
     # 包括未提交新文件和删除文件；Git HEAD 不能代表一个脏工作树的测试身份。
     result = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
@@ -53,6 +67,14 @@ def test_dependencies(root: Path, selected: set[str]) -> set[str]:
         visited.add(name)
         if not name.endswith(".py"):
             continue
+        # pytest 自动注入祖先目录夹具，它们不会出现在测试的 import 中。
+        for parent in Path(name).parents:
+            if parent == Path('.'):
+                break
+            for filename in ('conftest.py', '__init__.py'):
+                dependency = (parent / filename).as_posix()
+                if (root / dependency).is_file() and dependency not in visited:
+                    pending.append(dependency)
         tree = ast.parse((root / name).read_text(encoding="utf-8-sig"))
         modules = []
         for node in ast.walk(tree):
@@ -92,7 +114,7 @@ def inventory(root: Path) -> dict:
     return {"schema_version": "1", "files": files, "invariants": {k: v["invariants"] for k, v in areas.items()}}
 
 
-def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: list[str]) -> dict:
+def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: list[str], ui: list[str] | None = None) -> dict:
     definitions = catalog(root)
     unknown = set(areas) - set(definitions) - {"all"}
     if unknown:
@@ -101,6 +123,9 @@ def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: li
     if any(Path(p).is_absolute() or ".." in Path(p).parts or ":" in p for p in normalized):
         raise ValueError("CHANGED_PATH_OUTSIDE_REPOSITORY")
     selected = set(definitions) if "all" in areas or level == "L4" else set(areas)
+    if ui:
+        ui_scopes(root, ui, [])
+        selected.add("frontend")
     reasons = []
     for name in normalized:
         matches = {key for key, value in definitions.items()
@@ -119,7 +144,9 @@ def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: li
     records = inventory(root)["files"]
     python_paths = sorted({r["path"] for r in records if r["engine"] == "pytest" and selected.intersection(r["areas"])})
     frontend_paths = sorted({r["path"].removeprefix("product/frontend/") for r in records if r["engine"] == "vitest" and selected.intersection(r["areas"])})
-    if normalized and selected == {"frontend"} and level in {"L1", "L2"}:
+    local_ui = selected == {"frontend"} and level in {"L1", "L2"} and not areas
+    styles_only = bool(normalized) and all(name.startswith("product/frontend/") and name.endswith(".css") for name in normalized)
+    if normalized and local_ui:
         local = []
         for name in normalized:
             if not name.startswith("product/frontend/src/features/"):
@@ -129,10 +156,18 @@ def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: li
             local.extend(p for p in frontend_paths if is_under(p, feature))
         if local:
             frontend_paths = sorted(set(local))
-    tasks = [{"id": "contracts", "command": "test", "args": ["tests/contracts", "-q"], "required": True}]
+    if local_ui and (styles_only or ui and not normalized):
+        frontend_paths = []
+        reasons.append("局部视觉检查使用生产浏览器；不以组件断言代替布局证据")
+    if level in {"L1", "L2"} and not areas and normalized and all(name in python_paths for name in normalized):
+        python_paths = sorted(set(normalized))
+        reasons.append("仅测试用例变化，执行这些文件；共享夹具和产品变化仍按能力扩大")
+    tasks = []
+    if python_paths or level == "L4":
+        tasks.append({"id": "contracts", "command": "test", "args": ["tests/contracts", "-q"], "required": True})
     if python_paths:
         tasks.append({"id": "collect", "command": "test", "args": [*python_paths, "--collect-only", "-qq"], "required": True})
-    if level != "L1" and python_paths:
+    if python_paths:
         markers = "not l5" if level in {"L3", "L4"} else "not (browser or process or slow or e2e or l5)"
         assigned = {p for p in python_paths if p.startswith("tests/contracts/")}
         # 每个文件只执行一次。通用 infra 分组只接收尚未被具体能力领取的文件。
@@ -144,9 +179,15 @@ def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: li
                 tasks.append({"id": "backend-" + name, "command": "test", "args": [*paths, "-m", markers, "-q", "--durations=15"], "required": True})
     if frontend_paths:
         tasks.append({"id": "frontend", "command": "frontend-test", "args": frontend_paths, "required": True})
-    if level in {"L3", "L4"} and "frontend" in selected:
-        tasks += [{"id": "build", "command": "prepare", "args": [], "required": True},
-                  {"id": "browser-ui", "command": "verify", "args": ["browser"], "required": True}]
+    if "frontend" in selected and (level in {"L3", "L4"} or styles_only or ui):
+        scopes = ui_scopes(root, [] if level == "L4" else ui or [], normalized if local_ui else [])
+        tasks.append({"id": "build", "command": "prepare", "args": [], "required": True})
+        # 每个场景独立留检查点，单处失败不要求重跑其余已通过场景。
+        # history 包含从历史进入结果的完整阅读；同时选择时只走一次结果详情。
+        for scope in scopes:
+            if scope == "results" and "history" in scopes:
+                continue
+            tasks.append({"id": "browser-" + scope, "command": "verify", "args": ["browser", "--ui", scope], "required": True})
     if "docs" in selected or level == "L4":
         tasks += [{"id": "docs", "command": "docs", "args": [], "required": True}]
     if "contracts" in selected or level == "L4":
@@ -160,9 +201,11 @@ def plan(root: Path, *, level: str, areas: list[str], changed: list[str], l5: li
             inputs = files
         elif task["id"].startswith("backend-") or task["id"] in {"collect", "contracts"}:
             selected_files = test_dependencies(root, {p.split("::", 1)[0] for p in task["args"] if p.endswith(".py")})
-            inputs = [p for p in files if not p.startswith(("docs/", "product/frontend/"))
-                      and (not p.startswith("tests/") or p in selected_files or p.startswith(("tests/fixtures/", "tests/support/", "tests/contracts/", "tests/acceptance/")) or p in {"tests/conftest.py", "tests/suites.toml"})]
-        elif task["id"] in {"frontend", "build", "browser-ui"}:
+            # 架构约束读取前后端边界，前端源码变化也必须使这类证据失效。
+            cross_frontend = any(p.startswith("tests/architecture/") for p in selected_files)
+            inputs = [p for p in files if not p.startswith("docs/") and (cross_frontend or not p.startswith("product/frontend/"))
+                      and (not p.startswith("tests/") or p in selected_files or p.startswith(("tests/fixtures/", "tests/support/", "tests/contracts/", "tests/acceptance/", "tests/validation/")) or p in {"tests/conftest.py", "tests/suites.toml"})]
+        elif task["id"] in {"frontend", "build"} or task["id"].startswith("browser-"):
             inputs = [p for p in files if p.startswith(("product/frontend/", "product/backend/api/", "product/protocols/", "tests/acceptance/ui/", "tests/support/", "scripts/", "product/config/")) or p in {"pnpm-lock.yaml", "pyproject.toml", "uv.lock"}]
         else:
             inputs = files

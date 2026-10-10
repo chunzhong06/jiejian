@@ -76,8 +76,8 @@
 @media(max-width:1100px){.result-overview-header{padding:var(--space-24) var(--space-24) 0;}.result-overview-title{align-items:flex-start;}.result-overview-title>.ant-btn{white-space:normal;height:auto;max-width:190px;}.result-overview-table th,.result-overview-table td{padding-inline:var(--space-16);}.result-overview-table th:first-child{width:36%;}.result-overview-table th:nth-child(2){width:31%;}.result-overview-table th:nth-child(3){width:19%;}.result-overview-table th:last-child{width:14%;}.result-investigation-heading,.result-investigation-body{padding:var(--space-24);}.result-detail-tabs{padding-inline:var(--space-24);}}
 @media(max-width:760px){.result-overview-title{flex-direction:column;gap:var(--space-16);}.result-overview-title>.ant-btn{align-self:flex-end;max-width:none;}.result-overview-meta{align-items:flex-start;}.result-section-heading{align-items:flex-start;flex-direction:column;gap:var(--space-4);}.result-overview-table,.result-overview-table tbody,.result-overview-table tr,.result-overview-table td{display:block;width:100%;}.result-overview-table thead{display:none;}.result-overview-table tr{padding:var(--space-20);}.result-overview-table tr+tr{border-top:1px solid var(--color-border);}.result-overview-table td{padding:0;border:0;}.result-overview-table td+td{margin-top:var(--space-12);}.result-overview-table td[data-label="实际结果"]:before{content:attr(data-label);display:block;color:var(--color-secondary);font-size:var(--font-label);margin-bottom:var(--space-4);}.result-overview-table .result-case-number{display:none;}.result-overview-table tr[data-tone=block]{box-shadow:inset 3px 0 var(--color-danger);}.result-overview-table tr[data-tone=unknown]{box-shadow:inset 3px 0 var(--color-warning);}.result-overview-table tr[data-tone]>td:first-child{box-shadow:none;}.result-overview-table td:last-child{margin-top:var(--space-8);}.result-review-views{gap:var(--space-16);}.result-review-views .result-scope-button{white-space:normal;height:auto;}.result-overall-boundary{display:block;}.result-overall-boundary p+p{margin-top:var(--space-8);}.result-expectation-comparison{grid-template-columns:1fr;gap:var(--space-24);}.result-investigation-heading{align-items:flex-start;gap:var(--space-16);}.result-investigation-heading h2{font-size:19px;}.result-investigation-nav{flex-wrap:wrap;}.result-investigation-nav nav{margin-left:auto;flex-wrap:wrap;}.result-investigation-nav .ant-select{max-width:100%;}.result-proof-summary{padding:var(--space-16);}.result-proof-title{flex-wrap:wrap;gap:var(--space-4) var(--space-8);}.result-repair-status{flex-wrap:wrap;}}
 /* 业务证明与执行条件分栏阅读；接口响应不混入必要证明的结论区。 */
-.result-fact-layout { display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:var(--space-40);margin-top:var(--space-32); }
-.result-fact-layout > section { min-width:0; }
+.result-fact-layout { display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:var(--space-40);width:min(100%,var(--layout-summary));margin:var(--space-32) auto 0; }
+.result-fact-layout > section { min-width:0;width:min(100%,60ch);justify-self:center; }
 .result-fact-layout .result-proof-summary { background:transparent;border:0;border-radius:0;padding:0;margin:0; }
 .result-fact-layout h3 { margin:0;padding-bottom:var(--space-16);border-bottom:1px solid var(--color-border);font-size:var(--font-body); }
 .result-fact-layout .result-proof-links { gap:var(--space-8) var(--space-20); }
@@ -102,18 +102,8 @@
 .evidence-proof-heading p { margin:var(--space-8) 0 0; }
 .evidence-proof-heading .editorial-eyebrow { margin:0 0 var(--space-8); }
 .evidence-proof-heading > .product-status { flex-shrink:0; }
-.evidence-observations h5 { font-size:var(--font-body);font-weight:var(--weight-medium);margin:0 0 var(--space-16); }
-.evidence-stage-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-20); }
-.evidence-stage { min-width:0;padding:var(--space-24);border:1px solid var(--color-border);border-radius:var(--radius-small);background:var(--color-surface-subtle); }
-.evidence-stage:only-child,.evidence-stage:last-child:nth-child(odd) { grid-column:1/-1; }
-.evidence-stage h4 { color:var(--color-secondary);font-size:var(--font-secondary);font-weight:var(--weight-medium);margin:0 0 var(--space-16); }
-.evidence-stage ol { list-style:none;margin:0;padding:0; }
-.evidence-stage li + li { border-top:1px solid var(--color-border);padding-top:var(--space-16);margin-top:var(--space-16); }
-.evidence-stage strong { display:block;font-size:var(--font-body);font-weight:var(--weight-medium);line-height:1.8;overflow-wrap:anywhere; }
-.evidence-stage time,.evidence-phase { display:block;color:var(--color-secondary);font-size:var(--font-label); }
-.evidence-stage time { margin-top:var(--space-12); }
 .evidence-technical { margin-top:var(--space-24);padding-top:var(--space-12);border-top:1px solid var(--color-border); }
-@media(max-width:760px) { .evidence-stage-grid { grid-template-columns:minmax(0,1fr); }.evidence-proof-heading { flex-wrap:wrap;gap:var(--space-12); }.evidence-stage { padding:var(--space-20); } }
+@media(max-width:760px) { .evidence-proof-heading { flex-wrap:wrap;gap:var(--space-12); } }
 
 /* 一条证明先读对象与观察结果，再在独立操作行选择必要或辅助记录。 */
 .result-investigation-body:has(.result-records-primary){max-width:1184px;margin-inline:auto;}
@@ -128,3 +118,28 @@
 .result-records-primary .result-proof-links{justify-content:flex-end;gap:var(--space-12) var(--space-24);border-top:1px solid var(--color-border);padding-top:var(--space-12);margin-top:var(--space-20);}
 .result-case-boundary>p{margin:var(--space-12) 0;}
 @media(max-width:600px){.result-records-primary{padding:var(--space-16);}.result-records-primary .result-proof-links{justify-content:flex-start;}}
+/* 舒适模式仅证据目录收拢；前两项沿已接受布局，紧凑模式复用全局密度。 */
+.result-records-body { width:min(100%,1040px);margin-inline:auto; }
+.result-path-unavailable { width:min(100%,760px);margin-inline:auto;text-align:center;padding:var(--space-24) 0; }
+.result-path-unavailable h3 { margin:0 0 var(--space-12);font-size:var(--font-section); }
+.result-path-unavailable p { color:var(--color-secondary);line-height:1.8; }
+.result-agent-handoff { width:min(100%,var(--layout-summary));margin:var(--space-24) auto; }
+[data-density="compact"] .result-investigation-body { width:min(100%,1040px);margin-inline:auto; }
+.evidence-verification > header { display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-block-end:24px; }
+.evidence-verification > header h3 { margin-block:8px 16px; }
+.evidence-verification-sections { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 32px; }
+.evidence-verification-sections > section { min-width:0;border-block-start:1px solid var(--color-border);padding-block-start:16px; }
+.evidence-verification-sections h4,.evidence-record-values h4,.evidence-related h4 { margin-block:0 12px; }
+.evidence-verification-sections p { margin-block:0 12px; }
+.evidence-verification details summary { cursor:pointer; }
+.evidence-verification code,.evidence-location { overflow-wrap:anywhere; }
+.evidence-record-values,.evidence-related { margin-block:28px; }
+.evidence-record-values dl > div { display:grid;grid-template-columns:minmax(120px,1fr) 3fr;gap:20px;padding-block:12px;border-block-end:1px solid var(--color-border); }
+.evidence-record-values dt,.evidence-record-values dd { margin:0;overflow-wrap:anywhere; }
+.evidence-record-values dd { display:grid;gap:8px; }
+.evidence-related .ant-btn { max-width:100%;height:auto;white-space:normal;text-align:start; }
+@media (max-width:720px) {
+  .evidence-verification-sections { grid-template-columns:minmax(0,1fr);gap:20px; }
+  .evidence-verification > header { flex-direction:column;gap:12px; }
+  .evidence-record-values dl > div { grid-template-columns:1fr;gap:8px; }
+}

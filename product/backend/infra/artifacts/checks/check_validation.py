@@ -6,7 +6,7 @@ import hashlib
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.checks.check_result import CheckRunnerInput
 from product.protocols.checks.check_runtime import CheckRuntimeBundle, check_runtime_fingerprint
-from product.protocols.checks.execution_request import PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3, canonical_execution_request_bytes
 
 
 def check_publication_budget_reason(actions, bundle) -> str | None:
@@ -33,8 +33,10 @@ def validate_check_inputs(request: PersistedExecutionRequestV3, bundle: CheckRun
                           runner_input: CheckRunnerInput | None = None) -> None:
     """在任何目标 I/O 前检查全计划关联；不从数据库或当前配置补齐缺少的事实。"""
     try:
+        if (bundle.schema_version=='6')!=(request.schema_version=='4'):
+            raise ValueError('request proof standard differs from runtime')
         config_hash = check_runtime_fingerprint(bundle)
-        request_hash = hashlib.sha256(canonical_execution_request_v3_bytes(request)).hexdigest()
+        request_hash = hashlib.sha256(canonical_execution_request_bytes(request)).hexdigest()
         if (request.project_id, request.source_fingerprint, request.config_fingerprint, request.budget_fingerprint) != (
             bundle.project_id, bundle.source_fingerprint, config_hash, bundle.budget.fingerprint()
         ):

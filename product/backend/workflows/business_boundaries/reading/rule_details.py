@@ -22,6 +22,10 @@ class BusinessRuleDetails:
                 raise JiejianError(ErrorCode.STORAGE_STATE,'权限规则的业务引用无法核对')
             runs = work.runs.page_for_project(project_id,limit=25)
             has_more = bool(runs) and work.runs.has_after_for_project(project_id,runs[-1].created_at_us,runs[-1].run_id)
+            candidate_mappings = work.rule_candidates.approval_mappings(intent_id=intent_id,revision=rule.revision)
+            for mapping in candidate_mappings:
+                source = work.rule_candidates.proposal_source(mapping['proposal_id'])
+                mapping['candidate_id'], mapping['candidate_revision'] = source[:2]
         materials = []
         prepared = None
         if current is not None:
@@ -63,7 +67,7 @@ class BusinessRuleDetails:
             expectation=rule.expectation.value,action_id=action.action_id,action_revision=action.revision,action_label=action.display_name,
             sentence=f'{subject.display_name}对{resource_owner}拥有的资源，'+('可以' if rule.expectation.value=='ALLOW' else '不得')+action.display_name+'。',
             effects=[dict(effect_id=item.effect_id,label=item.business_label,description=item.description) for item in action.effect_catalog if item.effect_id in rule.protected_effect_ids],
-            approval=rule.approval.model_dump(mode='json'),materials=materials,
+            approval=rule.approval.model_dump(mode='json'),candidate_mappings=candidate_mappings,materials=materials,
             preparation_complete=prepared is not None and prepared.preparation_complete,latest_result=latest,
             history_has_more=has_more,unreadable_history=unreadable,
             preparation_url=f'/tests?materials=1&project_id={project_id}&action_id={action.action_id}',

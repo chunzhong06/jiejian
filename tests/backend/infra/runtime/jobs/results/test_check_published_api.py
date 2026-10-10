@@ -101,6 +101,22 @@ def test_published_api_story_evidence_disabled_assistant_and_tamper(package_part
         assert "observations" not in index[0] and "case" not in index[0]
         detail = client.get(prefix + "/evidence/" + index[0]["evidence_id"])
         assert detail.status_code == 200 and "observations" in detail.json()["data"]
+        document=detail.json()['data'];case_id=document['case']['case_id'];evidence_id=document['evidence_id']
+        record_path=prefix+'/evidence/'+evidence_id+'/records'
+        params=dict(project_id=package.request.project_id,case_id=case_id)
+        records=client.get(record_path,params=params).json()['data']['records']
+        observation_record=next(item for item in records if item['kind']=='OBSERVATION')
+        reading=client.get(record_path+'/'+observation_record['record_id'],params=params)
+        assert reading.status_code==200,reading.text
+        reading=reading.json()['data']
+        assert len(reading['verification'])==6 and any('旧证据' in text for text in reading['limitations'])
+        assert reading['location']['pointer'].startswith('/observations/')
+        assert reading['verification'][0]['source']['pointer']=='/case/permission'
+        assert 'request_ref' not in json.dumps(reading) and 'lease_owner' not in json.dumps(reading)
+        assert client.get(record_path,params=params|{'project_id':'another-project'}).status_code==404
+        other=next(item.case_id for item in package.result.case_results if item.case_id!=case_id)
+        assert client.get(record_path,params=params|{'case_id':other}).status_code==404
+        assert client.get(record_path+'/rd_missing',params=params).status_code==404
         explanation = client.get(prefix + "/assistant/result-explanation")
         assert explanation.status_code == 200
         assert explanation.json()["data"]["status"] == "DISABLED"
@@ -111,6 +127,7 @@ def test_published_api_story_evidence_disabled_assistant_and_tamper(package_part
         assert status["result_integrity"] == "INVALID" and status["run"]["verdict"] is None
         assert client.get(prefix + "/result-story").status_code >= 400
         assert client.get(prefix + "/evidence").status_code >= 400
+        assert client.get(record_path+'/'+observation_record['record_id'],params=params).status_code>=400
 
 
 @pytest.mark.parametrize("package_parts", [{"configure": frozen_labels}], indirect=True)

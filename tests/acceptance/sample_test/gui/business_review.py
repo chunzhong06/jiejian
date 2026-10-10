@@ -20,8 +20,8 @@ def verify_business_selection(gui, project):
     area = gui.page.get_by_role("region", name="审阅业务候选", exact=True)
     area.get_by_role("heading", name="整理权限组与业务动作", exact=True).wait_for()
     _capture_layout(gui, "business-selection")
-    expect(area.get_by_role("button", name="下一步：核对业务总览", exact=True)).to_have_count(1)
-    area.get_by_role("button", name="下一步：核对业务总览", exact=True).click()
+    expect(area.get_by_role("button", name="核对业务总览", exact=True)).to_have_count(1)
+    area.get_by_role("button", name="核对业务总览", exact=True).click()
     expect(area.get_by_role("heading", name="核对业务总览", exact=True)).to_be_focused()
     expect(area.get_by_role("textbox")).to_have_count(0)
     _capture_layout(gui, "business-selection-review")
@@ -51,7 +51,7 @@ def verify_identity_layout(gui):
 
 def verify_maintenance_layout(gui):
     gui._open_maintenance()
-    expect(gui.page.get_by_role("button", name="下一步：核对修改", exact=True)).to_have_count(0)
+    expect(gui.page.get_by_role("button", name="核对修改", exact=True)).to_have_count(0)
     _capture_layout(gui, "boundary-maintenance-entry")
     gui._goto("/tests")
     gui._mark("boundary-maintenance-layout")

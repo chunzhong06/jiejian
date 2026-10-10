@@ -14,7 +14,7 @@ class PreparationNextAction(BoundaryModel):
     gui_url: str = Field(pattern=r'^#/(application|permissions|tests|changes|environment|history)(\?|$)', max_length=2048)
     mcp_tool: Literal['jiejian_proof_source_save', 'jiejian_proof_preflight_start',
                       'jiejian_proof_preflight_status', 'jiejian_proof_adoption_preview',
-                      'jiejian_check_run', 'jiejian_change_registration_preview'] | None = None
+                      'jiejian_check_preview', 'jiejian_change_registration_preview'] | None = None
     required_level: Literal['READ', 'PREPARE', 'EXECUTE'] | None = None
     action_id: str | None = None
     action_revision: int | None = Field(default=None, ge=1)

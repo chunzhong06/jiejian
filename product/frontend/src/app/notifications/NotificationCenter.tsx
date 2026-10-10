@@ -1,6 +1,6 @@
 /* 全局通知：检查动态与错误队列共享浮层，消费结构化诊断，独立维护去重、过期和有限展示状态。 */
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Alert, Button, Space, Typography } from 'antd'
 import { CloseOutlined } from '@ant-design/icons'
 import type { ApiError, ErrorDiagnosis } from '../../api/http'
@@ -104,11 +104,23 @@ export function NotificationCenter({
 }) {
   const visible = items.slice(-MAX_VISIBLE_SIZE)
   const overflow = Math.max(0, items.length - visible.length)
-  return <aside className="notification-center" aria-label="全局通知" aria-live="polite" aria-relevant="additions">
+  const center = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const element = center.current, shell = element?.closest<HTMLElement>('.app-shell')
+    if (!element || !shell) return
+    // 通知保持浮动，但正文末尾可滚到通知上方；不让错误提示挡住返回和提交按钮。
+    const observer = new ResizeObserver(() => {
+      const height = element.getBoundingClientRect().height
+      shell.style.setProperty('--notification-clearance', height > 8 ? `${Math.ceil(height + 48)}px` : '0px')
+    })
+    observer.observe(element)
+    return () => { observer.disconnect(); shell.style.removeProperty('--notification-clearance') }
+  }, [])
+  return <aside ref={center} className="notification-center" aria-label="全局通知" aria-live="polite" aria-relevant="additions">
     {resourceNotice}
     <MotionPresenceList items={activity ? [{...activity,key:'check-activity'}] : []}>{item=><section className="check-activity-toast" aria-label="检查动态">
       <div className="check-activity-toast-heading"><span>检查动态</span>{item.onDismiss && <Button type="text" aria-label="关闭检查提示" icon={<CloseOutlined />} onClick={item.onDismiss} />}</div>
-      <p>{item.label}</p><div className="check-activity-toast-actions"><Button type="link" onClick={item.onView}>{item.actionLabel}</Button></div>
+      <p>{item.label}</p><div className="notification-actions"><Button type="link" onClick={item.onView}>{item.actionLabel}</Button></div>
     </section>}</MotionPresenceList>
     <div className="notification-stack">
       <MotionPresenceList items={visible}>{item=><NotificationCard item={item} onDismiss={onDismiss} onNavigate={onNavigate}/>}</MotionPresenceList>
@@ -138,10 +150,10 @@ function NotificationCard({
     description={<Space direction="vertical" size={8} className="full-width">
       <Typography.Text>{diagnosis?.short_message ?? '请刷新状态后重试；仍失败时检查运行环境。'}</Typography.Text>
       {diagnosis?.cleanup_warnings.map((warning) => <Typography.Text type="warning" key={warning}>附加提示：{warning}</Typography.Text>)}
-      <Space wrap>
-        {diagnosis?.route && <Button type="link" size="small" onClick={() => onNavigate(diagnosis.route, item.key)}>前往处理页面</Button>}
+      <div className="notification-actions">
         <Button type="link" size="small" onClick={() => onDismiss(item.key)}>{persistent ? '我知道了' : '关闭'}</Button>
-      </Space>
+        {diagnosis?.route && <Button type="link" size="small" onClick={() => onNavigate(diagnosis.route, item.key)}>前往处理页面</Button>}
+      </div>
     </Space>}
   />
 }

@@ -2,7 +2,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DiagnosisSummary } from './DiagnosisSummary'
-import { story } from '../../../testing/fixtures/results'
+import { story } from '../../../shared/testing/results'
 
 describe('定位依据', () => {
   it('范围定位解释真实原因，不提供精确节点结论', () => {

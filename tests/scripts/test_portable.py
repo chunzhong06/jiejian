@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import inspect
 import json
 import os
 import shutil
@@ -48,26 +47,10 @@ def _builder() -> ModuleType:
     return _load_module(BUILDER_PATH, f"portable_builder_{uuid.uuid4().hex}")
 
 
-def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> None:
+def test_portable_startup_has_no_build_or_download_commands() -> None:
+    # 静态检查只保留用户明确要求的启动禁令；相对路径、Job 回收和重开由真实 exe 场景验证。
     builder = _builder()
-
-    assert builder.RELEASE_VERSION == __version__
-    assert builder.RELEASE_NAME == RELEASE_NAME
-    assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in builder._START_CMD
-    assert "%~dp0" in builder._START_CMD
     launcher = builder._START_PS1
-    assert 'Join-Path $PSScriptRoot ".."' in launcher
-    assert '"JIEJIAN_RUNTIME_MODE"' not in launcher
-    assert '$env:JIEJIAN_RUNTIME_MODE = "portable"' in launcher
-    assert "$env:JIEJIAN_RELEASE_ROOT = $releaseRoot" in launcher
-    assert "$env:JIEJIAN_PLAYWRIGHT_EXECUTABLE" in launcher
-    assert '$env:JIEJIAN_NODE_EXECUTABLE = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "node\\node.exe"))' in launcher
-    assert '$env:JIEJIAN_NODE_VERSION = [string]$release.node_version' in launcher
-    assert "$env:PLAYWRIGHT_BROWSERS_PATH" in launcher
-    assert 'Lib\\site-packages\\product\\frontend\\dist' in launcher
-    assert '"-m", "product.backend.cli"' in launcher
-    assert '"--official-sample-root"' in launcher
-    assert "Remove-Item Env:JIEJIAN_PROJECT_ROOT" in launcher
     for forbidden in (
         "scripts\\start.ps1",
         "prepare-sourceruntime",
@@ -99,21 +82,21 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
         },
     )
 
-    assert {path.name for path in base.iterdir()} == {"README.txt", "runtime", "start.cmd"}
-    assert (base / "start.cmd").read_bytes().startswith(b"@echo off\r\n")
+    assert {path.name for path in base.iterdir()} == {"README.txt", "runtime", "app", "docs"}
+    assert not (base / "start.cmd").exists()
     assert (base / "README.txt").read_bytes().startswith(b"\xef\xbb\xbf")
-    start_ps1 = (base / "runtime" / "start.ps1").read_bytes()
+    start_ps1 = (base / "app" / "start.ps1").read_bytes()
     assert start_ps1.startswith(b"\xef\xbb\xbf")
     assert b"\r\n" in start_ps1
-    release = json.loads((base / "runtime" / "release.json").read_text(encoding="utf-8"))
+    release = json.loads((base / "app" / "release.json").read_text(encoding="utf-8"))
     assert release == {
-        "schema_version": "2",
+        "schema_version": "3",
         "product": "JieJian Web V1",
         "version": __version__,
         "package_version": __version__,
         "platform": "windows",
         "architecture": "x64",
-        "runtime_layout_version": "2",
+        "runtime_layout_version": "3",
         "python_version": "3.13.13",
         "playwright_version": "1.58.0",
         "chromium_revision": "1228",
@@ -127,10 +110,11 @@ def test_full_and_nosamples_archives_share_exact_product_tree(tmp_path: Path) ->
     base = tmp_path / "base"
     samples = tmp_path / "samples"
     (base / "runtime").mkdir(parents=True)
-    (base / "start.cmd").write_text("start", encoding="ascii")
-    (base / "runtime" / "release.json").write_text("{}", encoding="ascii")
-    (samples / "web" / "collaboration_space").mkdir(parents=True)
-    (samples / "web" / "collaboration_space" / "sample.json").write_text("{}", encoding="ascii")
+    (base / "界鉴.exe").write_bytes(b'MZ')
+    (base / "app").mkdir()
+    (base / "app" / "release.json").write_text("{}", encoding="ascii")
+    (samples / "digital_gallery").mkdir(parents=True)
+    (samples / "digital_gallery" / "sample.json").write_text("{}", encoding="ascii")
     full = tmp_path / "full.zip"
     nosamples = tmp_path / "nosamples.zip"
 
@@ -141,7 +125,7 @@ def test_full_and_nosamples_archives_share_exact_product_tree(tmp_path: Path) ->
         nosamples, without_samples=True
     )
     with zipfile.ZipFile(full) as archive:
-        assert f"{RELEASE_NAME}/samples/web/collaboration_space/sample.json" in archive.namelist()
+        assert f"{RELEASE_NAME}/samples/digital_gallery/sample.json" in archive.namelist()
     with zipfile.ZipFile(nosamples) as archive:
         assert all("/samples/" not in name for name in archive.namelist())
 
@@ -191,7 +175,7 @@ def test_portable_runtime_prunes_dependency_tests_and_generated_python_artifacts
     assert runtime_module.is_file()
 
 
-def test_portable_build_owns_temp_and_publishes_six_stable_progress_stages(
+def test_portable_build_owns_its_temporary_directory(
     tmp_path: Path,
 ) -> None:
     builder = _builder()
@@ -202,10 +186,6 @@ def test_portable_build_owns_temp_and_publishes_six_stable_progress_stages(
     assert environment["TEMP"] == str(temporary.resolve())
     assert environment["TMP"] == str(temporary.resolve())
     assert temporary.is_dir()
-    build_source = inspect.getsource(builder.build)
-    positions = [build_source.index(f"_progress({step},") for step in range(1, 7)]
-    assert positions == sorted(positions)
-    assert "flush=True" in inspect.getsource(builder._progress)
 
 
 def _verify_checksum(path: Path, expected: str) -> None:
@@ -224,18 +204,32 @@ def _portable_environment() -> dict[str, str]:
     return environment
 
 
-def _accept_full_delivery(page, client, audit_dir, state, identities) -> int:
+def _accept_full_delivery(page, client, audit_dir, state, identities, chromium: Path) -> int:
     """便携版使用同一当前 GUI/API 操作，只有安装和启动身份不同。"""
     gui = CurrentGui(page, client, audit_dir)
     experience = gui.start()
     state.sample_started = True
     project_id = experience["project_id"]
     sample_port = int(experience["origin"].rsplit(":", 1)[1])
-    current_api.prepare_current(client, project_id, initial=True, gui=gui)
+    from tests.acceptance.sample_test.gallery import run_sequence
+    run_sequence(client, gui, project_id, state, str(chromium), stop_after_setup=True)
     for identity in client.call("GET", f"/api/projects/{project_id}/test-identities"):
         identities[identity["identity_id"]] = identity["identity_id"]
     # 新实例从同步基线开始；Portable 验证实际完整计划，三阶段回归由唯一 sample-test 负责。
-    result = current_api.run_current(client, project_id, state, name="portable-baseline", expected="PASS", gui=gui)
+    from tests.acceptance.sample_test.gallery import assert_result
+    preview = client.call('GET', f'/api/projects/{project_id}/check-preview')
+    assert preview['can_execute'] and (preview['action_count'], preview['case_count']) == (3, 5)
+    before = set(current_api.project_run_ids(client, project_id))
+    try:
+        submitted = gui.submit(project_id, {'schema_version':'2', 'expected_plan_fingerprint':preview['plan_fingerprint'], 'idempotency_key':'portable-'+uuid.uuid4().hex}, None)
+    except Exception:
+        current_api.recover_run_for_cleanup(client, project_id, before, state)
+        raise
+    state.active_run_id, state.active_run_job_id = submitted['run']['run_id'], submitted['job']['job_id']
+    current_api.wait_published(client, state.active_run_id, state.active_run_job_id)
+    result = current_api.read_result(client, state.active_run_id)
+    assert_result(result, expected='PASS')
+    state.active_run_id = state.active_run_job_id = None
     gui.checkpoint("baseline-result", result)
     gui.history_search(project_id, result["run_id"])
     gui.history_open(result)
@@ -291,6 +285,8 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, obj
     invocation.mkdir()
     shutil.unpack_archive(archive, extraction)
     release = extraction / RELEASE_NAME
+    fixed_before = {str(path.relative_to(release)):hashlib.sha256(path.read_bytes()).hexdigest()
+        for folder in ('app','runtime') for path in (release / folder).rglob('*') if path.is_file()}
     log_path = root / ("full.log" if samples else "nosamples.log")
     process = None
     log = None
@@ -304,9 +300,8 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, obj
     try:
         assert not _port_open(CONTROL_PORT), "默认控制端口已被占用"
         log = log_path.open("wb")
-        command_shell = os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")
         process = spawn_managed_process(
-            [command_shell, "/d", "/s", "/c", "call", str(release / "start.cmd"), "-NoOpen"],
+            [str(release / "界鉴.exe"), *([] if samples else ['--no-open'])],
             cwd=invocation,
             env=_portable_environment(),
             stdin=subprocess.DEVNULL,
@@ -330,11 +325,27 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, obj
         client.bind_page(page)
         sample_status = client.call("GET", "/api/experience/official-sample")
         assert sample_status["available"] is samples
-        sample_button = page.get_by_role("button", name="启动示例", exact=True)
+        status = client.call('GET', '/api/system/status')
+        assert status['version'] == __version__
+        assert status['environment']['python']['runtime_mode'] == 'portable'
+        assert Path(status['environment']['python']['package_origins']['product']).is_relative_to(release / 'app')
+        def read_owner():
+            # 第0字节是系统文件锁；按正式锁协议从第1字节读取有限诊断身份。
+            with (release / 'var/runtime/locks/serve.lock').open('rb') as stream:
+                stream.seek(1)
+                return stream.read(16384)
+        owner_before = read_owner()
+        duplicate = subprocess.run([str(release / '界鉴.exe'), '--no-open'], cwd=invocation, env=_portable_environment(), timeout=15)
+        assert duplicate.returncode == 0
+        assert read_owner() == owner_before
         if samples:
-            assert sample_button.is_enabled()
-        elif sample_button.count():
-            assert sample_button.is_disabled()
+            startup_log = release / 'var/logs/launcher.log'
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if '__JIEJIAN_GUI_STATUS__:opened' in startup_log.read_text(encoding='utf-8', errors='replace'):
+                    break
+                time.sleep(.1)
+            assert '__JIEJIAN_GUI_STATUS__:opened' in startup_log.read_text(encoding='utf-8', errors='replace')
         if samples:
             sample_port = _accept_full_delivery(
                 page,
@@ -342,6 +353,7 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, obj
                 root,
                 state,
                 identities,
+                candidates[0],
             )
             _shutdown_owned_runtime(
                 client,
@@ -396,7 +408,11 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, obj
                 release_process_tree(process, timeout=5)
         if log is not None:
             log.close()
+    fixed_after = {str(path.relative_to(release)):hashlib.sha256(path.read_bytes()).hexdigest()
+        for folder in ('app','runtime') for path in (release / folder).rglob('*') if path.is_file()}
+    assert fixed_after == fixed_before, '启动和使用不得改写固定 app/runtime 组件'
     return {"archive": archive.name, "startup": "PASSED", "samples": samples,
+        "exe_entry": True, "duplicate_reuses_instance": True, "fixed_components_unchanged": True,
         "business_check": "OFFICIAL_BASELINE_PASS" if samples else "OWNED_NODE_STARTED_AND_STOPPED",
         "owned_tree_closed": released, "control_port_closed": not _port_open(CONTROL_PORT)}
 

@@ -1,10 +1,11 @@
 // 历史只消费有界、完整性已核验的读模型；列表与精确 Run 详情共享返回位置，不产生新检查。
 import { SearchField } from '../../shared/ui/SearchField'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
-import { Button, Select, Spin } from 'antd'
+import { Alert, Button, Select, Spin } from 'antd'
+import { RightOutlined } from '@ant-design/icons'
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError } from '../../api/http'
-import { currentChecksApi, type CheckHistoryCursor, type CheckHistoryItem, type CheckHistoryQuery } from '../../api/checks/currentChecks'
+import { currentChecksApi, type CheckHistoryCursor, type CheckHistoryItem, type CheckHistoryQuery, type RuleHistoryReference } from '../../api/checks/currentChecks'
 import type { ProjectDto } from '../../api/applications/projects'
 import { formatTimestamp } from '../../shared/format/time'
 import { lifecycleLabel } from '../../shared/presentation/execution'
@@ -12,21 +13,23 @@ import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import './history.css'
 import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
+import {RuleHistoryFilters} from './RuleHistoryFilters'
 
 const labels = { PASS: '通过', BLOCK: '权限问题', INCONCLUSIVE: '证据不足' }
 const cursorKey = (cursor: CheckHistoryCursor | null) => cursor ? `${cursor.created_at_us}:${cursor.run_id}` : ''
 
-export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId, renderRun }: {
+export function AllCheckHistory({ project, onError, onNavigate, requestedRunId, renderRun, ruleReference,initialOptions,returnSearch,showHeader=true,ruleFilters,refreshToken=0 }: {
   project: ProjectDto
   onError: (error: ApiError) => void
   onNavigate: (path: string) => void
   requestedRunId?: string | null
+  ruleReference?:RuleHistoryReference;initialOptions?:CheckHistoryQuery;returnSearch?:string;showHeader?:boolean;ruleFilters?:(controls:ReactNode)=>ReactNode;refreshToken?:number
   renderRun: (runId: string, onBack: () => void) => ReactNode
 }) {
   const visible = useContext(WorkPageVisible)
   const [newRecords, setNewRecords] = useState(false)
-  const [query, setQuery] = useState('')
-  const [options, setOptions] = useState<CheckHistoryQuery>({})
+  const [query, setQuery] = useState(initialOptions?.query??'')
+  const [options, setOptions] = useState<CheckHistoryQuery>({...initialOptions,...(ruleReference?{rule:ruleReference}:{})})
   const [items, setItems] = useState<CheckHistoryItem[]>([])
   const [cursor, setCursor] = useState<CheckHistoryCursor | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,6 +39,9 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   const scrollPosition = useRef(0)
   const returnTarget = useRef<string | undefined>(undefined)
   const list = useRef<HTMLElement>(null)
+  const origins=useRef(new Map<string,CheckHistoryCursor|null>())
+  const routeOptions=JSON.stringify(initialOptions??null),ruleKey=JSON.stringify(ruleReference??null)
+  useEffect(()=>{if(initialOptions===undefined)return;const next={...initialOptions,...(ruleReference?{rule:ruleReference}:{})};setOptions(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);setQuery(next.query??'')},[routeOptions,ruleKey])
   const load = useCallback(async (after: CheckHistoryCursor | null = null) => {
     if (after && busy.current) return
     const request = ++epoch.current
@@ -48,6 +54,7 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
         throw new ApiError('STATE_PRECONDITION', '检查历史所属项目不一致。')
       }
       if (after && cursorKey(after) === cursorKey(page.next_cursor)) throw new ApiError('STATE_PRECONDITION', '历史读取位置未推进，请重新获取记录。')
+      page.items.forEach(item=>origins.current.set(item.status.run.run_id,after))
       setItems(previous => after ? [...previous, ...page.items.filter(item => !previous.some(old => old.status.run.run_id === item.status.run.run_id))] : page.items)
       setCursor(page.next_cursor)
     } catch (error) { if (request === epoch.current) { setFailed(true); onError(error as ApiError) } }
@@ -56,12 +63,12 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   useEffect(() => {
     if (!visible) {
       // 离开模块后释放筛选；从某条结果返回时页面仍可见，保留原阅读位置。
-      setQuery(''); setOptions(previous => Object.keys(previous).length ? {} : previous)
+      setQuery(''); setOptions(previous => Object.keys(previous).length ? ruleReference?{rule:ruleReference}:{} : previous)
       return
     }
-    void load()
+    void load(options.cursor??null)
     return () => { epoch.current += 1; busy.current = false }
-  }, [load, visible])
+  }, [load, visible,refreshToken])
   // 详情关闭后恢复选中行和滚动位置；后台结果变化不抢走正在阅读的历史。
   useEffect(() => {
     if (requestedRunId || !returnTarget.current) return
@@ -90,10 +97,16 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   }, 5000, false)
   const open = (runId: string) => {
     scrollPosition.current = window.scrollY; returnTarget.current = runId
-    onNavigate(`/history?run_id=${encodeURIComponent(runId)}`)
+    const params=historyParams();const origin=origins.current.get(runId);if(origin){params.set('page_before_time',String(origin.created_at_us));params.set('page_before_run',origin.run_id)}else{params.delete('page_before_time');params.delete('page_before_run')}params.set('run_id',runId);const item=items.find(row=>row.status.run.run_id===runId);if(item?.matching_cases?.length===1)params.set('case_id',item.matching_cases[0]);onNavigate('/history?'+params)
   }
-  const clear = () => { setQuery(''); setOptions({}) }
-  const filtered = Boolean(options.query || options.verdict || options.lifecycle)
+  const historyParams=(next=options)=>{const params=new URLSearchParams(returnSearch??'');for(const key of ['run_id','case_id','tab','evidence_id','record_id'])params.delete(key);for(const key of ['query','verdict','lifecycle'] as const){params.delete(key);if(next[key])params.set(key,next[key]!)}return params}
+  const applyOptions=(next:CheckHistoryQuery)=>{const cleared={...next};delete cleared.cursor;setOptions(cleared);if(returnSearch!==undefined){const params=historyParams(cleared);params.delete('page_before_time');params.delete('page_before_run');onNavigate('/history?'+params)}}
+  const clear = () => { setQuery('');setOptions({});if(returnSearch!==undefined)onNavigate('/history');else applyOptions({}) }
+  const filtered = Boolean(ruleReference || options.query || options.verdict || options.lifecycle)
+  const resultFilters = <>
+    <Select aria-label="筛选检查结论" value={options.verdict ?? ''} options={[{ value: '', label: '全部结论' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} onChange={value => applyOptions({ ...options, query: query.trim(), verdict: value ? value as CheckHistoryQuery['verdict'] : undefined })} />
+    <Select aria-label="筛选执行状态" value={options.lifecycle ?? ''} options={[{ value: '', label: '全部执行状态' }, ...['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].map(value => ({ value, label: lifecycleLabel(value) }))]} onChange={value => applyOptions({ ...options, lifecycle: value ? value as CheckHistoryQuery['lifecycle'] : undefined })} />
+  </>
   const grouped = items.map((item, index) => {
     const date = new Date(item.status.run.created_at_us / 1000).toLocaleDateString('zh-CN')
     const previousDate = index ? new Date(items[index - 1].status.run.created_at_us / 1000).toLocaleDateString('zh-CN') : null
@@ -101,28 +114,28 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   })
   return <>
     <div hidden={Boolean(requestedRunId)}>
-      <EditorialPage label="项目检查历史">
-        <EditorialHeader eyebrow={project.name || '当前应用'} title="检查记录"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
-        <div className="history-surface"><form className="history-toolbar" onSubmit={event => { event.preventDefault(); setOptions(previous => ({ ...previous, query: query.trim() })) }}>
-          <SearchField aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
-          <Button htmlType="submit" aria-label="搜索">搜索</Button>
-          <Select aria-label="筛选检查结论" value={options.verdict ?? ''} options={[{ value: '', label: '全部结论' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} onChange={value => setOptions(previous => ({ ...previous, query: query.trim(), verdict: value ? value as CheckHistoryQuery['verdict'] : undefined }))} />
-          <Select aria-label="筛选执行状态" value={options.lifecycle ?? ''} options={[{ value: '', label: '全部执行状态' }, ...['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].map(value => ({ value, label: lifecycleLabel(value) }))]} onChange={value => setOptions(previous => ({ ...previous, lifecycle: value ? value as CheckHistoryQuery['lifecycle'] : undefined }))} />
-          {filtered && <Button type="link" onClick={clear}>清除筛选</Button>}
+      <EditorialPage label="项目检查历史" width="summary">
+        {showHeader&&<EditorialHeader eyebrow={project.name || '当前应用'} title="检查历史"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>}
+        <div className={`history-surface${!loading && !failed && !items.length ? ' is-empty' : ''}`}><form className="history-filters" onSubmit={event => { event.preventDefault(); applyOptions({ ...options, query: query.trim() }) }}>
+          <div className="history-search-controls"><SearchField aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
+          <Button htmlType="submit" aria-label="搜索">搜索</Button>{filtered && <Button type="link" onClick={clear}>清除筛选</Button>}</div>
+          {ruleFilters ? ruleFilters(resultFilters) : <div className="history-result-filters">{resultFilters}</div>}
         </form>
         {newRecords && <div className="history-update" role="status">有新的检查记录<Button onClick={()=>void load()}>显示新记录</Button></div>}
         {live.retrying && <p role="status">暂时无法同步记录，正在重试。已有记录仍可查看。</p>}
         <section className="history-records" aria-label="历史检查列表" aria-busy={loading} ref={list}>
-          <div className="history-columns" aria-hidden="true"><span>检查内容</span><span>安全结论</span><span>执行状态</span><span>查看</span></div>
+          {!!items.length && <div className="history-columns" aria-hidden="true"><span>检查内容</span><span>{ruleReference?'相关检查项':'安全结论'}</span><span>执行状态</span><span>查看</span></div>}
           {grouped.map(({ item, date, heading }) => {
             const { run, result_integrity } = item.status
-            const verdict = result_integrity === 'VALID' ? run.verdict : null
+            const verdict = result_integrity === 'VALID'&&!ruleReference ? run.verdict : null
+            const matched=result_integrity==='VALID'&&ruleReference?item.matching_verdicts??[]:[]
+            const related=matched.includes('VULNERABLE')?{label:'含权限问题',tone:'danger' as const}:matched.includes('INCONCLUSIVE')?{label:'含证据不足',tone:'warning' as const}:matched.length?{label:'相关项均符合要求',tone:'success' as const}:undefined
             return <div key={run.run_id}>
               {heading && <h2 className="history-date">{date}</h2>}
               <button className="history-record" data-run={run.run_id} onClick={() => open(run.run_id)}>
                 <span className="history-record-copy"><strong>{item.action_labels.join('、') || '权限检查'}</strong><small>{formatTimestamp(run.created_at_us)} · 权限版本 {run.policy_epoch}{item.source_run_id ? ' · 原题复验' : item.change_id ? ' · 关联代码变化' : ''}</small><small className="history-id">{run.run_id}</small></span>
-                <StatusBadge kind={verdict ? 'verdict' : 'lifecycle'} tone={result_integrity === 'INVALID' ? 'warning' : verdict === 'PASS' ? 'success' : verdict === 'BLOCK' ? 'danger' : verdict === 'INCONCLUSIVE' ? 'warning' : 'neutral'}>{result_integrity === 'INVALID' ? '结果完整性校验失败' : verdict ? labels[verdict] : '尚无安全结论'}</StatusBadge>
-                <span className="history-lifecycle">{lifecycleLabel(run.lifecycle)}</span><span className="history-open">查看{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '进度' : '结果'}</span>
+                <StatusBadge kind={verdict ? 'verdict' : 'lifecycle'} tone={result_integrity === 'INVALID' ? 'warning' : related?.tone??(verdict === 'PASS' ? 'success' : verdict === 'BLOCK' ? 'danger' : verdict === 'INCONCLUSIVE' ? 'warning' : 'neutral')}>{result_integrity === 'INVALID' ? '结果完整性校验失败' : related?.label??(verdict ? labels[verdict] : '尚无安全结论')}</StatusBadge>
+                <span className="history-lifecycle">{lifecycleLabel(run.lifecycle)}</span><span className="history-open"><span>查看{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '进度' : '结果'}</span><RightOutlined aria-hidden/></span>
               </button>
             </div>
           })}
@@ -134,6 +147,31 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
         <p className="editorial-muted history-boundary">历史结论只覆盖当时冻结的权限与源码。执行完成不等于验证通过。</p>
       </EditorialPage>
     </div>
-    {requestedRunId && renderRun(requestedRunId, () => onNavigate('/history'))}
+    {requestedRunId && renderRun(requestedRunId, () => onNavigate(returnSearch===undefined?'/history':'/history?'+historyParams()))}
   </>
+}
+
+
+export function CheckHistoryPage(props:{project:ProjectDto;onError:(error:ApiError)=>void;onNavigate:(path:string)=>void;requestedRunId?:string|null;locationSearch?:string;renderRun:(runId:string,onBack:()=>void)=>ReactNode}) {
+  const [refreshToken,setRefreshToken]=useState(0)
+  const params=new URLSearchParams(props.locationSearch??'')
+  const intent=params.get('intent_id'),revision=Number(params.get('revision')),hash=params.get('intent_hash')
+  const invalidRule=(params.has('intent_id')||params.has('revision')||params.has('intent_hash'))&&(!intent||!Number.isInteger(revision)||revision<1||!hash||!/^[0-9a-f]{64}$/.test(hash))
+  const ref=invalidRule||!intent||!hash?undefined:{intent_id:intent,revision,intent_hash:hash}
+  const contextParams=new URLSearchParams(params);for(const key of ['view','run_id','case_id','tab','evidence_id','record_id'])contextParams.delete(key)
+  const pageTime=params.get('page_before_time'),pageRun=params.get('page_before_run')
+  const invalidCursor=(params.has('page_before_time')||params.has('page_before_run'))&&(!pageTime||!pageRun||!Number.isSafeInteger(Number(pageTime))||Number(pageTime)<0)
+  const initial:CheckHistoryQuery={...(pageTime&&pageRun&&!invalidCursor?{cursor:{created_at_us:Number(pageTime),run_id:pageRun}}:{}),...(params.get('query')?{query:params.get('query')!}:{}),...(params.get('verdict')?{verdict:params.get('verdict') as CheckHistoryQuery['verdict']}:{ }),...(params.get('lifecycle')?{lifecycle:params.get('lifecycle') as CheckHistoryQuery['lifecycle']}:{})}
+  const selectRule=(rule?:RuleHistoryReference)=>{
+    for(const key of ['intent_id','revision','intent_hash','page_before_time','page_before_run'])contextParams.delete(key)
+    if(rule){contextParams.set('intent_id',rule.intent_id);contextParams.set('revision',String(rule.revision));contextParams.set('intent_hash',rule.intent_hash)}
+    props.onNavigate('/history?'+contextParams)
+  }
+  if(invalidRule||invalidCursor)return <EditorialPage label="检查历史" width="summary"><EditorialHeader title="检查历史"/>
+    <Alert type="warning" showIcon message={invalidRule?'规则筛选引用不完整，请清除筛选后重新选择。':'历史分页位置不完整，请重新读取列表。'}/>
+    <Button onClick={()=>props.onNavigate('/history')}>重新读取检查历史</Button>
+  </EditorialPage>
+  return <AllCheckHistory {...props} ruleReference={ref} initialOptions={initial} returnSearch={contextParams.toString()} refreshToken={refreshToken}
+    ruleFilters={controls=><RuleHistoryFilters projectId={props.project.project_id} onError={props.onError} active={!props.requestedRunId}
+      value={ref} onSelect={selectRule} onMaintained={()=>setRefreshToken(value=>value+1)}>{controls}</RuleHistoryFilters>}/>
 }

@@ -1,0 +1,131 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "数字展馆协作空间",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/me": {
+      "get": {
+        "summary": "当前身份",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/galleries": {
+      "post": {
+        "summary": "创建展馆",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/galleries/{resource_id}": {
+      "get": {
+        "summary": "查看项目身份",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/galleries/{resource_id}/preview": {
+      "get": {
+        "summary": "查看公开预览",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/galleries/{resource_id}/exhibition": {
+      "get": {
+        "summary": "下载公开展示版",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/galleries/{resource_id}/internal": {
+      "post": {
+        "summary": "取得内部完整包",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/galleries/{resource_id}/withdraw": {
+      "post": {
+        "summary": "撤回内部开放",
+        "responses": {
+          "200": {
+            "description": "业务响应"
+          }
+        },
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

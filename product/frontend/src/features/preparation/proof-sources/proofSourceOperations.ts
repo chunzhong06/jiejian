@@ -3,7 +3,7 @@ import type {ProofOperationKind} from '../../../api/preparation/proofSources'
 
 export type PendingProofOperation = {kind: ProofOperationKind; operation: string}
 const storageKey = (project: string) => `jiejian-proof-operation:${project}`
-const kinds: readonly string[] = ['SAVE_SOURCE','GRANT_SCOPE','START_PREFLIGHT','CANCEL_PREFLIGHT','ADOPT_SOURCE','REVOKE_SCOPE']
+const kinds: readonly string[] = ['SAVE_SOURCE','GRANT_SCOPE','START_PREFLIGHT','CANCEL_PREFLIGHT','ADOPT_SOURCE','REVOKE_SCOPE','UPLOAD_REFERENCE','CANCEL_REFERENCE','START_REFERENCE_CAPTURE','CANCEL_REFERENCE_CAPTURE']
 
 export function readProofOperation(project: string): PendingProofOperation | undefined {
   try {

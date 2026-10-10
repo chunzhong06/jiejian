@@ -5,11 +5,12 @@ import json
 import re
 from typing import Annotated,Literal
 from urllib.parse import unquote,urlsplit
-from pydantic import Field,field_validator,model_validator
+from pydantic import Field,TypeAdapter,field_validator,model_validator
 from product.protocols.runtime.runtime_identity import RuntimeModel, Digest, RuntimeFile
 from product.protocols.runtime.node_runtime import NodeRuntimeReference, ProjectId
 from product.protocols.checks.check_runtime import CheckIdentity
 from product.protocols.web.target import WebTargetScope
+from product.protocols.checks.business_facts import ArtifactManifestReference
 
 SourceId=Annotated[str,Field(pattern=r'^psr_[0-9a-f]{32}$')]
 PreflightId=Annotated[str,Field(pattern=r'^ppf_[0-9a-f]{32}$')]
@@ -145,7 +146,7 @@ def source_identity_paths(config, identities=()):
     return tuple(sorted({item.verification.request.path for item in identities if item.verification is not None}))
 
 
-class ProofSourceRevision(RuntimeModel):
+class LegacyProofSourceRevision(RuntimeModel):
     schema_version:Literal['1','2']='2'
     project_id:ProjectId
     source_id:SourceId
@@ -163,7 +164,7 @@ class ProofSourceRevision(RuntimeModel):
         return self
 
 
-class SourceReadScope(RuntimeModel):
+class LegacySourceReadScope(RuntimeModel):
     schema_version:Literal['1','2']='2'
     scope_id:ScopeId
     project_id:ProjectId
@@ -193,14 +194,14 @@ class SourceReadScope(RuntimeModel):
         return values
 
 
-class ProofContractAttestation(RuntimeModel):
+class LegacyProofContractAttestation(RuntimeModel):
     contract_id:ContractId
     implementation_profile:str=Field(pattern=r'^[A-Z][A-Z0-9_]{0,63}$')
     fingerprint:Digest
     approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE']
 
 
-class ProofPreflightInput(RuntimeModel):
+class LegacyProofPreflightInput(RuntimeModel):
     schema_version:Literal['1','2']='2'
     preflight_id:PreflightId
     project_id:ProjectId
@@ -208,7 +209,7 @@ class ProofPreflightInput(RuntimeModel):
     source_revision:int=Field(ge=1)
     source_fingerprint:Digest
     config:AnyProofSourceConfig
-    scope:SourceReadScope
+    scope:LegacySourceReadScope
     basis_id:str=Field(pattern=r'^pb_[0-9a-f]{64}$')
     control_session_id:str=Field(pattern=r'^pcs_[0-9a-f]{32}$')
     authority_id:str=Field(min_length=1,max_length=128)
@@ -218,7 +219,7 @@ class ProofPreflightInput(RuntimeModel):
     resource_id:str=Field(pattern=r'^[\w.-]+$',min_length=1,max_length=256)
     owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
     runtime_reference:NodeRuntimeReference
-    contract:ProofContractAttestation|None=None
+    contract:LegacyProofContractAttestation|None=None
     created_at_us:int=Field(ge=0)
 
     @model_validator(mode='after')
@@ -249,7 +250,7 @@ class ProofCheckItem(RuntimeModel):
     mapping_key:MappingKey|None=None
 
 
-class ProofPreflightReport(RuntimeModel):
+class LegacyProofPreflightReport(RuntimeModel):
     schema_version:Literal['1']='1'
     preflight_id:PreflightId
     job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
@@ -276,7 +277,7 @@ class FrozenJsonProofSource(RuntimeModel):
     revision:int=Field(ge=1)
     source_fingerprint:Digest
     config:AnyProofSourceConfig
-    contract:ProofContractAttestation
+    contract:LegacyProofContractAttestation
     owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
     identity_roles:dict[IdentityId,Annotated[str,Field(pattern=SAFE_SUBJECT)]]
 
@@ -292,19 +293,137 @@ class ProofSourceAdoption(RuntimeModel):
     created_at_us:int=Field(ge=0)
 
 
-class ProofRunnerInput(RuntimeModel):
+class LegacyProofRunnerInput(RuntimeModel):
     schema_version:Literal['1']='1'
     job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
     attempt:int=Field(ge=1)
     fencing_token:int=Field(ge=1)
     lease_owner:str=Field(min_length=1,max_length=128)
-    request:ProofPreflightInput
+    request:LegacyProofPreflightInput
     request_fingerprint:Digest
 
     @model_validator(mode='after')
     def input_hash(self):
         if self.request_fingerprint!=proof_fingerprint(self.request):raise ValueError('preflight input hash mismatch')
         return self
+
+
+class AtomicProofSourceConfig(ManagedProofSourceConfig):
+    source_contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1']
+
+    @model_validator(mode='after')
+    def atomic_mapping(self):
+        if self.source_contract_id=='TRANSACTION_HISTORY_V2' and (len(self.mappings.get('state',()))<2 or self.mappings['state'][0]!='data'):
+            raise ValueError('atomic state must reference a protected resource data field')
+        return self
+
+
+class FileProofSourceConfig(AtomicProofSourceConfig):
+    source_kind:Literal['REFERENCE_FILE']='REFERENCE_FILE'
+    source_contract_id:Literal['FILE_RESPONSE_CONTENT_V1']='FILE_RESPONSE_CONTENT_V1'
+    reference_artifact:ArtifactManifestReference|None=None
+    reference_origin:Literal['UPLOAD','REFERENCE_CAPTURE']|None=None
+    reference_resource_id:str=Field(min_length=1,max_length=256)
+    reference_owner_identity_id:IdentityId
+
+    @model_validator(mode='after')
+    def reference_pair(self):
+        if (self.reference_artifact is None)!=(self.reference_origin is None):raise ValueError('file reference origin mismatch')
+        return self
+
+
+CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig,Field(discriminator='source_kind')]
+
+
+class ProofContractAttestation(LegacyProofContractAttestation):
+    contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1']
+    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
+    approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY']
+
+    @model_validator(mode='after')
+    def matching_profile(self):
+        if (self.contract_id=='FILE_RESPONSE_CONTENT_V1')!=(self.implementation_profile=='CONTROLLED_FILE_RECEIPT_V1'):
+            raise ValueError('file contract profile mismatch')
+        expected={'FILE_RESPONSE_CONTENT_V1':'FILE_CONTENT_DELIVERY','TRANSACTION_HISTORY_V2':'STATE_MUTATION','RESOURCE_FIELDS_V1':'DATA_DISCLOSURE'}
+        if self.approved_effect_kind!=expected[self.contract_id]:raise ValueError('source contract effect mismatch')
+        return self
+
+
+class ProofSourceRevision(LegacyProofSourceRevision):
+    schema_version:Literal['3']='3'
+    config:CurrentProofSourceConfig
+
+
+class SourceReadScope(LegacySourceReadScope):
+    schema_version:Literal['3']='3'
+
+
+class ProofPreflightInput(LegacyProofPreflightInput):
+    schema_version:Literal['3']='3'
+    config:CurrentProofSourceConfig
+    scope:SourceReadScope
+    contract:ProofContractAttestation|None=None
+
+    @model_validator(mode='after')
+    def reference_ready(self):
+        if isinstance(self.config,FileProofSourceConfig) and self.config.reference_artifact is None:
+            raise ValueError('reference file must be prepared before preflight')
+        return self
+
+
+class ProofPreflightReport(LegacyProofPreflightReport):
+    schema_version:Literal['2']='2'
+
+
+class FrozenProofSource(FrozenJsonProofSource):
+    config:CurrentProofSourceConfig
+    contract:ProofContractAttestation
+    adoption_preflight_id:PreflightId|None=None
+
+    @model_validator(mode='after')
+    def file_adoption_reference(self):
+        if isinstance(self.config,FileProofSourceConfig) and (self.adoption_preflight_id is None or self.config.reference_artifact is None):
+            raise ValueError('file proof requires exact adopted preflight')
+        return self
+
+
+class ProofRunnerInput(LegacyProofRunnerInput):
+    schema_version:Literal['2']='2'
+    request:ProofPreflightInput
+
+
+def read_source_revision(raw):
+    return _read_proof_document(raw,Annotated[LegacyProofSourceRevision|ProofSourceRevision,Field(discriminator='schema_version')])
+
+
+def read_source_scope(raw):
+    return _read_proof_document(raw,Annotated[LegacySourceReadScope|SourceReadScope,Field(discriminator='schema_version')])
+
+
+def read_preflight_input(raw):
+    return _read_proof_document(raw,Annotated[LegacyProofPreflightInput|ProofPreflightInput,Field(discriminator='schema_version')])
+
+
+def read_preflight_report(raw):
+    return _read_proof_document(raw,Annotated[LegacyProofPreflightReport|ProofPreflightReport,Field(discriminator='schema_version')])
+
+
+def read_proof_runner(raw):
+    return _read_proof_document(raw,Annotated[LegacyProofRunnerInput|ProofRunnerInput,Field(discriminator='schema_version')])
+
+
+def _read_proof_document(raw,model):
+    """按原根读取，拒绝重复字段和超限原文；不将旧根重新序列化为新版本。"""
+    if not isinstance(raw,(str,bytes)) or len(raw.encode('utf-8') if isinstance(raw,str) else raw)>262144:
+        raise ValueError('proof document exceeds limit')
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result:raise ValueError('duplicate proof field')
+            result[key]=value
+        return result
+    json.loads(raw,object_pairs_hook=unique,parse_constant=lambda _:(_ for _ in ()).throw(ValueError('nonfinite proof value')))
+    return TypeAdapter(model).validate_json(raw)
 
 
 def proof_bytes(value:RuntimeModel)->bytes:

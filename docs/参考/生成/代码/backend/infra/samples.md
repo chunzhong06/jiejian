@@ -11,6 +11,16 @@
 
 静态import / dot-source：`product.backend.infra.samples.official`
 
+### `product/backend/infra/samples/gallery_login.py`
+
+[打开源码](../../../../../../product/backend/infra/samples/gallery_login.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class GalleryLoginAdapter`
+- `GalleryLoginAdapter.run(self, request, **options)`
+- `main()`
+
+静态import / dot-source：`product.backend.core.errors`、`product.backend.infra.identity.browser`、`product.backend.infra.identity.process`、`sys`、`urllib.parse`
+
 ### `product/backend/infra/samples/official.py`
 
 [打开源码](../../../../../../product/backend/infra/samples/official.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -35,6 +45,7 @@
 - `OfficialSampleManager.set_observation(self, experience_id, available) -> None`
 - `OfficialSampleManager.export_execution_mode(self, experience_id) -> str`
 - `OfficialSampleManager.bind_effects(self, experience_id, export_effect_id, view_effect_id) -> None`
+- `OfficialSampleManager.copy_node_source(self, workspace_id) -> Path`
 - `OfficialSampleManager.workspace_source(self, workspace_id) -> Path`
 - `OfficialSampleManager.cleanup_exited_instance(self, instance_id, identity) -> None`
 - `OfficialSampleManager.stop(self, experience_id) -> None`

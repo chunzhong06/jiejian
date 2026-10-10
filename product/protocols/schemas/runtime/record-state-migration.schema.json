@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "resource_count": {
+      "minimum": 0,
+      "title": "Resource Count",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_generation": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Source Generation",
+      "type": "string"
+    },
+    "source_history_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source History Sha256",
+      "type": "string"
+    },
+    "source_state_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source State Sha256",
+      "type": "string"
+    },
+    "target_generation": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Target Generation",
+      "type": "string"
+    },
+    "target_state_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Target State Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_generation",
+    "target_generation",
+    "source_history_sha256",
+    "source_state_sha256",
+    "target_state_sha256",
+    "resource_count"
+  ],
+  "title": "RecordStateMigration",
+  "type": "object"
+}

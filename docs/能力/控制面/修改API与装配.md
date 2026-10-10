@@ -64,7 +64,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。
 
-MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 34 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
+MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、当前已注册工具及其授权层级（清单见生成注册参考）、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
 
 ## 失败先查哪里
 

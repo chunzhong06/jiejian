@@ -14,7 +14,7 @@ from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import CheckRunnerInput, CheckRunnerProgress, canonical_check_document, parse_check_document
 from product.protocols.checks.check_runtime import canonical_check_runtime_bytes, check_payload_contains_secret
-from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes
+from product.protocols.checks.execution_request import canonical_execution_request_bytes
 
 
 def _write_new(path: Path, raw: bytes) -> None:
@@ -48,7 +48,7 @@ def execute_check_attempt(input_path: Path, staging: Path, *, environ) -> int:
             return 64
         staging.mkdir(exist_ok=False)
         (staging / "evidence").mkdir()
-        _write_new(staging / "request.json", canonical_execution_request_v3_bytes(request))
+        _write_new(staging / "request.json", canonical_execution_request_bytes(request))
         _write_new(staging / "runtime.json", canonical_check_runtime_bytes(bundle))
         def progress(phase, completed, planned):
             try:

@@ -3,12 +3,14 @@ import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/reac
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {ProofSourcesPanel} from './ProofSourcesPanel'
 const api = vi.hoisted(() => ({context:vi.fn(),write:vi.fn(),receipt:vi.fn(),adoptionPreview:vi.fn()}))
+const access=vi.hoisted(()=>({status:vi.fn()}))
 vi.mock('../../../api/preparation/proofSources',() => ({proofSourcesApi:api}))
+vi.mock('../../../api/system/mcp',()=>({mcpAccessApi:access}))
 const config = {action_id:'action',action_revision:1,effect_id:'effect',observation_identity_id:'alice',resource_binding_id:'res',relative_path_template:'/collections/units/{resource_id}',collection:'units',source_kind:'MANAGED_TRANSACTION_RECORDS',mappings:{state:['state']},identity_claims:[{identity_id:'alice',application_subject_id:'alice',request_path:'/identity/current'}],source_files:['app.mjs'],max_response_bytes:262144,timeout_us:5000000,source_contract_id:'TRANSACTION_HISTORY_V1'}
 const source = {source_id:'source',revision:1,config,submitted_via:'MCP',client_name:'Agent',adopted:false,preflight:null}
 const initial = () => ({project_id:'app_a',basis_id:'basis',runtime_available:true,runtime_origin:'http://127.0.0.1:3000',actions:[{action_id:'action',label:'发布资料',effects:[{effect_id:'effect',label:'资料被发布'}]}],identities:[{identity_id:'alice',label:'Alice'}],resources:[{resource_binding_id:'res',resource_id:'alpha'}],sources:[source],read_scopes:[]})
 const props = {projectId:'app_a',onBack:vi.fn(),onChanged:vi.fn().mockResolvedValue(undefined)}
-beforeEach(() => {vi.resetAllMocks();sessionStorage.clear();api.context.mockResolvedValue(initial())})
+beforeEach(() => {vi.resetAllMocks();sessionStorage.clear();api.context.mockResolvedValue(initial());access.status.mockResolvedValue({paired:true,accepting_connections:true,connection_state:'CONNECTED',project_grants:[{project_id:'app_a',level:'PREPARE'}]})})
 afterEach(cleanup)
 
 it('确认读取范围必须展示地址和账号，并由用户勾选',async () => {
@@ -28,7 +30,7 @@ it('预检查可用只展示采用入口，不自动采用',async () => {
   const value = initial()
   api.context.mockResolvedValue({...value,read_scopes:[{scope_id:'scope',origin:value.runtime_origin,identity_ids:['alice'],resource_binding_ids:['res'],path_templates:['/identity/current',config.relative_path_template],max_response_bytes:262144,timeout_us:5000000}],sources:[{...source,preflight:{preflight_id:'preflight',state:'SUCCEEDED',current_basis:true,report:{assessment:'USABLE',checks:[{code:'MAPPING_READABLE',status:'CONFIRMED',mapping_key:'state'}]}}}]})
   render(<ProofSourcesPanel {...props}/>);
-  expect(await screen.findByRole('button',{name:'预览采用影响'})).toBeEnabled()
+  expect(await screen.findByRole('button',{name:'确认使用这项材料'})).toBeEnabled()
   expect(screen.getByText('1 项字段映射')).toBeInTheDocument()
   expect(screen.queryByText('符合要求')).not.toBeInTheDocument()
   expect(api.write).not.toHaveBeenCalled()
@@ -37,8 +39,8 @@ it('预检查可用只展示采用入口，不自动采用',async () => {
 it('取消的预检查即使残留可用报告也不显示采用入口',async () => {
   api.context.mockResolvedValue({...initial(),sources:[{...source,preflight:{preflight_id:'cancelled',state:'CANCELLED',current_basis:true,report:{assessment:'USABLE',checks:[]}}}]})
   render(<ProofSourcesPanel {...props}/>)
-  await screen.findByRole('heading',{name:'核对结果证明'})
-  expect(screen.queryByRole('button',{name:'预览采用影响'})).not.toBeInTheDocument()
+  await screen.findByRole('heading',{name:'准备检查用的文件和记录'})
+  expect(screen.queryByRole('button',{name:'确认使用这项材料'})).not.toBeInTheDocument()
   expect(api.write).not.toHaveBeenCalled()
 })
 
@@ -52,9 +54,10 @@ it('网络响应丢失后跨刷新只查询同一回执',async () => {
   const operation = api.write.mock.calls[0][2].operation_id
   await waitFor(() => expect(screen.getByRole('button',{name:'返回核对'})).toBeEnabled())
   view.unmount();render(<ProofSourcesPanel {...props}/>);
-  await screen.findByRole('heading',{name:'核对结果证明'})
+  await screen.findByRole('heading',{name:'准备检查用的文件和记录'})
   // 未确认操作在界面中持续显现，不能因刷新变为可再次提交。
-  expect(screen.getByRole('button',{name:'确认读取范围'})).toBeDisabled()
+  expect(screen.queryByRole('button',{name:'确认读取范围'})).not.toBeInTheDocument()
+  expect(screen.getByRole('button',{name:'查询本次操作'})).toBeEnabled()
   expect(api.write).toHaveBeenCalledTimes(1)
   expect(sessionStorage.getItem('jiejian-proof-operation:app_a')).toContain(operation)
 })
@@ -83,8 +86,10 @@ it('复制准备说明要求重新读取最新依据，不把旧建议当执行�
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}})
   api.context.mockResolvedValue({...initial(),guidance:{project_id:'app_a',basis_id:'basis',state:'CURRENT',materials:[],sources:[],next_action:{kind:'REVIEW_SOURCE',handler:'AGENT',title:'核对状态字段',reason:'没有读到指定字段。'}}})
   render(<ProofSourcesPanel {...props}/>)
-  fireEvent.click(await screen.findByRole('button',{name:'复制给 Agent 的准备说明'}))
-  expect(copy).toHaveBeenCalledWith(expect.stringContaining('先重新调用 jiejian_preparation_context'))
+  fireEvent.click(await screen.findByRole('button',{name:'Agent 协助'}))
+  await waitFor(()=>expect(screen.getByRole('button',{name:'复制协助请求'})).toBeEnabled())
+  fireEvent.click(screen.getByRole('button',{name:'复制协助请求'}))
+  await waitFor(()=>expect(copy).toHaveBeenCalledWith(expect.stringContaining('先重新调用 jiejian_preparation_context')))
   expect(copy).toHaveBeenCalledWith(expect.stringContaining('修订 1，动作 action'))
   expect(api.write).not.toHaveBeenCalled()
 })
@@ -124,8 +129,30 @@ it('切换项目后迟到的读取不会覆盖新项目',async () => {
   api.context.mockImplementation(project => project==='app_a' ? first : Promise.resolve(second))
   const panel=render(<ProofSourcesPanel {...props}/>)
   panel.rerender(<ProofSourcesPanel {...props} projectId="app_b"/>)
-  expect(await screen.findByText('第二应用动作 · Agent')).toBeInTheDocument()
+  expect((await screen.findAllByText('第二应用动作')).length).toBeGreaterThan(0)
   await act(async () => {finishFirst(initial());await first})
-  expect(screen.getByText('第二应用动作 · Agent')).toBeInTheDocument()
+  expect(screen.getAllByText('第二应用动作').length).toBeGreaterThan(0)
   expect(api.write).not.toHaveBeenCalled()
+})
+
+it('回执已保存但外层刷新尚未结束时，切换来源不会一直锁住按钮',async () => {
+  let finish!: () => void
+  const refresh=new Promise<void>(resolve=>{finish=resolve})
+  const onChanged=vi.fn(()=>refresh)
+  api.context.mockResolvedValue({...initial(),sources:[source,{...source,source_id:'second'}]})
+  api.write.mockImplementation(async (_project,kind,body)=>({project_id:'app_a',operation_kind:kind,operation_id:body.operation_id,result:{state:'GRANTED'}}))
+  const panel=render(<ProofSourcesPanel {...props} requestedSource="source" onChanged={onChanged}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'确认读取范围'}))
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button',{name:'允许这些读取'}))
+  await waitFor(()=>expect(onChanged).toHaveBeenCalledTimes(1))
+  expect(sessionStorage.getItem('jiejian-proof-operation:app_a')).toBeNull()
+  expect(screen.getByRole('button',{name:'返回检查材料'})).toBeEnabled()
+  fireEvent.click(screen.getByRole('button',{name:'返回检查材料'}))
+  expect(props.onBack).toHaveBeenCalledOnce()
+  panel.rerender(<ProofSourcesPanel {...props} requestedSource="second" onChanged={onChanged}/>)
+  await waitFor(()=>expect(screen.getByRole('button',{name:'确认读取范围'})).toBeEnabled())
+  await act(async()=>{finish();await refresh})
+  expect(screen.getByRole('button',{name:'确认读取范围'})).toBeEnabled()
+  expect(api.write).toHaveBeenCalledTimes(1)
 })

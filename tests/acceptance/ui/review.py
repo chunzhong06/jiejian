@@ -1,6 +1,7 @@
 # 验证生产前端的通知、权限行可见反馈与清理预览；不执行业务写入或清理。
 import json
 import re
+import time
 from pathlib import Path
 from functools import partial
 from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
@@ -12,27 +13,40 @@ from uuid import uuid4
 import platform
 from tests.support.verification.reporting import write_report
 from tests.acceptance.ui.hover_feedback import permission_editor, verify_permission_feedback
+from tests.acceptance.ui.check_process_and_access import verify_check_process_and_access, verify_source_and_assist
+from tests.acceptance.ui.material_suggestions import verify_material_suggestions
+from tests.acceptance.ui.reference_files import verify_reference_files
+from tests.acceptance.ui.result_records import verify_result_records
 
 
-def run(root: Path) -> int:
+def run(root: Path, *, scopes=None, materials_only=False, references_only=False, records_only=False, history_only=False, runtime_dir=None) -> int:
+    from tests.support.verification.catalog import ui_scopes
+    legacy = [name for name, enabled in [("materials", materials_only), ("references", references_only), ("results", records_only), ("history", history_only)] if enabled]
+    selected = set(ui_scopes(root, list(scopes or legacy), []))
+    if selected - {"core", "process", "materials", "references", "results", "history"}:
+        raise ValueError("UI_SCOPE_WITHOUT_RUNNER")
+    started = time.monotonic()
     out=root/"var/audit/testing"/("browser-"+uuid4().hex);out.mkdir(parents=True)
-    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text(encoding='utf-8-sig'))
+    runtime=Path(runtime_dir) if runtime_dir is not None else root/'var/runtime'
+    receipt=json.loads((runtime/'source/receipt.json').read_text(encoding='utf-8-sig'))
     project={'project_id':'ui-check','name':'通知局部验证','status':'READY','target_type':'WEB'}
     active={'run':{'project_id':'ui-check','run_id':'ui-run','lifecycle':'RUNNING','verdict':None,'plan_fingerprint':'x','policy_epoch':1,'created_at_us':1,'finished_at_us':None},'progress':None,'job':None,'result_integrity':'NOT_PUBLISHED'}
     maintenance={'schema_version':'1','entries':{key:{'path':'var/test','bytes':0,'files':0} for key in ['assistant','logs','temporary']},'protected':{'data':'var/data'},'inventory':[
         {'category':'builds','label':'前端构建','relative_path':'共享启动目录/frontend/builds/previous-version-with-long-id','state':'CLEANABLE','reason':'启动登记且无引用','bytes':22000000,'files':6},
         {'category':'builds','label':'当前前端','relative_path':'runtime/frontend','state':'PROTECTED','reason':'当前服务使用','bytes':None,'files':None},
         {'category':'temporary','label':'未登记文件','relative_path':'temp/manual-file','state':'UNKNOWN','reason':'没有生成方登记','bytes':None,'files':None}]}
-    report={'scope':'production frontend with mocked read-only responses','checks':[],'errors':[],'writes':[]}
+    manifest=json.loads((runtime/'frontend/frontend-manifest.json').read_text(encoding='utf-8'))
+    report={'status':'RUNNING','scope':'production frontend with mocked read-only responses','selected_scopes':sorted(selected),
+            'build_id':manifest['build_id'],'visual_acceptance':'NOT_REVIEWED','checks':[],'errors':[],'writes':[]}
     class Quiet(SimpleHTTPRequestHandler):
         def log_message(self,*args):pass
-    server=ThreadingHTTPServer(('127.0.0.1',0),partial(Quiet,directory=str(root/'var/runtime/frontend')))
+    server=ThreadingHTTPServer(('127.0.0.1',0),partial(Quiet,directory=str(runtime/'frontend')))
     thread=Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         with sync_playwright() as p:
             browser=p.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
             try:
-                for width,theme in [(1280,'light'),(1280,'dark'),(390,'light'),(390,'dark')]:
+                for width,theme in ([(1280,'light'),(1280,'dark'),(390,'light'),(390,'dark')] if 'core' in selected else []):
                     state={'done':False,'reads':0}
                     def api(route):
                         path=urlparse(route.request.url).path
@@ -48,7 +62,7 @@ def run(root: Path) -> int:
                         elif path=='/api/llm/settings':data={'enabled':False,'default_profile_name':None,'updated_at_us':0}
                         elif path=='/api/system/status':data={'api':'available','worker':'running','browser':'available','version':'1.1.14'}
                         elif path=='/api/system/maintenance':data=maintenance
-                        elif path=='/api/mcp/access':data={'paired':False,'connection_state':'UNPAIRED','project_grants':[],'enabled':False}
+                        elif path=='/api/mcp/access':data={'paired':True,'connection_state':'CONNECTED','project_grants':[],'accepting_connections':True,'client_connected':True,'client_name':'测试客户端','endpoint':'http://127.0.0.1/mcp','default_level':'READ'}
                         elif path.endswith('/workspace'):data={'project':project,'connection':{'endpoint_status':'CONFIRMED','source_analysis_status':'COMPLETED'},'actors':[],'actions':[],'areas':[],'primary_task':None,'active_check':None if state['done'] else active,'latest_result':None}
                         elif path.endswith('/business-boundaries/editor'):data=permission_editor(project['project_id'])
                         elif path.endswith('/rule-context'):data={'project_id':project['project_id'],'candidates':[],'next_offset':None}
@@ -85,6 +99,36 @@ def run(root: Path) -> int:
                     page.goto(f'http://127.0.0.1:{server.server_port}/#/permissions')
                     feedback=verify_permission_feedback(page,out,f'{width}-{theme}')
                     report['checks'].append({'width':width,'theme':theme,'permission_feedback':feedback})
+                    # 复现用户报告的版本说明占位和二级导航远离正文；只读三种视图留图审阅。
+                    page.emulate_media(reduced_motion='reduce')
+                    for title in ['权限规则','业务动作','业务角色']:
+                        page.get_by_role('navigation',name='权限要求视图').get_by_role('button',name=title,exact=True).click()
+                        expect(page.get_by_role('textbox',name='搜索业务角色' if title=='业务角色' else '搜索业务动作')).to_be_visible()
+                        if title!='权限规则':
+                            # 标签与右侧第一行文字对齐，长规则换行也不把标签移到整段中央。
+                            offsets=page.locator('.definition-linked-rule').evaluate_all('''rows=>rows.map(row=>{
+                              const box=element=>{const range=document.createRange();range.selectNodeContents(element);return range.getClientRects()[0]};
+                              const badge=box(row.firstElementChild),text=box(row.lastElementChild);
+                              return Math.abs(badge.y+badge.height/2-text.y-text.height/2);
+                            })''')
+                            if not offsets or max(offsets)>2:
+                                page.screenshot(path=str(out/f'role-alignment-failure-{width}-{theme}.png'),full_page=True)
+                                styles=page.locator('.definition-linked-rule').first.evaluate('''row=>[row,...row.children].map(e=>({font:getComputedStyle(e).font,line:getComputedStyle(e).lineHeight,align:getComputedStyle(e).alignItems,self:getComputedStyle(e).alignSelf,box:e.getBoundingClientRect().toJSON()}))''')
+                                raise AssertionError(('RULE_TEXT_ALIGNMENT',offsets,styles))
+                            report['checks'].append({'width':width,'theme':theme,'view':title,'rule_text_offsets':offsets})
+                        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+                        page.evaluate('window.scrollTo(0,0)')
+                        page.screenshot(path=str(out/f'permissions-{title}-{width}-{theme}.png'),full_page=True)
+                    page.goto(f'http://127.0.0.1:{server.server_port}/#/tools')
+                    manage=page.get_by_role('button',name='管理连接',exact=True)
+                    expect(manage).to_be_visible()
+                    manage.click()
+                    management=page.get_by_role('region',name='管理连接',exact=True)
+                    expect(management).to_be_visible()
+                    distance=management.evaluate("e=>e.getBoundingClientRect().top-document.querySelector('.connection-header').getBoundingClientRect().bottom")
+                    assert 0<=distance<=48, ('CONNECTION_MANAGEMENT_TOO_FAR',distance)
+                    page.screenshot(path=str(out/f'connection-management-{width}-{theme}.png'),full_page=True)
+                    report['checks'].append({'width':width,'theme':theme,'connection_management_gap':distance,'permission_views':3})
                     report['checks'].append({'width':width,'theme':theme,'progress_closed_and_completion_reappeared':True,'header':geometry})
                     page.evaluate('window.scrollTo(0,0)');page.wait_for_timeout(300)
                     page.screenshot(path=str(out/f'system-{width}-{theme}.png'), full_page=True)
@@ -105,20 +149,31 @@ def run(root: Path) -> int:
                     assert ep.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
                     ep.screenshot(path=str(out/f'workspace-{width}-{theme}.png'),full_page=True)
                     start.click()
-                    alert=ep.locator('.ant-alert-with-description').filter(has_text='接入前，请先在本机启动应用')
+                    alert=ep.locator('.ant-alert-with-description').filter(has_text='应用还没运行，也可以先整理规则')
                     expect(alert).to_be_visible()
                     offset=alert.evaluate("e=>{const i=e.querySelector('.ant-alert-icon svg').getBoundingClientRect(),t=e.querySelector('.ant-alert-message'),b=t.getBoundingClientRect();return Math.abs(i.y+i.height/2-b.y-parseFloat(getComputedStyle(t).lineHeight)/2)}")
                     assert offset<1.5
                     ep.screenshot(path=str(out/f'access-{width}-{theme}.png'),full_page=True)
                     report['checks'].append({'width':width,'theme':theme,'pages':['system','workspace','application-setup'],'icon_offset':offset})
                     empty.close()
-                assert not report['errors'] and not report['writes'],report
+                if 'process' in selected:
+                    verify_check_process_and_access(browser, f'http://127.0.0.1:{server.server_port}', out, report)
+                    verify_source_and_assist(browser, f'http://127.0.0.1:{server.server_port}', out, report)
+                if 'materials' in selected:verify_material_suggestions(browser, f'http://127.0.0.1:{server.server_port}', out, report)
+                if 'references' in selected:verify_reference_files(browser,f'http://127.0.0.1:{server.server_port}',out,report)
+                if selected & {'results','history'}:verify_result_records(browser,f'http://127.0.0.1:{server.server_port}',out,report,from_history='history' in selected)
+                assert report['checks'] and not report['errors'] and not report['writes'],report
                 report['status']='PASSED'
                 report['browser_version']=browser.version
                 report['platform']=platform.platform()
             finally:browser.close()
+    except Exception as error:
+        # 浏览器错误可能携带响应与用户输入，只保存类型；原堆栈仍在本地控制台。
+        report.update(status='FAILED',failure_type=type(error).__name__)
+        raise
     finally:
         server.shutdown();server.server_close();thread.join(3)
+        report['seconds']=round(time.monotonic()-started,3)
         write_report(out/'report.json', {'schema_version':'1',**report})
     print('浏览器验收报告：'+str(out/'report.json'))
     return 0

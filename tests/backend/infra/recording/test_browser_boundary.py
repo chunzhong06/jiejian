@@ -263,3 +263,40 @@ def test_browser_init_script_captures_ui_metadata_without_input_values() -> None
         result,
         known_secrets=(sentinel,),
     )
+
+
+def test_intercepted_login_preserves_cookie_path_without_expanding_host_scope(monkeypatch):
+    import httpx
+    from playwright.sync_api import sync_playwright
+    from product.backend.infra.recording.transport import BoundedRouteTransport
+    # 只操作临时浏览器内存，不请求外部域名，也不写Windows凭据。
+    login = 'http://app.example.test/session/login'
+    response = httpx.Response(200, request=httpx.Request('POST', login), headers=[
+        ('Set-Cookie', 'root_session=temporary-root; Path=/; HttpOnly; SameSite=Strict'),
+        ('Set-Cookie', 'private_session=temporary-private; Path=/private; HttpOnly'),
+    ])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context()
+            BoundedRouteTransport._apply_response_cookies(context, login, response)
+            assert {item['name'] for item in context.cookies('http://app.example.test/service/tickets')} == {'root_session'}
+            assert {item['name'] for item in context.cookies('http://app.example.test/private/one')} == {'root_session', 'private_session'}
+            from types import SimpleNamespace
+            observed = []
+            client_type = httpx.Client
+            def receive(request):
+                observed.append(request.headers.get('cookie'))
+                return httpx.Response(200, stream=httpx.ByteStream(b'{}'), headers={'Content-Type':'application/json','Content-Length':'2'})
+            monkeypatch.setattr(httpx,'Client',lambda **kwargs:client_type(transport=httpx.MockTransport(receive),**kwargs))
+            request = SimpleNamespace(url='http://app.example.test/private-other',headers={},method='GET',post_data_buffer=None)
+            BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,Mock())
+            assert observed == ['root_session=temporary-root']
+            for host in ('sub.app.example.test','other.example.test'):
+                request.url = 'http://'+host+'/service/tickets'
+                BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,Mock())
+            assert observed[1:] == [None,None]
+            root = next(item for item in context.cookies() if item['name'] == 'root_session')
+            assert root['path'] == '/' and root['httpOnly'] and root['sameSite'] == 'Strict'
+        finally:
+            browser.close()

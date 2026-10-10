@@ -23,7 +23,7 @@ from product.backend.infra.artifacts.checks.check_validation import check_public
 from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
 from product.protocols.checks.check_runtime import check_runtime_fingerprint
-from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, canonical_execution_request_v3_bytes, content_hash
+from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, canonical_execution_request_bytes, content_hash
 
 
 class CheckPreview(WireModel):
@@ -101,7 +101,7 @@ class CheckService:
                 details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint})
         if self._source_inspector(project_id) != request.source_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已变化，需要重新登记和准备")
-        raw = canonical_execution_request_v3_bytes(request)
+        raw = canonical_execution_request_bytes(request)
         request_hash = hashlib.sha256(raw).hexdigest()
         job_id, run_id = "job_" + uuid4().hex, "run_" + uuid4().hex
         now = self._clock()
@@ -112,7 +112,7 @@ class CheckService:
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
             current, current_request, current_bundle = self._freeze(project_id, work=work,change_id=change_id)
-            if not current.can_execute or current_request is None or canonical_execution_request_v3_bytes(current_request) != raw:
+            if not current.can_execute or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             validate_check_inputs(current_request, current_bundle)
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
@@ -146,6 +146,10 @@ class CheckService:
         if work is None:
             with self._uow_factory() as current:
                 return self._freeze(project_id, work=current,change_id=change_id)
+        with self._registry.read_scope(project_id):
+            return self._freeze_current(project_id, work=work, change_id=change_id)
+
+    def _freeze_current(self, project_id, *, work, change_id=None):
         if work.projects.get(project_id) is None:
             raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
         bundle, runtime_reason = None, None
@@ -172,6 +176,9 @@ class CheckService:
         if can_execute:
             request = self._preparation.build_execution_request_v3(project_id, engine_version=self._engine_version,
                 config_fingerprint=config_hash, budget_fingerprint=bundle.budget.fingerprint())
+            if bundle.schema_version=='6':
+                from product.protocols.checks.execution_request import PersistedExecutionRequestV4
+                request=PersistedExecutionRequestV4(**request.model_dump(exclude={'schema_version'}))
             validate_check_inputs(request, bundle)
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")

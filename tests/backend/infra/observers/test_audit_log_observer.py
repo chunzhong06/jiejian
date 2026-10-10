@@ -430,8 +430,9 @@ def test_audit_observer_rejects_read_time_replacement(tmp_path: Path, monkeypatc
             return os.stat_result(fields)
         return result
 
-    monkeypatch.setattr(audit_module.os, "fstat", replaced_fstat)
-    envelope = audit_module._run_child(invocation, utc_now_us=lambda: 100)
+    with monkeypatch.context() as patch:
+        patch.setattr(audit_module.os, "fstat", replaced_fstat)
+        envelope = audit_module._run_child(invocation, utc_now_us=lambda: 100)
     assert envelope.completeness is ObservationCompleteness.PARTIAL
     assert AUDIT_FILE_CHANGED in envelope.reason_codes
     assert audit_module.evaluate_observer_outcome(envelope, required=True).status is ObserverOutcomeStatus.INCONCLUSIVE

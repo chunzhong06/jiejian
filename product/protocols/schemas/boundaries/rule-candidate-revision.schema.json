@@ -16,6 +16,7 @@
       "enum": [
         "STATE_MUTATION",
         "DATA_DISCLOSURE",
+        "FILE_CONTENT_DELIVERY",
         "OBJECT_CREATION",
         "EXTERNAL_DISPATCH",
         "RESTRICTED_FUNCTION_INVOCATION",
@@ -31,6 +32,134 @@
       ],
       "title": "BusinessRevisionState",
       "type": "string"
+    },
+    "LegacyRuleCandidateContent": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActionItem"
+          },
+          "maxItems": 10,
+          "title": "Actions",
+          "type": "array"
+        },
+        "actors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActorItem"
+          },
+          "maxItems": 20,
+          "title": "Actors",
+          "type": "array"
+        },
+        "examples": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleExample"
+          },
+          "maxItems": 20,
+          "title": "Examples",
+          "type": "array"
+        },
+        "original_text": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Original Text",
+          "type": "string"
+        },
+        "permissions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedPermissionItem"
+          },
+          "maxItems": 10,
+          "title": "Permissions",
+          "type": "array"
+        },
+        "unresolved_questions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unresolved Questions",
+          "type": "array"
+        },
+        "unsupported_constraints": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unsupported Constraints",
+          "type": "array"
+        }
+      },
+      "required": [
+        "original_text"
+      ],
+      "title": "LegacyRuleCandidateContent",
+      "type": "object"
+    },
+    "LegacyRuleCandidateRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/LegacyRuleCandidateContent"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "LegacyRuleCandidateRevision",
+      "type": "object"
     },
     "PermissionExpectation": {
       "enum": [
@@ -442,6 +571,15 @@
           "title": "Permissions",
           "type": "array"
         },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleScenario"
+          },
+          "maxItems": 10,
+          "title": "Scenarios",
+          "type": "array"
+        },
         "unresolved_questions": {
           "default": [],
           "items": {
@@ -465,6 +603,64 @@
         "original_text"
       ],
       "title": "RuleCandidateContent",
+      "type": "object"
+    },
+    "RuleCandidateRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/RuleCandidateContent"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "RuleCandidateRevision",
       "type": "object"
     },
     "RuleExample": {
@@ -509,62 +705,118 @@
       ],
       "title": "RuleExample",
       "type": "object"
-    }
-  },
-  "additionalProperties": false,
-  "properties": {
-    "basis_id": {
-      "pattern": "^rb_[0-9a-f]{64}$",
-      "title": "Basis Id",
-      "type": "string"
     },
-    "candidate_id": {
-      "pattern": "^rcd_[0-9a-f]{32}$",
-      "title": "Candidate Id",
-      "type": "string"
-    },
-    "content": {
-      "$ref": "#/$defs/RuleCandidateContent"
-    },
-    "created_at_us": {
-      "minimum": 0,
-      "title": "Created At Us",
-      "type": "integer"
-    },
-    "project_id": {
-      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-      "title": "Project Id",
-      "type": "string"
-    },
-    "revision": {
-      "minimum": 1,
-      "title": "Revision",
-      "type": "integer"
-    },
-    "schema_version": {
-      "const": "1",
-      "default": "1",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "submitted_via": {
-      "enum": [
-        "MCP",
-        "LOCAL_GUI"
+    "RuleScenario": {
+      "additionalProperties": false,
+      "properties": {
+        "occurrence": {
+          "default": 1,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Occurrence",
+          "type": "integer"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/RuleScenarioOption"
+          },
+          "maxItems": 4,
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "original_excerpt": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Original Excerpt",
+          "type": "string"
+        },
+        "original_text_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Original Text Hash",
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "scenario_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Scenario Fingerprint",
+          "type": "string"
+        },
+        "scenario_id": {
+          "pattern": "^rsc_[0-9a-f]{16}$",
+          "title": "Scenario Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "original_excerpt",
+        "question",
+        "options",
+        "original_text_hash",
+        "scenario_fingerprint"
       ],
-      "title": "Submitted Via",
-      "type": "string"
+      "title": "RuleScenario",
+      "type": "object"
+    },
+    "RuleScenarioOption": {
+      "additionalProperties": false,
+      "properties": {
+        "explanation": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "option_id": {
+          "pattern": "^rop_[0-9a-f]{16}$",
+          "title": "Option Id",
+          "type": "string"
+        },
+        "replacements": {
+          "items": {
+            "$ref": "#/$defs/ProposedPermissionItem"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Replacements",
+          "type": "array"
+        }
+      },
+      "required": [
+        "option_id",
+        "label",
+        "explanation",
+        "replacements"
+      ],
+      "title": "RuleScenarioOption",
+      "type": "object"
     }
   },
-  "required": [
-    "project_id",
-    "candidate_id",
-    "revision",
-    "basis_id",
-    "content",
-    "submitted_via",
-    "created_at_us"
-  ],
-  "title": "RuleCandidateRevision",
-  "type": "object"
+  "discriminator": {
+    "mapping": {
+      "1": "#/$defs/LegacyRuleCandidateRevision",
+      "2": "#/$defs/RuleCandidateRevision"
+    },
+    "propertyName": "schema_version"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/LegacyRuleCandidateRevision"
+    },
+    {
+      "$ref": "#/$defs/RuleCandidateRevision"
+    }
+  ]
 }

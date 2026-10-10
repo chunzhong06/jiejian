@@ -1,5 +1,244 @@
 {
   "$defs": {
+    "ArtifactManifestReference": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^pai_[0-9a-f]{32}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "exclusiveMinimum": 0,
+          "maximum": 4194304,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "asset_id",
+        "sha256",
+        "size"
+      ],
+      "title": "ArtifactManifestReference",
+      "type": "object"
+    },
+    "AtomicProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/ManagedIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "enum": [
+            "TRANSACTION_HISTORY_V2",
+            "RESOURCE_FIELDS_V1"
+          ],
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "MANAGED_TRANSACTION_RECORDS",
+          "default": "MANAGED_TRANSACTION_RECORDS",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "target_data_path": {
+          "default": [
+            "data"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Target Data Path",
+          "type": "array"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "target_owner_path": {
+          "default": [
+            "owner_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Owner Path",
+          "type": "array"
+        },
+        "target_resource_path": {
+          "default": [
+            "resource_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Resource Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "source_contract_id",
+        "identity_claims",
+        "collection"
+      ],
+      "title": "AtomicProofSourceConfig",
+      "type": "object"
+    },
     "BearerIdentityBinding": {
       "additionalProperties": false,
       "properties": {
@@ -152,6 +391,254 @@
         }
       },
       "title": "EmptyBody",
+      "type": "object"
+    },
+    "FileProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/ManagedIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "reference_artifact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactManifestReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reference_origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "UPLOAD",
+                "REFERENCE_CAPTURE"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Origin"
+        },
+        "reference_owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Reference Owner Identity Id",
+          "type": "string"
+        },
+        "reference_resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Reference Resource Id",
+          "type": "string"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "const": "FILE_RESPONSE_CONTENT_V1",
+          "default": "FILE_RESPONSE_CONTENT_V1",
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "REFERENCE_FILE",
+          "default": "REFERENCE_FILE",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "target_data_path": {
+          "default": [
+            "data"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Target Data Path",
+          "type": "array"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "target_owner_path": {
+          "default": [
+            "owner_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Owner Path",
+          "type": "array"
+        },
+        "target_resource_path": {
+          "default": [
+            "resource_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Resource Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "identity_claims",
+        "collection",
+        "reference_resource_id",
+        "reference_owner_identity_id"
+      ],
+      "title": "FileProofSourceConfig",
       "type": "object"
     },
     "FormUrlEncodedBody": {
@@ -392,217 +879,6 @@
         "application_role"
       ],
       "title": "ManagedIdentityClaim",
-      "type": "object"
-    },
-    "ManagedProofSourceConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "action_id": {
-          "pattern": "^bac_[0-9a-f]{32}$",
-          "title": "Action Id",
-          "type": "string"
-        },
-        "action_revision": {
-          "minimum": 1,
-          "title": "Action Revision",
-          "type": "integer"
-        },
-        "collection": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
-          "title": "Collection",
-          "type": "string"
-        },
-        "effect_id": {
-          "pattern": "^bef_[0-9a-f]{32}$",
-          "title": "Effect Id",
-          "type": "string"
-        },
-        "identity_claims": {
-          "items": {
-            "$ref": "#/$defs/ManagedIdentityClaim"
-          },
-          "maxItems": 16,
-          "minItems": 1,
-          "title": "Identity Claims",
-          "type": "array"
-        },
-        "mappings": {
-          "additionalProperties": {
-            "items": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-              "type": "string"
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "type": "array"
-          },
-          "maxProperties": 16,
-          "minProperties": 2,
-          "propertyNames": {
-            "enum": [
-              "resource_id",
-              "owner_id",
-              "state",
-              "version",
-              "effect_count",
-              "history_generation",
-              "operation_id",
-              "operation_resource_id",
-              "operation_subject_id",
-              "operation_before_version",
-              "operation_after_version",
-              "operation_state",
-              "unfinished_effects",
-              "title",
-              "summary",
-              "body"
-            ]
-          },
-          "title": "Mappings",
-          "type": "object"
-        },
-        "max_response_bytes": {
-          "default": 262144,
-          "maximum": 262144,
-          "minimum": 1024,
-          "title": "Max Response Bytes",
-          "type": "integer"
-        },
-        "observation_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Observation Identity Id",
-          "type": "string"
-        },
-        "protected_projection": {
-          "default": [],
-          "items": {
-            "maxLength": 256,
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Protected Projection",
-          "type": "array"
-        },
-        "read_scope_id": {
-          "anyOf": [
-            {
-              "pattern": "^prs_[0-9a-f]{32}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Read Scope Id"
-        },
-        "relative_path_template": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Relative Path Template",
-          "type": "string"
-        },
-        "resource_binding_id": {
-          "pattern": "^res_[0-9a-f]{32}$",
-          "title": "Resource Binding Id",
-          "type": "string"
-        },
-        "source_contract_id": {
-          "enum": [
-            "TRANSACTION_HISTORY_V1",
-            "RESOURCE_FIELDS_V1"
-          ],
-          "title": "Source Contract Id",
-          "type": "string"
-        },
-        "source_files": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "title": "Source Files",
-          "type": "array"
-        },
-        "source_kind": {
-          "const": "MANAGED_TRANSACTION_RECORDS",
-          "default": "MANAGED_TRANSACTION_RECORDS",
-          "title": "Source Kind",
-          "type": "string"
-        },
-        "target_data_path": {
-          "default": [
-            "data"
-          ],
-          "items": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-            "type": "string"
-          },
-          "maxItems": 8,
-          "title": "Target Data Path",
-          "type": "array"
-        },
-        "target_operation_path": {
-          "default": [
-            "operation_id"
-          ],
-          "items": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-            "type": "string"
-          },
-          "maxItems": 8,
-          "minItems": 1,
-          "title": "Target Operation Path",
-          "type": "array"
-        },
-        "target_owner_path": {
-          "default": [
-            "owner_id"
-          ],
-          "items": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-            "type": "string"
-          },
-          "maxItems": 8,
-          "minItems": 1,
-          "title": "Target Owner Path",
-          "type": "array"
-        },
-        "target_resource_path": {
-          "default": [
-            "resource_id"
-          ],
-          "items": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-            "type": "string"
-          },
-          "maxItems": 8,
-          "minItems": 1,
-          "title": "Target Resource Path",
-          "type": "array"
-        },
-        "timeout_us": {
-          "default": 5000000,
-          "maximum": 5000000,
-          "minimum": 1000,
-          "title": "Timeout Us",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "action_id",
-        "action_revision",
-        "effect_id",
-        "observation_identity_id",
-        "resource_binding_id",
-        "relative_path_template",
-        "mappings",
-        "source_contract_id",
-        "identity_claims",
-        "collection"
-      ],
-      "title": "ManagedProofSourceConfig",
       "type": "object"
     },
     "MultipartBody": {
@@ -847,17 +1123,17 @@
         "approved_effect_kind": {
           "enum": [
             "STATE_MUTATION",
-            "DATA_DISCLOSURE"
+            "DATA_DISCLOSURE",
+            "FILE_CONTENT_DELIVERY"
           ],
           "title": "Approved Effect Kind",
           "type": "string"
         },
         "contract_id": {
           "enum": [
-            "SYNC_RESOURCE_HISTORY_V1",
-            "OWNER_RESOURCE_VIEW_V1",
-            "TRANSACTION_HISTORY_V1",
-            "RESOURCE_FIELDS_V1"
+            "TRANSACTION_HISTORY_V2",
+            "RESOURCE_FIELDS_V1",
+            "FILE_RESPONSE_CONTENT_V1"
           ],
           "title": "Contract Id",
           "type": "string"
@@ -868,14 +1144,17 @@
           "type": "string"
         },
         "implementation_profile": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "default": "CONTROLLED_TRANSACTION_RECORDS_V2",
+          "enum": [
+            "CONTROLLED_TRANSACTION_RECORDS_V2",
+            "CONTROLLED_FILE_RECEIPT_V1"
+          ],
           "title": "Implementation Profile",
           "type": "string"
         }
       },
       "required": [
         "contract_id",
-        "implementation_profile",
         "fingerprint",
         "approved_effect_kind"
       ],
@@ -899,17 +1178,17 @@
         "config": {
           "discriminator": {
             "mapping": {
-              "JSON_HTTP_RESOURCE": "#/$defs/ProofSourceConfig",
-              "MANAGED_TRANSACTION_RECORDS": "#/$defs/ManagedProofSourceConfig"
+              "MANAGED_TRANSACTION_RECORDS": "#/$defs/AtomicProofSourceConfig",
+              "REFERENCE_FILE": "#/$defs/FileProofSourceConfig"
             },
             "propertyName": "source_kind"
           },
           "oneOf": [
             {
-              "$ref": "#/$defs/ProofSourceConfig"
+              "$ref": "#/$defs/AtomicProofSourceConfig"
             },
             {
-              "$ref": "#/$defs/ManagedProofSourceConfig"
+              "$ref": "#/$defs/FileProofSourceConfig"
             }
           ],
           "title": "Config"
@@ -980,11 +1259,8 @@
           "$ref": "#/$defs/NodeRuntimeReference"
         },
         "schema_version": {
-          "default": "2",
-          "enum": [
-            "1",
-            "2"
-          ],
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1030,165 +1306,6 @@
         "created_at_us"
       ],
       "title": "ProofPreflightInput",
-      "type": "object"
-    },
-    "ProofSourceConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "action_id": {
-          "pattern": "^bac_[0-9a-f]{32}$",
-          "title": "Action Id",
-          "type": "string"
-        },
-        "action_revision": {
-          "minimum": 1,
-          "title": "Action Revision",
-          "type": "integer"
-        },
-        "effect_id": {
-          "pattern": "^bef_[0-9a-f]{32}$",
-          "title": "Effect Id",
-          "type": "string"
-        },
-        "identity_claims": {
-          "items": {
-            "$ref": "#/$defs/SourceIdentityClaim"
-          },
-          "maxItems": 16,
-          "minItems": 1,
-          "title": "Identity Claims",
-          "type": "array"
-        },
-        "mappings": {
-          "additionalProperties": {
-            "items": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-              "type": "string"
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "type": "array"
-          },
-          "maxProperties": 16,
-          "minProperties": 2,
-          "propertyNames": {
-            "enum": [
-              "resource_id",
-              "owner_id",
-              "state",
-              "version",
-              "effect_count",
-              "history_generation",
-              "operation_id",
-              "operation_resource_id",
-              "operation_subject_id",
-              "operation_before_version",
-              "operation_after_version",
-              "operation_state",
-              "unfinished_effects",
-              "title",
-              "summary",
-              "body"
-            ]
-          },
-          "title": "Mappings",
-          "type": "object"
-        },
-        "max_response_bytes": {
-          "default": 262144,
-          "maximum": 262144,
-          "minimum": 1024,
-          "title": "Max Response Bytes",
-          "type": "integer"
-        },
-        "observation_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Observation Identity Id",
-          "type": "string"
-        },
-        "read_scope_id": {
-          "anyOf": [
-            {
-              "pattern": "^prs_[0-9a-f]{32}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Read Scope Id"
-        },
-        "relative_path_template": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Relative Path Template",
-          "type": "string"
-        },
-        "resource_binding_id": {
-          "pattern": "^res_[0-9a-f]{32}$",
-          "title": "Resource Binding Id",
-          "type": "string"
-        },
-        "source_contract_id": {
-          "enum": [
-            "SYNC_RESOURCE_HISTORY_V1",
-            "OWNER_RESOURCE_VIEW_V1",
-            "TRANSACTION_HISTORY_V1",
-            "RESOURCE_FIELDS_V1"
-          ],
-          "title": "Source Contract Id",
-          "type": "string"
-        },
-        "source_files": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "minItems": 1,
-          "title": "Source Files",
-          "type": "array"
-        },
-        "source_kind": {
-          "const": "JSON_HTTP_RESOURCE",
-          "default": "JSON_HTTP_RESOURCE",
-          "title": "Source Kind",
-          "type": "string"
-        },
-        "target_operation_path": {
-          "default": [
-            "operation_id"
-          ],
-          "items": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
-            "type": "string"
-          },
-          "maxItems": 8,
-          "minItems": 1,
-          "title": "Target Operation Path",
-          "type": "array"
-        },
-        "timeout_us": {
-          "default": 5000000,
-          "maximum": 5000000,
-          "minimum": 1000,
-          "title": "Timeout Us",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "action_id",
-        "action_revision",
-        "effect_id",
-        "observation_identity_id",
-        "resource_binding_id",
-        "relative_path_template",
-        "mappings",
-        "source_contract_id",
-        "identity_claims",
-        "source_files"
-      ],
-      "title": "ProofSourceConfig",
       "type": "object"
     },
     "ResponseExtractor": {
@@ -1299,27 +1416,6 @@
       "title": "ResponseExtractorKind",
       "type": "string"
     },
-    "SourceIdentityClaim": {
-      "additionalProperties": false,
-      "properties": {
-        "application_subject_id": {
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-          "title": "Application Subject Id",
-          "type": "string"
-        },
-        "identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Identity Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "identity_id",
-        "application_subject_id"
-      ],
-      "title": "SourceIdentityClaim",
-      "type": "object"
-    },
     "SourceReadScope": {
       "additionalProperties": false,
       "properties": {
@@ -1373,11 +1469,8 @@
           "type": "array"
         },
         "schema_version": {
-          "default": "2",
-          "enum": [
-            "1",
-            "2"
-          ],
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1670,8 +1763,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
       "type": "string"
     }

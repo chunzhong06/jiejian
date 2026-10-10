@@ -15,6 +15,7 @@ from product.protocols.checks.check_publication import CheckPublicationManifest
 from product.protocols.checks.check_runtime import check_payload_contains_secret
 from product.protocols.runtime.runtime_identity import RuntimeCorrespondence
 from product.protocols.runtime.node_runtime import NodeRuntimeCorrespondence
+from product.protocols.checks.business_facts import BusinessFact,ObservationFactReference,CommittedStateFact
 
 RunId = Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]
 JobId = Annotated[str, Field(pattern=r"^job_[0-9a-f]{32}$")]
@@ -141,6 +142,40 @@ class CheckEvidence(WireModel):
         return self
 
 
+class DetailedCheckEvidence(CheckEvidence):
+    schema_version:Literal['2']='2'
+    business_facts:tuple[BusinessFact,...]=Field(default=(),max_length=64)
+    fact_references:tuple[ObservationFactReference,...]=Field(default=(),max_length=240)
+
+    @model_validator(mode='after')
+    def validate_fact_associations(self):
+        facts={item.fact_id:item for item in self.business_facts}
+        if len(facts)!=len(self.business_facts):raise ValueError('duplicate business fact')
+        marker=check_request_marker(self.run_id,self.job_id,self.attempt,self.case.case_id)
+        proofs={proof.proof_fingerprint:proof for proof in self.case.proof_requirements}
+        operations=set()
+        for fact in facts.values():
+            if (fact.case_id,fact.request_ref)!=(self.case.case_id,marker):raise ValueError('fact belongs to another request')
+            for ref in fact.proofs:
+                proof=proofs.get(ref.proof_fingerprint)
+                if proof is None or proof.effect_id!=ref.effect_id:raise ValueError('fact proof is not frozen in case')
+            if isinstance(fact.data,CommittedStateFact):
+                key=(fact.data.generation,fact.data.operation_id)
+                if key in operations:raise ValueError('committed operation must be stored once')
+                operations.add(key)
+        observation_keys={(item.proof_fingerprint,item.observer_id,item.phase) for item in self.observations}
+        referenced,keys=set(),set()
+        for reference in self.fact_references:
+            key=(reference.proof_fingerprint,reference.observer_id,reference.phase)
+            if key not in observation_keys or key in keys:raise ValueError('fact observation mismatch')
+            keys.add(key)
+            for fact_id in reference.fact_ids:
+                if fact_id not in facts or reference.source not in facts[fact_id].proofs:raise ValueError('fact source mismatch')
+            referenced.update(reference.fact_ids)
+        if referenced!=set(facts):raise ValueError('unreferenced business fact')
+        return self
+
+
 class CheckCaseResult(WireModel):
     case_id: CaseId
     action_id: ActionId
@@ -198,12 +233,13 @@ def evidence_content_id(payload) -> str:
     return "ev_" + hashlib.sha256(raw).hexdigest()
 
 
-def seal_check_evidence(**fields) -> CheckEvidence:
+def seal_check_evidence(*,detailed=False,**fields) -> CheckEvidence:
     # 先补齐根默认值，再计算内容地址；最终严格 reader 仍拒绝绕过校验的嵌套事实。
-    draft = CheckEvidence.model_construct(evidence_id="ev_" + "0" * 64, **fields)
+    model=DetailedCheckEvidence if detailed else CheckEvidence
+    draft = model.model_construct(evidence_id="ev_" + "0" * 64, **fields)
     payload = draft.model_dump(mode="json", exclude={"evidence_id"})
     payload["evidence_id"] = evidence_content_id(payload)
-    return CheckEvidence.model_validate_json(json.dumps(payload), strict=True)
+    return model.model_validate_json(json.dumps(payload), strict=True)
 
 
 class ControlledCheckRunnerResult(CheckRunnerResult):
@@ -221,7 +257,7 @@ class CheckResultProtocolError(ValueError):
 
 
 CheckDocument = TypeVar("CheckDocument", CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
-_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
+_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, DetailedCheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
 
 
 def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[str, ...] = ()) -> bytes:
@@ -260,6 +296,9 @@ def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secret
             model = {'1':CheckRunnerResult,'2':ControlledCheckRunnerResult,'3':NodeCheckRunnerResult}.get(payload.get('schema_version'))
             if model is None:
                 raise ValueError('unsupported result version')
+        if model is CheckEvidence and isinstance(payload,dict):
+            model={'1':CheckEvidence,'2':DetailedCheckEvidence}.get(payload.get('schema_version'))
+            if model is None:raise ValueError('unsupported evidence version')
         document = model.model_validate_json(raw, strict=True)
         if canonical_check_document(document, known_secrets=known_secrets) != raw:
             raise ValueError("noncanonical check document")

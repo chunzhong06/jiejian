@@ -141,4 +141,78 @@
 
 静态import / dot-source：`__future__`、`alembic`、`hashlib`、`json`、`sqlalchemy`
 
+### `product/backend/migrations/versions/0013_rule_decisions.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0013_rule_decisions.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `_CREATE_SQL`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`__future__`、`alembic`、`hashlib`、`json`、`sqlalchemy`
+
+### `product/backend/migrations/versions/0014_preparation_suggestions.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0014_preparation_suggestions.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `_CREATE_SQL`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`__future__`、`alembic`、`hashlib`、`json`、`sqlalchemy`
+
+### `product/backend/migrations/versions/0015_reference_capture.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0015_reference_capture.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `_CREATE_SQL`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`__future__`、`alembic`、`hashlib`、`json`、`sqlalchemy`
+
+### `product/backend/migrations/versions/0016_capture_recovery.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0016_capture_recovery.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`__future__`、`alembic`、`hashlib`、`json`、`sqlalchemy`
+
+### `product/backend/migrations/versions/0017_rule_history.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0017_rule_history.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `_CREATE_SQL`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`alembic`、`hashlib`、`json`
+
+### `product/backend/migrations/versions/0018_node_sample.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0018_node_sample.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `_PRIOR_SCHEMA_SHA256`
+- `_CREATE_SQL`
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`alembic`、`hashlib`、`json`
+
+### `product/backend/migrations/versions/0019_preparation_batches.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0019_preparation_batches.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`alembic`、`sqlalchemy`
+
 <!-- GENERATED:END -->

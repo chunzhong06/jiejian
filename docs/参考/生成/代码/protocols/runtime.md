@@ -43,6 +43,20 @@
 
 静态import / dot-source：`product.protocols.runtime.runtime_identity`、`pydantic`、`typing`
 
+### `product/protocols/runtime/record_trace.py`
+
+[打开源码](../../../../../product/protocols/runtime/record_trace.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class RecordTraceInput`
+- `RecordTraceInput.event_meaning(self)`
+- `class RecordTraceWrite`
+- `class RecordTraceEvent`
+- `class RecordTraceReceipt`
+- `class RecordTraceLog`
+- `RecordTraceLog.explicit_graph(self)`
+
+静态import / dot-source：`product.protocols.runtime.runtime_identity`、`product.protocols.runtime.transaction_records`、`pydantic`、`re`、`typing`
+
 ### `product/protocols/runtime/runtime_identity.py`
 
 [打开源码](../../../../../product/protocols/runtime/runtime_identity.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -73,14 +87,22 @@
 - `RecordChange.bounded_value(cls, value)`
 - `class RecordSeed`
 - `RecordSeed.bounded_data(cls, value)`
-- `class RecordTransaction`
+- `class LegacyRecordTransaction`
 - `class RecordSnapshot`
 - `class RecordTransition`
-- `class RecordOperation`
+- `class LegacyRecordOperation`
 - `class RecordProviderReference`
 - `class RecordProofRequest`
 - `class RecordRequestScope`
+- `class LegacyRecordProofView`
+- `class RecordTransaction`
+- `class RecordOperation`
+- `RecordOperation.exact_commit(self)`
 - `class RecordProofView`
+- `RecordProofView.complete_scope_sequence(self)`
+- `class RecordStateMigration`
+- `RecordStateMigration.preserve_business_state(self)`
+- `read_record_proof(raw)`
 
 静态import / dot-source：`__future__`、`json`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.runtime_identity`、`pydantic`、`typing`
 

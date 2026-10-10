@@ -19,7 +19,7 @@ def test_canonical_enums_keep_one_object_and_persistent_values():
     assert SecurityEffectKind is BusinessEffectKind
     assert [item.value for item in PermissionExpectation] == ["ALLOW", "DENY"]
     assert {item.value for item in BusinessEffectKind} == {
-        "STATE_MUTATION", "DATA_DISCLOSURE", "OBJECT_CREATION", "EXTERNAL_DISPATCH",
+        "STATE_MUTATION", "DATA_DISCLOSURE", "FILE_CONTENT_DELIVERY", "OBJECT_CREATION", "EXTERNAL_DISPATCH",
         "RESTRICTED_FUNCTION_INVOCATION", "CREDENTIAL_ACCESS",
     }
 

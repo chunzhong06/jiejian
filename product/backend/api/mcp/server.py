@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server import MCPServer
 from mcp.server.context import HandlerResult, ServerRequestContext
@@ -25,6 +25,7 @@ from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
+from product.backend.core.boundaries.rule_preview import RulePreviewCommand
 import json
 from product.backend.core.development import OperationId, OperationKind
 from product.backend.core.checks.repair import CurrentRepairReference
@@ -119,6 +120,14 @@ def build_mcp_control(
         require_mcp_level(access, ctx, MCPAccessLevel.READ)
         return _json(_invoke(lambda: context.projects.list(include_archived=include_archived)))
 
+    @server.tool(name='jiejian_agent_context', structured_output=True)
+    def agent_context(ctx: Context, project_id: str,
+        stage: Literal['RULES','MATERIALS','RECORDING','RESULTS','REPAIR']='RULES',
+        recording_id: str | None=None, run_id: str | None=None, case_id: str | None=None) -> dict[str,Any]:
+        """读取当前协作任务和下一步工具；不批准、执行或生成权限结论。"""
+        require_mcp_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return _invoke(lambda:context.agent_workflow.read(project_id,stage,recording_id=recording_id,run_id=run_id,case_id=case_id))
+
     @server.tool(name="jiejian_project_show", structured_output=True)
     def project_show(ctx: Context, project_id: str) -> dict[str, Any]:
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
@@ -159,10 +168,17 @@ def build_mcp_control(
         return _json(_invoke(lambda: context.rule_candidates.show(project_id, candidate_id, revision)))
 
     @server.tool(name="jiejian_rule_operation", structured_output=True)
-    def rule_operation(ctx: Context, project_id: str, operation_id: str) -> dict[str, Any]:
+    def rule_operation(ctx: Context, project_id: str, operation_id: str, kind: Literal["SAVE", "PROPOSE", "DECIDE"] = "SAVE") -> dict[str, Any]:
         """保存响应丢失时查询原操作；UNKNOWN不能解释为未执行。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        return _json(_invoke(lambda: context.rule_candidates.operation(project_id, "SAVE", operation_id)))
+        return _json(_invoke(lambda: context.rule_candidates.operation(project_id, kind, operation_id)))
+
+    @server.tool(name="jiejian_rule_preview", structured_output=True)
+    def rule_preview(ctx: Context, project_id: str, reference: dict[str, Any], situation: dict[str, Any] | None = None) -> dict[str, Any]:
+        """查看精确规则怎样适用；只做规则匹配，不执行目标或判断是否安全。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return _json(_invoke(lambda: context.rule_candidates.preview(project_id,
+            RulePreviewCommand.model_validate_json(json.dumps({'reference': reference, 'situation': situation}, allow_nan=False)))))
 
     @server.tool(name="jiejian_identity_list", structured_output=True)
     def identity_list(ctx: Context, project_id: str) -> list[dict[str, Any]]:
@@ -201,6 +217,13 @@ def build_mcp_control(
         require_mcp_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
         _invoke(lambda:context.check_results.status(run_id,project_id=project_id))
         return _current_story_view(_invoke(lambda:context.check_story.build(run_id)))
+
+    @server.tool(name='jiejian_evidence_show',structured_output=True)
+    def evidence_show(ctx:Context,project_id:str,run_id:str,case_id:str,evidence_id:str,record_ref:str|None=None)->dict[str,Any]:
+        require_mcp_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        value=_invoke(lambda:context.check_results.evidence_records(run_id,evidence_id,case_id,project_id=project_id,record_id=record_ref))
+        # 同一有限投影不含请求nonce、租约、凭据或物理磁盘位置。
+        return value.model_dump(mode='json')
 
     @server.tool(name="jiejian_repair_show",structured_output=True)
     def repair_show(ctx: Context, project_id: str, source_run_id: str | None = None, source_case_id: str | None = None) -> dict[str,Any]:
@@ -294,11 +317,16 @@ def build_mcp_control(
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
         return {"receipt": _json(_invoke(lambda: context.development.receipt(project_id, kind, operation_id)))}
 
+    @server.tool(name='jiejian_check_preview',structured_output=True)
+    def check_preview(ctx:Context, project_id:str, change_id:str|None=None)->dict[str,Any]:
+        """读取完整检查计划与指纹；执行必须携带本次读取的指纹，变化后重新核对。"""
+        require_mcp_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return _json(_invoke(lambda:context.checks.preview(project_id,change_id=change_id)))
+
     @server.tool(name="jiejian_check_run",structured_output=True)
-    def check_run(ctx: Context, project_id: str, idempotency_key: str, change_id: str | None = None) -> dict[str,Any]:
+    def check_run(ctx: Context, project_id: str, idempotency_key: str, expected_plan_fingerprint: str, change_id: str | None = None) -> dict[str,Any]:
         require_mcp_level(access,ctx,MCPAccessLevel.EXECUTE,project_id=project_id)
-        preview = _invoke(lambda:context.checks.preview(project_id,change_id=change_id))
-        submitted = _invoke(lambda:context.checks.submit(project_id,expected_plan_fingerprint=preview.plan_fingerprint,
+        submitted = _invoke(lambda:context.checks.submit(project_id,expected_plan_fingerprint=expected_plan_fingerprint,
             idempotency_key=idempotency_key,change_id=change_id))
         return _current_run_view(_invoke(lambda:context.check_results.status(submitted.run.run_id,project_id=project_id)))
 

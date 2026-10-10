@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "RecordTraceEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "ALLOW",
+                "DENY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authorization Decision"
+        },
+        "event_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "ENTRY",
+            "IDENTITY",
+            "AUTHORIZATION",
+            "PERSISTENT_EFFECT",
+            "MESSAGE",
+            "RECOVERY"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Id"
+        },
+        "parent_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Event Id"
+        },
+        "recorded_at_us": {
+          "minimum": 0,
+          "title": "Recorded At Us",
+          "type": "integer"
+        },
+        "semantic_key": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "source_component": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Component",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Location",
+          "type": "string"
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Id"
+        }
+      },
+      "required": [
+        "kind",
+        "semantic_key",
+        "source_component",
+        "source_location",
+        "event_id",
+        "recorded_at_us"
+      ],
+      "title": "RecordTraceEvent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "$ref": "#/$defs/RecordTraceEvent"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event"
+  ],
+  "title": "RecordTraceReceipt",
+  "type": "object"
+}

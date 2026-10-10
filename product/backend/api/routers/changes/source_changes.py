@@ -72,7 +72,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/source-changes",
         response_model=ApiResponse,
     )
-    async def source_change_list(
+    def source_change_list(
         project_id: str,
         limit: int = Query(default=50, ge=1, le=100),
     ):
@@ -83,7 +83,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/source-changes/latest",
         response_model=ApiResponse,
     )
-    async def latest_source_change(project_id: str):
+    def latest_source_change(project_id: str):
         latest = context.source_changes.latest(project_id)
         return data_response(None if latest is None else latest.model_dump(mode="json"))
 
@@ -91,7 +91,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/source-changes/{change_id}",
         response_model=ApiResponse,
     )
-    async def source_change(project_id: str, change_id: str):
+    def source_change(project_id: str, change_id: str):
         view = context.source_changes.view(project_id,change_id)
         return data_response(view.model_dump(mode="json"))
 

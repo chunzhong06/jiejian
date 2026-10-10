@@ -2,20 +2,20 @@
 from product.backend.infra.observers.adapters.json_source import strict_json, SourceReadError
 from product.backend.infra.observers.records.source_contracts import audit_source_contract
 from product.backend.infra.observers.records.record_source import read_record_source
-from product.backend.infra.observers.records.record_facts import record_value, request_fact
+from product.backend.infra.observers.records.record_facts import record_value
 from product.backend.infra.observers.checks.check_disclosure import disclosure_proof
 from product.protocols.checks.check_result import CheckObservation
-from product.protocols.preparation.proof_sources import ManagedProofSourceConfig
+from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig
 from product.protocols.web.request import HttpRequestTemplate
 
 
 def observe_records(owner, *, source, case, action_id, requirement, proof, phase, baseline_trusted,
-                    cleanup, common, source_identity):
+                    cleanup, common):
     from product.backend.infra.observers.checks.check_runtime import CheckObservedSource
     config = source.config
-    if not isinstance(config,ManagedProofSourceConfig):
+    if not isinstance(config,AtomicProofSourceConfig):
         return owner._unknown(common,'SOURCE_REQUIRES_MIGRATION')
-    if source_identity != 'MATCH' or audit_source_contract(owner.var_dir,owner.bundle.runtime_reference,config) != source.contract:
+    if audit_source_contract(owner.var_dir,owner.bundle.runtime_reference,config) != source.contract:
         return owner._unknown(common,'RECORD_PROVIDER_UNAVAILABLE')
     claims = {item.identity_id:item for item in config.identity_claims}
     subject = claims.get(case.subject_test_identity_id)
@@ -45,64 +45,53 @@ def observe_records(owner, *, source, case, action_id, requirement, proof, phase
         before = owner._json_histories.get(key)
         complete, projection, reasons = False, None, ()
         state,closure = 'UNKNOWN','OPEN'
-        if config.source_contract_id == 'TRANSACTION_HISTORY_V1':
+        facts,reference=(),None
+        if isinstance(config,FileProofSourceConfig):
+            from product.backend.core.boundaries.entities import boundary_sha256
+            from product.backend.infra.observers.checks.file_evidence import collect_file_evidence
+            from product.backend.core.verification.business_facts import reduce_file_facts
+            projection=(case.resource_id,snapshot.owner_id,boundary_sha256(snapshot.data))
+            if phase in {'BASELINE','BEFORE','RECOVERY'} or target is not None and baseline_trusted:
+                facts,reference=collect_file_evidence(source=source,case=case,requirement=requirement,proof=proof,
+                    phase=phase,before=before,view=view,target=target,clock=owner.clock(),marker=owner.web.request_marker(case.case_id))
+                state,closure,complete=reduce_file_facts(reference,facts,case=case)
+                reasons=reference.reason_codes
+        elif config.source_contract_id == 'TRANSACTION_HISTORY_V2':
             path = config.mappings['state'][1:]
             value = record_value(snapshot.data,path)
             projection = (case.resource_id,snapshot.owner_id,value)
-            if phase in {'BASELINE','BEFORE','RECOVERY'}:
-                state = 'CONFIRMED' if value == proof.expected_state else 'ABSENT'
-                complete,closure = True,'CLOSED'
-            elif target is not None and baseline_trusted:
-                fact = request_fact(before,view,path=path,expected_state=proof.expected_state,
-                    request_nonce=target.request_nonce,request_digest=target.request_digest,
-                    subject_id=subject.application_subject_id,resource_id=case.resource_id,
-                    owner_id=resource_owner.application_subject_id,collection=config.collection)
-                state,closure,reasons = fact.state,fact.closure,fact.reason_codes
-                complete = state != 'UNKNOWN'
+            if phase in {'BASELINE','BEFORE','RECOVERY'} or target is not None and baseline_trusted:
+                from product.backend.infra.observers.checks.record_evidence import collect_record_evidence
+                from product.backend.core.verification.business_facts import reduce_record_facts
+                facts,reference=collect_record_evidence(source=source,case=case,requirement=requirement,proof=proof,
+                    phase=phase,before=before,view=view,target=target,clock=owner.clock(),
+                    marker=owner.web.request_marker(case.case_id),claims=claims)
+                state,closure,complete=reduce_record_facts(reference,facts,case=case,expected_state=proof.expected_state)
+                if phase in {'AFTER','EVENTUAL'} and complete:
+                    reasons=('BUSINESS_EFFECT_RECORDED' if state=='CONFIRMED' else 'COMPLETE_HISTORY_UNCHANGED',)
         else:
             initial = disclosure_proof(owner=snapshot.data,response=snapshot.data,fields=proof.protected_projection,
                 key=owner._disclosure_key,marker=owner.web.request_marker(case.case_id))
             projection = (case.resource_id,snapshot.owner_id,initial.owner_digest) if initial.projection_complete else None
-            if phase in {'BASELINE','BEFORE','RECOVERY'}:
-                complete = projection is not None
-                state,closure = ('CONFIRMED','CLOSED') if complete else ('UNKNOWN','OPEN')
-            elif target is not None and before is not None and baseline_trusted:
-                scope = view.scope
-                if (scope is not None and scope.request_nonce == target.request_nonce
-                        and scope.request_digest == target.request_digest and scope.generation == before.generation == snapshot.generation):
-                    data = strict_json(target.body,config.max_response_bytes)
-                    state,complete,reasons = _disclosure(owner,config,proof,case,before,snapshot,data,target.status_code)
-                    complete = complete and (state == 'CONFIRMED' or scope.state == 'COMPLETE')
-                    closure = 'CLOSED' if complete else 'OPEN'
+            if phase in {'BASELINE','BEFORE','RECOVERY'} or target is not None and before is not None and baseline_trusted:
+                from product.backend.infra.observers.checks.disclosure_evidence import collect_disclosure_evidence
+                from product.backend.core.verification.business_facts import reduce_disclosure_facts
+                facts,reference=collect_disclosure_evidence(source=source,case=case,requirement=requirement,proof=proof,
+                    phase=phase,before=before,view=view,target=target,clock=owner.clock(),
+                    marker=owner.web.request_marker(case.case_id),key=owner._disclosure_key)
+                state,closure,complete=reduce_disclosure_facts(reference,facts,case=case)
+                if not complete:reasons=reference.reason_codes or ('DISCLOSURE_PROJECTION_INCOMPLETE',)
         terminal = bool(complete and view.scope is not None and view.scope.state == 'COMPLETE')
         if not complete and not reasons:
             reasons = ('RECORD_REQUEST_INCOMPLETE',)
         observation = CheckObservation(**common,state=state,closure=closure,complete=complete,
             reliable=complete,correlated=complete,authoritative=complete,window_end_us=owner.clock(),
             correlation_refs=(case.case_id,owner.web.request_marker(case.case_id)),reason_codes=reasons)
+        if reference is not None:
+            owner._evidence_sources[observation.model_dump_json()]=(facts,reference)
         return CheckObservedSource(observation,projection if complete else None,terminal,
             case.case_id if terminal else None,case.resource_id if terminal else None,proof.binding_fingerprint if terminal else None)
     except (SourceReadError,KeyError) as error:
         return owner._unknown(common,error.code if isinstance(error,SourceReadError) else 'ACTUAL_IDENTITY_MISMATCH')
-
-
-def _disclosure(owner,config,proof,case,before,after,data,status):
-    """有限 JSON 字段证明；禁止读取时任一受保护字段泄露都保留，未知响应不能推成未泄露。"""
-    if before.data != after.data or before.version != after.version:
-        return 'UNKNOWN',False,('RECORD_HISTORY_INCOMPLETE',)
-    if status in {401,403} and isinstance(data,dict) and set(data) <= {'error'}:
-        return 'ABSENT',True,()
-    try:
-        content = record_value(data,config.target_data_path)
-        if (record_value(data,config.target_resource_path)!=case.resource_id
-                or record_value(data,config.target_owner_path)!=before.owner_id):
-            return 'UNKNOWN',False,('OPERATION_CORRELATION_INVALID',)
-    except SourceReadError:
-        return 'UNKNOWN',False,('DISCLOSURE_PROJECTION_INCOMPLETE',)
-    results = [disclosure_proof(owner=before.data,response=content,fields=(field,),key=owner._disclosure_key,
-        marker=owner.web.request_marker(case.case_id)) for field in proof.protected_projection]
-    if case.permission.expectation=='DENY' and any(item.matched for item in results):
-        return 'CONFIRMED',True,()
-    if all(item.matched for item in results):
-        return 'CONFIRMED',True,()
-    return 'UNKNOWN',False,('DISCLOSURE_PROJECTION_INCOMPLETE',)
+    except ValueError:
+        return owner._unknown(common,'FACT_PROJECTION_UNAVAILABLE')

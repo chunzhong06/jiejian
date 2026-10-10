@@ -56,23 +56,23 @@ export function OfficialSamplePanel({ value, onChanged, onError, expanded = fals
     {(uncertain || syncFailed) && <Alert className="flow-feedback" type="warning" showIcon message={uncertain ? '环境操作回执尚未确认' : '环境操作已完成，页面尚未同步'} description="先重新读取状态，不重复启动、停止或切换。" action={<Button loading={busy} onClick={() => void reread()}>重新核对环境</Button>}/>}
     {!value ? <p>正在读取官方环境…</p> : !value.available ? <Alert className="flow-feedback" type="info" message={value.unavailable_reason ?? '当前环境无法启动官方示例。'} /> : !value.active ? <>
       {expanded && retainedExited ? <div className="environment-recovery">
-        <StatusBadge kind="lifecycle">已确认旧实例退出</StatusBadge><h2>从全新示例开始</h2><p>每次启动都从同步导出开始，创建独立的新项目。确认权限后检查起始实现，再体验一次异步优化与复验。</p>
+        <StatusBadge kind="lifecycle">已确认旧实例退出</StatusBadge><h2>从全新示例开始</h2><p>每次启动都会创建独立的新项目。确认权限后检查起始实现，再体验修改与复验。</p>
         <Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button>
-        <div className="environment-retained"><div><strong>旧项目归档保留</strong><p>检查结果与证据</p><p>原问题与修复记录</p><p>历史权限与源码记录</p></div><div><strong>新项目从零开始</strong><p>同步导出的起始源码</p><p>尚未批准的权限提案</p><p>重新准备账号、资源与材料</p></div></div>
+        <div className="environment-retained"><div><strong>旧项目归档保留</strong><p>检查结果与证据</p><p>原问题与修复记录</p><p>历史权限与源码记录</p></div><div><strong>新项目从零开始</strong><p>未修改的起始源码</p><p>尚未批准的权限提案</p><p>重新准备账号、资源与材料</p></div></div>
         <p className="editorial-muted">旧源码修改、登录状态和材料不带入新实例。启动不会自动批准权限或执行检查。</p>
       </div> : <div className="sample-start-row">{!compact && <div className="sample-start-copy"><p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
       {retainedExited && <p className="editorial-muted">上次示例已退出，历史记录保留。本次启动将创建全新示例。</p>}
       </div>}<Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button></div>}
-    </> : <section className="sample-environment" aria-label="示例环境管理" data-expanded={expanded}><h3>示例环境管理</h3>
-      <p className="editorial-muted">在开发客户端继续开发，回到“源码改动”登记修改并检查。这里管理示例实例和观察条件，检查结束不会重置项目。</p>
-      <Space wrap>
+    </> : <section className="sample-environment" aria-label="示例环境管理" data-expanded={expanded}><div className="sample-management-row"><div><h3>示例环境管理</h3>
+      <p className="editorial-muted">修改代码后，到“源码改动”登记并检查。需要重新开始时，再重置示例。</p></div>
+      <Space className="sample-management-actions" wrap>
         <Button disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('reset')}>重置官方环境</Button>
-        <Button disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('stop')}>停止官方示例</Button>
-      </Space>
-      <details><summary>可选体验：证据不足时会怎样</summary><p>临时关闭决定性项目包观察，不改变应用代码。下一次检查应根据实际证据决定是否能够下结论，历史结果保持不变。</p><Button disabled={busy || uncertain || environmentPending} onClick={() => void perform(() => experienceApi.observation(Boolean(value.evidence_limited)))}>{value.evidence_limited ? '恢复完整观察条件' : '使用受限观察条件'}</Button></details>
+        <Button danger disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('stop')}>停止官方示例</Button>
+      </Space></div>
+      {value.runtime_kind!=='NODE_ESM'&&<details><summary>可选体验：证据不足时会怎样</summary><p>临时关闭决定性项目包观察，不改变应用代码。下一次检查应根据实际证据决定是否能够下结论，历史结果保持不变。</p><Button disabled={busy || uncertain || environmentPending} onClick={() => void perform(() => experienceApi.observation(Boolean(value.evidence_limited)))}>{value.evidence_limited ? '恢复完整观察条件' : '使用受限观察条件'}</Button></details>}
     </section>}
     <Modal open={confirm !== null} title={confirm === 'start' ? '启动官方示例？' : confirm === 'reset' ? '重置官方环境？' : confirm === 'stop' ? '停止官方示例？' : '切换示例条件？'}
-      okText={confirm === 'start' ? '启动示例' : confirm === 'reset' ? '确认重置' : '确认停止'} cancelText="取消" confirmLoading={busy} onCancel={() => { if (!busy) setConfirm(null) }}
+      okText={confirm === 'start' ? '启动示例' : confirm === 'reset' ? '确认重置' : '确认停止'} cancelText="取消" okButtonProps={{danger:confirm==='stop'||confirm==='reset'}} confirmLoading={busy} onCancel={() => { if (!busy) setConfirm(null) }}
       onOk={() => {
         if (confirm === 'start' || confirm === 'reset' || confirm === 'stop') {
           pendingOperation.current ??= { action: confirm, id: crypto.randomUUID() }

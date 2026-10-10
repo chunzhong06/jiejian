@@ -35,20 +35,23 @@ class CurrentProjectRepairService:
         self._reader,self._repairs,self._changes,self._boundaries = reader,repairs,changes,boundaries
         self._pending_request_reader = pending_request_reader
 
-    def evaluate(self, project_id):
+    def evaluate(self, project_id, *, readings=None):
         from product.backend.workflows.changes.service import permission_refs
         boundary = self._boundaries.view(project_id)
         refs = permission_refs(boundary)
-        history = sorted(self._reader.list_for_project(project_id),key=lambda item:(item.run.created_at_us,item.run.run_id))
-        families,packages = {},{}
+        readings = self._reader.project_readings(project_id) if readings is None else readings
+        history = sorted((status for status,_ in readings),key=lambda item:(item.run.created_at_us,item.run.run_id))
+        families,packages = {},{status.run.run_id:package for status,package in readings if package is not None}
         for status in history:
             if status.result_integrity not in {"VALID", "INVALID"}:
                 continue
             # 损坏的已发布包必须交由 Reader 拒绝，不能忽略后把既有问题投影为无任务。
-            package = self._reader.package(status.run.run_id,project_id=project_id)
+            package = packages.get(status.run.run_id)
+            if package is None:
+                package = self._reader.package(status.run.run_id,project_id=project_id)
             packages[status.run.run_id] = package
             if package.result.verdict is RunVerdict.BLOCK:
-                for contract in self._repairs.contracts(status.run.run_id):
+                for contract in self._repairs.contracts_from_verified_package(package):
                     families.setdefault(contract.deny.identity.fingerprint(),contract)
         tasks = []
         for family,contract in families.items():
@@ -72,7 +75,7 @@ class CurrentProjectRepairService:
                 if linked:
                     entry,package = linked[-1]
                     run_id = entry.run.run_id
-                    verification = None if package is None else self._repairs.verification(run_id)
+                    verification = None if package is None else self._repairs.verification_from_verified_package(package)
                     status = "INCONCLUSIVE" if verification is None else verification.status
                 elif change is not None:
                     status = "READY_TO_VERIFY" if change.revalidation.status=="READY" and change.revalidation.can_execute else "CHANGE_SUBMITTED"

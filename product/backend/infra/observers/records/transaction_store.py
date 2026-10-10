@@ -8,10 +8,13 @@ from pathlib import Path
 import os
 import sqlite3
 import struct
+import time
+import zlib
 from threading import RLock
 from uuid import uuid4
 
-from product.protocols.runtime.transaction_records import RecordOperation, RecordSeed, RecordSnapshot, RecordTransaction, RecordTransition, RecordProofView, RecordRequestScope, bounded_record_data
+from product.protocols.runtime.transaction_records import RecordOperation, RecordSeed, RecordSnapshot, RecordTransaction, RecordTransition, RecordProofView, RecordRequestScope, RecordStateMigration, bounded_record_data
+from product.backend.infra.observers.records.record_history import read_history, import_legacy_state
 
 
 class RecordStoreError(ValueError):
@@ -22,10 +25,20 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def _trace_log(document):
+    from product.protocols.runtime.record_trace import RecordTraceLog
+    if isinstance(document,bytes):
+        decoder=zlib.decompressobj()
+        document=decoder.decompress(document,262145)
+        if len(document)>262144 or not decoder.eof or decoder.unused_data:
+            raise RecordStoreError('TRACE_DOCUMENT_INVALID')
+    return RecordTraceLog.model_validate_json(document)
+
+
 class TransactionRecordStore:
     """由产品拥有的记录进程使用；目标应用只能通过受限业务端口访问，不能取得数据库路径。"""
 
-    def __init__(self, database: Path):
+    def __init__(self, database: Path, *, legacy_database: Path | None = None):
         database = database.absolute()
         if database.resolve() != database or database.is_symlink():
             raise RecordStoreError("RECORD_STORE_PATH_INVALID")
@@ -36,13 +49,14 @@ class TransactionRecordStore:
         self._last_hash = bytes(32)
         from product.backend.infra.runtime.process.exclusive_file import open_exclusive_record_file
         self._file = open_exclusive_record_file(database)
+        fresh_file = os.fstat(self._file.fileno()).st_size == 0
         self._db = sqlite3.connect(':memory:', isolation_level=None, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         try:
             loaded = self._restore()
             with self._connection() as db:
                 db.executescript("""
-                CREATE TABLE IF NOT EXISTS metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1), format INTEGER NOT NULL, generation TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1), format INTEGER NOT NULL, generation TEXT NOT NULL, migration TEXT);
                 CREATE TABLE IF NOT EXISTS resources(collection TEXT NOT NULL, resource_id TEXT NOT NULL, owner_id TEXT NOT NULL,
                     version INTEGER NOT NULL CHECK(version>=0), data TEXT NOT NULL, last_operation_id TEXT,
                     PRIMARY KEY(collection,resource_id));
@@ -52,42 +66,43 @@ class TransactionRecordStore:
                     document TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS scope_operations(scope_id TEXT NOT NULL, operation_id TEXT UNIQUE NOT NULL,
                     ordinal INTEGER NOT NULL, PRIMARY KEY(scope_id,ordinal));
+                CREATE TABLE IF NOT EXISTS execution_traces(scope_id TEXT NOT NULL, collection TEXT NOT NULL,
+                    resource_id TEXT NOT NULL, document BLOB NOT NULL, PRIMARY KEY(scope_id,collection,resource_id));
                 """)
-                db.execute("INSERT OR IGNORE INTO metadata VALUES(1,1,?)", (uuid4().hex,))
-                if db.execute("SELECT format FROM metadata WHERE singleton=1").fetchone()[0] != 1:
+                db.execute("INSERT OR IGNORE INTO metadata VALUES(1,2,?,NULL)", (uuid4().hex,))
+                if db.execute("SELECT format FROM metadata WHERE singleton=1").fetchone()[0] != 2:
                     raise RecordStoreError("RECORD_STORE_FORMAT_UNSUPPORTED")
                 if not loaded:
-                    self._persist()
+                    legacy_exists = False
+                    if legacy_database is not None:
+                        try:legacy_database.stat();legacy_exists=True
+                        except FileNotFoundError:pass
+                    if legacy_exists:
+                        generation=db.execute('SELECT generation FROM metadata WHERE singleton=1').fetchone()[0]
+                        import_legacy_state(legacy_database,db,generation,self._persist)
+                    else:self._persist()
         except BaseException:
+            # 旧实例占用或旧日志校验失败时，允许稍后重试新空库；持久化结果不明的文件保留待核对。
+            if fresh_file and not self._poisoned:
+                try:self._file.seek(0);self._file.truncate(0);os.fsync(self._file.fileno())
+                except OSError:pass
             self.close()
             raise
 
     def _restore(self):
         """任何截断、摘要不符都拒绝开放，不把损坏尾部当成“没有发生”。"""
-        magic = b'JIEJIAN-TRANSACTION-RECORDS-1\n'
-        size = os.fstat(self._file.fileno()).st_size
-        if size == 0:
-            self._file.write(magic)
-            return False
-        if size > 128 * 1024 * 1024 or self._file.read(len(magic)) != magic:
-            raise RecordStoreError('RECORD_HISTORY_INVALID')
-        latest = None
-        while self._file.tell() < size:
-            length_raw = self._file.read(4)
-            if len(length_raw) != 4:
-                raise RecordStoreError('RECORD_HISTORY_INCOMPLETE')
-            length = struct.unpack('>I', length_raw)[0]
-            if not 1 <= length <= 128 * 1024 * 1024:
-                raise RecordStoreError('RECORD_HISTORY_INVALID')
-            data = self._file.read(length)
-            digest = self._file.read(32)
-            if len(data) != length or len(digest) != 32 or hashlib.sha256(self._last_hash + length_raw + data).digest() != digest:
-                raise RecordStoreError('RECORD_HISTORY_INCOMPLETE')
-            self._last_hash, latest = digest, data
+        try:latest,self._last_hash=read_history(self._file,2)
+        except ValueError as error:raise RecordStoreError(str(error)) from None
         if latest is None:
-            raise RecordStoreError('RECORD_HISTORY_INCOMPLETE')
+            self._file.write(b'JIEJIAN-TRANSACTION-RECORDS-2\n')
+            return False
         self._db.deserialize(latest)
         return True
+
+    def migration_receipt(self) -> RecordStateMigration | None:
+        with self._connection() as db:
+            payload=db.execute('SELECT migration FROM metadata WHERE singleton=1').fetchone()[0]
+            return None if payload is None else RecordStateMigration.model_validate_json(payload)
 
     def _persist(self):
         # SQLite 只在拥有者内存中运行。落盘文件始终由 OS 独占，原生 SQLite 也不能绕过文件共享限制。
@@ -201,6 +216,44 @@ class TransactionRecordStore:
             self._persist()
             return scope
 
+    def append_trace(self, command):
+        """宿主绑定当前请求；父节点与提交引用均不得越过同一请求和资源。"""
+        from product.protocols.runtime.record_trace import RecordTraceEvent,RecordTraceLog
+        with self._connection() as db:
+            scope=self._scope(db,command.scope_id)
+            if scope.state!='OPEN':raise RecordStoreError('RECORD_SCOPE_CLOSED')
+            self._snapshot(db,command.collection,command.resource_id)
+            row=db.execute('SELECT document FROM execution_traces WHERE scope_id=? AND collection=? AND resource_id=?',
+                (scope.scope_id,command.collection,command.resource_id)).fetchone()
+            log=_trace_log(row[0]) if row else RecordTraceLog(scope_id=scope.scope_id,
+                generation=scope.generation,request_nonce=scope.request_nonce,request_digest=scope.request_digest,
+                collection=command.collection,resource_id=command.resource_id)
+            if command.event.operation_id is not None:
+                operation=self.operation(command.event.operation_id)
+                if (operation.scope_id,operation.collection,operation.resource_id,operation.subject_id)!=(scope.scope_id,command.collection,command.resource_id,command.event.subject_id):
+                    raise RecordStoreError('TRACE_OPERATION_MISMATCH')
+            event=RecordTraceEvent(**command.event.model_dump(),event_id='event_'+uuid4().hex,recorded_at_us=time.time_ns()//1000)
+            log=RecordTraceLog.model_validate(log.model_dump()|{'events':(*log.events,event)})
+            db.execute('INSERT OR REPLACE INTO execution_traces VALUES(?,?,?,?)',
+                (scope.scope_id,command.collection,command.resource_id,zlib.compress(log.model_dump_json().encode('utf-8'))))
+            # 诊断事件在请求闭合时与 scope 一起持久化，避免每个节点复制整个业务快照。
+            # 中途崩溃只能恢复 OPEN/部分事件，不能伪装成完整执行链。
+            return event
+
+    def trace_view(self, collection, resource_id, request_nonce):
+        """只读已写入的事件与当前完成边界，不按业务状态或时间生成事件。"""
+        from product.protocols.runtime.record_trace import RecordTraceLog
+        with self._connection() as db:
+            row=db.execute('SELECT document FROM scopes WHERE request_nonce=?',(request_nonce,)).fetchone()
+            if row is None:raise RecordStoreError('RECORD_SCOPE_MISSING')
+            scope=RecordRequestScope.model_validate_json(row[0])
+            row=db.execute('SELECT document FROM execution_traces WHERE scope_id=? AND collection=? AND resource_id=?',
+                (scope.scope_id,collection,resource_id)).fetchone()
+            log=_trace_log(row[0]) if row else RecordTraceLog(scope_id=scope.scope_id,
+                generation=scope.generation,request_nonce=scope.request_nonce,request_digest=scope.request_digest,
+                collection=collection,resource_id=resource_id)
+            return log.model_copy(update={'scope_state':scope.state})
+
     def proof_view(self, collection: str, resource_id: str, operation_id: str | None = None,
                    request_nonce: str | None = None) -> RecordProofView:
         """同一锁内读取资源与对应操作，防止并发写入拼接出并不存在的前后状态。"""
@@ -225,26 +278,29 @@ class TransactionRecordStore:
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                ordinal = 0
+                scope = None
                 if command.scope_id is not None:
                     scope = self._scope(db, command.scope_id)
-                    if scope.state != 'OPEN':
-                        raise RecordStoreError('RECORD_SCOPE_CLOSED')
-                    ordinal = db.execute('SELECT COUNT(*) FROM scope_operations WHERE scope_id=?', (scope.scope_id,)).fetchone()[0]
-                    if ordinal >= 32:
-                        raise RecordStoreError('RECORD_REQUEST_LIMIT')
+                    if scope.generation != db.execute('SELECT generation FROM metadata WHERE singleton=1').fetchone()[0]:
+                        raise RecordStoreError('RECORD_SCOPE_MISMATCH')
                 prior = db.execute("SELECT command_hash,document FROM operations WHERE request_key=?", (command.request_key,)).fetchone()
                 if prior is not None:
                     if prior["command_hash"] != command_hash:
                         raise RecordStoreError("RECORD_OPERATION_CONFLICT")
                     db.execute("ROLLBACK")
                     return RecordOperation.model_validate_json(prior["document"])
+                # 回执不是新写入；相同调用者与scope已由完整command_hash核对，关闭后仍可回读。
+                scope_ordinal = None
+                if scope is not None:
+                    if scope.state != 'OPEN':raise RecordStoreError('RECORD_SCOPE_CLOSED')
+                    scope_ordinal = db.execute('SELECT COUNT(*) FROM scope_operations WHERE scope_id=?', (scope.scope_id,)).fetchone()[0]
+                    if scope_ordinal >= 32:raise RecordStoreError('RECORD_REQUEST_LIMIT')
                 current = self._snapshot(db, command.collection, command.resource_id)
                 if current.version != command.expected_version:
                     raise RecordStoreError("RECORD_VERSION_CONFLICT")
                 value = current.data
                 transitions = []
-                for ordinal, change in enumerate(command.changes):
+                for change_ordinal, change in enumerate(command.changes):
                     before = bounded_record_data(value)
                     value = bounded_record_data(value)
                     parent = value
@@ -254,17 +310,17 @@ class TransactionRecordStore:
                         parent = parent[key]
                     parent[change.path[-1]] = change.value
                     value = bounded_record_data(value)
-                    transitions.append(RecordTransition(ordinal=ordinal, before=before, after=value))
+                    transitions.append(RecordTransition(ordinal=change_ordinal, before=before, after=value))
                 operation = RecordOperation(operation_id=uuid4().hex, generation=current.generation,
                     collection=current.collection, resource_id=current.resource_id, owner_id=current.owner_id,
                     subject_id=command.subject_id, request_key=command.request_key, scope_id=command.scope_id, before_version=current.version,
-                    after_version=current.version + 1, transitions=tuple(transitions))
+                    after_version=current.version + 1, transitions=tuple(transitions),scope_ordinal=scope_ordinal)
                 db.execute("UPDATE resources SET version=?,data=?,last_operation_id=? WHERE collection=? AND resource_id=?",
                     (operation.after_version, _json(value), operation.operation_id, current.collection, current.resource_id))
                 db.execute("INSERT INTO operations VALUES(?,?,?,?)",
                     (operation.operation_id, command.request_key, command_hash, operation.model_dump_json()))
                 if command.scope_id is not None:
-                    db.execute('INSERT INTO scope_operations VALUES(?,?,?)', (command.scope_id, operation.operation_id, ordinal))
+                    db.execute('INSERT INTO scope_operations VALUES(?,?,?)', (command.scope_id, operation.operation_id, scope_ordinal))
                 db.execute("COMMIT")
                 self._persist()
                 return operation

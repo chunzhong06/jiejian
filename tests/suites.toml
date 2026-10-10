@@ -55,3 +55,22 @@ invariants = ["公共组件交互一致", "页面加载空态失败态", "跨页
 tests = ["tests/docs"]
 sources = ["docs", "README.md", "AGENTS.md"]
 invariants = ["文档链接与代码参考有效", "Schema 与真实导出一致"]
+
+# 浏览器范围只选择已有真实页面检查，不代表布局获得用户接受。
+[ui.core]
+sources = ["product/frontend/src/features/system", "product/frontend/src/features/workspace", "product/frontend/src/features/boundaries", "product/frontend/src/app/notifications"]
+
+[ui.process]
+sources = ["product/frontend/src/features/access", "product/frontend/src/features/checks", "product/frontend/src/features/changes", "product/frontend/src/features/tools"]
+
+[ui.materials]
+sources = ["product/frontend/src/features/preparation/materials", "product/frontend/src/features/preparation/PreparationPage.tsx", "product/frontend/src/features/preparation/evidence", "product/frontend/src/features/preparation/supplemental"]
+
+[ui.references]
+sources = ["product/frontend/src/features/preparation/proof-sources", "product/frontend/src/shared/styles/proof-details.css"]
+
+[ui.results]
+sources = ["product/frontend/src/features/results"]
+
+[ui.history]
+sources = ["product/frontend/src/features/history"]

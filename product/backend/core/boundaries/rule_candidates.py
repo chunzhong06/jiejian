@@ -1,15 +1,16 @@
 # 保存待人确认的对话规则；候选、具体例子和来源声明不构成正式权限。
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from product.backend.core.boundaries.entities import BoundaryModel
 from product.backend.core.boundaries.proposals import (
     PERMISSION_ITEM_ID_PATTERN, ProposedActionItem, ProposedActorItem, ProposedPermissionItem,
 )
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
+from product.backend.core.boundaries.candidate_scenarios import RuleScenario, RuleScenarioInput, freeze_scenario
 
 CANDIDATE_ID_PATTERN = r"^rcd_[0-9a-f]{32}$"
 BASIS_ID_PATTERN = r"^rb_[0-9a-f]{64}$"
@@ -28,7 +29,7 @@ class RuleExample(BoundaryModel):
         return self
 
 
-class RuleCandidateContent(BoundaryModel):
+class LegacyRuleCandidateContent(BoundaryModel):
     original_text: str = Field(min_length=1, max_length=4096)
     actors: tuple[ProposedActorItem, ...] = Field(default=(), max_length=20)
     actions: tuple[ProposedActionItem, ...] = Field(default=(), max_length=10)
@@ -52,7 +53,7 @@ class RuleCandidateContent(BoundaryModel):
         return values
 
     @model_validator(mode="after")
-    def unique_items(self) -> RuleCandidateContent:
+    def unique_items(self) -> LegacyRuleCandidateContent:
         for items in (self.actors, self.actions, self.permissions):
             if len({item.item_id for item in items}) != len(items):
                 raise ValueError("候选内的局部引用不能重复")
@@ -60,15 +61,70 @@ class RuleCandidateContent(BoundaryModel):
 
 
 # 此根由数据库与GUI/MCP独立读取，版本不向内部例子和业务建议传播。
-class RuleCandidateRevision(BoundaryModel):
+class LegacyRuleCandidateRevision(BoundaryModel):
     schema_version: Literal["1"] = "1"
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     candidate_id: str = Field(pattern=CANDIDATE_ID_PATTERN)
     revision: int = Field(ge=1)
     basis_id: str = Field(pattern=BASIS_ID_PATTERN)
-    content: RuleCandidateContent
+    content: LegacyRuleCandidateContent
     submitted_via: Literal["MCP", "LOCAL_GUI"]
     created_at_us: int = Field(ge=0)
+
+
+class RuleCandidateContentInput(LegacyRuleCandidateContent):
+    scenarios: tuple[RuleScenarioInput, ...] = Field(default=(), max_length=10)
+
+    @model_validator(mode="after")
+    def scenario_references(self):
+        if len({item.scenario_id for item in self.scenarios}) != len(self.scenarios):
+            raise ValueError("情境标识不能重复")
+        permission_ids = {item.item_id for item in self.permissions}
+        for scenario in self.scenarios:
+            freeze_scenario(scenario, self)
+            for option in scenario.options:
+                if not {item.item_id for item in option.replacements} <= permission_ids:
+                    raise ValueError("选项只能替换当前候选内的权限项")
+        return self
+
+
+class RuleCandidateContent(RuleCandidateContentInput):
+    scenarios: tuple[RuleScenario, ...] = Field(default=(), max_length=10)
+
+    @model_validator(mode="after")
+    def verify_fingerprints(self):
+        if any(freeze_scenario(item, self) != item for item in self.scenarios):
+            raise ValueError("情境指纹与原话或候选内容不一致")
+        return self
+
+
+class RuleCandidateRevision(LegacyRuleCandidateRevision):
+    schema_version: Literal["2"] = "2"
+    content: RuleCandidateContent
+
+    @model_validator(mode="after")
+    def bounded_root(self):
+        if len(self.model_dump_json().encode("utf-8")) > 1024 * 1024:
+            raise ValueError("候选根不得超过1MiB")
+        return self
+
+
+def freeze_candidate_content(value: RuleCandidateContentInput) -> RuleCandidateContent:
+    return RuleCandidateContent(**value.model_dump(exclude={"scenarios"}),
+        scenarios=tuple(freeze_scenario(item, value) for item in value.scenarios))
+
+
+_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision, Field(discriminator="schema_version")])
+
+
+def read_candidate_revision(payload: str):
+    if len(payload.encode("utf-8")) > 1024 * 1024:
+        raise ValueError("候选根不得超过1MiB")
+    return _reader.validate_json(payload)
+
+
+def rule_candidate_revision_schema():
+    return _reader.json_schema()
 
 
 class RuleCandidateSave(BoundaryModel):
@@ -76,7 +132,7 @@ class RuleCandidateSave(BoundaryModel):
     expected_basis_id: str = Field(pattern=BASIS_ID_PATTERN)
     candidate_id: str | None = Field(default=None, pattern=CANDIDATE_ID_PATTERN)
     expected_revision: int | None = Field(default=None, ge=1)
-    content: RuleCandidateContent
+    content: RuleCandidateContentInput
 
     @model_validator(mode="after")
     def paired_revision(self) -> RuleCandidateSave:

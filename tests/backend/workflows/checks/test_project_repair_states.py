@@ -39,6 +39,27 @@ def test_project_repair_projects_exact_linked_state(state):
         assert actual.tasks[0].run_id == current.result.run_id
 
 
+@pytest.mark.parametrize('mismatch', ['repair_reference', 'source_run_id', 'change_id'])
+def test_unrelated_passing_run_cannot_verify_the_original_problem(mismatch):
+    # 独立反例替代源码里必须写出某个布尔表达式的断言：错一项关联就不能修复原题。
+    source = package()
+    contract = build_current_repair_contract(source, next(item.case_id for item in source.result.case_results if item.verdict == 'VULNERABLE'))
+    current = package(forbidden=False, run_id='run_'+'2'*32)
+    change_id = 'chg_'+'3'*32
+    context = repair_context(contract)
+    if mismatch in {'repair_reference', 'source_run_id'}:
+        context = context.model_copy(update={mismatch: 'f'*64 if mismatch == 'repair_reference' else 'run_'+'f'*32})
+    current.request = current.request.model_copy(update={'repair_context':context, 'change_context':N(change_id='chg_'+'f'*32 if mismatch=='change_id' else change_id)})
+    entries = [N(run=N(run_id=item.result.run_id,created_at_us=index),result_integrity='VALID') for index,item in enumerate((source,current))]
+    service = CurrentProjectRepairService(reader=N(list_for_project=lambda _:entries,package=lambda run,**kwargs:source if run==source.result.run_id else current),
+        repairs=N(contracts=lambda _:(contract,),verification=lambda _:pytest.fail('不相关检查不能进入原题验证')),
+        changes=N(latest_for_repair=lambda *args:N(manifest=N(change_id=change_id),revalidation=N(status='READY',can_execute=True))),
+        boundaries=N(view=lambda _:N(policy_epoch=1,permission_intents=contract.original_intents)),pending_request_reader=lambda _:None)
+    value = service.evaluate(source.request.project_id)
+    assert value.status == 'READY_TO_VERIFY'
+    assert value.tasks[0].run_id is None and value.tasks[0].verification is None
+
+
 def test_project_repair_invalid_publication_is_not_silently_no_task():
     from product.backend.core.errors import ErrorCode, JiejianError
     def unavailable(*args, **kwargs):

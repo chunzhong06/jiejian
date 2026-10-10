@@ -8,6 +8,8 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import upgrade_database
 from product.backend.infra.storage.db import require_current_database
 
@@ -45,7 +47,8 @@ def test_0006_schema_drift_is_rejected_before_mutation(tmp_path):
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE INDEX unexpected ON projects(name)")
     before = path.read_bytes()
-    with pytest.raises(Exception): upgrade_database(path)
+    with pytest.raises(JiejianError) as caught: upgrade_database(path)
+    assert caught.value.code == ErrorCode.STORAGE_MIGRATION
     assert path.read_bytes() == before
 
 
@@ -58,7 +61,7 @@ def test_recovery_ddl_failure_keeps_old_revision_and_rows(tmp_path, monkeypatch)
         context = MigrationContext.configure(connection)
         monkeypatch.setattr(migration, "op", Operations(context))
         monkeypatch.setattr(migration, "_CREATE_SQL", (*migration._CREATE_SQL[:2], "INVALID DDL"))
-        with pytest.raises(Exception):
+        with pytest.raises(OperationalError):
             with context.begin_transaction(_per_migration=True): migration.upgrade()
     engine.dispose()
     with sqlite3.connect(path) as connection:

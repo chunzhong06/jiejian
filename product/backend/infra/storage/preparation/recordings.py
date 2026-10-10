@@ -338,6 +338,14 @@ class RecordingRepository:
         )
         return tuple(self._record(row) for row in rows)
 
+    def preparation_references(self, project_id: str):
+        """准备建议只需录制身份与生命周期；不为罗列引用加载全部浏览器事件正文。"""
+        fields = ('recording_id', 'project_id', 'business_action_id', 'action_revision', 'purpose',
+            'subject_test_identity_id', 'resource_owner_test_identity_id', 'state', 'updated_at_us')
+        rows = self._session.execute(select(*(getattr(RecordingRow, name) for name in fields))
+            .where(RecordingRow.project_id == project_id).order_by(RecordingRow.recording_id)).all()
+        return tuple(dict(zip(fields, row)) for row in rows)
+
     def _row(self, record: RecordingRecord) -> RecordingRow:
         return RecordingRow(
             recording_id=record.recording_id,

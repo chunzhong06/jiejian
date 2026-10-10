@@ -66,6 +66,7 @@ class EvidenceExplanation(WireModel):
 
 class StoryTraceEvent(WireModel):
     event_id: str
+    semantic_key: str | None = None
     parent_event_ids: tuple[str, ...]
     kind: TraceEventKind
     authorization_decision: TraceAuthorizationDecision | None
@@ -147,6 +148,16 @@ class CheckStoryBuilder:
 
     def build(self, run_id: str, *, include_repair=True) -> ResultStory:
         package = self._reader.package(run_id)
+        return self._from_verified_package(package, include_repair=include_repair)
+
+    def breakpoints_from_verified_package(self, package):
+        """在当前请求已核验的包上投影断点；不递归读取磁盘或原题服务。"""
+        return {item.case_id: item.breakpoint for item in
+                self._from_verified_package(package, include_repair=False).actions}
+
+    def _from_verified_package(self, package, *, include_repair):
+        # 此对象只由严格 reader 或同请求的原题服务传入；不跨请求缓存完整性结论。
+        run_id = package.result.run_id
         results = {item.case_id: item for item in package.result.case_results}
         evidence = {item.evidence_id: item for item in package.evidence}
         configs = {item.action_id: item for item in package.bundle.actions}
@@ -242,11 +253,12 @@ class CheckStoryBuilder:
                     proof_coverage=_proof_coverage(case, proofs, documents, facts)))
         verification = None
         if include_repair and self._repairs is not None:
-            contracts = {item.source_case_id:item for item in self._repairs.contracts(run_id)}
+            contracts = {item.source_case_id:item for item in self._repairs.contracts_from_verified_package(
+                package, breakpoints={item.case_id: item.breakpoint for item in stories})}
             stories = [item.model_copy(update={"repair_requirement": contracts.get(item.case_id),
                 "repair_comparison": build_repair_comparison(contracts[item.case_id], package)
                     if item.case_id in contracts else ()}) for item in stories]
-            verification = self._repairs.verification(run_id)
+            verification = self._repairs.verification_from_verified_package(package)
         correspondence = getattr(package.result, "runtime_correspondence", None)
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
@@ -309,7 +321,7 @@ def _execution_path(documents) -> StoryExecutionPath | None:
         return None
     # 保留既有拓扑顺序及全部节点；部分/空路径也必须照录完整性与原因。
     return StoryExecutionPath(complete=trace.complete, reason_codes=trace.reason_codes,
-        events=tuple(StoryTraceEvent(event_id=event.event_id, parent_event_ids=event.parent_event_ids,
+        events=tuple(StoryTraceEvent(event_id=event.event_id, semantic_key=event.semantic_key, parent_event_ids=event.parent_event_ids,
             kind=event.kind, authorization_decision=event.authorization_decision, effect_id=event.effect_id,
             dispatch_effect_ids=event.dispatch_effect_ids, source_component=event.source_component,
             source_location=event.source_location) for event in trace.events),

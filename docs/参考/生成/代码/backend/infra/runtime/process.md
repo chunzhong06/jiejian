@@ -145,7 +145,7 @@
 
 [打开源码](../../../../../../../product/backend/infra/runtime/process/exclusive_file.py) · Python AST；作用域内import不表示每次调用均执行。
 
-- `open_exclusive_record_file(path)`
+- `open_exclusive_record_file(path, read_only)`
 
 静态import / dot-source：`__future__`、`os`、`pathlib`、`作用域内：msvcrt`、`作用域内：pywintypes`、`作用域内：win32con`、`作用域内：win32file`
 
@@ -193,7 +193,7 @@
 - `OwnedRecordServer.reference(self, project_id, owner_identity)`
 - `OwnedRecordServer.stop(self)`
 
-静态import / dot-source：`__future__`、`hashlib`、`hmac`、`http.server`、`importlib`、`json`、`os`、`pathlib`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.records.transaction_store`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.transaction_records`、`pydantic`、`secrets`、`threading`、`urllib.parse`、`作用域内：product.backend.infra.observers.records`、`作用域内：product.backend.infra.runtime.process.records.record_capabilities`、`作用域内：product.backend.infra.runtime.process.tree`、`作用域内：product.protocols.runtime`、`动态引用：product.backend.infra.runtime.process.exclusive_file`、`动态引用：product.backend.infra.runtime.process.records.record_capabilities`
+静态import / dot-source：`__future__`、`hashlib`、`hmac`、`http.server`、`importlib`、`json`、`os`、`pathlib`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.records.transaction_store`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.record_trace`、`product.protocols.runtime.transaction_records`、`pydantic`、`secrets`、`threading`、`urllib.parse`、`作用域内：product.backend.infra.observers.records`、`作用域内：product.backend.infra.runtime.process.records.record_capabilities`、`作用域内：product.backend.infra.runtime.process.tree`、`作用域内：product.protocols.runtime`、`动态引用：product.backend.infra.runtime.process.exclusive_file`、`动态引用：product.backend.infra.runtime.process.records.record_capabilities`
 
 ### `product/backend/infra/runtime/process/tree.py`
 

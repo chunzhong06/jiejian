@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Mapping
+from urllib.parse import urlsplit
 
 import httpx
 from playwright.sync_api import BrowserContext, Request
@@ -62,7 +63,12 @@ class BoundedRouteTransport:
         headers = self._end_to_end_headers(request.headers)
         # 仅在原请求未显式携带 Cookie 时补齐当前 BrowserContext 的会话语义。
         if "cookie" not in headers:
-            cookies = context.cookies(request.url)
+            target = urlsplit(request.url)
+            path, host = target.path or "/", target.hostname
+            # Playwright的URL筛选会扩大主机/路径匹配；补齐host-only与目录边界后才注入。
+            cookies = [cookie for cookie in context.cookies(request.url)
+                if (host == cookie["domain"].lstrip(".") or cookie["domain"].startswith(".") and host.endswith(cookie["domain"]))
+                and (path == cookie["path"] or path.startswith(cookie["path"].rstrip("/") + "/"))]
             if cookies:
                 headers["cookie"] = "; ".join(
                     f"{cookie['name']}={cookie['value']}" for cookie in cookies
@@ -221,11 +227,10 @@ class BoundedRouteTransport:
                     name.casefold() == "httponly" for name in cookie._rest
                 ),
             }
-            if cookie.domain_specified:
-                item["domain"] = cookie.domain
-                item["path"] = cookie.path or "/"
-            else:
-                item["url"] = request_url
+            # url模式会让Playwright重算登录目录，丢失服务器的Path=/。
+            # 无Domain时保留精确主机（不加前导点），显式路径由Cookie解析器给出。
+            item["domain"] = cookie.domain if cookie.domain_specified else urlsplit(request_url).hostname
+            item["path"] = cookie.path or "/"
             if cookie.expires is not None:
                 item["expires"] = float(cookie.expires)
             same_site = next(

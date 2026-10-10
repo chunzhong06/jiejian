@@ -1,7 +1,7 @@
 // 实现定位单独选择，不改变业务定义与权限语义。
 import { Alert, Select, Typography } from "antd"
 import type { BoundaryMaintenanceDraftDto } from "../../../api/boundaries/businessBoundaries"
-import { AssistantPanel } from "../../assistant/AssistantPanel"
+import { AgentWorkflowEntry } from "../../../shared/ui/AgentWorkflowEntry"
 import { confidenceLabels } from "../draft/boundaryLabels"
 export function ImplementationSelector({ kind, item, draft, onChange }: {
   kind: 'ROLE' | 'ACTION'
@@ -32,7 +32,7 @@ export function ImplementationSelector({ kind, item, draft, onChange }: {
       placeholder="尚未选择可验证的代码实现"
     />
     {missingEvidence && <Alert type="info" showIcon message="这条线索没有可验证源码证据，只能帮助描述业务，不能证明当前代码实现。" />}
-    {identity && <AssistantPanel projectId={draft.project_id} surface="implementation-mapping" focus={kind === 'ROLE' ? { business_actor_id: identity } : { business_action_id: identity }} title="理解当前代码实现候选" actionLabel="解释候选" />}
+    {identity && <AgentWorkflowEntry projectId={draft.project_id} stage="RULES"/>}
   </details>
 }
 

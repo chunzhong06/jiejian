@@ -185,9 +185,10 @@ def test_discovery_rejects_too_many_empty_directories_before_reading_configs(
     def fail_read(*args, **kwargs):
         pytest.fail("配置读取不应在条目预算超限前发生")
 
-    monkeypatch.setattr(discovery.Path, "read_text", fail_read)
-    with pytest.raises(JiejianError) as error:
-        discover_folder(tmp_path)
+    with monkeypatch.context() as patch:
+        patch.setattr(discovery.Path, "read_text", fail_read)
+        with pytest.raises(JiejianError) as error:
+            discover_folder(tmp_path)
     assert error.value.code == ErrorCode.ONBOARDING_READ_BUDGET.value
     assert error.value.to_dict()["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"
 

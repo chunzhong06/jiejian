@@ -223,6 +223,7 @@
   border: 0;
   box-shadow: none;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-20);
   min-width: 0;
 }
@@ -256,6 +257,8 @@
 
 .boundary-draft-toolbar {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16);
   justify-content: space-between;
   padding: 0;
   margin: 0;
@@ -726,7 +729,16 @@
 .definition-effect-summary p {
   margin: var(--space-8) 0 0;
   font-size: 13px;
+  color: var(--color-secondary);
+  font-weight: var(--weight-regular);
+  line-height: 1.8;
 }
+
+/* 索引仍在左侧；短详情在自己的阅读区居中，正文保持左对齐。 */
+.definition-document { width:min(100%,760px); justify-self:center; }
+.definition-effect-summary > div { padding-block:var(--space-16); }
+.definition-effect-summary > div + div { border-top:1px solid var(--color-border); }
+.definition-effect-summary strong { display:block; font-weight:var(--weight-medium); }
 
 .definition-linked {
   margin-top: 28px;
@@ -739,10 +751,15 @@
 .definition-linked-rule {
   display: flex;
   gap: 15px;
-  align-items: start;
+  align-items: baseline;
   padding: 15px 0;
   border-bottom: 1px solid var(--color-border);
   font-size: 13px;
+}
+
+/* 标签的公共顶端对齐适用于多行卡片；这里需与规则首行共享文字基线。 */
+.definition-linked-rule > .permission-badge {
+  align-self: baseline;
 }
 
 .definition-edit-surface {
@@ -791,6 +808,13 @@
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* 结果内的移除是局部操作，沿所属网格右侧对齐，不拉伸成整栏按钮。 */
+.boundary-effect-editor > .ant-btn-dangerous {
+  justify-self: end;
+  align-self: end;
+  max-width: 100%;
 }
 
 .boundary-candidate-basis>summary {
@@ -976,3 +1000,8 @@
 
 /* 提案入口是一次决策，普通编辑在前、确认入口在右。 */
 .boundary-entry-actions { justify-content:flex-end; align-items:center; }
+
+@media(max-width:760px) {
+  .boundary-draft-toolbar > div:first-child { flex-basis:100%; }
+  .boundary-draft-toolbar > .boundary-draft-main-actions { margin-inline-start:auto; }
+}

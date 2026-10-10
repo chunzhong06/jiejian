@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage.preparation.batches import PreparationBatchRepository
 from product.backend.infra.storage.preparation.supplemental_materials import SupplementalMaterialRepository
 from product.backend.infra.storage.changes.code_observations import CodeObservationRepository
 from product.backend.infra.storage.runtime.environment_operations import EnvironmentOperationRepository
@@ -33,17 +34,14 @@ from product.backend.infra.storage.execution.job_control import JobControlReposi
 from product.backend.infra.storage.applications.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.boundaries.business_boundaries import BusinessBoundaryRepository
 from product.backend.infra.storage.boundaries.rule_candidates import RuleCandidateRepository
+from product.backend.infra.storage.preparation.suggestions import PreparationSuggestionRepository
 from product.backend.infra.storage.runtime.runtime_loads import RuntimeLoadRepository
 from product.backend.infra.storage.preparation.proof_sources import ProofSourceRepository
+from product.backend.infra.storage.preparation.proof_artifacts import ProofArtifactRepository
 from product.backend.infra.storage.preparation.action_preparation import ActionPreparationRepository
-from product.backend.infra.storage.boundaries.contracts import ContractVersionRepository
-from product.backend.infra.storage.settings.llm import AIAssistanceSettingsRepository, LLMProfileRepository
-from product.backend.infra.storage.execution.profiles import ExecutionProfileRepository
 from product.backend.infra.storage.results.evidence import EvidenceIndexRepository
 from product.backend.infra.storage.results.check_publications import CheckPublicationRepository
-from product.backend.infra.storage.results.findings import FindingRepository
-from product.backend.infra.storage.results.finalizations import RunFinalizationRepository
-from product.backend.infra.storage.results.gating import GatingRepository
+from product.backend.infra.storage.results.rule_history import RuleHistoryRepository
 from product.backend.infra.storage.execution.jobs import JobEventRepository, JobRepository
 from product.backend.infra.storage.applications.projects import ProjectRepository
 from product.backend.infra.storage.preparation.recordings import FlowDraftRevisionRepository, RecordingRepository
@@ -60,10 +58,11 @@ class StorageUnitOfWork:
     application_understanding: ApplicationUnderstandingRepository
     business_boundaries: BusinessBoundaryRepository
     rule_candidates: RuleCandidateRepository
+    preparation_suggestions: PreparationSuggestionRepository
     runtime_loads: RuntimeLoadRepository
     proof_sources: ProofSourceRepository
+    proof_artifacts: ProofArtifactRepository
     action_preparation: ActionPreparationRepository
-    contract_versions: ContractVersionRepository
     runs: RunRepository
     recordings: RecordingRepository
     flow_drafts: FlowDraftRevisionRepository
@@ -72,12 +71,7 @@ class StorageUnitOfWork:
     job_control: JobControlRepository
     evidence: EvidenceIndexRepository
     check_publications: CheckPublicationRepository
-    llm_profiles: LLMProfileRepository
-    ai_assistance_settings: AIAssistanceSettingsRepository
-    execution_profiles: ExecutionProfileRepository
-    findings: FindingRepository
-    finalizations: RunFinalizationRepository
-    gating: GatingRepository
+    rule_history: RuleHistoryRepository
     test_identities: TestIdentityRepository
     permission_intents: PermissionIntentRepository
     source_changes: SourceChangeRepository
@@ -104,6 +98,7 @@ class StorageUnitOfWork:
         self._session = session
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
+        self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
         self.application_understanding = ApplicationUnderstandingRepository(
             session,
             self._known_secrets,
@@ -113,12 +108,11 @@ class StorageUnitOfWork:
             self._known_secrets,
         )
         self.rule_candidates = RuleCandidateRepository(session, self._known_secrets)
+        self.preparation_suggestions = PreparationSuggestionRepository(session, self._known_secrets)
         self.runtime_loads = RuntimeLoadRepository(session, self._known_secrets)
         self.proof_sources = ProofSourceRepository(session, self._known_secrets)
+        self.proof_artifacts = ProofArtifactRepository(session,self._known_secrets)
         self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
-        self.contract_versions = ContractVersionRepository(
-            session, self._known_secrets
-        )
         self.runs = RunRepository(session, self._known_secrets)
         self.recordings = RecordingRepository(session, self._known_secrets)
         self.flow_drafts = FlowDraftRevisionRepository(
@@ -130,14 +124,7 @@ class StorageUnitOfWork:
         self.job_control = JobControlRepository(session, self._known_secrets)
         self.evidence = EvidenceIndexRepository(session, self._known_secrets)
         self.check_publications = CheckPublicationRepository(session, self._known_secrets)
-        self.llm_profiles = LLMProfileRepository(session, self._known_secrets)
-        self.ai_assistance_settings = AIAssistanceSettingsRepository(session, self._known_secrets)
-        self.execution_profiles = ExecutionProfileRepository(
-            session, self._known_secrets
-        )
-        self.findings = FindingRepository(session, self._known_secrets)
-        self.finalizations = RunFinalizationRepository(session, self._known_secrets)
-        self.gating = GatingRepository(session, self._known_secrets)
+        self.rule_history = RuleHistoryRepository(session,self._known_secrets)
         self.test_identities = TestIdentityRepository(session, self._known_secrets)
         self.permission_intents = PermissionIntentRepository(
             session,
@@ -181,6 +168,17 @@ class StorageUnitOfWork:
         except SQLAlchemyError:
             session.rollback()
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前有其他写操作，请先核对状态") from None
+
+    def begin_read_snapshot(self) -> None:
+        """将关联的多次只读查询固定在同一快照；SQLite legacy SELECT 本身不会开启事务。"""
+        session=self._require_session()
+        try:
+            connection=session.connection()
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN")
+        except SQLAlchemyError:
+            session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE,"暂时无法读取一致的任务状态") from None
 
     def rollback(self) -> None:
         session = self._require_session()

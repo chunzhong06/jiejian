@@ -117,6 +117,7 @@ def serve_command(
     host: str = typer.Option("127.0.0.1", "--host", hidden=True),
     port: int = typer.Option(8765, "--port", min=1, max=65535, hidden=True),
     open_browser: bool = typer.Option(False, "--open/--no-open", hidden=True),
+    launcher_event: str | None = typer.Option(None, "--launcher-event", hidden=True),
     browser: GuiBrowser = typer.Option(GuiBrowser.MANAGED, "--browser", help="界面浏览器：managed 使用专用 Chromium，system 使用系统浏览器"),
     frontend_dir: Path | None = typer.Option(
         None, "--frontend-dir", hidden=True
@@ -132,7 +133,7 @@ def serve_command(
     import ipaddress
     import threading
     from product.backend.cli.gui_browser import GuiBrowserSession, open_gui_browser
-    from product.backend.cli.gui_console import run_gui_console
+    from product.backend.cli.gui_console import run_gui_console, launcher_key_reader
 
     import uvicorn
 
@@ -199,12 +200,14 @@ def serve_command(
                     )
                     print(f"__JIEJIAN_SERVE_STATUS__:{status.value}", flush=True)
                     if status in {ServeReadinessStatus.READY_BROWSER_OPENED, ServeReadinessStatus.READY_BROWSER_OPEN_FAILED}:
-                        run_gui_console(
-                            open_browser=reopen_gui,
-                            stopped=stopped_event,
-                            is_stopping=lambda: server.should_exit,
-                            emit=lambda value: print(f"__JIEJIAN_GUI_STATUS__:{value}", flush=True),
-                        )
+                        with launcher_key_reader(launcher_event) as read_key:
+                            run_gui_console(
+                                open_browser=reopen_gui,
+                                stopped=stopped_event,
+                                is_stopping=lambda: server.should_exit,
+                                emit=lambda value: print(f"__JIEJIAN_GUI_STATUS__:{value}", flush=True),
+                                read_key=read_key,
+                            )
 
                 ready_thread = threading.Thread(
                     target=open_when_ready,

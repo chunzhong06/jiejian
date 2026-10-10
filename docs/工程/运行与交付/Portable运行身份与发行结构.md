@@ -6,15 +6,19 @@
 
 ## 先理解：Portable 是自包含发行，不是复制源码环境
 
-源码仓库通过 `start.cmd → scripts/start.ps1 → dev.ps1 prepare` 使用 Conda、uv、Node/pnpm 和 `var/development`。Portable 则把已经冻结的 Python、生产依赖、界鉴 Wheel、前端 build 与 Playwright Chromium 组装进一个可移动目录；用户解压后从包根 `start.cmd` 进入，不安装、不更新、不构建，也不访问网络。
+源码仓库通过 `start.cmd → scripts/start.ps1 → dev.ps1 prepare` 使用 Conda、uv、Node/pnpm 和 `var/development`。Portable 则把已经冻结的 Python、生产依赖、界鉴 Wheel、前端 build 与 Playwright Chromium 组装进一个可移动目录；用户解压后从包根 `界鉴.exe` 进入，不安装、不更新、不构建，也不访问网络。
 
 ```text
 JieJian-WebV1-<version>-Windows-x64/
-├── start.cmd
-├── README.txt
-├── runtime/
+├── 界鉴.exe
+├── app/
 │   ├── start.ps1
 │   ├── release.json
+│   ├── product/
+│   └── jiejian-<version>.dist-info/
+├── docs/
+├── README.txt
+├── runtime/
 │   ├── python/
 │   ├── playwright/
 │   └── node/        # 固定Node及许可证，支持普通受控应用
@@ -22,13 +26,15 @@ JieJian-WebV1-<version>-Windows-x64/
 └── var/              # 首次启动后在发行根内创建
 ```
 
-full 与 nosamples 从同一个 Base Tree 生成。两包除 `samples/` 外的路径与文件 hash 必须逐项相同；nosamples 仍是完整产品，只是不提供官方协作空间 Sample。
+full 与 nosamples 从同一个 Base Tree 生成。两包除 `samples/` 外的路径与文件 hash 必须逐项相同；nosamples 仍是完整产品，只是不提供数字展馆官方示例。
 
 ## Release root 与相对启动
 
-包根 `start.cmd` 只调用系统自带 Windows PowerShell 5.1，并把控制交给 `runtime/start.ps1`。PowerShell 从自己的 `$PSScriptRoot` 反推 release root，所有 Python、Chromium、前端、Sample 和 var 路径都相对发行根解析。
+包根 `界鉴.exe` 只调用系统自带 Windows PowerShell 5.1，并把控制交给 `app/start.ps1`。PowerShell 从自己的 `$PSScriptRoot` 反推 release root，所有 Python、Chromium、前端、Sample 和 var 路径都相对发行根解析。
 
 Portable 不读取仓库路径、当前工作目录、用户 PATH、Conda、uv、pip、系统 Node、pnpm、源码 receipt 或 development cache。普通应用使用包内 `runtime/node/node.exe`，启动器与Node定位器核对发行摘要。发行目录整体移动到另一个磁盘、中文或带空格路径后，身份与启动结果应保持一致。包内不存在 `direct_url.json`、editable path、源码绝对路径、node_modules、pycache 或构建临时目录。
+
+重复双击通过会话内原生事件通知现有服务重开窗口，原 ServeLock 仍约束同一 var 只能由一个服务管理。产品与依赖使用相对 .pth 关联，不增加环境 PATH 或 PYTHONPATH 中的源码搜索。
 
 ## Portable 运行身份
 
@@ -38,22 +44,22 @@ Portable 主进程和受控子进程必须同时确认：
 - `JIEJIAN_RELEASE_ROOT` 是当前真实发行根；
 - 当前解释器位于 `<release>/runtime/python/python.exe`；
 - `JIEJIAN_PLAYWRIGHT_EXECUTABLE` 与 `PLAYWRIGHT_BROWSERS_PATH` 都指向 `<release>/runtime/playwright` 内的唯一受控 Chromium；
-- 关键包来源位于包内 Python，且 product frontend 使用 Wheel 内置 build；
+- 生产依赖来源位于包内 Python；product 与发行包元数据位于 app，前端仍使用同一 Wheel 的内置 build；
 - 开发态 `JIEJIAN_PROJECT_ROOT`、`PYTHONHOME`、`PYTHONPATH` 等身份不会泄漏进来。
 
 身份验证形成 runtime fingerprint 和有限 report，Worker/Runner/Recording/Observer 等角色只继承自己的白名单变量。浏览器路径不只是“文件存在”，还必须证明落在当前发行根内；系统 Chrome、Edge、用户 Playwright cache 都不能替代。
 
 ## release.json 与产品版本
 
-`runtime/release.json` 是发行元数据根，记录 schema、产品、产品/包版本、Windows x64、运行布局、CPython、Playwright 与 Chromium revision。产品版本来自 `product.backend.__version__`，Wheel 版本、文件名版本与 release.json 必须一致；不允许在 builder、前端清单或 API 中维护另一份产品版本。
+`app/release.json` 是发行元数据根，记录 schema、产品、产品/包版本、Windows x64、运行布局、CPython、Playwright 与 Chromium revision。产品版本来自 `product.backend.__version__`，Wheel 版本、文件名版本与 release.json 必须一致；不允许在 builder、前端清单或 API 中维护另一份产品版本。
 
 `release.json.schema_version` 表示发行元数据格式，不等于产品版本。普通启动仍由代码内产品版本供 FastAPI、CLI `--version` 与系统设置页消费。
 
-当前元数据为格式2、运行布局2，新增 `node_version` 和 `node_sha256`。`PortableReleaseManifest`严格读取这些字段，Node被替换、缺失或位于发行根之外时拒绝受控启动。包内Node仅用于已明确授权的应用，不能据其存在声称支持任意npm依赖或恶意代码隔离。
+当前元数据为格式3、运行布局3，产品和dist-info放在app，运行组件放在runtime；保留 `node_version` 和 `node_sha256`。`PortableReleaseManifest`严格读取这些字段，Node被替换、缺失或位于发行根之外时拒绝受控启动。包内Node仅用于已明确授权的应用，不能据其存在声称支持任意npm依赖或恶意代码隔离。
 
 ## 前端与 Sample 可选层
 
-Portable 的前端由内部 Wheel 的 `./product/frontend/dist`（Wheel 内相对路径） 提供，启动时不执行 TypeScript/Vite。full 包把仓库当前 `samples/` 作为只读发行输入复制到根层，并把明确存在的官方 Sample root 传给产品；nosamples 不创建虚假目录，也不启用测试开关，GUI 只如实显示官方 Sample 不可用。
+Portable 的前端由内部 Wheel 的 `./product/frontend/dist`（Wheel 内相对路径） 提供，启动时不执行 TypeScript/Vite。full 包把仓库当前 `samples/web/` 作为只读发行输入复制到根层，并把明确存在的官方 Sample root 传给产品；nosamples 不创建虚假目录，也不启用测试开关，GUI 只如实显示官方 Sample 不可用。
 
 Sample 是可选体验资产，不是产品依赖。产品包不从 Sample import，nosamples 的项目接入、Recording、Runner、Observer 与结果能力保持完整。
 

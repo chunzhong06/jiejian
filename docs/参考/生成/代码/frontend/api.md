@@ -56,34 +56,6 @@
 
 静态import / dot-source：`../http`、`./onboarding`
 
-### `product/frontend/src/api/assistance/assistant.ts`
-
-[打开源码](../../../../../product/frontend/src/api/assistance/assistant.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `AssistantEntity`
-- `AssistantFocus`
-- `AssistantSuggestion`
-- `AssistantSurfaceView`
-- `ProjectAssistantSurface`
-- `assistantApi`
-
-静态import / dot-source：`../http`
-
-### `product/frontend/src/api/assistance/llm.ts`
-
-[打开源码](../../../../../product/frontend/src/api/assistance/llm.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `AIAssistanceSettings`
-- `LLMConnectionStatus`
-- `LLMModelCatalog`
-- `LLMModelOption`
-- `LLMProfile`
-- `LLMProfileWrite`
-- `LLMProvider`
-- `llmApi`
-
-静态import / dot-source：`../http`
-
 ### `product/frontend/src/api/boundaries/businessBoundaries.ts`
 
 [打开源码](../../../../../product/frontend/src/api/boundaries/businessBoundaries.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -121,22 +93,15 @@
 
 静态import / dot-source：`../http`
 
-### `product/frontend/src/api/boundaries/permissionDrafts.ts`
-
-[打开源码](../../../../../product/frontend/src/api/boundaries/permissionDrafts.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
-
-- `PermissionDraftSuggestion`
-- `PermissionDraftView`
-- `permissionDraftsApi`
-
-静态import / dot-source：`../http`、`./businessBoundaries`
-
 ### `product/frontend/src/api/boundaries/ruleCandidates.ts`
 
 [打开源码](../../../../../product/frontend/src/api/boundaries/ruleCandidates.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
+- `MeaningChoice`
 - `RuleCandidateContext`
 - `RuleCandidateView`
+- `RuleScenario`
+- `ScenarioDecision`
 - `ruleCandidatesApi`
 
 静态import / dot-source：`../http`、`./businessBoundaries`
@@ -147,6 +112,17 @@
 
 - `RuleDetails`
 - `ruleDetailsApi`
+
+静态import / dot-source：`../http`
+
+### `product/frontend/src/api/boundaries/rulePreview.ts`
+
+[打开源码](../../../../../product/frontend/src/api/boundaries/rulePreview.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RulePreview`
+- `RulePreviewReference`
+- `RulePreviewSituation`
+- `rulePreviewApi`
 
 静态import / dot-source：`../http`
 
@@ -208,8 +184,16 @@
 - `CheckStatus`
 - `CheckVerdict`
 - `EvidenceExplanation`
+- `EvidenceRecordIndex`
+- `EvidenceRecordLink`
+- `EvidenceRecordView`
+- `HistoryCoverage`
+- `HistoryMaintenanceReceipt`
 - `ObservationReading`
 - `ResultStory`
+- `RuleHistoryItem`
+- `RuleHistoryPage`
+- `RuleHistoryReference`
 - `StoryExecutionPath`
 - `StoryIdentity`
 - `StoryProofCoverage`
@@ -249,6 +233,16 @@
 - `ApiError`
 - `ErrorDiagnosis`
 - `request`
+
+### `product/frontend/src/api/preparation/batches.ts`
+
+[打开源码](../../../../../product/frontend/src/api/preparation/batches.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `PreparationBatch`
+- `PreparationBatchPlan`
+- `preparationBatchesApi`
+
+静态import / dot-source：`../http`
 
 ### `product/frontend/src/api/preparation/jobs.ts`
 
@@ -292,20 +286,39 @@
 - `PreparationMaterialAdvice`
 - `PreparationNextAction`
 
+### `product/frontend/src/api/preparation/preparationSuggestions.ts`
+
+[打开源码](../../../../../product/frontend/src/api/preparation/preparationSuggestions.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `MaterialSuggestion`
+- `MaterialSuggestionKind`
+- `PreparationSuggestionContext`
+- `PreparationSuggestionView`
+- `SuggestedMaterial`
+- `SuggestionItemView`
+- `preparationSuggestionsApi`
+
+静态import / dot-source：`../http`
+
 ### `product/frontend/src/api/preparation/proofSources.ts`
 
 [打开源码](../../../../../product/frontend/src/api/preparation/proofSources.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 - `AdoptionPreview`
+- `ArtifactManifest`
+- `CapturePlan`
+- `CaptureSelection`
+- `CaptureStatus`
 - `ProofConfig`
 - `ProofContext`
 - `ProofOperationKind`
 - `ProofReceipt`
 - `ProofReport`
 - `ProofSource`
+- `ReferenceInput`
 - `proofSourcesApi`
 
-静态import / dot-source：`../http`、`./preparationGuidance`
+静态import / dot-source：`../http`、`./preparationGuidance`、`./preparationSuggestions`
 
 ### `product/frontend/src/api/preparation/recordings.ts`
 

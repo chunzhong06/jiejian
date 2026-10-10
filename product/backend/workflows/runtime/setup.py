@@ -54,7 +54,7 @@ class NodeRuntimeSetup:
         if not before.source_analysis_authorized:
             if not consent_source_read:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先明确允许读取当前应用源码')
-            before=self.understanding.authorize_source_analysis(project_id,revision=revision,for_controlled_start=True)
+            before=self.understanding.authorize_source_analysis(project_id,revision=revision)
         if port==self._control_port:
             raise JiejianError(ErrorCode.SELF_TARGET_FORBIDDEN,'不能使用界鉴自身的服务端口')
         analysis=self.understanding.analyzer.analyze(project_id,before.source_root)
@@ -105,11 +105,12 @@ class NodeRuntimeSetup:
             current=work.application_understanding.get(project_id)
             if current is None or current.revision != preview.revision or current.source_root != before.source_root or not current.source_analysis_authorized:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'启动设置已变化，未提交运行任务')
-            if work.sample_workspaces.for_project(project_id) is not None:
+            sample=work.sample_workspaces.for_project(project_id)
+            if sample is not None and sample['runtime_kind']!='NODE_ESM':
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'官方示例应使用其独立启动入口')
         return self._public(self.jobs.submit(request,validate_current=validate_current,work=work))
 
-    def state(self, project_id):
+    def state(self, project_id, *, verify_source=True):
         self._eligible(project_id)
         with self._uow() as work:
             request=work.runtime_loads.latest(project_id)
@@ -127,9 +128,10 @@ class NodeRuntimeSetup:
         if operation['receipt'] is not None:
             try:
                 running=node_reference_matches(self.var_dir,request,operation['receipt'].reference,self._node())
-                current=self.understanding.get(project_id)
-                source_matches=current.source_analysis_authorized and self.understanding.analyzer.analyze(
-                    project_id,current.source_root).source_fingerprint==request.source_fingerprint
+                if verify_source:
+                    current=self.understanding.get(project_id)
+                    source_matches=current.source_analysis_authorized and self.understanding.analyzer.analyze(
+                        project_id,current.source_root).source_fingerprint==request.source_fingerprint
             except (OSError,ValueError,JiejianError):
                 pass
         return {'project_id':project_id,'operation':self._public(operation),'running':running,'source_matches':source_matches,'configuration':configuration}
@@ -153,7 +155,8 @@ class NodeRuntimeSetup:
             return work.runtime_loads.latest(project_id) is not None
 
     def reference(self, project_id):
-        state=self.state(project_id)
+        # reference核对已加载实例；调用者按本次源码事实比较，避免先运行一轮不会使用结果的源码分析。
+        state=self.state(project_id, verify_source=False)
         if not state['running']:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前应用的受控实例未得到确认',details={'reason':'RUNTIME_SOURCE_NOT_LOADED'})
         with self._uow() as work:
@@ -186,7 +189,8 @@ class NodeRuntimeSetup:
             project=work.projects.get(project_id)
             if project is None or project.status is ProjectStatus.ARCHIVED:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'应用不存在或已归档')
-            if work.sample_workspaces.for_project(project_id) is not None:
+            sample=work.sample_workspaces.for_project(project_id)
+            if sample is not None and sample['runtime_kind']!='NODE_ESM':
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'官方示例应使用其独立启动入口')
         return self.understanding.get(project_id)
 

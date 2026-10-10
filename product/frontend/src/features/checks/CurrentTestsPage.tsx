@@ -12,13 +12,14 @@ import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from '../results/CurrentResultStory'
+import { ResultAgentHandoff } from '../results/ResultAgentHandoff'
 import { CheckProgressPanel } from './CheckProgressPanel'
 import { ResultOverviewHeader, ResultScope } from '../results/overview/ResultOverview'
 import { SourceIdentityPanel } from '../changes/delivery/SourceIdentityPanel'
 
 const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.run.lifecycle)
 
-export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedMaterials?: boolean; requestedTaskId?: string | null; requestedRunId?: string | null; requestedCaseId?: string | null; changeId?: string | null; onBackToHistory?: () => void }) {
+export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedMaterials?: boolean; requestedTaskId?: string | null; requestedRunId?: string | null; requestedCaseId?: string | null; requestedTab?:string|null; requestedEvidenceId?:string|null; requestedRecordId?:string|null; changeId?: string | null; onBackToHistory?: () => void }) {
   const { project, onError, onNavigate, requestedRunId, requestedTaskId, requestedMaterials } = props
   const visible = useContext(WorkPageVisible)
   const [materials, setMaterials] = useState(Boolean(requestedTaskId || requestedMaterials))
@@ -57,6 +58,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const pending = useRef<{ fingerprint: string; key: string } | undefined>(undefined)
   const alive = useRef(true)
   const loadEpoch = useRef(0)
+  const pendingRefreshes = useRef(0)
   const currentProject = useRef(project.project_id)
   currentProject.current = project.project_id
   const workspaceRefresh = useRef(props.onStateChanged)
@@ -77,14 +79,17 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; loadEpoch.current += 1 } }, [])
   const refresh = useCallback(async (quiet = false) => {
+    // 后台轮询不能不断废弃较慢的首次读取，否则材料齐备也会一直显示加载中。
+    if (quiet && pendingRefreshes.current > 0) return
+    pendingRefreshes.current += 1
     const epoch = ++loadEpoch.current
     if (!quiet) { setLoading(true); setReadFailed(false) }
     try {
-      const [nextPreview, nextRuns] = await Promise.all([currentChecksApi.preview(project.project_id, changeId), currentChecksApi.list(project.project_id)])
+      const [nextPreview, nextRuns] = await Promise.all([currentChecksApi.preview(project.project_id, changeId), currentChecksApi.list(project.project_id, true)])
       if (nextPreview.project_id !== project.project_id || nextRuns.some((item) => item.run.project_id !== project.project_id)) throw new ApiError('STATE_PRECONDITION', '检查信息所属项目不一致。')
       if (alive.current && epoch === loadEpoch.current) { setPreview(nextPreview); setRuns(nextRuns); setReadFailed(false) }
     } catch (error) { if (alive.current && epoch === loadEpoch.current) { setReadFailed(true); if (!quiet) { setPreview(null); onError(error as ApiError) } }; if (quiet) throw error }
-    finally { if (alive.current && epoch === loadEpoch.current) setLoading(false) }
+    finally { pendingRefreshes.current -= 1; if (alive.current && epoch === loadEpoch.current) setLoading(false) }
   }, [project.project_id, onError, changeId])
   useLiveRead(visible && !selected && !materials && !busy ? project.project_id + (changeId ?? '') : undefined, () => refresh(true), 5000, false)
   useEffect(() => {
@@ -97,7 +102,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
 
   useEffect(() => {
     setWorkspaceSyncFailed(false)
-    if (!selected || materials) return
+    if (!selected || materials || !visible) return
     let valid = true
     let timer: ReturnType<typeof setTimeout> | undefined
     let failures = 0, pendingRead = false
@@ -106,7 +111,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     setStory(previous => previous?.run_id === selected && previous.project_id === project.project_id ? previous : null)
     setRunFailed(false); setPollPaused(false); setRunLoading(true)
     const read = async () => {
-      if (!valid || pendingRead) return
+      if (!valid || pendingRead || document.visibilityState === 'hidden') return
       clearTimeout(timer); pendingRead = true
       try {
         const next = await currentChecksApi.status(selected)
@@ -138,7 +143,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     document.addEventListener('visibilitychange', resume)
     void read()
     return () => { valid = false; if (timer) clearTimeout(timer); window.removeEventListener('online',resume); window.removeEventListener('focus',resume); document.removeEventListener('visibilitychange',resume) }
-  }, [selected, materials, project.project_id, refreshEpoch, onError, syncWorkspace])
+  }, [selected, materials, project.project_id, refreshEpoch, onError, syncWorkspace, visible])
 
   const start = async () => {
     if (submitting.current || !preview?.can_execute || readFailed) return
@@ -176,7 +181,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   }
   const showMaterials = () => { setMaterials(true); setSelected(undefined); navigateCheck('/tests?materials=1') }
   // 显式切换准备任务只重置页面局部模式；同一任务刷新继续保留当前输入和服务端材料。
-  if (materials) return <PreparationPage key={`${project.project_id}:${requestedTaskId ?? "materials"}`} {...props} onNavigate={(path) => {
+  if (materials) return <PreparationPage key={`${project.project_id}:${requestedTaskId ?? "materials"}`} {...props} assistReturnTo={`/tests?materials=1${changeId ? `&change_id=${encodeURIComponent(changeId)}` : ''}${props.requestedActionId ? `&action_id=${encodeURIComponent(props.requestedActionId)}` : ''}${requestedTaskId ? `&task_id=${encodeURIComponent(requestedTaskId)}` : ''}`} onNavigate={(path) => {
     if (path.split('?')[0] === '/tests' && !new URLSearchParams(path.split('?')[1]).has('task_id')) {
       const keepMaterials = new URLSearchParams(path.split('?')[1]).get('materials') === '1'
       setMaterials(keepMaterials); if (!keepMaterials) void refresh()
@@ -203,13 +208,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       {primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}</div>
     </section>}
     {selectedMode && status && (status.progress || active(status)) && status.result_integrity !== 'VALID' && !story && <CheckProgressPanel status={status} paused={pollPaused}>
-      {active(status) && status.job && <Button disabled={busy || status.job.cancel_requested} onClick={async () => {
+      {active(status) && status.job && <Button danger disabled={busy || status.job.cancel_requested} onClick={async () => {
       setBusy(true)
       try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
     }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
     </CheckProgressPanel>}
     {selectedMode && workspaceSyncFailed && <p role="status">检查记录已读取，工作台状态暂未同步。<Button onClick={() => void syncWorkspace(`retry:${selected}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
-    {!selectedMode && loading && <LoadingState page>正在读取检查状态…</LoadingState>}
+    {!selectedMode && loading && <LoadingState>正在读取检查状态…</LoadingState>}
     {!selectedMode && readFailed && <Alert className="flow-feedback" type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
     {!selectedMode && submissionUncertain && <Alert className="flow-feedback" type="warning" showIcon message="检查请求已发出，但尚未收到确认。请先读取检查记录；再次确认会使用同一次请求。" />}
     {selectedMode && pollPaused && <Alert className="flow-feedback" type="info" showIcon message={status?.result_integrity === 'VALID' && !story ? '检查已完成，但结果暂时无法读取，正在自动重试。不会重新执行检查。' : '暂时无法获取最新进度，正在自动重试。保留上次读取的状态。'} />}
@@ -224,16 +229,18 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
         {story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) && <Button type="primary" onClick={() => onNavigate('/changes?repair_reference=' + encodeURIComponent(story.actions.find(action => action.repair_requirement)!.repair_requirement!.repair_fingerprint))}>查看修复依据</Button>}
       </div>
     </section>}
+    {completionPending && story && <ResultAgentHandoff story={story} onNavigate={onNavigate}/>}
     {selectedMode && story && !completionPending && <>
       <nav className="result-review-views" aria-label="本轮结果视图"><button aria-current={resultView === 'result' ? 'page' : undefined} onClick={() => setResultView('result')}>检查结果 <span>{story.actions.length}</span></button><button aria-current={resultView === 'source' ? 'page' : undefined} onClick={() => setResultView('source')}>源码对应</button><ResultScope story={story}/></nav>
       {resultView === 'source' && <SourceIdentityPanel key={story.run_id} projectId={project.project_id} recordId={story.run_id} kind="runs" onIntegrityError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/>}
-      <div hidden={resultView !== 'result'}><WorkPageVisible.Provider value={visible && resultView === 'result'}><CurrentResultStory key={story.run_id} embedded story={story} requestedCaseId={props.requestedCaseId} onCaseChange={caseId => onNavigate(`/tests?run_id=${encodeURIComponent(story.run_id)}${caseId ? '&case_id=' + encodeURIComponent(caseId) : ''}`)} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/></WorkPageVisible.Provider></div>
+      <div hidden={resultView !== 'result'}><WorkPageVisible.Provider value={visible && resultView === 'result'}><CurrentResultStory key={story.run_id} embedded story={story} requestedCaseId={props.requestedCaseId} requestedTab={props.requestedTab} requestedEvidenceId={props.requestedEvidenceId} requestedRecordId={props.requestedRecordId} onCaseChange={caseId => onNavigate(`/tests?run_id=${encodeURIComponent(story.run_id)}${caseId ? '&case_id=' + encodeURIComponent(caseId) : ''}`)} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/></WorkPageVisible.Provider></div>
+      {resultView==='result' && status?.result_integrity==='VALID' && <details className="check-process-history"><summary>查看本轮检查过程</summary><CheckProgressPanel status={status} paused={false}/></details>}
       <div className="result-record-actions">{resultView === 'source' && <Button onClick={() => onNavigate('/changes')}>查看当前代码变化</Button>}<Button loading={runLoading} onClick={() => setRefreshEpoch(value => value + 1)}>刷新检查结果</Button></div>
     </>}
     {!selectedMode && <>
       {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
     </>}
-    {!(selectedMode && story && !completionPending) && <div className="check-footer">{!selectedMode && <nav className="check-related-actions" aria-label="检查相关内容">{(running || preview?.can_execute) && <Button type="link" onClick={showMaterials} disabled={busy}>管理准备材料</Button>}<Button type="link" onClick={() => onNavigate('/history')}>查看全部检查历史</Button></nav>}<TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
+    {!(selectedMode && story && !completionPending) && <div className="check-footer">{!selectedMode && <nav className="check-related-actions" aria-label="检查相关内容">{(running || preview?.can_execute) && <Button type="link" onClick={showMaterials} disabled={busy}>管理准备材料</Button>}</nav>}<TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
       refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: (selectedMode ? runLoading : loading) || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}
       /></div>}
   </EditorialPage>

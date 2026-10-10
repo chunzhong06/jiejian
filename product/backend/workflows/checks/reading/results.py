@@ -69,6 +69,8 @@ class CheckHistoryItem(WireModel):
     action_labels: tuple[str, ...] = ()
     change_id: str | None = None
     source_run_id: str | None = None
+    matching_cases:tuple[str,...]=()
+    matching_verdicts:tuple[str,...]=()
 
 
 class CheckHistoryPage(WireModel):
@@ -84,10 +86,14 @@ class CheckResultReader:
         self._var_dir, self._uow_factory = var_dir, uow_factory
 
     def list_for_project(self, project_id: str) -> tuple[CheckRunStatus, ...]:
+        return tuple(status for status, _ in self.project_readings(project_id))
+
+    def project_readings(self, project_id):
+        """历史聚合只在当前请求传递核验后的包，避免修复与总览再次读取同一文件。"""
         with self._uow_factory() as work:
             if work.projects.get(project_id) is None:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
-            return tuple(self._status(work, run) for run in work.runs.list_for_project(project_id))
+            return tuple(self._status_and_package(work, run) for run in work.runs.list_for_project(project_id))
 
     def active_for_project(self, project_id: str) -> CheckRunStatus | None:
         """按持久生命周期定位一条本项目活动 Run，不为活动项验证全部历史。"""
@@ -100,7 +106,7 @@ class CheckResultReader:
 
     def history(self, project_id: str, *, limit: int = 25, before_created_at_us: int | None = None,
                 before_run_id: str | None = None, query: str | None = None,
-                verdict: RunVerdict | None = None, lifecycle: RunLifecycle | None = None) -> CheckHistoryPage:
+                verdict: RunVerdict | None = None, lifecycle: RunLifecycle | None = None,rule_reference:tuple[str,int,str]|None=None) -> CheckHistoryPage:
         """一次最多校验 250 条；过滤后仍以最后扫描键续读，不声称跨请求快照或总量。"""
         if not 1 <= limit <= 50 or (before_created_at_us is None) != (before_run_id is None):
             raise JiejianError(ErrorCode.INPUT_INVALID, "历史分页参数无效")
@@ -108,19 +114,30 @@ class CheckResultReader:
         with self._uow_factory() as work:
             if work.projects.get(project_id) is None:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
-            candidates = work.runs.page_for_project(project_id, limit=250,
-                before_created_at_us=before_created_at_us, before_run_id=before_run_id)
+            if rule_reference is None:
+                candidates = work.runs.page_for_project(project_id, limit=250,
+                    before_created_at_us=before_created_at_us, before_run_id=before_run_id)
+            else:
+                ids=work.rule_history.runs(project_id,rule_reference,limit=250,before_time=before_created_at_us,before_run=before_run_id)
+                candidates=tuple(run for run_id in ids if (run:=work.runs.get(run_id)) is not None and run.project_id==project_id)
             items, last = [], None
             for run in candidates:
                 last = run
                 status, package = self._status_and_package(work, run)
                 labels, change_id, source_run_id = (), None, None
+                matched=()
                 if package is not None:
                     # request 冻结实际动作集合与顺序；可读标签只从同一已校验 bundle 按 action_id 关联。
                     configured = {action.action_id: action for action in package.bundle.actions}
                     labels = tuple(dict.fromkeys(configured[action.action_id].display_name for action in package.request.actions))
                     change_id = None if package.request.change_context is None else package.request.change_context.change_id
                     source_run_id = None if package.request.repair_context is None else package.request.repair_context.source_run_id
+                    if rule_reference is not None:
+                        selected_cases={case.case_id for action in package.request.actions for case in action.cases
+                            if (case.permission.intent_id,case.permission.revision,case.permission.intent_hash)==rule_reference}
+                        matched=tuple(item for item in package.result.case_results if item.case_id in selected_cases)
+                        if not matched:continue
+                        labels=tuple(dict.fromkeys(configured[item.action_id].display_name for item in matched))
                 if verdict is not None and status.run.verdict != verdict:
                     continue
                 if lifecycle is not None and status.run.lifecycle != lifecycle:
@@ -128,11 +145,13 @@ class CheckResultReader:
                 if needle and not any(needle in value.casefold() for value in (run.run_id, *labels)):
                     continue
                 items.append(CheckHistoryItem(status=status, action_labels=labels,
-                    change_id=change_id, source_run_id=source_run_id))
+                    change_id=change_id, source_run_id=source_run_id,matching_cases=tuple(item.case_id for item in matched),matching_verdicts=tuple(item.verdict.value for item in matched)))
                 if len(items) == limit:
                     break
             cursor = None
-            if last is not None and work.runs.has_after_for_project(project_id, last.created_at_us, last.run_id):
+            more=last is not None and (work.runs.has_after_for_project(project_id,last.created_at_us,last.run_id) if rule_reference is None else
+                bool(work.rule_history.runs(project_id,rule_reference,limit=1,before_time=last.created_at_us,before_run=last.run_id)))
+            if more:
                 cursor = CheckHistoryCursor(created_at_us=last.created_at_us, run_id=last.run_id)
             return CheckHistoryPage(project_id=project_id, items=tuple(items), next_cursor=cursor)
 
@@ -157,6 +176,25 @@ class CheckResultReader:
         if found is None:
             raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "记录不存在")
         return found
+
+    def evidence_records(self,run_id,evidence_id,case_id,*,project_id=None,record_id=None):
+        from product.backend.workflows.checks.reading.records import record_index,record_view
+        package=self.package(run_id,project_id=project_id)
+        return record_index(package,evidence_id,case_id) if record_id is None else record_view(package,evidence_id,case_id,record_id)
+
+    def evidence_bundle(self, project_id, run_id, case_id, evidence_ids):
+        """同次展开所需文档和索引共享一次完整核验；其它请求仍重新校验字节。"""
+        from product.backend.workflows.checks.reading.records import record_index
+        ids = tuple(dict.fromkeys(evidence_ids))
+        if not ids or len(evidence_ids) > 32:
+            raise JiejianError(ErrorCode.INPUT_INVALID, '每次请选择1至32份发布证据')
+        package = self.package(run_id, project_id=project_id)
+        values = []
+        for evidence_id in ids:
+            index = record_index(package, evidence_id, case_id)
+            document = next(item for item in package.evidence if item.evidence_id == evidence_id)
+            values.append(dict(document=document.model_dump(mode='json'), index=index.model_dump(mode='json')))
+        return dict(project_id=project_id, run_id=run_id, case_id=case_id, items=values)
 
     @staticmethod
     def _run(work, run_id, project_id):

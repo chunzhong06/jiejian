@@ -61,6 +61,8 @@ def test_connection_reset_clears_all_project_grants(tmp_path, reset):
     app.state.context.close()
 
 
+@pytest.mark.process
+@pytest.mark.slow
 def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(tmp_path):
     from pathlib import Path
     from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
@@ -68,7 +70,7 @@ def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(),
         environ=runtime_identity_environment(var_dir),
-        official_sample_root=Path(__file__).resolve().parents[4] / "samples/web/collaboration_space")
+        official_sample_root=Path(__file__).resolve().parents[4] / "samples/web/digital_gallery")
     core = app.state.context
     async def scenario():
         async with app.router.lifespan_context(app):
@@ -82,30 +84,40 @@ def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(
                 headers={"Authorization": "Bearer " + token, "Origin": TEST_CONTROL_ORIGIN}, follow_redirects=True) as http:
                 async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + "/mcp", http_client=http, terminate_on_close=False)) as client:
                     delivery = await start_task(client, project)
-                    (Path(source) / "additional_logic.py").write_text("# 独立业务修改测试。\ndef value(): return 1\n", encoding="utf-8")
-                    changed = await client.call_tool("jiejian_change_submit", {"project_id": project, **delivery, "reason": "登记通用代码修改", "claimed_paths": ["additional_logic.py"]})
+                    (Path(source) / "additional_logic.mjs").write_text("// 独立业务修改测试。\nexport function value() { return 1; }\n", encoding="utf-8")
+                    changed = await client.call_tool("jiejian_change_submit", {"project_id": project, **delivery, "reason": "登记通用代码修改", "claimed_paths": ["additional_logic.mjs"]})
                     assert not changed.is_error
                     change_id = changed.structured_content["change_id"]
                     with pytest.raises(MCPError):
-                        await client.call_tool("jiejian_check_run", {"project_id": project, "change_id": change_id, "idempotency_key": "prepare-cannot-execute"})
-                    prepare_changed_sample(core, project)
+                        await client.call_tool("jiejian_check_run", {"project_id": project, "change_id": change_id, "idempotency_key": "prepare-cannot-execute", "expected_plan_fingerprint": "0"*64})
                     from uuid import uuid4
                     preview = core.checks.preview(project, change_id=change_id)
                     assert not preview.can_execute
-                    assert any(gap.reason == "RUNTIME_SOURCE_NOT_LOADED" for gap in preview.gaps)
+                    from product.backend.core.errors import JiejianError
+                    fingerprint = core.application_understanding.get(project).source_fingerprint
+                    with pytest.raises(JiejianError) as stale:
+                        core.node_runtime.require_loaded_delivery(project, fingerprint)
+                    assert stale.value.to_dict()['details']['reason'] == 'RUNTIME_SOURCE_NOT_LOADED'
                     activation = core.runtime_activation.activate(project, changed.structured_content["delivery_id"],
                         operation_id=uuid4().hex, expected_version=changed.structured_content["task_version"])
+                    import time
+                    deadline = time.monotonic() + 30
+                    while activation.status == "PENDING" and time.monotonic() < deadline:
+                        await anyio.sleep(.1)
+                        activation = core.runtime_activation.receipt(project, activation.operation_id)
                     assert activation.status == "SUCCEEDED"
+                    prepare_changed_sample(core, project)
                     access.set_level(project, MCPAccessLevel.EXECUTE)
-                    submitted = await client.call_tool("jiejian_check_run", {"project_id": project, "change_id": change_id, "idempotency_key": "generic-change"})
+                    plan = await client.call_tool("jiejian_check_preview", {"project_id": project, "change_id": change_id})
+                    submitted = await client.call_tool("jiejian_check_run", {"project_id": project, "change_id": change_id, "idempotency_key": "generic-change", "expected_plan_fingerprint": plan.structured_content["plan_fingerprint"]})
                     assert not submitted.is_error
                     run_id = submitted.structured_content["run_id"]
                     request = core.checks.pending_request(run_id)
                     assert request.change_context.change_id == change_id
                     with core.uow_factory() as work:
                         assert work.development.latest_check_run(project, changed.structured_content["delivery_id"]) == run_id
-                    assert len(request.actions) == 2
-                    assert sum(len(action.cases) for action in request.actions) == 3
+                    assert len(request.actions) == 3
+                    assert sum(len(action.cases) for action in request.actions) == 5
                     after = core.business_boundaries.view(project)
                     assert after.policy_epoch == before.policy_epoch
                     assert after.permission_intents == before.permission_intents
@@ -125,16 +137,45 @@ def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_p
                 headers={"Authorization":"Bearer "+token,"Origin":TEST_CONTROL_ORIGIN},follow_redirects=True) as http:
                 async with Client(streamable_http_client(TEST_CONTROL_ORIGIN+"/mcp",http_client=http,terminate_on_close=False)) as client:
                     assert {tool.name for tool in (await client.list_tools()).tools} == TOOLS
+                    rule = app.state.context.business_boundaries.view(project).permission_intents[0]
+                    preview = await client.call_tool("jiejian_rule_preview", {"project_id": project,
+                        "reference": {"kind": "APPROVED", "rules": [{"intent_id": rule.intent_id, "revision": rule.revision}]},
+                        "situation": {"subject_id": rule.subject_actor_id, "owner_id": rule.resource_owner_actor_id,
+                            "relation": rule.relation.value, "action_id": rule.business_action_id, "effect_id": rule.protected_effect_ids[0]}})
+                    assert preview.structured_content["coverage"] == rule.expectation.value
+                    assert access.level_for(project) is MCPAccessLevel.READ
+                    materials=await client.call_tool('jiejian_preparation_context',{'project_id':project})
+                    advice={'operation_id':'7'*32,'expected_basis_id':materials.structured_content['suggestion_context']['basis_id'],
+                        'content':{'items':[{'item_id':'psi_'+'1'*16,
+                            'target':{'kind':'APPROVED','action_id':rule.business_action_id,'action_revision':rule.action_revision,
+                                'actor_id':rule.subject_actor_id,'actor_revision':rule.subject_actor_revision},
+                            'material':{'kind':'identity','account_requirement':'继续核对现有账号'},'description':'保留原测试账号',
+                            'source':{'classification':'HYPOTHESIS','explanation':'按当前要求整理'},'handler':'USER'}]}}
+                    with pytest.raises(MCPError):
+                        await client.call_tool('jiejian_preparation_suggestion_save',{'project_id':project,'suggestion':advice})
+                    access.set_level(project,MCPAccessLevel.PREPARE)
+                    saved=await client.call_tool('jiejian_preparation_suggestion_save',{'project_id':project,'suggestion':advice})
+                    assert not saved.is_error
+                    access.set_level(project,MCPAccessLevel.READ)
+                    saved_id=saved.structured_content['suggestion']['suggestion_id']
+                    read=await client.call_tool('jiejian_preparation_suggestion_show',{'project_id':project,'suggestion_id':saved_id,'revision':1})
+                    receipt=await client.call_tool('jiejian_preparation_suggestion_receipt',{'project_id':project,'operation_id':advice['operation_id']})
+                    assert read.structured_content['suggestion']==saved.structured_content['suggestion']
+                    assert receipt.structured_content['status']=='FOUND'
+                    assert str(harness.source_root) not in str(read.structured_content)
+                    unavailable = await client.call_tool("jiejian_rule_candidate_decide", {"project_id": project})
+                    assert unavailable.is_error
                     status = await client.call_tool("jiejian_check_status",{"project_id":project})
                     assert status.structured_content["can_execute"]
                     assert "plan_fingerprint" not in status.structured_content
+                    plan = await client.call_tool("jiejian_check_preview",{"project_id":project})
                     with pytest.raises(MCPError):
-                        await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run"})
+                        await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run","expected_plan_fingerprint":plan.structured_content["plan_fingerprint"]})
                     access.set_level(project,MCPAccessLevel.EXECUTE)
-                    created = await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run"})
+                    created = await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run","expected_plan_fingerprint":plan.structured_content["plan_fingerprint"]})
                     assert not created.is_error
                     run_id = created.structured_content["run_id"]
-                    same = await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run"})
+                    same = await client.call_tool("jiejian_check_run",{"project_id":project,"idempotency_key":"sdk-run","expected_plan_fingerprint":plan.structured_content["plan_fingerprint"]})
                     assert same.structured_content["run_id"]==run_id
                     with pytest.raises(MCPError):
                         await client.call_tool("jiejian_check_status",{"project_id":"other-project","run_id":run_id})

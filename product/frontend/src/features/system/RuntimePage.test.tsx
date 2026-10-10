@@ -65,7 +65,7 @@ describe('RuntimePage', () => {
       status: maintenanceStatus,
     })
 
-    render(<RuntimePage status={status} profiles={[]} failed={false} />)
+    render(<RuntimePage status={status} />)
 
     expect(screen.getByText('1.1.0')).toBeInTheDocument()
     expect(screen.getByText('检查执行器当前不可用。')).toBeInTheDocument()
@@ -91,7 +91,7 @@ describe('RuntimePage', () => {
 
 it('首次读取失败不显示零值，恢复读取后撤下错误并恢复维护入口', async () => {
   const read = vi.spyOn(systemApi, 'maintenanceStatus').mockRejectedValueOnce(new Error('Failed to fetch')).mockResolvedValue(maintenanceStatus)
-  render(<RuntimePage status={status} profiles={[]} failed={false}/>)
+  render(<RuntimePage status={status}/>)
   expect(await screen.findByText('扫描暂时失败')).toBeInTheDocument()
   expect(screen.queryByText('0 B')).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'预览清理'})).not.toBeInTheDocument()
@@ -109,14 +109,14 @@ it('只提交选中项目，未知回执跨刷新后仅查询结果', async()=>{
     removed:[],results:[],counts:{DELETED:0,ALREADY_MISSING:0,SKIPPED_IN_USE:0,SKIPPED_CHANGED:0,FAILED:0},protected:maintenanceStatus.protected,status:maintenanceStatus}
   const write=vi.spyOn(systemApi,'maintenanceOperation').mockResolvedValueOnce(plan).mockRejectedValueOnce(new Error('response lost'))
   const read=vi.spyOn(systemApi,'maintenanceOutcome').mockResolvedValue({state:'COMPLETED',result:{...plan,dry_run:false,counts:{...plan.counts,DELETED:1}}})
-  const view=render(<RuntimePage status={status} profiles={[]} failed={false}/>)
+  const view=render(<RuntimePage status={status}/>)
   fireEvent.click(await screen.findByRole('button',{name:'预览清理'}))
   fireEvent.click(await screen.findByRole('checkbox',{name:/下载缓存/}))
   fireEvent.click(screen.getByRole('button',{name:'清理所选'}))
   expect(await screen.findByText('清理结果待确认')).toBeInTheDocument()
   expect(write).toHaveBeenLastCalledWith('clear-all',{confirmed:true,dry_run:false,plan_id:'recover-plan',item_ids:['one']})
   view.unmount()
-  render(<RuntimePage status={status} profiles={[]} failed={false}/>)
+  render(<RuntimePage status={status}/>)
   fireEvent.click(await screen.findByRole('button',{name:'读取本次清理结果'}))
   expect(await screen.findByText('本次清理已完成')).toBeInTheDocument()
   expect(read).toHaveBeenCalledWith('recover-plan')

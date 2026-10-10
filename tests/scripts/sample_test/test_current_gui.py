@@ -9,6 +9,13 @@ from tests.acceptance.sample_test import current_api
 from tests.acceptance.sample_test.harness.state import SampleTestError
 
 
+@pytest.fixture(autouse=True)
+def stub_locator_expectations(monkeypatch):
+    # 编排单测只验证等待与点击顺序；实际Locator启用状态由正式GUI验收负责。
+    from tests.acceptance.sample_test.gui import checks
+    monkeypatch.setattr(checks,'expect',lambda node:N(to_be_enabled=lambda **kwargs:node.wait_for(**kwargs)))
+
+
 class Node:
     def __init__(self, page, kind, name, scope=()):
         self.page, self.kind, self.name, self.scope = page, kind, name, scope

@@ -36,16 +36,26 @@ def test_runner_progress_failure_does_not_change_result_or_call_legacy_evaluator
     attempt.mkdir(parents=True)
     input_path = attempt / "input.json"
     input_path.write_bytes(canonical_check_document(input))
+    injected = []
     def rejected(*args, **kwargs):
+        injected.append(True)
         raise ValueError("injected progress model failure") if failure == "model" else OSError("injected progress write failure")
-    if failure == "model":
-        monkeypatch.setattr(runner, "CheckRunnerProgress", rejected)
-    else:
-        monkeypatch.setattr(runner.os, "replace", rejected)
+    replace = runner.os.replace
+    def fail_progress_write(source, destination):
+        if destination == attempt / 'progress.json':
+            return rejected()
+        return replace(source, destination)
     def legacy_forbidden(*args, **kwargs):
         raise AssertionError("legacy accepted-alone evaluator must not run")
-    monkeypatch.setattr("product.backend.core.verification.permissions.evaluation.evaluate_permission_case", legacy_forbidden)
-    assert runner.execute_check_attempt(input_path, attempt / "staging", environ=environment) == 0
+    # 全局文件函数只在被测调用期间替换，pytest 报告与清理仍使用真实文件系统。
+    with monkeypatch.context() as patch:
+        if failure == "model":
+            patch.setattr(runner, "CheckRunnerProgress", rejected)
+        else:
+            patch.setattr(runner.os, "replace", fail_progress_write)
+        patch.setattr("product.backend.core.verification.permissions.evaluation.evaluate_permission_case", legacy_forbidden)
+        code = runner.execute_check_attempt(input_path, attempt / "staging", environ=environment)
+    assert code == 0 and injected
     result = parse_check_document((attempt / "staging/result.json").read_bytes(), CheckRunnerResult)
     assert result.verdict is RunVerdict.BLOCK
     assert len(check_target[1]["target_calls"]) == 2

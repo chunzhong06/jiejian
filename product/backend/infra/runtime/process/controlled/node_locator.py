@@ -14,7 +14,7 @@ def controlled_node_executable(environ) -> Path:
             node=root/'runtime/node/node.exe'
             allowed=root/'runtime/node'
             from product.protocols.runtime.portable_release import PortableReleaseManifest
-            release=PortableReleaseManifest.model_validate_json(_read_bounded(root/'runtime/release.json',16384))
+            release=PortableReleaseManifest.model_validate_json(_read_bounded(root/'app/release.json',16384))
             with node.open('rb') as stream:
                 if hashlib.file_digest(stream,'sha256').hexdigest()!=release.node_sha256:
                     raise ValueError('portable Node differs from release identity')

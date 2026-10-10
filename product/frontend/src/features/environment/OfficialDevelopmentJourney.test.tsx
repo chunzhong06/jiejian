@@ -73,3 +73,19 @@ it('代码已切换但交付登记未完成时，先回读再显式恢复同一�
   await waitFor(() => expect(api.switchVersion).toHaveBeenCalledTimes(2))
   expect(api.switchVersion.mock.calls[1]).toEqual(['VULNERABLE', undefined])
 })
+
+it('Node故事从错误交付继续到先开放后撤回，只在确认后应用',async()=>{
+  api.development.mockResolvedValue({...facts,implementation:'VULNERABLE',verdict:'BLOCK',run_id:'wrong-delivery'})
+  const p=props();render(<OfficialDevelopmentJourney {...p} value={{...value,runtime_kind:'NODE_ESM',display_name:'数字展馆协作空间'}}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'继续体验先开放后撤回'}))
+  expect(api.switchVersion).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'应用代码变更'}))
+  await waitFor(()=>expect(api.switchVersion).toHaveBeenCalledExactlyOnceWith('EXPOSE_REVOKE',undefined))
+})
+it('后续预览修改携带本批change，不借用原修复批次',async()=>{
+  api.development.mockResolvedValue({...facts,implementation:'PREVIEW_CHANGED',repair_verified:true})
+  const p=props();render(<OfficialDevelopmentJourney {...p} value={{...value,runtime_kind:'NODE_ESM',current_change_id:'preview-change',repair_change_id:'old-repair'}}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'继续准备与验证'}))
+  expect(p.onNavigate).toHaveBeenCalledWith('/tests?change_id=preview-change')
+  expect(api.switchVersion).not.toHaveBeenCalled()
+})

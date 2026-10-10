@@ -1,9 +1,11 @@
 /* 当前产品壳：只接入动作级 Workspace、应用接入、业务边界和明确不可用区域。 */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Layout, Modal, Result } from 'antd'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
 import { experienceApi } from '../../api/applications/experience'
+import { useNewApplication } from '../state/useNewApplication'
+import { LoadingState } from '../../shared/ui/LoadingState'
 import { ApiError } from '../../api/http'
 import { mcpAccessApi, type MCPAccessView } from '../../api/system/mcp'
 import { projectsApi, type ProjectDto } from '../../api/applications/projects'
@@ -18,11 +20,10 @@ import { OfficialSamplePanel } from '../../features/environment/OfficialSamplePa
 import { OfficialDevelopmentJourney } from '../../features/environment/OfficialDevelopmentJourney'
 import { EnvironmentPage } from '../../features/environment/EnvironmentPage'
 import { BusinessBoundaryPage } from '../../features/boundaries/BusinessBoundaryPage'
-import LLMSettingsDrawer from '../../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../../features/system/RuntimePage'
 import { ToolsPage } from '../../features/tools/ToolsPage'
 import { WorkbenchPage } from '../../features/workspace/WorkbenchPage'
-import { aiStatusLabel, AppHeader } from './AppHeader'
+import { AppHeader } from './AppHeader'
 import { NotificationCenter, enqueueNotification, useNotificationExpiry, type NotificationItem } from '../notifications/NotificationCenter'
 import { normalizeRoute, type AppRoute } from '../navigation/routes'
 import { useProjectWorkspace } from '../state/useProjectWorkspace'
@@ -44,13 +45,35 @@ function CurrentUnavailableArea({ title, description, onBack }: { title: string;
 
 export default function ControlShell() { return <HashRouter><ControlShellContent /></HashRouter> }
 
+// 二级导航跟随当前可见阅读面宽度；历史、材料和结果详情切换时不另猜一套断点。
+function CheckSectionNavigation({route,onNavigate}:{route:AppRoute;onNavigate:(path:string)=>void}) {
+  const ref=useRef<HTMLElement>(null)
+  useLayoutEffect(()=>{
+    const nav=ref.current,frame=nav?.parentElement
+    if(!nav||!frame)return
+    let page:HTMLElement|undefined,scheduled=0
+    const align=()=>{
+      scheduled=0
+      const active=Array.from(frame.querySelectorAll<HTMLElement>('.editorial-page')).find(item=>!item.closest('[hidden]')&&item.getClientRects().length>0)
+      if(page!==active){if(page)resize.unobserve(page);page=active;if(page)resize.observe(page)}
+      nav.style.maxWidth=page?`${page.getBoundingClientRect().width}px`:''
+    }
+    const schedule=()=>{if(!scheduled)scheduled=requestAnimationFrame(align)}
+    const resize=new ResizeObserver(schedule),mutation=new MutationObserver(schedule)
+    resize.observe(frame)
+    mutation.observe(frame,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','class']})
+    align()
+    return()=>{cancelAnimationFrame(scheduled);resize.disconnect();mutation.disconnect()}
+  },[route])
+  return <nav ref={ref} className="check-section-navigation" aria-label="检查导航"><button aria-current={route==='/tests'?'page':undefined} onClick={()=>onNavigate('/tests')}>当前检查</button><button aria-current={route==='/history'?'page':undefined} onClick={()=>onNavigate('/history')}>检查历史</button></nav>
+}
+
 function ControlShellContent() {
   const location = useLocation()
   const navigate = useNavigate()
   const route = normalizeRoute(location.pathname)
   const [error, setError] = useState<ApiError | null>(null)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [retryEpoch, setRetryEpoch] = useState(0)
   const [shutdownConfirmOpen, setShutdownConfirmOpen] = useState(false)
   const [shutdownRequested, setShutdownRequested] = useState(false)
@@ -90,8 +113,7 @@ function ControlShellContent() {
   useEffect(() => { setWorkReceipt(null) }, [selected?.project_id, location.key])
   useEffect(() => { if (!workReceipt) return; const timer = window.setTimeout(() => setWorkReceipt(null), 6000); return () => window.clearTimeout(timer) }, [workReceipt])
   const checkActivity = useCheckActivity(selected?.project_id, latestWorkspace?.active_check, workspaceState.refreshCurrentWorkspace, latestWorkspace?.latest_result?.run_id, Boolean(latestWorkspace))
-  const { profiles: llmProfiles, profilesFailed: llmLoadFailed, aiSettings, setAiSettings, aiSettingsFailed, status: systemStatus } = systemState
-  const assistantStatus = aiStatusLabel(llmProfiles, aiSettings, llmLoadFailed, aiSettingsFailed)
+  const { status: systemStatus } = systemState
 
   useEffect(() => {
     let active = true
@@ -135,15 +157,21 @@ function ControlShellContent() {
 
   useEffect(() => {
     if (location.pathname === '/settings/models') {
-      setSettingsOpen(true)
-      navigate('/workspace', { replace: true })
+      navigate('/tools', { replace: true })
       return
     }
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
 
-  const choose = (project: ProjectDto) => { setWorkReceipt(null); workspaceState.selectProject(project); navigate('/workspace') }
-  const connectForAccess = (project: ProjectDto) => { workspaceState.selectProject(project); clearError() }
+  const newApplication=useNewApplication({onEnter:()=>{
+    setWorkReceipt(null);clearError();workspaceState.selectProject(null);navigate('/application?new=1')
+  },onEnvironment:setExperience,onError:notifyError})
+  const choose = (project: ProjectDto) => { newApplication.abandon();setWorkReceipt(null); workspaceState.selectProject(project); navigate('/workspace') }
+  const connectForAccess = (project: ProjectDto) => { newApplication.abandon();workspaceState.selectProject(project);clearError();navigate('/application',{replace:true}) }
+  useEffect(()=>{
+    // 刷新新接入地址只回读环境，不重放先前可能已经提交的停止动作。
+    if(route==='/application' && new URLSearchParams(location.search).get('new')==='1' && newApplication.state==='IDLE')void newApplication.reread()
+  },[route,location.search,newApplication.state,newApplication.reread])
   const retryCurrentPage = () => {
     clearError()
     setRetryEpoch((epoch) => epoch + 1)
@@ -152,8 +180,7 @@ function ControlShellContent() {
   }
   const navigateRecoveryTarget = useCallback((path: string) => {
     if (path === '/settings/models') {
-      setSettingsOpen(true)
-      navigate('/workspace')
+      navigate('/tools')
       return
     }
     const [pathname, query] = path.split('?')
@@ -183,11 +210,13 @@ function ControlShellContent() {
     key={`checks-${selected.project_id}-${retryEpoch}-${changeId ?? ''}`} project={selected} workspace={workspace} onError={notifyError}
     onStateChanged={workspaceState.refreshCurrentWorkspace} onBackToHistory={onBackToHistory} onFeedback={rememberReceipt}
     onProvidedMaterials={experience?.active && experience.project_id === selected.project_id ? async () => { const value = await experienceApi.prepare(); setExperience(value); return value } : undefined}
-    onNavigate={path => { if (onBackToHistory && path.startsWith('/tests?run_id=')) navigate(path.replace('/tests?', '/history?')); else navigateRecoveryTarget(path) }}
+    onNavigate={path => { if (onBackToHistory && path.startsWith('/tests?run_id=')) {const next=new URLSearchParams(path.split('?')[1]),prior=new URLSearchParams(location.search);for(const key of ['intent_id','revision','intent_hash','query','verdict','lifecycle','page_before_time','page_before_run'])if(prior.has(key))next.set(key,prior.get(key)!);navigate('/history?'+next)} else navigateRecoveryTarget(path) }}
     requestedProofSources={new URLSearchParams(location.search).get('proof_sources') === '1'} requestedProofSource={new URLSearchParams(location.search).get('source')}
     requestedActionId={new URLSearchParams(location.search).get('action_id')}
+    requestedSuggestionId={new URLSearchParams(location.search).get('suggestion_id')} requestedSuggestionRevision={new URLSearchParams(location.search).get('suggestion_revision')}
+    requestedMaterialKind={new URLSearchParams(location.search).get('material_kind')}
     requestedIdentities={new URLSearchParams(location.search).get('identities') === '1'}
-    requestedMaterials={new URLSearchParams(location.search).get('materials') === '1'} requestedTaskId={taskId} requestedRunId={runId} requestedCaseId={new URLSearchParams(location.search).get('case_id')} changeId={changeId} />
+    requestedMaterials={new URLSearchParams(location.search).get('materials') === '1'} requestedTaskId={taskId} requestedRunId={runId} requestedCaseId={new URLSearchParams(location.search).get('case_id')} requestedTab={new URLSearchParams(location.search).get('tab')} requestedEvidenceId={new URLSearchParams(location.search).get('evidence_id')} requestedRecordId={new URLSearchParams(location.search).get('record_id')} changeId={changeId} />
   const renderPermissions = () => {
     const params = new URLSearchParams(location.search)
     const candidateProject = params.get('project_id')
@@ -206,7 +235,7 @@ function ControlShellContent() {
     onCandidateRoute={(id, revision, operation) => { const next = new URLSearchParams(location.search); next.set('project_id', selected.project_id); if(id) {next.set('candidate', id); next.set('revision', String(revision))} else {next.delete('candidate'); next.delete('revision')} if (operation) next.set('rule_operation_id', operation); else next.delete('rule_operation_id'); navigate(`/permissions?${next.toString()}`, {replace:true}) }}
     requestedProposalId={route === '/workspace' ? workspace?.primary_task?.proposal_id : new URLSearchParams(location.search).get('proposal_id')}
     onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onFeedback={rememberReceipt}
-    onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
+    providedDownloadChoiceRequired={experience?.runtime_kind==='NODE_ESM'} onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
   }
 
   const samplePanel = <OfficialSamplePanel value={experience} onError={notifyError} onChanged={async (value) => {
@@ -219,13 +248,22 @@ function ControlShellContent() {
   const content = () => {
     // 当前任务与自由入口使用相同组件位置，避免从当前工作进入权限页时丢失草稿。
     if (route === '/workspace') return <WorkbenchPage workspaceSyncFailed={workspaceState.synchronization?.retrying} selected={selected} workspace={latestWorkspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
-    if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
+    if (route === '/tools') {
+      const params = new URLSearchParams(location.search), target = params.get('return_to')
+      const canReturn = params.get('source_project_id') === selected?.project_id && target && ['/permissions','/tests','/changes','/history'].includes(target.split('?')[0])
+      return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} onReturn={canReturn ? () => navigate(target) : undefined} />
+    }
     if (route === '/environment') return <EnvironmentPage onRemoveCurrent={() => setRemoveConfirmOpen(true)} project={selected} workspace={workspace} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { const started = !experience?.active || experience.project_id !== next.project_id; workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next); if (started) navigate('/workspace') } }}/>
-    if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
-    if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
+    if (route === '/application') {
+      const fresh=new URLSearchParams(location.search).get('new')==='1'
+      if(fresh && ['CHECKING','STOPPING'].includes(newApplication.state))return <LoadingState page>{newApplication.state==='STOPPING'?'正在停止官方示例，随后接入新应用…':'正在核对接入环境…'}</LoadingState>
+      if(fresh && newApplication.state==='UNCONFIRMED')return <Result status="info" title="先确认官方示例已停止" subTitle="停止结果尚未确认，或仍有任务需要处理。历史检查与证据保留。" extra={<><Button type="primary" onClick={()=>void newApplication.reread()}>重新读取停止状态</Button><Button onClick={()=>navigate('/environment')}>查看官方环境</Button></>}/>
+      return <AccessPage key={fresh?'new-application':selected?.project_id??'unselected'} selected={fresh?null:selected} requestConnection={!fresh && new URLSearchParams(location.search).get('step')==='connection'} endpointStatus={fresh?undefined:workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={!fresh && experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
+    }
+    if (route === '/settings/system') return <RuntimePage status={systemStatus} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/permissions') return renderPermissions()
-    if (route === '/history') return <CheckHistoryPage key={`history-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigateRecoveryTarget} requestedRunId={new URLSearchParams(location.search).get('run_id')} renderRun={(runId, onBack) => renderChecks(runId, null, null, onBack)} />
+    if (route === '/history') return <CheckHistoryPage key={`history-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigateRecoveryTarget} locationSearch={location.search} requestedRunId={new URLSearchParams(location.search).get('run_id')} renderRun={(runId, onBack) => renderChecks(runId, null, null, onBack)} />
     if (route === '/changes') return <ChangesPage key={`changes-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigate} onStateChanged={workspaceState.refreshCurrentWorkspace} requestedRepair={new URLSearchParams(location.search).get('repair_reference')}
       requestedView={new URLSearchParams(location.search).get('view')} requestedChange={new URLSearchParams(location.search).get('change_id')} developmentJourney={experience?.active && experience.project_id === selected.project_id ? <OfficialDevelopmentJourney key={selected.project_id} value={experience} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async next => { setExperience(next); await workspaceState.refreshCurrentWorkspace() }}/> : undefined}/>
     if (route === '/tests') {
@@ -247,9 +285,10 @@ function ControlShellContent() {
   if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务清理完成后，可以关闭此页面。" />
   return <TaskGuardContext.Provider value={updateGuard}><Layout className="app-shell"><a className="skip-to-content" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>跳到主要内容</a>
     <Layout className="product-main">
-      <div className="product-chrome"><AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
+      <div className="product-chrome"><AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={newApplication.begin} onNavigate={path=>path==='/application'?newApplication.begin():navigate(path)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
       <ModuleNavigation route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} /></div>
       <Layout.Content className="content"><div className="content-frame" id="main-content" tabIndex={-1}>
+        {selected&&['/tests','/history'].includes(route)&&<CheckSectionNavigation route={route} onNavigate={navigate}/>}
         {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
         {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>
     </Layout>
@@ -273,6 +312,5 @@ function ControlShellContent() {
         notifyError(shutdownError as ApiError)
       }
     }}>界鉴会先停止当前本地服务并保存可恢复事实。</Modal>
-    <LLMSettingsDrawer open={settingsOpen} profiles={llmProfiles} aiSettings={aiSettings} onClose={() => setSettingsOpen(false)} onChanged={systemState.setProfiles} onSettingsChanged={setAiSettings} onError={notifyError} />
   </Layout></TaskGuardContext.Provider>
 }

@@ -89,6 +89,7 @@ describe('ApplicationSetup', () => {
 
     expect(screen.queryByText(/Profile path|resource id|read path|recovery path/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '选择应用文件夹' }))
+    fireEvent.click(await screen.findByRole('button', { name: '连接已运行的应用' }))
     expect(await screen.findByText('确认本地访问地址', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText(/只探测 127\.0\.0\.1/)).toBeInTheDocument()
     expect(screen.queryByText(/::1/)).not.toBeInTheDocument()
@@ -110,6 +111,24 @@ describe('ApplicationSetup', () => {
     expect(screen.getByDisplayValue('修改文档')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认权限组和业务动作后继续' })).not.toBeInTheDocument()
     expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'app-demo' }))
+  })
+
+  it('未运行时从目录直接整理业务，不探测地址或伪造运行状态', async () => {
+    const authorized = {...baseUnderstanding,source_analysis_authorized:true,source_analysis_authorized_at_us:3,revision:1}
+    mockProjects.authorizeSourceAnalysis.mockResolvedValue(authorized)
+    mockProjects.analyzeSource.mockResolvedValue({...authorized,source_fingerprint:'d'.repeat(64),analysis_completed_at_us:4,role_candidates:[role],action_candidates:[action],revision:2})
+    render(<ApplicationSetup selected={null} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button',{name:'选择应用文件夹'}))
+    expect(await screen.findByRole('heading',{name:'分析权限组与关键业务动作'})).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'授权并开始分析'})).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox',{name:/只读分析当前应用源码/}))
+    fireEvent.click(screen.getByRole('button',{name:'授权并开始分析'}))
+    expect(await screen.findByRole('button',{name:'审阅业务与权限'})).toBeInTheDocument()
+    expect(screen.getByText('实际操作前再连接')).toBeInTheDocument()
+    expect(mockProjects.discoverEndpoints).not.toHaveBeenCalled()
+    expect(mockProjects.confirmEndpoint).not.toHaveBeenCalled()
+    expect(mockProjects.authorizeSourceAnalysis).toHaveBeenCalledWith('app-demo',0)
+    expect(mockProjects.analyzeSource).toHaveBeenCalledWith('app-demo',1)
   })
 
   it('未启动普通应用时提供由界鉴启动官方示例的明确入口', async () => {
@@ -135,7 +154,7 @@ describe('ApplicationSetup', () => {
     fireEvent.click(screen.getByText('权限组 · 1'))
     expect(screen.getByDisplayValue('所有者')).toBeInTheDocument()
     expect(mockProjects.decideCandidates).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' }))
+    fireEvent.click(screen.getByRole('button', { name: '核对业务总览' }))
     const summary = screen.getByRole('region', { name: '本次选择完整摘要' })
     expect(summary).toHaveTextContent('所有者')
     expect(summary).toHaveTextContent('修改文档')
@@ -146,7 +165,7 @@ describe('ApplicationSetup', () => {
     ]))
     expect(await screen.findByText('本次业务信息已确认，权限规则尚未改变。')).toBeInTheDocument()
     await waitFor(() => expect(continued).toHaveBeenCalledOnce())
-    expect(screen.queryByRole('button', { name: '下一步：核对业务总览' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '核对业务总览' })).not.toBeInTheDocument()
   })
 
   it('保留只读授权并允许按当前源码重新发现候选', async () => {
@@ -207,7 +226,7 @@ describe('ApplicationSetup', () => {
       revision: 3,
     }
     mockProjects.understanding.mockResolvedValue(restored)
-    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} endpointStatus="NEEDS_CONFIRMATION" onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} endpointStatus="NEEDS_CONFIRMATION" requestConnection onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
 
     expect(await screen.findByText('确认本地访问地址', { selector: 'h2' })).toBeInTheDocument()
     expect(mockProjects.discoverEndpoints).toHaveBeenCalledWith('app-demo')
@@ -224,7 +243,7 @@ describe('ApplicationSetup', () => {
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '重新读取接入状态' }))
     expect(screen.queryByRole('button', { name: '选择应用文件夹' })).not.toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: '确认本地访问地址' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '分析权限组与关键业务动作' })).toBeInTheDocument()
     expect(mockProjects.understanding).toHaveBeenCalledTimes(2)
     expect(mockProjects.connectApplication).not.toHaveBeenCalled()
     expect(mockProjects.confirmEndpoint).not.toHaveBeenCalled()

@@ -412,6 +412,11 @@
 /* 条件提示自行保留上下间距，出现、消失或连续出现时都不贴住工作卡片。 */
 .flow-feedback { margin-block: var(--space-16); }
 
-/* 整页等待占据内容工作区，局部等待只占其所属区域；图标和文字不分散排布。 */
+/* 首次等待保持紧凑；数据未到时仍为返回和其他模块留出可用空间。 */
 .loading-state { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-16);min-height:120px;width:100%;text-align:center;color:var(--color-secondary);font-size:var(--font-secondary);padding:var(--space-24); }
-.loading-state--page { min-height:clamp(240px,calc(100dvh - 320px),640px); }
+.loading-state--page { min-height:180px; }
+
+/* 短事实按阅读宽度成组居中；标签和值共用左侧文字轴，不把整行文字居中。 */
+.centered-fact-groups { width:min(100%,var(--layout-summary));margin-inline:auto; }
+.centered-fact-groups > :is(div,span) { width:fit-content;max-width:100%;min-width:0;justify-self:center;text-align:start; }
+@media(max-width:700px) { .centered-fact-groups > :is(div,span) { width:100%;justify-self:stretch; } }

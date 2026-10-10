@@ -14,7 +14,7 @@
 [打开源码](../../../../../../product/frontend/src/features/workspace/WorkbenchPage.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../api/checks/currentChecks`、`../../api/workspace`、`../../testing/fixtures/results`、`./WorkbenchPage`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../api/checks/currentChecks`、`../../api/workspace`、`../../shared/testing/results`、`./WorkbenchPage`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/workspace/WorkbenchPage.tsx`
 

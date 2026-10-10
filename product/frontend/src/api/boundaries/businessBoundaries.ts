@@ -15,7 +15,7 @@ export type BoundaryDraftViewDto = {
   candidates: BoundaryCandidateDto[]
 }
 
-export type BusinessEffectKind = 'STATE_MUTATION' | 'DATA_DISCLOSURE' | 'OBJECT_CREATION' | 'EXTERNAL_DISPATCH' | 'RESTRICTED_FUNCTION_INVOCATION' | 'CREDENTIAL_ACCESS'
+export type BusinessEffectKind = 'STATE_MUTATION' | 'DATA_DISCLOSURE' | 'FILE_CONTENT_DELIVERY' | 'OBJECT_CREATION' | 'EXTERNAL_DISPATCH' | 'RESTRICTED_FUNCTION_INVOCATION' | 'CREDENTIAL_ACCESS'
 export type ProposedEffectDto = {
   item_id: string
   effect_id?: string | null

@@ -30,6 +30,7 @@
 - `JobControlRepository.complete_recording_result(self, job_id, recording_id, attempt, lease_owner, fencing_token, completed_at_us) -> JobRecord &#124; None`
 - `JobControlRepository.complete_runtime_load(self, job_id, load_id, request_hash, attempt, lease_owner, fencing_token, now_us) -> JobRecord &#124; None`
 - `JobControlRepository.complete_preflight(self, job_id, preflight_id, request_hash, attempt, lease_owner, fencing_token, now_us) -> JobRecord &#124; None`
+- `JobControlRepository.complete_reference_capture(self, job_id, capture_id, request_hash, attempt, lease_owner, fencing_token, now_us, require_active_lease)`
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage.base`、`product.backend.infra.storage.execution.jobs`、`product.backend.infra.storage.execution.runs`、`product.backend.infra.storage.preparation.recordings`、`sqlalchemy`、`sqlalchemy.exc`、`sqlalchemy.orm`、`typing`
 
@@ -50,6 +51,7 @@
 - `JobRepository.get_by_run(self, run_id) -> JobRecord &#124; None`
 - `JobRepository.get_by_recording(self, recording_id) -> JobRecord &#124; None`
 - `JobRepository.get_by_preflight(self, preflight_id) -> JobRecord &#124; None`
+- `JobRepository.get_by_capture(self, capture_id) -> JobRecord &#124; None`
 - `JobRepository.get_by_runtime_load(self, load_id) -> JobRecord &#124; None`
 - `JobRepository.list_for_project(self, project_id) -> tuple[JobRecord, ...]`
 - `JobRepository.next_pending(self, now_us, target_types) -> JobRecord &#124; None`
@@ -66,11 +68,6 @@
 - `class ExecutionProfileRow`
 - `class ExecutionProfileRecord`
 - `ExecutionProfileRecord.validate_time(self) -> ExecutionProfileRecord`
-- `class ExecutionProfileRepository`
-- `ExecutionProfileRepository.add(self, record) -> None`
-- `ExecutionProfileRepository.get(self, profile_id) -> ExecutionProfileRecord &#124; None`
-- `ExecutionProfileRepository.list_for_project(self, project_id) -> tuple[ExecutionProfileRecord, ...]`
-- `ExecutionProfileRepository.replace(self, record) -> None`
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`
 

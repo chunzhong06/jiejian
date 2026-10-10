@@ -27,7 +27,7 @@ def test_result_router_only_registers_current_read_resources() -> None:
     router = build_results_router(SimpleNamespace())
     assert {(route.path, frozenset(route.methods)) for route in router.routes} == {
         (f"/api/runs/{{run_id}}/{suffix}", frozenset({"GET"}))
-        for suffix in ("repair-contracts", "result-story", "evidence", "evidence/{evidence_id}")
+        for suffix in ("repair-contracts", "result-story", "evidence", "evidence/{evidence_id}", "evidence/{evidence_id}/records", "evidence/{evidence_id}/records/{record_id}")
     }
 
 

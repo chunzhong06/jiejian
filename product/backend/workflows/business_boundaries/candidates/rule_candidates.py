@@ -8,7 +8,11 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from product.backend.core.boundaries.entities import boundary_sha256
-from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, RuleCandidateSave
+from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, RuleCandidateSave, freeze_candidate_content
+from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide, RuleCandidateDecision
+from product.backend.workflows.business_boundaries.candidates.decisions import (
+    check_candidate_edit, decision_digest, pending_scenario_issues, scenario_state, selected_permission_issues,
+)
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.business_boundaries.models import (
     BoundaryMaintenanceActionItem, BoundaryMaintenanceActorItem, BoundaryMaintenanceCommand,
@@ -55,18 +59,63 @@ class RuleCandidateService:
                 return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
             draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
             self._current_basis(command.expected_basis_id, draft)
+            content = freeze_candidate_content(command.content)
             if command.candidate_id:
                 current = self._required(work, project_id, command.candidate_id)
                 if current.revision != command.expected_revision:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已有新修订", details={"reason": "CONFLICT"})
+                check_candidate_edit(work, current, content)
             elif len(work.rule_candidates.list(project_id, limit=201)) >= 200:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选数量已达上限", details={"reason": "LIMIT_EXCEEDED"})
             value = RuleCandidateRevision(project_id=project_id,
                 candidate_id=command.candidate_id or f"rcd_{uuid4().hex}",
                 revision=(command.expected_revision or 0) + 1, basis_id=command.expected_basis_id,
-                content=command.content, submitted_via=submitted_via, created_at_us=self._clock_us())
+                content=content, submitted_via=submitted_via, created_at_us=self._clock_us())
+            # 每个选项只替换有限权限项；保存前验证所有选项的引用，不执行其中任何业务动作。
+            for scenario in content.scenarios:
+                for option in scenario.options:
+                    replacements = {item.item_id: item for item in option.replacements}
+                    changed = content.model_copy(update={"permissions": tuple(replacements.get(item.item_id, item) for item in content.permissions)})
+                    self._merge(value.model_copy(update={"content": changed}), draft)
             work.rule_candidates.append(value, expected_revision=command.expected_revision)
             work.rule_candidates.add_receipt(project_id, "SAVE", command.operation_id, fingerprint, value)
+            result = self._view(work, value)
+            work.commit()
+            return result
+
+    def decide(self, project_id: str, candidate_id: str, command: RuleCandidateDecide):
+        """仅由LOCAL_GUI调用；人的决定、候选修订及DECIDE回执原子落库。"""
+        fingerprint = boundary_sha256({"candidate_id": candidate_id, "command": command.model_dump(mode="json")})
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            receipt = work.rule_candidates.receipt(project_id, "DECIDE", command.operation_id)
+            if receipt:
+                self._same_request(receipt, fingerprint)
+                return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
+            draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
+            self._current_basis(command.expected_basis_id, draft)
+            current = self._required(work, project_id, candidate_id)
+            if current.revision != command.expected_revision or current.basis_id != command.expected_basis_id:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已经变化，请重新核对含义", details={"reason": "CONFLICT"})
+            scenario = next((item for item in getattr(current.content, "scenarios", ()) if item.scenario_id == command.scenario_id), None)
+            if scenario is None or scenario.scenario_fingerprint != command.scenario_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "这处含义已有变化，请重新读取")
+            if command.action == "SELECT" and command.option_id not in {item.option_id for item in scenario.options}:
+                raise JiejianError(ErrorCode.INPUT_INVALID, "选项不属于这处含义")
+            decision = RuleCandidateDecision(**command.model_dump(), decision_id=f"rcdcn_{uuid4().hex}",
+                project_id=project_id, candidate_id=candidate_id, output_revision=current.revision + 1,
+                request_fingerprint=fingerprint, created_at_us=self._clock_us())
+            _, replacements, _ = scenario_state(work, current, extra=decision)
+            questions = tuple(question for question in current.content.unresolved_questions
+                if not (command.action in {"SELECT", "DISMISS"} and question == scenario.question))
+            content = current.content.model_copy(update={"permissions": tuple(replacements.get(item.item_id, item) for item in current.content.permissions),
+                "unresolved_questions": questions})
+            value = RuleCandidateRevision(project_id=project_id, candidate_id=candidate_id, revision=current.revision + 1,
+                basis_id=current.basis_id, content=content, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
+            self._merge(value, draft)
+            work.rule_candidates.append(value, expected_revision=current.revision)
+            work.rule_candidates.add_decision(decision)
+            work.rule_candidates.add_receipt(project_id, "DECIDE", command.operation_id, fingerprint, value)
             result = self._view(work, value)
             work.commit()
             return result
@@ -74,6 +123,11 @@ class RuleCandidateService:
     def show(self, project_id: str, candidate_id: str, revision: int | None = None):
         with self._uow_factory() as work:
             return self._view(work, self._required(work, project_id, candidate_id, revision))
+
+    def preview(self, project_id: str, command):
+        from product.backend.workflows.business_boundaries.candidates.preview import preview_rules
+        with self._uow_factory() as work:
+            return {"project_id": project_id, **preview_rules(work, project_id, command, self)}
 
     def operation(self, project_id: str, kind: str, operation_id: str):
         with self._uow_factory() as work:
@@ -103,7 +157,9 @@ class RuleCandidateService:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "先解决候选中的问题", details={"reason": view["assessment"]})
                 draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
                 proposal = self._boundaries.create_maintenance_proposal(project_id, self._merge(value, draft), work=work, allow_initial=True)
-                work.rule_candidates.link_proposal(candidate_id, revision, proposal.proposal.proposal_id)
+                states, _, _ = scenario_state(work, value)
+                work.rule_candidates.link_proposal(candidate_id, revision, proposal.proposal.proposal_id,
+                    content_hash=boundary_sha256(value.content.model_dump(mode="json")), decision_digest=decision_digest(states))
             work.rule_candidates.add_receipt(project_id, "PROPOSE", operation_id, fingerprint, value)
             result = self._view(work, value)
             work.commit()
@@ -113,6 +169,8 @@ class RuleCandidateService:
         draft = self._boundaries.maintenance_draft(value.project_id, work=work, allow_empty=True)
         issues = []
         content = value.content
+        states, _, conflicts = scenario_state(work, value)
+        issues.extend(pending_scenario_issues(states, conflicts))
         if value.basis_id != "rb_" + draft.boundary_state_fingerprint:
             issues.append({"code": "CONTEXT_STALE", "message": "正式规则已变化，需要重新核对候选"})
         for text in content.unsupported_constraints:
@@ -128,8 +186,11 @@ class RuleCandidateService:
             if example.permission_item_id not in known_ids:
                 issues.append({"code": "EXAMPLE_NOT_COVERED", "message": example.uncovered_reason or "例子引用的权限不存在"})
         unchanged = False
+        merged = None
         try:
             merged = self._merge(value, draft)
+            if getattr(content, "scenarios", ()):
+                issues.extend(selected_permission_issues(merged.permissions))
             unchanged = all({item.item_id: item for item in getattr(merged, name)}
                 == {item.item_id: item for item in getattr(draft, name)} for name in ("actors", "actions", "permissions"))
         except (JiejianError, ValidationError):
@@ -139,6 +200,11 @@ class RuleCandidateService:
         # 已作决定的候选是历史输入；不能因自身批准推进基线而提示用户再次修改同一候选。
         return {"candidate": value, "assessment": "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if unchanged else "REVIEWABLE",
             "issues": [] if decision else issues, "proposal_id": proposal_id, "decision": decision,
+            "scenario_decisions": states,
+            "meaning_context": {"actors": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name} for item in merged.actors],
+                "actions": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name,
+                    "effect_catalog": [{"item_id": effect.item_id, "business_label": effect.business_label} for effect in item.effects]} for item in merged.actions]},
+            "approval_mappings": [] if proposal_id is None else work.rule_candidates.approval_mappings(proposal_id=proposal_id),
             "reuse": {"status": "HISTORICAL" if decision else "PREDICTION",
                 "message": "这是当时的候选记录，当前准备以正式规则为准" if decision else "以下只列现有材料及可能的复用；批准后还要核对账号、实现与证明，当前不访问目标。",
                 "actions": [] if decision else self._reuse_prediction(work, value, draft)},

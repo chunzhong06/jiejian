@@ -5,6 +5,7 @@ import type { BusinessEffectKind, ProposedPermissionDto } from '../../../api/bou
 export const effectKindLabels: Record<BusinessEffectKind, string> = {
   STATE_MUTATION: '业务状态发生变化',
   DATA_DISCLOSURE: '受保护数据被读取',
+  FILE_CONTENT_DELIVERY: '完整文件被接收',
   OBJECT_CREATION: '生成一个新的业务对象或文件',
   EXTERNAL_DISPATCH: '向外部系统发出业务请求',
   RESTRICTED_FUNCTION_INVOCATION: '调用受限制的业务功能',

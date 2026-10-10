@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "RecordTraceInput": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "ALLOW",
+                "DENY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authorization Decision"
+        },
+        "kind": {
+          "enum": [
+            "ENTRY",
+            "IDENTITY",
+            "AUTHORIZATION",
+            "PERSISTENT_EFFECT",
+            "MESSAGE",
+            "RECOVERY"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Id"
+        },
+        "parent_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Event Id"
+        },
+        "semantic_key": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "source_component": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Component",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Location",
+          "type": "string"
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Id"
+        }
+      },
+      "required": [
+        "kind",
+        "semantic_key",
+        "source_component",
+        "source_location"
+      ],
+      "title": "RecordTraceInput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "collection": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Collection",
+      "type": "string"
+    },
+    "event": {
+      "$ref": "#/$defs/RecordTraceInput"
+    },
+    "resource_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Resource Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Scope Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scope_id",
+    "collection",
+    "resource_id",
+    "event"
+  ],
+  "title": "RecordTraceWrite",
+  "type": "object"
+}

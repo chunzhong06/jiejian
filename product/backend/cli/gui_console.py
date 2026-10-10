@@ -6,6 +6,7 @@ import sys
 import time
 from collections.abc import Callable
 from threading import Event
+from contextlib import contextmanager
 
 
 def console_key_reader() -> Callable[[], str | None] | None:
@@ -25,6 +26,33 @@ def console_key_reader() -> Callable[[], str | None] | None:
         return key.lower()
 
     return read_key
+
+
+@contextmanager
+def launcher_key_reader(event_name: str | None):
+    """便携 exe 的重复启动只发送本会话事件，复用当前服务打开 GUI 的动作。"""
+    if event_name is None:
+        yield None
+        return
+    import ctypes
+    import re
+    from ctypes import wintypes
+    if os.name != 'nt' or os.environ.get('JIEJIAN_RUNTIME_MODE') != 'portable' or not re.fullmatch(r'Local\\JieJian-Reopen-[0-9a-f]{16}', event_name):
+        raise ValueError('invalid portable launcher event')
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenEventW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.OpenEventW.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.OpenEventW(0x00100000, False, event_name)
+    if not handle:
+        raise OSError('portable launcher event unavailable')
+    try:
+        yield lambda: 'g' if kernel.WaitForSingleObject(handle, 0) == 0 else None
+    finally:
+        kernel.CloseHandle(handle)
 
 
 def run_gui_console(

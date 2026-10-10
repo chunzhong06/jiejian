@@ -627,6 +627,7 @@
       "enum": [
         "STATE_MUTATION",
         "DATA_DISCLOSURE",
+        "FILE_CONTENT_DELIVERY",
         "OBJECT_CREATION",
         "EXTERNAL_DISPATCH",
         "RESTRICTED_FUNCTION_INVOCATION",

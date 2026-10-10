@@ -16,22 +16,27 @@
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
-### `product/backend/workflows/business_boundaries/candidates/drafting.py`
+### `product/backend/workflows/business_boundaries/candidates/decisions.py`
 
-[打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/drafting.py) · Python AST；作用域内import不表示每次调用均执行。
+[打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/decisions.py) · Python AST；作用域内import不表示每次调用均执行。
 
-- `_OPTION_ID_PATTERN`
-- `_MAX_OPTIONS`
-- `_MAX_SUGGESTIONS`
-- `_MAX_QUOTE_CHARS`
-- `class PermissionDraftStatus`
-- `class PermissionDraftSuggestionView`
-- `class PermissionDraftIssueView`
-- `class PermissionDraftView`
-- `class PermissionDraftService`
-- `PermissionDraftService.draft(self, project_id, human_text) -> PermissionDraftView`
+- `scenario_state(work, value, extra)`
+- `decision_digest(states)`
+- `pending_scenario_issues(states, conflicts)`
+- `selected_permission_issues(permissions)`
+- `check_candidate_edit(work, current, incoming)`
+- `validate_approval_source(work, proposal, current_basis)`
+- `save_approval_mappings(work, source, proposal_id, boundary_decision_id, permission_plans, action_plans)`
 
-静态import / dot-source：`__future__`、`dataclasses`、`enum`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.semantics`、`product.backend.core.errors`、`product.backend.infra.llm.adapters.base`、`pydantic`、`re`、`unicodedata`、`uuid`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`
+
+### `product/backend/workflows/business_boundaries/candidates/preview.py`
+
+[打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/preview.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `preview_rules(work, project_id, command, candidate_service)`
+
+静态import / dot-source：`product.backend.core.boundaries.permissions`、`product.backend.core.errors`
 
 ### `product/backend/workflows/business_boundaries/candidates/rule_candidates.py`
 
@@ -40,11 +45,13 @@
 - `class RuleCandidateService`
 - `RuleCandidateService.context(self, project_id, offset)`
 - `RuleCandidateService.save(self, project_id, command, submitted_via)`
+- `RuleCandidateService.decide(self, project_id, candidate_id, command)`
 - `RuleCandidateService.show(self, project_id, candidate_id, revision)`
+- `RuleCandidateService.preview(self, project_id, command)`
 - `RuleCandidateService.operation(self, project_id, kind, operation_id)`
 - `RuleCandidateService.propose(self, project_id, candidate_id, revision, operation_id)`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.models`、`pydantic`、`time`、`uuid`
+静态import / dot-source：`__future__`、`json`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.decisions`、`product.backend.workflows.business_boundaries.models`、`pydantic`、`time`、`uuid`、`作用域内：product.backend.workflows.business_boundaries.candidates.preview`
 
 ### `product/backend/workflows/business_boundaries/fingerprints.py`
 
@@ -225,6 +232,6 @@
 - `BusinessBoundaryService.view(self, project_id, work) -> BusinessBoundaryView`
 - `BusinessBoundaryService.actor_revision(self, project_id, actor_id, revision) -> BusinessActorRevision`
 
-静态import / dot-source：`__future__`、`collections.abc`、`contextlib`、`product.backend.core.applications.models`、`product.backend.core.boundaries.approval`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.proposals`、`product.backend.core.errors`、`product.backend.infra.storage`、`product.backend.workflows.business_boundaries.inspection`、`product.backend.workflows.business_boundaries.models`、`product.backend.workflows.business_boundaries.proposals`、`product.backend.workflows.business_boundaries.proposals.maintenance`、`product.backend.workflows.business_boundaries.reading`、`time`、`uuid`、`作用域内：contextlib`
+静态import / dot-source：`__future__`、`collections.abc`、`contextlib`、`product.backend.core.applications.models`、`product.backend.core.boundaries.approval`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.proposals`、`product.backend.core.errors`、`product.backend.infra.storage`、`product.backend.workflows.business_boundaries.candidates.decisions`、`product.backend.workflows.business_boundaries.inspection`、`product.backend.workflows.business_boundaries.models`、`product.backend.workflows.business_boundaries.proposals`、`product.backend.workflows.business_boundaries.proposals.maintenance`、`product.backend.workflows.business_boundaries.reading`、`time`、`uuid`、`作用域内：contextlib`
 
 <!-- GENERATED:END -->

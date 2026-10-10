@@ -29,6 +29,12 @@
   gap: var(--space-24) var(--space-32);
 }
 
+/* 跨栏字段也由同一网格管理行距，避免新增动作字段贴住上一行。 */
+.permission-form-action {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .permission-effect-selection {
   margin-block: var(--space-24);
   padding-block: var(--space-24);
@@ -99,12 +105,32 @@
   min-width: 0;
   max-width: 100%;
 }
-/* 权限版本来自当前只读投影，候选不占据正式规则之前的大卡片。 */
-.boundary-current-summary { display:flex;justify-content:space-between;align-items:center;gap:var(--space-32);padding:var(--space-24) 0;border-block:1px solid var(--color-border); }
-.boundary-current-summary h2 { font-size:var(--font-section);margin:var(--space-8) 0; }
-.boundary-current-summary p { margin:0;color:var(--color-secondary);font-size:var(--font-secondary); }
-.boundary-current-summary dl { display:flex;gap:var(--space-40);margin:0; }
-.boundary-current-summary dt { color:var(--color-secondary);font-size:var(--font-label);white-space:nowrap; }
-.boundary-current-summary dd { margin:var(--space-8) 0 0;font-size:var(--font-section); }
-.boundary-current-summary small { font-size:var(--font-label);color:var(--color-secondary); }
-@media(max-width:600px) { .boundary-current-summary { flex-wrap:wrap;gap:var(--space-20); }.boundary-current-summary dl { width:100%; } }
+/* 生效版本作为页头元信息，导航与筛选共同服务紧邻的正文。 */
+.boundary-version { color:var(--color-secondary);font-size:var(--font-secondary); }
+.boundary-browser { display:grid;gap:var(--space-16);min-width:0; }
+.boundary-browser .boundary-collection-toolbar { margin:0;padding:0;border:0; }
+.boundary-browser .boundary-document { margin:0; }
+.boundary-manual-entry > .boundary-editor { margin-top:var(--space-16); }
+
+/* 原权限行保留原样，筛选与搜索相邻，不引入第二套按动作阅读的页面。 */
+.boundary-browser .boundary-collection-toolbar > .ant-segmented { margin-inline-start:auto; }
+.permission-review-filter { margin-bottom:var(--space-20); }
+@media(max-width:700px) { .boundary-browser .boundary-collection-toolbar > .ant-segmented { margin-inline-start:0; } }
+
+.boundary-provided-proposal{padding:var(--rhythm-panelPadding);border:1px solid var(--color-border);border-radius:var(--radius-large);background:var(--color-reading-surface);margin-bottom:var(--space-24)}
+.boundary-provided-proposal h2{font-size:var(--font-section);margin:0 0 var(--space-8)}
+.boundary-provided-proposal header p{margin:0}
+.boundary-provided-proposal .boundary-entry-actions{justify-content:space-between;border-top:1px solid var(--color-border);padding-top:var(--space-20)}
+.boundary-provided-proposal .boundary-entry-actions>.ant-btn:last-child{margin-inline-start:auto}
+.boundary-entry-actions + .boundary-editor{margin-top:var(--space-24)}
+.provided-meaning-choice { border:0;padding:0;margin:var(--space-24) 0 0;min-width:0; }
+.provided-meaning-choice legend { font-weight:var(--weight-medium);margin-bottom:var(--space-16); }
+.provided-meaning-choice .ant-radio-group { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-16); }
+.provided-meaning-choice .ant-radio-label{min-width:0}
+.provided-meaning-choice .ant-radio-label strong,.provided-meaning-choice .ant-radio-label>span{display:block}
+.provided-meaning-choice .ant-radio-label>span{margin-top:var(--space-8);font-size:var(--font-secondary);color:var(--color-secondary)}
+.provided-meaning-choice>p{margin:var(--space-16) 0 0}
+@media(max-width:700px){.provided-meaning-choice .ant-radio-group{grid-template-columns:minmax(0,1fr)}.boundary-provided-proposal .boundary-entry-actions{justify-content:flex-end}}
+/* 说明业务识别、权限决定和最终批准的关系；编号表示流程位置，不伪造完成状态。 */
+.boundary-setup-path{display:flex;flex-wrap:wrap;gap:var(--space-16) var(--space-32);list-style:none;padding:0;margin:0;color:var(--color-secondary);font-size:var(--font-secondary)}
+.boundary-setup-path [aria-current]{color:var(--color-primary);font-weight:var(--weight-strong)}

@@ -61,6 +61,7 @@ class HttpResponse:
     url: str = ""
     request_nonce: str = ""
     request_digest: str = ""
+    entity_receipt: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +214,7 @@ class HttpExecutionAdapter:
         identity_runtime: HttpIdentityRuntime | None = None,
         terminal_completed: bool | None = None,
         cleanup_request: bool = False,
+        entity_policy=None,
     ) -> tuple[ExecutionFact, HttpResponse]:
         """发送单个模板并返回同一响应，供工作流提取动态值。"""
 
@@ -234,6 +236,7 @@ class HttpExecutionAdapter:
                 slot_values=values,
                 identity_runtime=identity_runtime,
                 cleanup_request=cleanup_request,
+                entity_policy=entity_policy,
                 redaction_values=tuple(
                     str(values[item.slot_id])
                     for item in binding.input_slots
@@ -283,6 +286,7 @@ class HttpExecutionAdapter:
         redaction_values: Sequence[str] = (),
         cleanup_request: bool = False,
         test_mode: bool = False,
+        entity_policy=None,
     ) -> HttpResponse:
         """在授权、取消和预算限制下发送一次目标请求。
 
@@ -345,6 +349,19 @@ class HttpExecutionAdapter:
                 timeout=guard.scope.timeout_seconds,
                 **request_kwargs,
             ) as response:
+                safe_secrets = tuple(self.known_secrets) + tuple(redaction_values)
+                if identity_runtime is not None:
+                    safe_secrets += identity_runtime.redaction_secrets()
+                if entity_policy is not None:
+                    from product.backend.infra.execution.web.file_entity import receive_file_entity
+                    if 300<=response.status_code<400 and response.headers.get('location'):
+                        guard.authorize_redirect(target.url,response.headers['location'])
+                    receipt=receive_file_entity(response,entity_policy,max_bytes=guard.scope.max_response_bytes,
+                        known_secrets=safe_secrets,cancelled=self.cancellation_requested)
+                    # TARGET原文不经过JSON解码，也不随HttpResponse离开采集边界。
+                    return HttpResponse(status_code=response.status_code,data={},body=b'',headers={},url=target.url,
+                        request_nonce=request_nonce,entity_receipt=receipt,
+                        request_digest=hashlib.sha256(method.upper().encode('ascii')+b'\n'+response.request.url.raw_path).hexdigest())
                 # 流式累计响应，避免先把超限内容完整读入内存。
                 content = bytearray()
                 for chunk in response.iter_bytes():
@@ -358,9 +375,6 @@ class HttpExecutionAdapter:
                 if 300 <= response.status_code < 400 and location:
                     guard.authorize_redirect(target.url, location)
                 # 目标可能回显凭据，必须在离开网络边界前完成已知秘密脱敏。
-                safe_secrets = tuple(self.known_secrets) + tuple(redaction_values)
-                if identity_runtime is not None:
-                    safe_secrets += identity_runtime.redaction_secrets()
                 safe_content = _redact_bytes(bytes(content), safe_secrets)
                 data = redact_known_secrets(_decode_response(safe_content), safe_secrets)
                 return HttpResponse(

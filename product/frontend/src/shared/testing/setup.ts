@@ -1,0 +1,31 @@
+// 初始化共用浏览器测试环境，并在每个用例结束后清理挂载内容。
+import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
+
+afterEach(cleanup)
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }),
+})
+
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', { writable: true, value: TestResizeObserver })
+
+const nativeGetComputedStyle = window.getComputedStyle.bind(window)
+window.getComputedStyle = (element: Element) => nativeGetComputedStyle(element)

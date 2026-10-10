@@ -1,5 +1,7 @@
 # 将Workspace主任务、材料和来源事实组织为GUI/MCP共享建议；只读，不另算安全结论。
 from urllib.parse import urlencode
+from pydantic import ValidationError
+from product.backend.core.errors import JiejianError
 
 from product.backend.workflows.preparation.guidance.models import PreparationGuidance, PreparationMaterialAdvice, PreparationNextAction, ProofSourceAdvice
 
@@ -58,7 +60,7 @@ def _workspace_action(project, task):
         refs['change_id'] = task.change_id
     if task.route == '/tests' and task.task_kind in PREPARATION_TASKS:
         refs['task_id'] = task.task_id
-    tool, level = {'RUN_CURRENT_CHECK': ('jiejian_check_run', 'EXECUTE'),
+    tool, level = {'RUN_CURRENT_CHECK': ('jiejian_check_preview', 'READ'),
                    'REGISTER_SOURCE_CHANGE': ('jiejian_change_registration_preview', 'READ')}.get(task.task_kind, (None, None))
     return PreparationNextAction(kind=task.task_kind, title=task.title,
         reason=task.why_now, handler='EITHER' if tool else 'USER',
@@ -93,6 +95,15 @@ def _source_advice(context, source):
         return advice('REVIEW_RUNTIME', '核对当前受控运行',
             '当前源码与受控实例尚未对应；已保存配置和录制保留，先核对应用运行。',
             route=_url('/environment', project))
+    resource=next((item for item in context['resources'] if item['resource_binding_id']==config['resource_binding_id']),None)
+    gap=next((item for item in context.get('reference_recovery_gaps',()) if resource is not None and
+        (item['resource_id'],item['owner_identity_id'])==(resource['resource_id'],resource['owner_identity_id'])),None)
+    if gap is not None:
+        return advice('REVIEW_REFERENCE_RECOVERY','核对取样后的恢复',
+            '原操作可能改变了这份资源。先核对恢复，再继续使用它；不会重新发送原取样操作。')
+    if config.get('source_kind')=='REFERENCE_FILE' and config.get('reference_artifact') is None:
+        return advice('PREPARE_REFERENCE','准备一份文件参照',
+            '可正常取得一次参照，也可上传已有测试文件；候选还需经过原预检查与采用。')
     if not source['read_scope_confirmed']:
         return advice('CONFIRM_READ_SCOPE', '确认这项来源的读取范围',
             '预检查需要当前账号、资源和路径的读取授权；Agent不能代替你确认。')
@@ -153,16 +164,32 @@ def _material_advice(project, preparation, identities=()):
 
 
 class PreparationGuidanceService:
-    def __init__(self, *, sources, workspace, preparation):
+    def __init__(self, *, sources, workspace, preparation, suggestions=None):
         self._sources, self._workspace, self._preparation = sources, workspace, preparation
+        self._suggestions = suggestions
 
     def context(self, project_id):
         """同一入口供GUI与MCP读取；建议只带引用，实际命令仍由原服务重新核验。"""
-        before = self._sources.context(project_id)
-        workspace = self._workspace.get(project_id)
+        suggestion_context = None
+        if self._suggestions is not None:
+            try:
+                suggestion_context = self._suggestions.context(project_id)
+            except (JiejianError, ValidationError):
+                suggestion_context = {'project_id':project_id,'state':'UNAVAILABLE','latest':None,
+                    'note':'材料建议暂时无法核对，仍可继续查看和准备真实材料。'}
+        before = self._sources.basis(project_id)
         preparation = self._preparation.get(project_id)
+        workspace = self._workspace.get(project_id, prepared=preparation)
         context = self._sources.context(project_id)
-        if before['basis_id'] != context['basis_id']:
+        suggestion_changed = False
+        if suggestion_context is not None and 'basis_id' in suggestion_context:
+            try:
+                suggestion_changed = suggestion_context['basis_id'] != self._suggestions.basis(project_id)
+            except (JiejianError, ValidationError):
+                suggestion_context = {'project_id':project_id,'state':'UNAVAILABLE','latest':None,
+                    'note':'材料建议暂时无法核对，仍可继续查看和准备真实材料。'}
+        inconsistent = before != context['basis_id'] or suggestion_changed
+        if inconsistent:
             guidance = PreparationGuidance(project_id=project_id, basis_id=context['basis_id'], state='NEEDS_REFRESH',
                 next_action=None, materials=(), sources=(), note='读取期间应用条件已变化，请重新读取准备情况；本次不提供混合状态的建议。')
         else:
@@ -191,7 +218,18 @@ class PreparationGuidanceService:
                         handler='AGENT', gui_url=_url('/tests', project_id, materials=1, proof_sources=1, action_id=task.business_action_id),
                         mcp_tool='jiejian_proof_source_save', required_level='PREPARE', action_id=task.business_action_id,
                         action_revision=task.action_revision, effect_id=task.effect_id, task_id=task.task_id)
+            if context.get('reference_recovery_gaps'):
+                gap=context['reference_recovery_gaps'][0]
+                next_action=PreparationNextAction(kind='REVIEW_REFERENCE_RECOVERY',title='核对取样后的恢复',
+                    reason='这份资源仍有正在执行或尚未确认恢复的取样，请先查看原任务。',handler='USER',
+                    action_id=gap['action_id'],gui_url=_url('/tests',project_id,materials=1,proof_sources=1,action_id=gap['action_id']))
             guidance = PreparationGuidance(project_id=project_id, basis_id=context['basis_id'], state='CURRENT',
                 next_action=next_action, materials=materials, sources=sources,
                 note='建议依据当前事实生成。打开入口不代表授权执行；准备可用不代表权限已通过检查。')
+        if suggestion_context is not None:
+            if suggestion_context.get('state') != 'UNAVAILABLE':
+                suggestion_context['state'] = 'NEEDS_REFRESH' if inconsistent else 'CURRENT'
+            if inconsistent:
+                suggestion_context['latest'] = None
+            context['suggestion_context'] = suggestion_context
         return context | {'guidance': guidance.model_dump(mode='json')}

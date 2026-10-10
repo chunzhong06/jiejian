@@ -1,6 +1,7 @@
 // 一次登记本地修改；只保存非秘密的操作定位，回执不明时回读原键，不重建请求试探。
-import { Alert, Button, Form, Input, Select, Spin } from 'antd'
-import { useEffect, useRef, useState } from 'react'
+import { Alert, Button, Form, Input, Select } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import { LoadingState } from '../../../shared/ui/LoadingState'
 import { sourceChangesApi, type RegistrationPreview } from '../../../api/changes/sourceChanges'
 import { developmentApi, newOperationId } from '../../../api/changes/development'
 import { ApiError } from '../../../api/http'
@@ -15,6 +16,8 @@ export function ChangeRegistration({ projectId, repair, requestedRepair, onSaved
   const [preview,setPreview] = useState<RegistrationPreview | null>(null), [failed,setFailed] = useState(false)
   const [reference,setReference] = useState<string | undefined>(requestedRepair ?? undefined)
   const [form] = Form.useForm<{reason?:string;paths?:string}>()
+  const formId = useId()
+  const unavailable = busy || (uncertain && !retryReady) || !preview || failed
   const alive = useRef(true), locked = useRef(false)
   const load = async () => {
     setFailed(false)
@@ -59,13 +62,14 @@ export function ChangeRegistration({ projectId, repair, requestedRepair, onSaved
   }
   return <section className="light-registration" aria-label="登记本地修改"><header><h2>登记本地修改</h2><p>开发需求继续在开发客户端讨论。这里只记录源码变化及沿用的权限范围。</p></header>
     {uncertain&&<Alert type="warning" showIcon message="上次登记回执尚未确认" description={legacy.current?'发现旧版登记的未确认操作，先读取原回执。':'先查询原操作，不重新登记。'} action={<Button loading={busy} onClick={()=>void query()}>查询登记回执</Button>}/>}
-    {message&&<p role="status">{message}</p>}{!preview&&!failed&&<Spin aria-label="正在核对登记范围"/>}{failed&&<Button onClick={()=>void load()}>重新读取登记范围</Button>}
+    {message&&<p role="status">{message}</p>}{!preview&&!failed&&<LoadingState>正在核对这次修改的权限范围…</LoadingState>}{failed&&<Button onClick={()=>void load()}>重新读取登记范围</Button>}
     {preview&&<p className="light-meta">沿用权限版本 {preview.policy_epoch} · {preview.permission_count} 条已确认要求</p>}
-    <Form form={form} layout="vertical" onFinish={submit} disabled={busy||(uncertain&&!retryReady)||!preview||failed}>
+    <Form id={formId} form={form} layout="vertical" onFinish={submit} disabled={unavailable}>
       <Form.Item name="reason" label="修改说明（选填）" rules={[{max:512}]}><Input.TextArea maxLength={512} autoSize={{minRows:2,maxRows:5}}/></Form.Item>
       {!!repair?.tasks.length&&<Form.Item label="关联原问题（可选）"><Select allowClear value={reference} onChange={setReference} options={repair.tasks.filter(item=>item.status!=='STALE').map((item,i)=>({value:item.contract.repair_fingerprint,label:`原问题 ${i+1} · ${repairLabels[item.status]}`}))}/></Form.Item>}
       <details><summary>补充涉及文件（可选）</summary><Form.Item name="paths" label="每行一个相对路径"><Input.TextArea maxLength={32768} autoSize={{minRows:2,maxRows:5}}/></Form.Item></details>
-      <div className="confirmation-actions"><Button onClick={onCancel}>返回修改记录</Button><Button type="primary" htmlType="submit" loading={busy}>{uncertain?'重试原登记':'登记并核对实际变化'}</Button></div>
     </Form>
+    {/* 返回不依赖预览结果；提交中的按钮仍保留位置，防止重复登记。 */}
+    <div className="confirmation-actions"><Button onClick={onCancel}>返回修改记录</Button><Button type="primary" form={formId} htmlType="submit" disabled={unavailable} loading={busy}>{uncertain?'重试原登记':'登记并核对实际变化'}</Button></div>
   </section>
 }

@@ -122,9 +122,10 @@ def cleanup(client, gui, state):
     gui._mark("mcp-cleanup")
 
 
-def run(client, gui, project, runs, state, *, session_factory=SDKSession):
-    """在起始、问题、观察不足、修复四轮后只增加一个普通 Run；失败由 Official 收口。"""
+def run(client, gui, project, runs, state, *, session_factory=SDKSession, profile="legacy"):
+    """在当前故事全部检查后只增加一个普通 Run；失败由 Official 收口。"""
     token = credential = None
+    action_count,case_count=(3,5) if profile=="gallery" else (2,3)
     state.mcp_project_id = project
     initial = client.call("GET", "/api/mcp/access")
     if initial["paired"] and not initial["accepting_connections"]:
@@ -147,10 +148,10 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
             preview = _call(session, "jiejian_check_status", {"project_id": project})
             if shown.get("project_id") != project or preview.get("project_id") != project:
                 _error("MCP_READ_PROJECT_MISMATCH")
-            if preview.get("action_count") != 2 or preview.get("case_count") != 3 or preview.get("can_execute") is not True:
+            if preview.get("action_count") != action_count or preview.get("case_count") != case_count or preview.get("can_execute") is not True:
                 _error("MCP_FULL_PLAN_UNAVAILABLE")
             registration = _call(session, "jiejian_change_registration_preview", {"project_id": project})
-            if registration.get("project_id") != project or registration.get("permission_count") != 3 or not registration.get("fingerprint"):
+            if registration.get("project_id") != project or registration.get("permission_count") != case_count or not registration.get("fingerprint"):
                 _error("MCP_REGISTRATION_SCOPE_MISMATCH")
             _deny_without_writes(session, client, project, "jiejian_change_register", {"project_id": project,
                 "operation_id": uuid4().hex, "expected_registration_fingerprint": registration["fingerprint"],
@@ -200,14 +201,17 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
                 _error("MCP_RUN_JOB_MISMATCH")
             current_api.wait_published(client, state.active_run_id, state.active_run_job_id)
             result = current_api.read_result(client, state.active_run_id)
-            current_api.assert_current_result(result, expected="PASS")
-            if len({item["action_id"] for item in result["story"]["actions"]}) != 2:
+            if profile=="gallery":
+                from .gallery import assert_result
+                assert_result(result,expected="PASS")
+            else:current_api.assert_current_result(result, expected="PASS")
+            if len({item["action_id"] for item in result["story"]["actions"]}) != action_count:
                 _error("MCP_FULL_RESULT_SCOPE_MISMATCH")
             if (result["story"].get("repair_verification") or {}).get("status") == "VERIFIED":
                 _error("MCP_ORDINARY_RUN_MARKED_VERIFIED")
             if (result["story"].get("change_context") or {}).get("change_id") != change_id:
                 _error("MCP_RUN_CHANGE_MISMATCH")
-            if set(current_api.project_run_ids(client, project)) != before_runs | {state.active_run_id} or len(before_runs) != 4:
+            if set(current_api.project_run_ids(client, project)) != before_runs | {state.active_run_id} or len(before_runs) != len(runs):
                 _error("MCP_FIVE_RUNS_MISMATCH")
             for original in runs:
                 if current_api.read_result(client, original["run_id"]) != original:
@@ -217,7 +221,7 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
             gui._mark("mcp-responsibility")
         cleanup(client, gui, state)
         return dict(client_name=CLIENT_NAME, project_id=project, change_id=change_id, run_id=result["run_id"],
-            verdict="PASS", scope="ordinary-full-check", actual_changed_path_count=0, total_run_count=5,
+            verdict="PASS", scope="ordinary-full-check", actual_changed_path_count=0, total_run_count=len(runs)+1,
             pairing="created-and-removed" if state.mcp_created_pairing else "existing-preserved")
     except Exception as exc:
         from .harness.state import SampleTestError

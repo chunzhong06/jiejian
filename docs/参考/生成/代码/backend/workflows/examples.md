@@ -34,6 +34,36 @@
 
 静态import / dot-source：`__future__`、`dataclasses`、`enum`、`json`、`product.backend.core.checks.repair`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.core.preparation.bindings`、`product.backend.infra.samples`、`product.backend.infra.secrets`、`product.backend.workflows.business_boundaries.proposals.official_recipe`、`product.backend.workflows.checks.local_observer_wiring`、`product.backend.workflows.checks.registry`、`product.backend.workflows.examples.materials`、`product.backend.workflows.examples.preset_delivery`、`product.backend.workflows.examples.recovery`、`product.backend.workflows.preparation.supplemental.contract`、`product.backend.workflows.test_identities`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.observer`、`pydantic`、`threading`、`time`、`typing`、`uuid`、`作用域内：product.backend.workflows.examples.journey`
 
+### `product/backend/workflows/examples/gallery_materials.py`
+
+[打开源码](../../../../../../product/backend/workflows/examples/gallery_materials.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `prepare_gallery_materials(service, project)`
+
+静态import / dot-source：`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.workflows.examples.gallery_recipe`、`product.backend.workflows.examples.materials`、`product.backend.workflows.preparation.proofs.artifact_inputs`、`product.backend.workflows.preparation.proofs.commands`、`product.backend.workflows.test_identities.service`、`product.protocols`、`product.protocols.preparation.proof_sources`、`uuid`
+
+### `product/backend/workflows/examples/gallery_recipe.py`
+
+[打开源码](../../../../../../product/backend/workflows/examples/gallery_recipe.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `OWNER`
+- `REVIEWER`
+- `INTERNAL`
+- `PREVIEW`
+- `EXHIBITION`
+- `FILE`
+- `ACCESS`
+- `PUBLIC`
+- `PDF`
+- `ACTION_ROUTES`
+- `gallery_recipe(exhibition_download, understanding) -> BoundaryProposalCommand`
+- `BASELINE`
+- `VULNERABLE`
+- `EXPOSE_REVOKE`
+- `PREVIEW_CHANGED`
+
+静态import / dot-source：`json`、`product.backend.workflows.business_boundaries.models`
+
 ### `product/backend/workflows/examples/journey.py`
 
 [打开源码](../../../../../../product/backend/workflows/examples/journey.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -53,8 +83,30 @@
 - `VIEW_ACTION_KEY`
 - `class OfficialScenarioInstaller`
 - `OfficialScenarioInstaller.install(self, project_id, endpoint, export_action_id, view_action_id, owner_identity_id, member_identity_id, source_fingerprint, runtime_instance_id, synchronous_export) -> tuple[str, str]`
+- `OfficialScenarioInstaller.install_recording(self, project_id, action_id, identity_id, endpoint, event_factory, resource_consumer, resource_location, source_fingerprint, purpose, parent_recording_id, target_request_id, runtime_instance_id, resource_owner_identity_id) -> str`
 
 静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`pathlib`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.workflows.recording.credentials`、`product.backend.workflows.recording.lifecycle`、`product.backend.workflows.recording.project_submission`、`product.backend.workflows.recording.submission`、`product.protocols`、`作用域内：product.backend.workflows.preparation.demonstrations`
+
+### `product/backend/workflows/examples/node_environment.py`
+
+[打开源码](../../../../../../product/backend/workflows/examples/node_environment.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class NodeOfficialSampleExperience`
+- `NodeOfficialSampleExperience.status(self)`
+- `NodeOfficialSampleExperience.start(self, consent, operation_id)`
+- `NodeOfficialSampleExperience.reset(self, consent, operation_id)`
+- `NodeOfficialSampleExperience.reconcile(self)`
+- `NodeOfficialSampleExperience.boundary_proposal(self, exhibition_download)`
+- `NodeOfficialSampleExperience.prepare(self)`
+- `NodeOfficialSampleExperience.switch_version(self, version, repair_reference)`
+- `NodeOfficialSampleExperience.development_journey(self)`
+- `NodeOfficialSampleExperience.set_observation(self, available)`
+- `NodeOfficialSampleExperience.stop(self, operation_id)`
+- `NodeOfficialSampleExperience.stop_project(self, project_id)`
+- `NodeOfficialSampleExperience.close(self)`
+- `NodeOfficialSampleExperience.history(self, limit)`
+
+静态import / dot-source：`__future__`、`hashlib`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.tree`、`product.backend.workflows.examples.environment`、`product.backend.workflows.examples.gallery_recipe`、`product.backend.workflows.examples.journey`、`product.backend.workflows.preparation.supplemental.contract`、`socket`、`threading`、`time`、`uuid`、`作用域内：product.backend.workflows.examples.gallery_materials`、`作用域内：product.backend.workflows.examples.recovery`
 
 ### `product/backend/workflows/examples/preset_delivery.py`
 
@@ -80,20 +132,5 @@
 - `SampleRecovery.save(self, workspace)`
 
 静态import / dot-source：`product.backend.core.errors`、`product.backend.infra.runtime.process.tree`、`uuid`
-
-### `product/backend/workflows/examples/validation_summary.py`
-
-[打开源码](../../../../../../product/backend/workflows/examples/validation_summary.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `_SUMMARY_FILE`
-- `_MAX_SUMMARY_BYTES`
-- `class PublishedCompetitionValidationSummary`
-- `PublishedCompetitionValidationSummary.validate_counts(self) -> PublishedCompetitionValidationSummary`
-- `class CompetitionValidationSummaryView`
-- `CompetitionValidationSummaryView.validate_availability(self) -> CompetitionValidationSummaryView`
-- `class CompetitionValidationSummaryQuery`
-- `CompetitionValidationSummaryQuery.get(self) -> CompetitionValidationSummaryView`
-
-静态import / dot-source：`__future__`、`json`、`pathlib`、`product.backend.infra.runtime.paths`、`pydantic`、`typing`
 
 <!-- GENERATED:END -->

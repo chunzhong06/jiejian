@@ -25,8 +25,9 @@
 .repair-origin { display:flex;justify-content:space-between;align-items:center;gap:var(--space-24);padding-bottom:var(--space-24);border-bottom:1px solid var(--color-border); }
 .repair-origin h2 { margin:0 0 var(--space-12);font-size:var(--font-section); }
 .repair-origin p { margin:0; }
-.repair-requirement-columns { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-40); }
-.repair-requirement-columns > section { min-width:0; }
+.repair-requirement-columns { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-40);width:min(100%,var(--layout-summary));margin-inline:auto; }
+.repair-requirement-columns > section { min-width:0;width:fit-content;max-width:100%;justify-self:center; }
+@media(max-width:700px) { .repair-requirement-columns > section { width:100%;justify-self:stretch; } }
 .repair-requirement-columns h3,.repair-current-batch h3 { font-size:var(--font-body);margin:0 0 var(--space-24); }
 .repair-business-rule dl { margin:0 0 var(--space-24); }
 .repair-business-rule dl > div { display:grid;grid-template-columns:90px minmax(0,1fr);gap:var(--space-16);margin-bottom:var(--space-16); }

@@ -14,10 +14,12 @@ import type { ProjectDto } from '../../api/applications/projects'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { browserState } from '../../shared/runtime/browserState'
 import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
-import { AssistantPanel } from '../assistant/AssistantPanel'
+import { AgentWorkflowEntry } from '../../shared/ui/AgentWorkflowEntry'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { TaskReceipt } from '../../shared/ui/TaskReceipt'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
+import { LoadingState } from '../../shared/ui/LoadingState'
 import { FlowDraftReview } from './FlowDraftReview'
 import { RecordingCaptureCard, captureLabel } from './RecordingCaptureCard'
 import './recording.css'
@@ -36,6 +38,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
   const task = materialContext ?? primaryTask
   const taskKey = materialContext ? `${materialContext.context_id}:${materialContext.recording_id ?? ''}` : primaryTask?.task_id
   const [recording, setRecording] = useState<RecordingDto | null>(null)
+  const [restoring, setRestoring] = useState(true), [restoreFailed, setRestoreFailed] = useState(false), [restoreAttempt, setRestoreAttempt] = useState(0)
   const [actionOptions, setActionOptions] = useState<RecordingActionDto[]>([])
   const [identityOptions, setIdentityOptions] = useState<RecordingTestIdentityDto[]>([])
   const [ownerConfirmed, setOwnerConfirmed] = useState(false)
@@ -98,6 +101,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     let active = true
     // 浏览器状态只负责页面定位；当前 Recording 必须先由服务端列表重新确认。
     setRecording(null)
+    setRestoring(true); setRestoreFailed(false)
     setOwnerConfirmed(false)
     browserState.clearRecording()
     Promise.all([recordingsApi.setup(project.project_id), recordingsApi.recordings(project.project_id)]).then(([setup, items]) => {
@@ -107,26 +111,19 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       // 有主任务时只恢复它指定的录制，不能拿项目最后一条录制替代当前材料。
       const id = task ? task.recording_id : items[0]?.recording_id
       if (id) return recordingsApi.recording(id).then((view) => { if (active) updateView(view) })
-    }).catch((error) => { if (active) onError(error as ApiError) })
+    }).catch((error) => { if (active) { setRestoreFailed(true); onError(error as ApiError) } })
+      .finally(() => { if (active) setRestoring(false) })
     return () => { active = false }
-  }, [project.project_id, taskKey])
+  }, [project.project_id, taskKey, restoreAttempt])
 
-  useEffect(() => {
-    const recordingId = recording?.recording_id
-    if (!recordingId || finishedStates.has(recording.state)) return
-    let active = true
-    let pending = false
-    const timer = window.setInterval(async () => {
-      if (pending) return
-      pending = true
-      try {
-        const view = await recordingsApi.recording(recordingId)
-        if (active) updateView(view)
-      } catch (error) { if (active) onError(error as ApiError) }
-      finally { pending = false }
-    }, 1200)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [recording?.recording_id, recording?.state])
+  // 离开工作面只暂停订阅，录制继续由 Worker 管理；回来重新读取同一录制。
+  const polledRecording = useRef(recording?.recording_id)
+  polledRecording.current = recording?.recording_id
+  const recordingSync = useLiveRead(recording && !finishedStates.has(recording.state) ? recording.recording_id : undefined, async () => {
+    const id = recording!.recording_id
+    const view = await recordingsApi.recording(id)
+    if (polledRecording.current === id) updateView(view)
+  }, 1200)
 
   useEffect(() => {
     if (!recording || !finishedStates.has(recording.state)) return
@@ -285,6 +282,11 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     }
     : undefined
 
+  if (restoring || restoreFailed) return <EditorialPage label="演示当前业务动作" width="summary">
+    <EditorialHeader eyebrow={project.name || '当前应用'} title="演示一次业务操作"/>
+    {restoring ? <LoadingState>正在读取这次录制与可用账号…</LoadingState> : <Alert type="warning" showIcon message="暂时无法读取这次录制，请重试。"/>}
+    <TaskActionBar back={{label:'返回检查准备',onClick:onBack}} primary={restoreFailed ? {label:'重新读取录制',onClick:()=>setRestoreAttempt(value=>value+1)} : undefined}/>
+  </EditorialPage>
   return <EditorialPage label="演示当前业务动作">
     <EditorialHeader eyebrow={project.name || '当前应用'} title={reviewable ? '审阅这次业务操作' : recording?.state === 'COMPLETED' ? '录制已保存' : '演示一次业务操作'}><p className="editorial-muted">{captureLabel(recording)}</p></EditorialHeader>
     <FlowSpine compact label="录制流程" steps={['准备录制','演示一次操作','审阅业务含义','回到检查材料'].map((title,index) => {
@@ -295,13 +297,13 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     {task?.recording_purpose === 'OBSERVATION' && <Alert type="info" showIcon message={`请演示一次：你通常在哪里确认“${effectName ?? '这项已确认的业务结果'}”是否发生。`} />}
     {task?.recording_purpose === 'RECOVERY' && <Alert type="info" showIcon message="请演示一次：你通常怎样恢复这项业务操作改变的状态。" />}
     {task ? <section className="recording-workspace"><h2>{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</h2>
-      <dl className="recording-facts"><div><dt>目标应用</dt><dd>{project.name || '当前应用'}</dd></div><div><dt>操作账号</dt><dd>{identityName(subjectId)}</dd></div><div><dt>资源所属账号</dt><dd>{identityName(ownerId)}</dd></div></dl>
+      <dl className="recording-facts centered-fact-groups"><div><dt>目标应用</dt><dd>{project.name || '当前应用'}</dd></div><div><dt>操作账号</dt><dd>{identityName(subjectId)}</dd></div><div><dt>资源所属账号</dt><dd>{identityName(ownerId)}</dd></div></dl>
       {!recording && <p className="editorial-muted">{task.why_now}</p>}
       {!recording && distinctOwner && <Checkbox checked={ownerConfirmed} disabled={busy} onChange={(event) => setOwnerConfirmed(event.target.checked)}>我确认本次演示的测试资源属于“{identityName(ownerId)}”</Checkbox>}
 </section>
       : <Alert type="info" showIcon message="要准备新的业务演示，请返回检查准备，按当前任务选择的账号和资源继续。" />}
     {recording && !reviewable && recording.state !== 'COMPLETED' && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
-    {reviewable && recording && <details><summary>解释这次录制</summary><AssistantPanel projectId={project.project_id} surface="recording-review" focus={{ recording_id: recording.recording_id }} title="这次录制的步骤用途" actionLabel="解读这次录制" /></details>}
+    {reviewable && recording && <AgentWorkflowEntry projectId={project.project_id} stage="RECORDING" recordingId={recording.recording_id}/>}
     {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
     {reviewable && draft && recordingPurpose !== 'TARGET' && <section><h2>{recordingPurpose === 'OBSERVATION' ? '哪一步用于确认业务结果？' : '哪一步用于恢复业务状态？'}</h2>
       {supplementChoices.length > 1 && <Radio.Group value={draft.target_step_id} disabled={busy} onChange={(event) => void review({ schema_version: '1', operation: 'CONFIRM_TARGET_STEP', step_id: event.target.value })}>
@@ -310,6 +312,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       <Alert type={canFinalize ? 'success' : 'warning'} showIcon message={canFinalize ? '业务含义已确认，可以保存本次补录' : supplementChoices.length ? '请选择符合这次业务目的的步骤' : '本次补录没有可用的业务步骤，请返回检查准备并重新演示'} />
     </section>}
     {(message || syncError) && <TaskReceipt message={message ?? '录制事实正在核对'} pending={syncError} onRetry={syncError ? () => void refreshPage() : undefined}/>}
+    {recordingSync.retrying && <p role="status" className="editorial-muted">暂时无法读取录制进度，正在重试。可以返回检查准备，已有录制继续保留。</p>}
     {recording?.state === 'COMPLETED' && draft && <section className="recording-summary"><h2>已保存的业务流程</h2><p>{recording.action?.display_name ?? '已确认动作'} · 账号：{recording.test_identity?.label ?? '已准备测试账号'}</p></section>}
     <TaskActionBar back={{ label: '返回检查准备', onClick: onBack, disabled: busy }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={primaryAction ? { ...primaryAction, disabled: Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled)) } : undefined} />
   </EditorialPage>

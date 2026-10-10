@@ -6,7 +6,7 @@ from pathlib import Path
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.artifacts.checks.check_packages import reject_check_links, read_check_bytes
-from product.protocols.preparation.proof_sources import ProofPreflightReport, proof_bytes
+from product.protocols.preparation.proof_sources import read_preflight_report, proof_bytes
 
 
 class ProofReportStore:
@@ -41,4 +41,4 @@ class ProofReportStore:
         raw = read_check_bytes(self._path(digest))
         if hashlib.sha256(raw).hexdigest() != digest:
             raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, '预检查报告指纹不一致')
-        return ProofPreflightReport.model_validate_json(raw)
+        return read_preflight_report(raw)

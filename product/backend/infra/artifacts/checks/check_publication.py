@@ -88,6 +88,8 @@ class CheckPublisher:
                 ):
                     raise JiejianError(ErrorCode.ARTIFACT_FENCE, "Runner 结果关联信息不匹配")
                 self._validate_receipt_state(work, package)
+                self._index_rules(work,package,digest)
+                work.commit()
                 return package
             self._validate_job(work, package)
             validate_check_decisions(package)
@@ -131,9 +133,16 @@ class CheckPublisher:
             attempt=result.attempt, fencing_token=result.fencing_token, request_hash=result.request_hash,
             result_hash=manifest.result_hash, manifest_hash=hashlib.sha256(manifest_raw).hexdigest(),
             published_at_us=manifest.published_at_us))
+        self._index_rules(work,package,hashlib.sha256(manifest_raw).hexdigest())
         append_job_event(work, job=changed[0], event_type=JobEventType.JOB_SUCCEEDED,
             source_state=JobState.RUNNING, target_state=JobState.SUCCEEDED, occurred_at_us=now,
             metadata={"attempt": result.attempt, "fencing_token": result.fencing_token})
+
+    @staticmethod
+    def _index_rules(work,package,manifest_hash):
+        run=work.runs.get(package.result.run_id)
+        work.rule_history.index(project_id=package.request.project_id,run_id=run.run_id,manifest_hash=manifest_hash,created_at_us=run.created_at_us,
+            permissions=tuple((case.case_id,case.permission) for action in package.request.actions for case in action.cases))
 
     def _validate_receipt_state(self, work, package):
         result = package.result

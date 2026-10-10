@@ -51,6 +51,12 @@ class PreparationService:
         self._bindings = bindings
         self._uow_factory = uow_factory
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
+        self._interruption_reader=None
+
+    def bind_interruption_reader(self,reader):
+        """只读取已持久化的资源中断，不创建第二份READY或执行恢复。"""
+        if self._interruption_reader is not None and self._interruption_reader!=reader:raise ValueError('准备中断读取者已装配')
+        self._interruption_reader=reader
 
     def evidence_details(self, project_id: str, action_id: str):
         """只解释已保存材料及能力声明；不改变准备状态或创建执行计划。"""
@@ -120,6 +126,7 @@ class PreparationService:
 
     def get(self, project_id: str) -> PreparationView:
         boundary = self._business_boundaries.view(project_id)
+        interruptions=() if self._interruption_reader is None else self._interruption_reader(project_id)
         identities = tuple(item for item in self._test_identities.list(project_id)
                            if item.project_id == project_id)
         actor_names = {(item.actor_id, item.revision): item.display_name for item in boundary.actors}
@@ -144,6 +151,13 @@ class PreparationService:
                 technical = technical.model_copy(update={
                     "recovery": PreparationItemView(status=PreparationStatus.NOT_REQUIRED)
                 })
+            affected=tuple(item for item in interruptions if action.action_id in item['affected_action_ids'])
+            if affected:
+                codes=tuple(sorted({item['reason'] for item in affected}))
+                technical=technical.model_copy(update={'resources':tuple(item.model_copy(update={
+                    'status':PreparationStatus.BLOCKED,'reason_codes':tuple(dict.fromkeys((*item.reason_codes,*codes)))})
+                    if any(gap['reason']=='REFERENCE_CAPTURE_IN_PROGRESS' or gap['owner_identity_id']==item.owner_test_identity_id for gap in affected) else item
+                    for item in technical.resources)})
             expected_owners = {item.owner_slot_id for item in contract.resources}
             expected_effects = {item.effect_id for item in contract.effect_evidence}
             assignments = {item.requirement.slot_id: item.test_identity_id for item in identity_view.slots}

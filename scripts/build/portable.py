@@ -37,85 +37,20 @@ _TEXT_SUFFIXES = frozenset(
     {".cfg", ".cmd", ".ini", ".json", ".pth", ".ps1", ".py", ".toml", ".txt"}
 )
 
-_START_CMD = """@echo off\r
-setlocal\r
-set "JIEJIAN_RELEASE_ROOT=%~dp0"\r
-"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%JIEJIAN_RELEASE_ROOT%runtime\\start.ps1" %*\r
-set "JIEJIAN_EXIT_CODE=%ERRORLEVEL%"\r
-endlocal & exit /b %JIEJIAN_EXIT_CODE%\r
+_START_PS1 = Path(__file__).with_name('portable_start.ps1').read_text(encoding='utf-8-sig')
+_USER_GUIDE = Path(__file__).with_name('portable_guide.txt').read_text(encoding='utf-8')
+
+_README = f"""界鉴 {RELEASE_VERSION}（Windows x64 便携版）
+
+启动：完整解压后双击“界鉴.exe”。所有程序已在发布前构建，启动不会安装依赖、下载或重新编译。
+重复双击会回到正在运行的界面。关闭界面窗口后也可双击恢复；安全退出请使用界面“设置”中的退出入口。
+app 为固定产品，runtime 为固定运行环境，samples 为唯一示例模板，docs 为使用说明与许可。
+var 保存项目、检查证据、设置与运行数据。它在首次启动时建立，请保留并定期备份。
+更新：安全退出后更换完整程序组件，保留 var。换电脑需要重新登录，Windows 凭据不会随文件夹迁移。
+完整版提供数字展馆官方示例；nosamples 版适用于只接入自己应用的用户。
+详细使用、更新与问题处理见 docs/使用说明.txt；启动阶段日志在 var/logs/launcher.log。
 """
 
-_START_PS1 = r'''# Windows x64 Portable 启动器：只解析包内运行时并进入正式 CLI serve，不执行安装、更新或构建。
-
-[CmdletBinding()]
-param([switch]$NoOpen)
-
-$ErrorActionPreference = "Stop"
-$releaseRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$releasePath = Join-Path $PSScriptRoot "release.json"
-$pythonRoot = Join-Path $PSScriptRoot "python"
-$python = Join-Path $pythonRoot "python.exe"
-$playwrightRoot = Join-Path $PSScriptRoot "playwright"
-$frontend = Join-Path $pythonRoot "Lib\site-packages\product\frontend\dist"
-$varDir = Join-Path $releaseRoot "var"
-$temporary = Join-Path $varDir "temp"
-
-if (-not (Test-Path -LiteralPath $releasePath -PathType Leaf)) { throw "Portable release.json 缺失" }
-$release = Get-Content -LiteralPath $releasePath -Raw -Encoding UTF8 | ConvertFrom-Json
-if ([string]$release.schema_version -ne "2" -or [string]$release.product -ne "JieJian Web V1" -or [string]$release.platform -ne "windows" -or [string]$release.architecture -ne "x64" -or [string]$release.runtime_layout_version -ne "2") { throw "Portable release.json 无效" }
-if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "node\node.exe") -PathType Leaf)) { throw "Portable Node 缺失" }
-if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot "node\node.exe") -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$release.node_sha256) { throw "Portable Node 指纹不一致" }
-if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Portable Python 缺失" }
-if (-not (Test-Path -LiteralPath (Join-Path $frontend "index.html") -PathType Leaf)) { throw "Portable 前端缺失" }
-if (-not (Test-Path -LiteralPath $playwrightRoot -PathType Container)) { throw "Portable Playwright 浏览器根缺失" }
-$chromium = @(Get-ChildItem -LiteralPath $playwrightRoot -Recurse -Filter "chrome.exe" -File | Where-Object { $_.FullName -match "[\\/]chromium-[^\\/]+[\\/]chrome-win[^\\/]*[\\/]chrome\.exe$" })
-if ($chromium.Count -ne 1) { throw "Portable Chromium 候选不唯一" }
-
-New-Item -ItemType Directory -Path $temporary -Force | Out-Null
-$env:JIEJIAN_PYTHON_EXECUTABLE = [IO.Path]::GetFullPath($python)
-$env:JIEJIAN_PYTHON_ENVIRONMENT_PATH = [IO.Path]::GetFullPath($pythonRoot)
-$env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE = "uv-managed"
-$env:JIEJIAN_RELEASE_ROOT = $releaseRoot
-$env:JIEJIAN_RUNTIME_MODE = "portable"
-$env:JIEJIAN_VAR_DIR = [IO.Path]::GetFullPath($varDir)
-$env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($frontend)
-$env:JIEJIAN_NODE_EXECUTABLE = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "node\node.exe"))
-$env:JIEJIAN_NODE_VERSION = [string]$release.node_version
-$env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = [IO.Path]::GetFullPath($chromium[0].FullName)
-$env:PLAYWRIGHT_BROWSERS_PATH = [IO.Path]::GetFullPath($playwrightRoot)
-$env:PYTHONDONTWRITEBYTECODE = "1"
-$env:PYTHONNOUSERSITE = "1"
-$env:PYTHONUTF8 = "1"
-$env:PYTHONIOENCODING = "utf-8"
-$env:TEMP = [IO.Path]::GetFullPath($temporary)
-$env:TMP = [IO.Path]::GetFullPath($temporary)
-$env:PATH = "$pythonRoot;$env:SystemRoot\System32"
-Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
-Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
-Remove-Item Env:JIEJIAN_PROJECT_ROOT -ErrorAction SilentlyContinue
-Remove-Item Env:JIEJIAN_RUNTIME_FINGERPRINT -ErrorAction SilentlyContinue
-Set-Location -LiteralPath $varDir
-
-$identityProbe = "from product.backend.infra.runtime.process.controlled.identity import python_environment_report; r=python_environment_report(); assert r['ok'], r['issues']; print(r['runtime_fingerprint'])"
-$fingerprint = (& $python -B -c $identityProbe | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $fingerprint -notmatch "^[0-9a-f]{64}$") { throw "Portable Python 运行身份校验失败" }
-$env:JIEJIAN_RUNTIME_FINGERPRINT = $fingerprint
-
-$arguments = @("-B", "-m", "product.backend.cli", "--var-dir", $varDir, "serve", "--host", "127.0.0.1", "--port", "8765", "--frontend-dir", $frontend)
-$sampleRoot = Join-Path $releaseRoot "samples\web\collaboration_space"
-if (Test-Path -LiteralPath (Join-Path $sampleRoot "sample.json") -PathType Leaf) { $arguments += @("--official-sample-root", $sampleRoot) }
-if ($NoOpen) { $arguments += "--no-open" } else { $arguments += "--open" }
-& $python @arguments
-exit $LASTEXITCODE
-'''
-
-_README = f"""界鉴 Web V1 {RELEASE_VERSION}（Windows x64 Portable）
-
-启动：双击根目录 start.cmd。首次启动会在同目录创建 var，用于数据库、日志和运行证据。
-本发行包已经包含 Python、Node、产品依赖、前端和 Chromium；启动不需要安装 Conda、uv、Node、pnpm，也不会联网下载依赖。
-请保持 runtime 目录完整。需要迁移时，在界鉴安全退出后整体移动或复制整个 {RELEASE_NAME} 目录。
-完整版包含官方“协作空间”示例；nosamples 版不包含官方示例，但仍可接入你自己的本地 Web 应用。
-"""
 
 
 def _arguments() -> argparse.Namespace:
@@ -126,6 +61,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--python-source", type=Path, required=True)
     parser.add_argument("--playwright-source", type=Path, required=True)
     parser.add_argument("--node-executable", type=Path, required=True)
+    parser.add_argument("--launcher-compiler", type=Path, required=True)
     parser.add_argument("--samples-source", type=Path, required=True)
     parser.add_argument("--uv", type=Path, required=True)
     parser.add_argument("--uv-cache", type=Path, required=True)
@@ -301,21 +237,59 @@ def _metadata(python: Path, playwright_root: Path, environment: dict[str, str]) 
     }
 
 
+def _place_product(base: Path, python: Path) -> None:
+    """移动已安装的同一 Wheel；相对 .pth 让主进程和全部子进程导入同一 app，不使用 PYTHONPATH。"""
+    site_packages = python.parent / 'Lib' / 'site-packages'
+    distributions = tuple(site_packages.glob('jiejian-*.dist-info'))
+    if len(distributions) != 1 or not (site_packages / 'product').is_dir():
+        raise RuntimeError('Portable 必须包含唯一已安装产品')
+    app = base / 'app'
+    app.mkdir()
+    for path in (site_packages / 'product', distributions[0]):
+        shutil.move(str(path), app / path.name)
+    (site_packages / 'jiejian-app.pth').write_text('../../../../app\n', encoding='ascii')
+    # Wheel console-script 带有构建时解释器路径；便携入口始终用包内 python -m，不交付这个失效副本。
+    for name in ('jiejian.exe', 'jiejian-script.py'):
+        (python.parent / 'Scripts' / name).unlink(missing_ok=True)
+
+
+def _compile_launcher(base: Path, compiler: Path, toolchain: dict, environment: dict[str, str]) -> None:
+    """构建一次 Win32 薄入口，运行时仅依赖 Windows 自带 DLL。"""
+    source = Path(__file__).with_name('launcher.c')
+    env = {**environment, 'PATH': os.pathsep.join((str(compiler.parent), str(Path(os.environ['SYSTEMROOT']) / 'System32')))}
+    config = toolchain['launcher']
+    target = _run((compiler, '-dumpmachine'), cwd=base, environment=env).strip()
+    version = _run((compiler, '-dumpfullversion'), cwd=base, environment=env).strip()
+    if target != config['target'] or version != config['version']:
+        raise RuntimeError('启动器编译器与 toolchain.json 的版本或目标不一致')
+    _run((compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-municode', '-mwindows',
+          '-static-libgcc', '-s', '-Wl,--no-insert-timestamp', '-finput-charset=UTF-8',
+          source, '-o', base / '界鉴.exe', '-lshell32', '-luser32', '-lgdi32'), cwd=base, environment=env)
+    import re
+    objdump = Path(_run((compiler, '-print-prog-name=objdump'), cwd=base, environment=env).strip())
+    if not objdump.is_absolute() or not objdump.is_file():
+        raise RuntimeError('启动器工具链缺少可定位的 objdump')
+    imports = _run((objdump, '-p', base / '界鉴.exe'), cwd=base, environment=env)
+    names = {name.casefold() for name in re.findall(r'DLL Name:\s*(\S+)', imports)}
+    if not names or any(name not in {'kernel32.dll', 'msvcrt.dll', 'ucrtbase.dll', 'user32.dll', 'shell32.dll', 'gdi32.dll', 'advapi32.dll'} and not name.startswith('api-ms-win-crt-') for name in names):
+        raise RuntimeError('原生入口依赖了非 Windows 系统 DLL')
+
+
 def _write_runtime_files(base: Path, metadata: dict[str, str]) -> None:
-    (base / "start.cmd").write_bytes(_START_CMD.encode("ascii"))
     (base / "README.txt").write_bytes(b"\xef\xbb\xbf" + _README.encode("utf-8"))
-    runtime = base / "runtime"
-    (runtime / "start.ps1").write_bytes(
+    app = base / "app"
+    app.mkdir(exist_ok=True)
+    (app / "start.ps1").write_bytes(
         b"\xef\xbb\xbf" + _START_PS1.replace("\n", "\r\n").encode("utf-8")
     )
     release = {
-        "schema_version": "2",
+        "schema_version": "3",
         "product": "JieJian Web V1",
         "version": RELEASE_VERSION,
         "package_version": metadata["wheel_version"],
         "platform": "windows",
         "architecture": "x64",
-        "runtime_layout_version": "2",
+        "runtime_layout_version": "3",
         "python_version": metadata["python_version"],
         "playwright_version": metadata["playwright_version"],
         "chromium_revision": metadata["chromium_revision"],
@@ -323,10 +297,17 @@ def _write_runtime_files(base: Path, metadata: dict[str, str]) -> None:
         "node_sha256": metadata["node_sha256"],
     }
     release = PortableReleaseManifest.model_validate(release).model_dump(mode='json')
-    (runtime / "release.json").write_text(
+    (app / "release.json").write_text(
         json.dumps(release, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
     )
+    docs = base / 'docs'
+    docs.mkdir(exist_ok=True)
+    docs.joinpath('使用说明.txt').write_text(_README + '\n' + _USER_GUIDE, encoding='utf-8-sig')
+    docs.joinpath('版本说明.txt').write_text(f'界鉴 {RELEASE_VERSION}\n\n本版本包含本地 Web 应用接入、规则审阅、材料准备、权限检查、原题复验与统一历史。\n程序在发布前构建；根目录的界鉴.exe是日常入口。\n', encoding='utf-8-sig')
+    docs.joinpath('第三方许可.txt').write_text('第三方许可证随对应固定组件保留：\nPython：runtime/python 中的 LICENSE 文件。\nNode：runtime/node/LICENSE.txt。\nChromium：runtime/playwright 中各组件的 LICENSE、LICENSES 和 credits 文件。\nPython 依赖：runtime/python/Lib/site-packages 下各 *.dist-info 的 licenses、LICENSE 或 COPYING。\nMiSans 字体：app/product/frontend/dist/assets 中的 MiSans-LICENSE PDF。\n原生启动器：本目录保留 MinGW-w64-COPYING、MinGW-w64-NOTICES、GCC-GPL-3.0、GCC-Runtime-Exception-3.1 与 Conda-forge-GCC-COPYING；来源见 SOURCES.txt。\n', encoding='utf-8-sig')
+    for license_file in Path(__file__).with_name('licenses').glob('*.txt'):
+        shutil.copyfile(license_file, docs / license_file.name)
 
 
 def _portable_environment(base: Path, python: Path, playwright_root: Path) -> dict[str, str]:
@@ -354,7 +335,7 @@ def _portable_environment(base: Path, python: Path, playwright_root: Path) -> di
             "JIEJIAN_RUNTIME_MODE": "portable",
             "JIEJIAN_VAR_DIR": str((base / "var").resolve()),
             "JIEJIAN_FRONTEND_DIST": str(
-                (python.parent / "Lib" / "site-packages" / "product" / "frontend" / "dist").resolve()
+                (base / "app" / "product" / "frontend" / "dist").resolve()
             ),
             "JIEJIAN_PLAYWRIGHT_EXECUTABLE": str(chromium[0].resolve()),
             "PLAYWRIGHT_BROWSERS_PATH": str(playwright_root.resolve()),
@@ -387,27 +368,27 @@ def _validate_tree_content(base: Path, project_root: Path) -> None:
         text = path.read_text(encoding="utf-8-sig", errors="ignore")
         if any(marker in text for marker in repository_markers):
             raise RuntimeError(f"Portable Tree 泄漏构建仓库绝对路径: {path.relative_to(base)}")
-    site_packages = base / "runtime" / "python" / "Lib" / "site-packages"
-    if tuple(site_packages.glob("jiejian-*.dist-info/direct_url.json")):
+    if tuple(base.rglob("jiejian-*.dist-info/direct_url.json")):
         raise RuntimeError("Portable Tree 仍包含构建 Wheel 的 direct_url 元数据")
 
 
 def _validate_base(base: Path, project_root: Path) -> None:
     python = base / "runtime" / "python" / "python.exe"
     playwright_root = base / "runtime" / "playwright"
-    frontend = python.parent / "Lib" / "site-packages" / "product" / "frontend" / "dist" / "index.html"
+    frontend = base / "app" / "product" / "frontend" / "dist" / "index.html"
     required = (
-        base / "start.cmd",
+        base / "界鉴.exe",
         base / "README.txt",
-        base / "runtime" / "start.ps1",
-        base / "runtime" / "release.json",
+        base / "app" / "start.ps1",
+        base / "app" / "release.json",
+        base / "docs" / "使用说明.txt",
         python,
         frontend,
         base / "runtime" / "node" / "node.exe",
     )
     if not all(path.is_file() for path in required):
         raise RuntimeError("Base Portable Tree 缺少必需文件")
-    if set(path.name for path in base.iterdir()) != {"README.txt", "runtime", "start.cmd"}:
+    if set(path.name for path in base.iterdir()) != {"README.txt", "runtime", "app", "docs", "界鉴.exe"}:
         raise RuntimeError("Base Portable Tree 根目录包含职责外文件")
     environment = _portable_environment(base, python, playwright_root)
     probe = (
@@ -492,10 +473,11 @@ def build(arguments: argparse.Namespace) -> None:
     for path in (
         arguments.wheel,
         arguments.node_executable,
+        arguments.launcher_compiler,
         arguments.python_source / "python.exe",
         arguments.uv,
         arguments.toolchain,
-        arguments.samples_source / "web" / "collaboration_space" / "sample.json",
+        arguments.samples_source / "digital_gallery" / "sample.json",
     ):
         if not path.resolve().is_file():
             raise RuntimeError(f"Portable 构建输入缺失: {path}")
@@ -551,7 +533,9 @@ def build(arguments: argparse.Namespace) -> None:
             "Portable Wheel 版本与产品版本真源不一致: "
             f"expected={RELEASE_VERSION} actual={metadata['wheel_version']}"
         )
+    _place_product(base, python)
     _write_runtime_files(base, metadata)
+    _compile_launcher(base, arguments.launcher_compiler.resolve(), toolchain, environment)
     _validate_base(base, project_root)
 
     full = artifacts / FULL_ARCHIVE

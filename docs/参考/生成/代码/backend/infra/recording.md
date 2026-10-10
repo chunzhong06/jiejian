@@ -94,7 +94,7 @@
 - `class BoundedRouteTransport`
 - `BoundedRouteTransport.fetch(self, request, context, guard) -> BoundedHTTPResponse`
 
-静态import / dot-source：`__future__`、`dataclasses`、`httpx`、`playwright.sync_api`、`product.backend.core.errors`、`product.backend.infra.execution.web.adapter`、`product.protocols.web.target`、`typing`
+静态import / dot-source：`__future__`、`dataclasses`、`httpx`、`playwright.sync_api`、`product.backend.core.errors`、`product.backend.infra.execution.web.adapter`、`product.protocols.web.target`、`typing`、`urllib.parse`
 
 ### `product/backend/infra/recording/ui_capture.py`
 

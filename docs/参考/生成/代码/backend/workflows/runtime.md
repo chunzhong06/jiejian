@@ -60,7 +60,7 @@
 - `class NodeRuntimeSetup`
 - `NodeRuntimeSetup.preview(self, project_id, entry, port, revision, consent_source_read)`
 - `NodeRuntimeSetup.start(self, project_id, entry, port, revision, preview_fingerprint, operation_id, consent_execute, work)`
-- `NodeRuntimeSetup.state(self, project_id)`
+- `NodeRuntimeSetup.state(self, project_id, verify_source)`
 - `NodeRuntimeSetup.operation(self, project_id, operation_id)`
 - `NodeRuntimeSetup.cancel(self, project_id, operation_id)`
 - `NodeRuntimeSetup.owns_project(self, project_id)`

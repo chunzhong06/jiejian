@@ -13,6 +13,6 @@ export function FrontendBuildNotice({identity, blocked, onReload = () => window.
   return <section className="check-activity-toast" aria-label="页面资源更新">
     <div className="check-activity-toast-heading"><span>页面资源有更新</span><Button type="text" aria-label="关闭页面更新提示" icon={<CloseOutlined/>} onClick={() => setDismissed(identity!.build_id!)}/></div>
     <p>{blocked ? '当前有未完成操作或检查，请完成后再刷新页面。' : '当前页面仍使用上一份资源，刷新后可看到新界面。'}</p>
-    <div className="check-activity-toast-actions"><Button type="link" disabled={blocked} onClick={() => {if (!blocked) onReload()}}>刷新页面</Button></div>
+    <div className="notification-actions"><Button type="link" disabled={blocked} onClick={() => {if (!blocked) onReload()}}>刷新页面</Button></div>
   </section>
 }

@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from product.backend.workflows.runtime.ports import RuntimeReference
-    from product.protocols.checks.json_check_runtime import FrozenJsonProofSource
+    from product.protocols.checks.json_check_runtime import FrozenProofSource
 import hashlib
 import json
 from urllib.parse import parse_qsl, urlsplit
@@ -75,7 +75,7 @@ class CheckRuntimeBuilder:
         self._json_sources_reader = None
 
     def bind_runtime_readers(self, *, reference_reader: Callable[[str], RuntimeReference | None],
-                             sources_reader: Callable[[str], tuple[FrozenJsonProofSource, ...]]):
+                             sources_reader: Callable[[str], tuple[FrozenProofSource, ...]]):
         """运行 provider 完成后连接唯一读取关系；不查询运行或冻结材料。"""
         if (self._runtime_reference_reader is not None and self._runtime_reference_reader != reference_reader) or (self._json_sources_reader is not None and self._json_sources_reader != sources_reader):
             raise ValueError("检查运行读取者已经连接")
@@ -89,6 +89,9 @@ class CheckRuntimeBuilder:
         if work is None:
             with self._uow_factory() as current:
                 return self.build(project_id, work=current)
+        from product.backend.workflows.preparation.proofs.capture_jobs import capture_recovery_gaps
+        capture_gaps=capture_recovery_gaps(self._var_dir,work,project_id)
+        if capture_gaps:raise _incomplete(capture_gaps[0]['reason'])
         boundary = self._boundaries.view(project_id, work=work)
         understanding = work.application_understanding.get(project_id)
         if understanding is None or not understanding.source_fingerprint or not understanding.confirmed_endpoint:
@@ -205,24 +208,24 @@ class CheckRuntimeBuilder:
                 binding=binding.binding.model_dump(mode="json"), verification=verification[identity_id].model_dump(mode="json") if identity_id in verification else None))
         for config in configs:
             config["steps"] = derive_target_classifiers(config, specs, identities)
-        bundle = CheckRuntimeBundle.model_validate_json(json.dumps(dict(project_id=project_id,
+        payload=dict(project_id=project_id,
             source_fingerprint=understanding.source_fingerprint, target=target.model_dump(mode="json"),
-            budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))), strict=True)
+            budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))
         reference = None if self._runtime_reference_reader is None else self._runtime_reference_reader(project_id)
         if reference is not None:
-            if reference.source_fingerprint!=bundle.source_fingerprint:
+            if reference.source_fingerprint!=understanding.source_fingerprint:
                 raise _incomplete('RUNTIME_SOURCE_NOT_LOADED')
-            if isinstance(reference,NodeRuntimeReference) and bundle.target.base_url!=f'http://127.0.0.1:{reference.port}':
+            if isinstance(reference,NodeRuntimeReference) and target.base_url!=f'http://127.0.0.1:{reference.port}':
                 raise _incomplete('RUNTIME_ENDPOINT_MISMATCH')
             model=NodeCheckRuntimeBundle if isinstance(reference,NodeRuntimeReference) else ControlledCheckRuntimeBundle
             if isinstance(reference,NodeRuntimeReference) and self._json_sources_reader is not None:
                 sources = self._json_sources_reader(project_id)
                 if sources:
-                    from product.protocols.checks.json_check_runtime import ManagedCheckRuntimeBundle
-                    return ManagedCheckRuntimeBundle(**bundle.model_dump(exclude={'schema_version'}),
-                        runtime_reference=reference,json_sources=sources)
-            return model(**bundle.model_dump(exclude={"schema_version"}), runtime_reference=reference)
-        return bundle
+                    from product.protocols.checks.json_check_runtime import ProofCheckRuntimeBundle
+                    return ProofCheckRuntimeBundle.model_validate_json(json.dumps(payload|dict(schema_version='6',
+                        runtime_reference=reference.model_dump(mode='json'),json_sources=[item.model_dump(mode='json') for item in sources])),strict=True)
+            return model.model_validate_json(json.dumps(payload|dict(runtime_reference=reference.model_dump(mode='json'))),strict=True)
+        return CheckRuntimeBundle.model_validate_json(json.dumps(payload),strict=True)
 
     def _check_binding(self, work, binding, action, understanding):
         reasons = self._source_inspector.reasons(work, binding, action, understanding)
@@ -253,7 +256,9 @@ class CheckRuntimeBuilder:
 
 def derive_target_classifiers(config, specs, identities):
     """只派生新检查快照的 TARGET 分类；历史录制 Flow 与 SETUP 原样保留。"""
-    action = CheckActionConfig.model_validate_json(json.dumps(config), strict=True)
+    from product.protocols.checks.json_check_runtime import CurrentCheckActionConfig
+    model=CurrentCheckActionConfig if any(item['effect_kind']=='FILE_CONTENT_DELIVERY' for item in config['proofs']) else CheckActionConfig
+    action=model.model_validate_json(json.dumps(config),strict=True)
     try:
         parsed_specs = {key: ObserverSpec.model_validate_json(json.dumps(value), strict=True) for key, value in specs.items()}
     except ValueError:

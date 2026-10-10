@@ -46,7 +46,7 @@ export function EvidenceMaterials({ projectId, actionId, onBack }: {
   const effect = current?.effects.find(item => item.effect_id === selected)
   const snapshotChanged = effect?.reason_codes.includes('EVIDENCE_SNAPSHOT_CHANGED')
   if (supplemental && current) return <SupplementalMaterials key={`${projectId}:${actionId}`} projectId={projectId} actionId={actionId} actionRevision={current.action_revision} actionLabel={current.action_label} onBack={() => setSupplemental(false)}/>
-  return <EditorialPage label="证明要求与材料">
+  return <EditorialPage label="证明要求与材料" width={!current?.effects.length ? 'summary' : undefined}>
     <div className="evidence-material-page-actions"><Button icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>返回准备材料</Button><Button icon={<ReloadOutlined aria-hidden="true" />} loading={loading} onClick={() => setRevision(value => value + 1)}>刷新材料详情</Button></div>
     <EditorialHeader eyebrow="当前工作 / 证明材料" title="看清每项结果的证明依据"><p className="editorial-muted">查看已保存的材料、来源声明与当前缺口。</p></EditorialHeader>
     <h2 className="evidence-material-action-title" ref={title} tabIndex={-1}>{current?.action_label ?? '证明要求与材料'}</h2>

@@ -1,6 +1,7 @@
 /* 录制采集过程：显示浏览器采集阶段、控制开始/停止并恢复后台事件游标。 */
 
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 import { Alert, Space, Typography } from 'antd'
 import type { RecordingDto, RecordingJobDto } from '../../api/preparation/recordings'
 import type { JobEventDto } from '../../api/preparation/jobs'
@@ -31,7 +32,7 @@ export function RecordingCaptureCard({ recording, onRefresh }: {
     ? captureGuide
     : phase === 'CAPTURING'
       ? captureGuide
-      : <Alert type={recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在启动有界 Chromium，请稍候。' : phase === 'STOPPING' ? `正在整理刚才的操作并寻找真正执行“${actionName}”的请求…` : recording.state === 'CANCELLED' ? '本次事件已丢弃，没有生成流程草稿。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
+      : <Alert type={recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在打开用于演示业务的独立浏览器，请稍候。' : phase === 'STOPPING' ? `正在整理刚才的操作，确认哪一步完成了“${actionName}”…` : recording.state === 'CANCELLED' ? '本次录制已丢弃，没有生成可用的业务流程。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
   return <section className="recording-capture"><Space direction="vertical" className="full-width" size="middle">
     {phaseContent}
     <RecordingProgress job={recording.job ?? undefined} onRefresh={onRefresh} />
@@ -39,9 +40,10 @@ export function RecordingCaptureCard({ recording, onRefresh }: {
 }
 
 function RecordingProgress({ job, onRefresh }: { job?: RecordingJobDto; onRefresh: () => void }) {
+  const visible = useContext(WorkPageVisible)
   const [event, setEvent] = useState<JobEventDto | null>(null)
   useEffect(() => {
-    if (!job?.job_id || ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(job.state)) return
+    if (!visible || !job?.job_id || ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(job.state)) return
     const stored = browserState.readJobCursor(job.job_id)
     const source = new EventSource(`/api/jobs/${job.job_id}/events?after=${stored}`)
     source.onmessage = (message) => {
@@ -52,7 +54,7 @@ function RecordingProgress({ job, onRefresh }: { job?: RecordingJobDto; onRefres
     }
     source.onerror = () => undefined
     return () => source.close()
-  }, [job?.job_id, job?.state])
+  }, [job?.job_id, job?.state, visible])
   if (!job) return null
   return <Space wrap><StatusBadge kind="lifecycle">处理状态：{lifecycleLabel(job.state)}</StatusBadge>{event && <Typography.Text type="secondary">状态已更新</Typography.Text>}</Space>
 }

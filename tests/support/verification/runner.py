@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from tests.support.verification.catalog import inventory, plan, source_files, fingerprint
+from tests.support.verification.catalog import inventory, plan, source_files, fingerprint, ui_scopes
 from tests.support.verification.reporting import write_report
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +63,11 @@ def execute(root: Path, output: Path, specification: dict, previous: dict | None
     else:
         report["status"] = "PASSED"
     report["seconds"] = round(time.time() - report["started_at"], 3)
+    report["summary"] = {
+        "executed_steps": sum("reused_from" not in item for item in report["steps"]),
+        "reused_steps": sum("reused_from" in item for item in report["steps"]),
+        "execution_seconds": round(sum(item.get("seconds", 0) for item in report["steps"]), 3),
+    }
     write_report(destination, report)
     print(f"验证状态：{report['status']}；报告：{destination}", flush=True)
     return 0 if report["status"] == "PASSED" else 1
@@ -74,20 +79,21 @@ def main() -> int:
     parser.add_argument("--level", choices=["L1", "L2", "L3", "L4"], default="L2")
     parser.add_argument("--area", action="append", default=[])
     parser.add_argument("--changed", action="append", default=[])
+    parser.add_argument("--ui", action="append", default=[], help="浏览器场景：core/process/materials/references/results/history/all，可重复")
     parser.add_argument("--l5", action="append", choices=["official", "ordinary", "validation", "competition", "portable", "windows"], default=[])
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--step", action="append", default=[], help="仅执行指定计划步骤；报告明确标为局部证据")
     options = parser.parse_args()
     if options.action == "browser":
         from tests.acceptance.ui.review import run
-        return run(ROOT)
+        return run(ROOT, scopes=ui_scopes(ROOT, options.ui, []))
     if options.action == "inventory":
         value = inventory(ROOT)
         destination = ROOT / "var/audit/testing/inventory.json"
         write_report(destination, value)
         print(f"测试文件：{len(value['files'])}；能力清单：{destination}")
         return 0
-    specification = plan(ROOT, level=options.level, areas=options.area, changed=options.changed, l5=options.l5)
+    specification = plan(ROOT, level=options.level, areas=options.area, changed=options.changed, l5=options.l5, ui=options.ui)
     if options.step:
         names = {task["id"] for task in specification["tasks"]}
         if set(options.step) - names:

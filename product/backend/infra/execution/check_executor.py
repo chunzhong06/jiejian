@@ -185,6 +185,11 @@ class CheckExecutor:
             if prior is None or prior.state != "CONFIRMED":
                 unique_observations[observation_key] = item
         observations = tuple(unique_observations.values())
+        evidence_fields={}
+        if self.bundle.schema_version=='6':
+            from product.backend.infra.observers.checks.sealed_facts import finalize_facts
+            observations,facts,references=finalize_facts(observations,self.observers._evidence_sources)
+            evidence_fields=dict(detailed=True,business_facts=facts,fact_references=references)
         outcome = CheckCaseOutcome(execution_outcome=execution, http_status=status,
             actual_identity_status=identity, baseline_trusted=baseline, recovery_verified=recovered,
             run_correlated=correlated, resource_correlated=correlated)
@@ -195,7 +200,7 @@ class CheckExecutor:
         document = seal_check_evidence(run_id=self.input.run_id, job_id=self.input.job_id,
             attempt=self.input.attempt, action_id=action.action_id, action_revision=action.action_revision,
             request_hash=self.input.request_hash, config_hash=self.input.config_hash, case=case,
-            outcome=outcome, observations=tuple(observations), trace=self.observers.trace(configured, case))
+            outcome=outcome, observations=tuple(observations), trace=self.observers.trace(configured, case),**evidence_fields)
         result = CheckCaseResult(case_id=case.case_id, action_id=action.action_id, verdict=decision.verdict,
             reason_codes=decision.reason_codes, evidence_ids=(document.evidence_id,), outcome=outcome)
         return result, document

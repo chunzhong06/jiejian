@@ -1,6 +1,6 @@
 // 验证业务边界页面只使用当前权限投影，并支持普通不可变提案与人工批准。
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BusinessBoundaryPage } from './BusinessBoundaryPage'
 import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
@@ -64,11 +64,27 @@ approvedBoundary.permission_intents = command.proposed_permissions.map((item, in
 approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, reason_codes: [] }))
 
 describe('业务边界页面', () => {
+  it('按全部允许禁止筛选原规则列表，搜索继续生效且不会写入权限', async () => {
+    mockApi.current.mockResolvedValue(approvedBoundary)
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    const list=within(await screen.findByRole('region',{name:'当前权限清单'}))
+    expect(list.getAllByText('允许',{exact:true})).toHaveLength(2)
+    expect(list.getAllByText('禁止',{exact:true})).toHaveLength(1)
+    fireEvent.click(screen.getByRole('radio',{name:'禁止'}))
+    expect(list.queryAllByText('允许',{exact:true})).toHaveLength(0)
+    expect(list.getAllByText('禁止',{exact:true})).toHaveLength(1)
+    fireEvent.change(screen.getByRole('textbox',{name:'搜索业务动作'}),{target:{value:'查看日常'}})
+    expect(list.getByText('没有符合筛选条件的权限规则。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio',{name:'全部规则'}))
+    expect(list.getAllByText('允许',{exact:true})).toHaveLength(1)
+    expect(mockApi.createProposal).not.toHaveBeenCalled()
+    expect(mockApi.approve).not.toHaveBeenCalled()
+  })
   it('已有权限先展示生效版本，待审提案只有显式选择才打开', async () => {
     mockApi.current.mockResolvedValue(approvedBoundary)
     mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null}]})
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
-    await screen.findByRole('heading',{name:'权限版本 1'})
+    await screen.findByText(/权限版本 1 · 3 条生效规则/)
     expect(screen.getByRole('region',{name:'当前权限清单'})).toBeInTheDocument()
     expect(screen.queryByRole('button',{name:'确认这组业务边界'})).not.toBeInTheDocument()
     expect(mockApi.proposal).not.toHaveBeenCalled()
@@ -131,7 +147,7 @@ describe('业务边界页面', () => {
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
     expect(onFeedback).toHaveBeenCalledWith('权限变更已批准，正在同步当前工作。')
     expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', {name:'权限版本 1'})).toBeInTheDocument()
+    expect(screen.getByText(/权限版本 1 · 3 条生效规则/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新读取下一步' }))
     await waitFor(() => expect(screen.queryByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).not.toBeInTheDocument())
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
@@ -167,6 +183,35 @@ describe('业务边界页面', () => {
     expect(mockApi.approve).not.toHaveBeenCalled()
   })
 
+  it('展示版要求必须明确选择，并进入待审提案而非自动批准',async()=>{
+    const provided=vi.fn().mockResolvedValue({proposal,decision:null})
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided} providedDownloadChoiceRequired/>)
+    const button=await screen.findByRole('button',{name:'使用已提供的权限提案'})
+    expect(button).toBeDisabled()
+    fireEvent.click(screen.getByRole('radio',{name:/仅允许在线预览/}))
+    fireEvent.click(button)
+    expect(await screen.findByRole('heading',{name:'核对本次业务变更'})).toBeInTheDocument()
+    expect(provided).toHaveBeenCalledExactlyOnceWith(false)
+    expect(mockApi.approve).not.toHaveBeenCalled()
+  })
+
+  it('不符合与待定都是独立选择，不按禁止下载生成官方提案',async()=>{
+    const provided=vi.fn()
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided} providedDownloadChoiceRequired/>)
+    await screen.findByRole('radio',{name:'这些都不是'})
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
+    fireEvent.click(screen.getByRole('radio',{name:'允许下载展示版'}))
+    fireEvent.click(screen.getByRole('radio',{name:'暂不确定'}))
+    expect(screen.getByRole('button',{name:'使用已提供的权限提案'})).toBeDisabled()
+    expect(screen.getByText('当前不生成权限提案。明确需求后，再选择符合要求的选项。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio',{name:'这些都不是'}))
+    expect(screen.queryByRole('button',{name:'使用已提供的权限提案'})).not.toBeInTheDocument()
+    const write=screen.getByRole('button',{name:'编写我的权限要求'})
+    fireEvent.click(write)
+    expect(screen.getByRole('button',{name:'收起自定义草稿'})).toHaveAttribute('aria-expanded','true')
+    expect(provided).not.toHaveBeenCalled();expect(mockApi.createProposal).not.toHaveBeenCalled();expect(mockApi.approve).not.toHaveBeenCalled()
+  })
+
   it('首次规则逐条取消或保存，生成提案仍包含其他动作的全部规则', () => {
     const onSubmit = vi.fn()
     render(<BoundaryProposalEditor preview={preview as BoundaryDraftViewDto} initialCommand={command as BoundaryProposalCommandDto} busy={false} onSubmit={onSubmit}/>)
@@ -185,6 +230,7 @@ describe('业务边界页面', () => {
 
   it('只把 Candidate 当识别依据，并要求用户填写真实业务结果', async () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByText('自行编写权限草稿', { selector: 'summary' }))
     expect(await screen.findByRole('heading', { name: '从当前源码整理业务边界' })).toBeInTheDocument()
     expect(screen.getAllByText('项目负责人').length).toBeGreaterThan(0)
     expect(screen.queryByText(`role_${'1'.repeat(32)}`)).not.toBeInTheDocument()
@@ -204,6 +250,7 @@ describe('业务边界页面', () => {
 
   it('普通项目不读取或展示官方公开合同入口', async () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByText('自行编写权限草稿', { selector: 'summary' }))
     expect(await screen.findByRole('heading', { name: '从当前源码整理业务边界' })).toBeInTheDocument()
     expect(screen.queryByText('官方公开合同')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '应用公开合同' })).not.toBeInTheDocument()

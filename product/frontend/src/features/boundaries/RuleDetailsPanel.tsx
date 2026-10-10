@@ -6,6 +6,7 @@ import {ruleDetailsApi,type RuleDetails} from '../../api/boundaries/ruleDetails'
 import {EditorialHeader,EditorialPage} from '../../shared/ui/Editorial'
 import {StatusBadge} from '../../shared/ui/StatusBadge'
 import {TaskActionBar} from '../../shared/ui/TaskActionBar'
+import { RuleCoveragePreview } from './RuleCoveragePreview'
 import { formatTimestamp } from '../../shared/format/time'
 import '../../shared/styles/proof-details.css'
 
@@ -20,14 +21,14 @@ export function RuleDetailsPanel({projectId,intentId,revision,onBack,onEdit,onNa
     }).catch(() => {if(current)setError(true)})
     return () => {current=false}
   },[projectId,intentId,revision,epoch])
-  if(error)return <EditorialPage><EditorialHeader title="这条规则暂时无法读取"/><p>指定的应用或规则修订无法核对，未跳转到其他规则。</p><TaskActionBar back={{label:'返回权限列表',onClick:onBack}} primary={{label:'重新读取',onClick:()=>setEpoch(item=>item+1)}}/></EditorialPage>
-  if(!value)return <EditorialPage><LoadingState page>正在读取这条规则…</LoadingState></EditorialPage>
+  if(error)return <EditorialPage width="summary"><EditorialHeader title="这条规则暂时无法读取"/><p>指定的应用或规则修订无法核对，未跳转到其他规则。</p><TaskActionBar back={{label:'返回权限列表',onClick:onBack}} primary={{label:'重新读取',onClick:()=>setEpoch(item=>item+1)}}/></EditorialPage>
+  if(!value)return <EditorialPage width="summary"><LoadingState>正在读取这条规则…</LoadingState><TaskActionBar back={{label:'返回权限列表',onClick:onBack}}/></EditorialPage>
   const latest = value.latest_result
   return <EditorialPage label="单条权限规则" width="summary">
     <EditorialHeader eyebrow={`权限要求 / 规则修订 ${value.revision}`} title={value.action_label} status={<StatusBadge kind="rule" tone={value.expectation==='ALLOW'?'success':'danger'}>{value.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge>}><p className="rule-sentence">{value.sentence}</p></EditorialHeader>
     <div className="proof-toolbar"><Button type="link" onClick={onBack}>返回权限列表</Button>{value.current && <Button onClick={()=>onEdit(value.action_id,value.intent_id)}>修改这条规则</Button>}</div>
     {!value.current && <Alert type="info" message="这是保留的历史修订" description="当前权限已经变化，以下显示这个修订的原约定与历史记录。"/>}
-    <section className="rule-detail-axes" aria-label="规则、材料与检查分别呈现">
+    <section className="rule-detail-axes centered-fact-groups" aria-label="规则、材料与检查分别呈现">
       <div><p className="editorial-eyebrow">规则</p><strong>{value.current?'已由你确认':'历史规则'}</strong><p className="editorial-muted">{formatTimestamp(value.approval.approved_at_us)}</p></div>
       <div><p className="editorial-eyebrow">检查材料</p><strong>{!value.current?'查看历史引用':value.preparation_complete?'可进入完整检查':'仍有材料待准备'}</strong><p className="editorial-muted">材料齐备本身不产生权限结论。</p></div>
       <div><p className="editorial-eyebrow">已发布结果</p><strong>{latest ? latest.applies_to_current_implementation?'有对应当前实现的记录':'有历史记录，当前实现未核验':'本次读取未找到对应记录'}</strong><p className="editorial-muted">按本条规则的精确修订关联。</p></div>
@@ -40,7 +41,8 @@ export function RuleDetailsPanel({projectId,intentId,revision,onBack,onEdit,onNa
       {latest.cases.map((item,index)=><div key={item.case_id} className="proof-toolbar"><span>检查项 {index+1}</span><StatusBadge kind="verdict" tone={item.verdict==='SAFE'?'success':item.verdict==='VULNERABLE'?'danger':'warning'}>{verdictLabels[item.verdict]??'尚无判断'}</StatusBadge><Button type="link" onClick={()=>onNavigate?.(`/tests?run_id=${latest.run_id}&case_id=${item.case_id}&project_id=${projectId}`)}>查看结果与证据</Button></div>)}</> : <p className="editorial-muted">{value.history_has_more?'最近 25 次记录中未找到这一修订的结果，可继续查看检查历史。':'尚未找到这条规则修订的可读结果。'}</p>}
       {value.unreadable_history && <Alert type="warning" message="部分历史记录无法完整核对，未将其作为本条规则的结论。"/>}
     </section>
-    <details className="proof-technical"><summary>查看确认依据</summary><p>{value.approval.reason}</p><p className="editorial-muted">{value.approval.approved_by} · 修订 {value.revision}</p></details>
+    <details className="proof-technical"><summary>查看确认依据</summary><p>{value.approval.reason}</p><p className="editorial-muted">{value.approval.approved_by} · 修订 {value.revision}</p>{value.candidate_mappings?.map(item=><Button type="link" key={`${item.candidate_id}:${item.candidate_revision}`} onClick={()=>onNavigate?.(`/permissions?project_id=${encodeURIComponent(projectId)}&candidate=${encodeURIComponent(item.candidate_id)}&revision=${item.candidate_revision}`)}>{item.scenario_decision_ids.length?'查看当时的含义选择':'查看当时的规则候选'}</Button>)}</details>
+    <RuleCoveragePreview projectId={projectId} reference={{kind:'APPROVED',rules:[{intent_id:value.intent_id,revision:value.revision}]}}/>
     <TaskActionBar back={{label:'返回权限列表',onClick:onBack}} primary={value.current && onNavigate ? {label:value.preparation_complete?'查看完整检查预览':'继续准备材料',onClick:()=>onNavigate(value.preparation_complete?value.check_url:value.preparation_url)}:undefined}/>
   </EditorialPage>
 }

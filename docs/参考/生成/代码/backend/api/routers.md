@@ -14,14 +14,6 @@
 [打开源码](../../../../../../product/backend/api/routers/applications/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
-### `product/backend/api/routers/applications/current_experience.py`
-
-[打开源码](../../../../../../product/backend/api/routers/applications/current_experience.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `build_current_experience_router() -> APIRouter`
-
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`
-
 ### `product/backend/api/routers/applications/experience.py`
 
 [打开源码](../../../../../../product/backend/api/routers/applications/experience.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -30,6 +22,7 @@
 - `class OfficialSampleStartRequest`
 - `class OfficialSampleStopRequest`
 - `class OfficialSampleVersionRequest`
+- `class OfficialBoundaryChoice`
 - `class OfficialObservationRequest`
 
 静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.checks.repair`、`product.backend.workflows.examples.environment`、`typing`
@@ -77,36 +70,13 @@
 - `class RuleCandidateSaveRequest`
 - `RuleCandidateSaveRequest.to_command(self) -> RuleCandidateSave`
 - `class RuleCandidateProposalRequest`
+- `class RulePreviewRequest`
+- `RulePreviewRequest.to_command(self)`
 - `class BoundaryMaintenanceCreateRequest`
 - `BoundaryMaintenanceCreateRequest.to_command(self) -> BoundaryMaintenanceCommand`
 - `build_business_boundaries_router(context) -> APIRouter`
 
-静态import / dot-source：`__future__`、`fastapi`、`fastapi.encoders`、`json`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.boundaries.proposals`、`product.backend.core.boundaries.rule_candidates`、`product.backend.workflows.business_boundaries`、`pydantic`、`typing`
-
-### `product/backend/api/routers/boundaries/permission_drafts.py`
-
-[打开源码](../../../../../../product/backend/api/routers/boundaries/permission_drafts.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `class PermissionDraftRequest`
-- `build_permission_drafts_router(context) -> APIRouter`
-
-静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`pydantic`、`typing`
-
-### `product/backend/api/routers/boundaries/permission_intents.py`
-
-[打开源码](../../../../../../product/backend/api/routers/boundaries/permission_intents.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `class PermissionIntentCellTarget`
-- `class PermissionIntentApprovalRequest`
-- `PermissionIntentApprovalRequest.validate_reason(cls, value) -> str &#124; None`
-- `class PermissionIntentProposalApprovalRequest`
-- `PermissionIntentProposalApprovalRequest.validate_reason(cls, value) -> str &#124; None`
-- `class PermissionIntentProposalDecisionRequest`
-- `class PermissionDraftRequest`
-- `PermissionDraftRequest.validate_text(cls, value) -> str`
-- `build_permission_intents_router(context) -> APIRouter`
-
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.boundaries.permissions`、`product.backend.core.verification.permissions`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`fastapi.encoders`、`json`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.proposals`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.boundaries.rule_preview`、`product.backend.workflows.business_boundaries`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/changes/__init__.py`
 
@@ -148,41 +118,23 @@
 
 静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`product.backend.composition`
 
-### `product/backend/api/routers/checks/gating.py`
-
-[打开源码](../../../../../../product/backend/api/routers/checks/gating.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `build_gating_router(context) -> APIRouter`
-- `class BaselineAcceptRequest`
-- `BaselineAcceptRequest.require_text(cls, value) -> str`
-- `class GateEvaluateRequest`
-
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`pydantic`、`typing`、`作用域内：product.backend.core.verification.gating`
-
-### `product/backend/api/routers/checks/jobs.py`
-
-[打开源码](../../../../../../product/backend/api/routers/checks/jobs.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `build_jobs_router(context) -> APIRouter`
-
-静态import / dot-source：`__future__`、`asyncio`、`collections.abc`、`fastapi`、`fastapi.responses`、`json`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.redaction`、`product.backend.infra.runtime.jobs.models`、`time`
-
 ### `product/backend/api/routers/checks/results.py`
 
 [打开源码](../../../../../../product/backend/api/routers/checks/results.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `build_results_router(context) -> APIRouter`
 
-静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`product.backend.composition`
+静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`typing`
 
 ### `product/backend/api/routers/checks/runs.py`
 
 [打开源码](../../../../../../product/backend/api/routers/checks/runs.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `require_local_history_session(request)`
 - `class RunCreateRequest`
 - `build_runs_router(context) -> APIRouter`
 
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.workflows.checks.history`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/preparation/__init__.py`
 
@@ -203,9 +155,12 @@
 [打开源码](../../../../../../product/backend/api/routers/preparation/proof_sources.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `require_local_proof_session(request)`
+- `class SavePreparationSuggestionRequest`
+- `SavePreparationSuggestionRequest.to_command(self)`
+- `json_command(model)`
 - `build_proof_sources_router(context)`
 
-静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`product.backend.workflows.preparation.proofs.commands`、`typing`
+静态import / dot-source：`fastapi`、`fastapi.responses`、`json`、`product.backend.api.envelope`、`product.backend.core.errors`、`product.backend.core.preparation.suggestions`、`product.backend.workflows.preparation.batches`、`product.backend.workflows.preparation.proofs.artifact_inputs`、`product.backend.workflows.preparation.proofs.capture_plan`、`product.backend.workflows.preparation.proofs.capture_service`、`product.backend.workflows.preparation.proofs.commands`、`pydantic`、`starlette.concurrency`、`typing`
 
 ### `product/backend/api/routers/preparation/recordings.py`
 
@@ -246,41 +201,13 @@
 [打开源码](../../../../../../product/backend/api/routers/system/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
-### `product/backend/api/routers/system/assistant.py`
+### `product/backend/api/routers/system/agent_workflow.py`
 
-[打开源码](../../../../../../product/backend/api/routers/system/assistant.py) · Python AST；作用域内import不表示每次调用均执行。
+[打开源码](../../../../../../product/backend/api/routers/system/agent_workflow.py) · Python AST；作用域内import不表示每次调用均执行。
 
-- `class ProjectAssistantSurface`
-- `_PROJECT_TEMPLATE`
-- `class AssistantGenerateRequest`
-- `class AssistantFocus`
-- `build_assistant_router(context) -> APIRouter`
+- `build_agent_workflow_router(context)`
 
-静态import / dot-source：`__future__`、`enum`、`fastapi`、`product.backend.api.envelope`、`product.backend.core.boundaries.entities`、`product.backend.core.identifiers`、`product.backend.workflows.assistant.templates`、`pydantic`、`typing`
-
-### `product/backend/api/routers/system/llm.py`
-
-[打开源码](../../../../../../product/backend/api/routers/system/llm.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `build_llm_router(context) -> APIRouter`
-- `class LLMSettingsRequest`
-- `class LLMModelDiscoverRequest`
-- `LLMModelDiscoverRequest.parse_provider(cls, value) -> LLMProviderType`
-- `LLMModelDiscoverRequest.validate_provider_base(self) -> LLMModelDiscoverRequest`
-- `class LLMProfileBase`
-- `LLMProfileBase.parse_provider(cls, value) -> LLMProviderType`
-- `LLMProfileBase.validate_base_url(cls, value, info) -> str &#124; None`
-- `LLMProfileBase.validate_secret_reference(cls, value) -> str &#124; None`
-- `LLMProfileBase.validate_formal_provider_base(self) -> LLMProfileBase`
-- `class LLMProfileCreateRequest`
-- `LLMProfileCreateRequest.validate_secret_input(self) -> LLMProfileCreateRequest`
-- `class LLMProfileUpdateRequest`
-- `LLMProfileUpdateRequest.validate_secret_input(self) -> LLMProfileUpdateRequest`
-- `LLMProfileUpdateRequest.validate_base_url_syntax(cls, value) -> str &#124; None`
-- `LLMProfileUpdateRequest.validate_secret_reference(cls, value) -> str &#124; None`
-- `class LLMDefaultProfileRequest`
-
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.infra.llm.catalog`、`product.backend.infra.llm.config`、`pydantic`、`typing`
+静态import / dot-source：`fastapi`、`product.backend.api.envelope`、`typing`
 
 ### `product/backend/api/routers/system/mcp_access.py`
 

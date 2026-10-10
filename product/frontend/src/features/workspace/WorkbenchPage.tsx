@@ -1,7 +1,8 @@
 // 概览集中显示下一步与权限、材料、最近结果；推荐动作来自服务端。
 import { Button } from 'antd'
 import { ArrowRightOutlined, RightOutlined, SafetyCertificateOutlined, FileSearchOutlined, FolderOpenOutlined } from '@ant-design/icons'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 import type { OfficialExperienceDto } from '../../api/applications/experience'
 import type { ProjectDto } from '../../api/applications/projects'
 import type { WorkspaceViewDto } from '../../api/workspace'
@@ -24,11 +25,12 @@ export function WorkbenchPage({ selected, workspace, systemStatus, experience, o
 }) {
   const [materials, setMaterials] = useState<PreparationView | null>(null)
   const [recent, setRecent] = useState<CheckHistoryItem[]>([])
+  const visible = useContext(WorkPageVisible)
   const project = useRef(selected?.project_id)
   project.current = selected?.project_id
   const generation = useRef(0)
   useEffect(() => { generation.current += 1; setMaterials(null); setRecent([]); return () => { generation.current += 1 } }, [selected?.project_id])
-  const sync = useLiveRead(selected?.project_id, async () => {
+  const sync = useLiveRead(visible ? selected?.project_id : undefined, async () => {
     const id = selected!.project_id, epoch = generation.current
     const [preparation, history] = await Promise.all([preparationApi.get(id), currentChecksApi.history(id)])
     if (project.current !== id || generation.current !== epoch) return
@@ -43,7 +45,7 @@ export function WorkbenchPage({ selected, workspace, systemStatus, experience, o
   const official = selected.official_sample || [experience?.project_id, experience?.history_project_id].includes(selected.project_id)
   const sampleRunning = experience?.active && experience.project_id === selected.project_id && experience.lifecycle === 'RUNNING'
   // 历史来源与实时实例分开；手动打开旧示例不能复用其过去的连接确认和待办。
-  if (official && !sampleRunning) return <EditorialPage label="示例重新开始">
+  if (official && !sampleRunning) return <EditorialPage label="示例重新开始" width="welcome">
     <EditorialHeader eyebrow="官方示例" title={selected.name || '协作空间'}><p className="editorial-muted">{experience?.project_id === selected.project_id && experience.recovery_state === 'EXITED' ? '该示例已停止。' : '该项目没有已确认正在运行的示例实例。'}已有检查结果与证据保留，过去的地址确认不代表现在仍可连接。</p></EditorialHeader>
 
     <section aria-label="官方示例"><h2>开始新的示例</h2>{samplePanel ?? <Button onClick={() => onNavigate('/environment')}>管理示例环境</Button>}</section>
@@ -62,10 +64,10 @@ export function WorkbenchPage({ selected, workspace, systemStatus, experience, o
   const resultFocus = !active && primary?.task_kind === 'VIEW_CURRENT_RESULT' && result && (primary.run_id ? primary.run_id === result.run_id : Boolean(workspace?.latest_result))
   const systemIssue = systemStatus.api !== 'available' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable'
   const permissionCount = workspace?.actions.reduce((sum,action)=>sum+action.permission_status.active_permission_count,0)
-  return <EditorialPage label="当前应用概览">
+  return <EditorialPage label="当前应用概览" width="welcome">
     <EditorialHeader eyebrow={selected.name || '当前应用'} title="总览"/>
     {workspaceSyncFailed && <p role="status">总览暂未同步，正在重试。下方保留上次读取的状态。</p>}
-    <section className="overview-task" aria-label="当前需要处理的任务">
+    <section className={`overview-task${!primary && !active ? ' overview-task--quiet' : ''}`} aria-label="当前需要处理的任务">
       <div className="overview-task-copy"><p className="editorial-eyebrow">{active ? '检查进行中' : resultFocus ? '最近检查已完成' : '当前下一步'}</p>
         <h2>{active ? running.progress?.current_case?.action_label ?? '正在检查已确认的权限' : resultFocus ? verdictLabel[result.verdict] : primary?.title ?? (workspace ? '当前没有待处理事项' : '正在读取当前状态')}</h2>
         <p>{active ? '界鉴正在执行并观察业务结果，你可以继续在开发客户端工作。' : resultFocus ? `对应权限版本 ${result.policy_epoch}` : primary?.why_now ?? '查看已确认的要求、准备条件与最近记录。'}</p>

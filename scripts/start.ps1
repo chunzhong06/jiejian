@@ -234,7 +234,7 @@ try {
         "--var-dir", $script:VarDir,
         "serve", "--open", "--browser", $Browser.ToLowerInvariant(), "--port", [string]$Port,
         "--frontend-dir", $script:FrontendDist,
-        "--official-sample-root", (Join-Path $script:ProjectRoot "samples\web\collaboration_space")
+        "--official-sample-root", (Join-Path $script:ProjectRoot "samples\web\digital_gallery")
     ) "serve" 50
     Write-DisplayResult "本地服务" "已停止" $true
     Complete-DisplayStage

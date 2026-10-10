@@ -17,14 +17,15 @@ class WorkspaceService:
     def validate_connections(self):
         self._reader.validate_connections()
 
-    def get(self, project_id: str) -> WorkspaceView:
+    def get(self, project_id: str, *, prepared=None) -> WorkspaceView:
         project, understanding = self._reader.project(project_id)
         boundary = self._business_boundaries.view(project_id)
         pending = self._business_boundaries.proposals(project_id, pending_only=True).proposals
         connection = WorkspaceConnectionView(endpoint_status=endpoint_status(understanding), source_analysis_status=source_status(understanding))
         actors, actions, boundary_attention = boundary_views(boundary, pending)
         primary_task = boundary_task(understanding, boundary, pending)
-        preparation = self._preparation.get(project_id)
+        # 同请求上层已经读取准备事实时复用；不存到实例上，也不跨请求复用。
+        preparation = prepared if prepared is not None and prepared.project_id == project_id else self._preparation.get(project_id)
         if primary_task is None:
             primary_task = self._preparation_task(boundary, preparation, understanding)
         latest_result, source_change, repair, active_check = None, None, None, None

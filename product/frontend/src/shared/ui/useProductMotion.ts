@@ -4,20 +4,22 @@ import { metrics } from './tokens'
 
 // 原十二类样稿的正式挂点；操作/选择勾形由 materials 与 useControlMotion 承接，浮层由 Ant Design 承接。
 export const motionRegistry = {
-  selection: '.module-navigation-list,.boundary-view-tabs,.product-view-tabs,.result-detail-tabs,.result-review-views,.check-run-stages',
-  copy: '.product-status,.editorial-heading-row h1,.boundary-action-heading h2,.ant-select-selection-item,.overview-task-copy h2,.proof-focus h2,.recording-capture-guide h2,.change-rule-association strong',
+  selection: '.module-navigation-list,.check-section-navigation,.boundary-view-tabs,.product-view-tabs,.result-detail-tabs,.result-review-views,.check-run-stages',
+  copy: '.product-status,.editorial-heading-row h1,.boundary-action-heading h2,.ant-select-selection-item,.overview-task-copy h2,.proof-focus h2,.material-focus h2,.candidate-selection-row > div > p,.recording-capture-guide h2,.change-rule-association strong',
   preview: '.rule-sentence,.permission-rule-form > h2',
-  list: '.light-table tbody,.history-records,.light-permission-list,.result-overview-table tbody,.material-table,.proof-checks ul,.identity-role-accounts',
+  list: '.light-table tbody,.history-records,.light-permission-list,.result-overview-table tbody,.material-table,.candidate-selection-list,.proof-checks ul,.identity-role-accounts',
   progress: '.flow-spine,.access-progress,.proof-stages,.check-activity-notice,.check-run-title,.check-run-count',
-  notice: '.work-receipt,.task-receipt,.check-activity-toast,.notification-card',
+  notice: '.work-receipt,.task-receipt,.check-activity-toast,.notification-card,.agent-assist-message,.runtime-maintenance > .flow-feedback',
   invalid: '.ant-form-item-explain-error,[aria-invalid=true],.permission-rule-form .ant-alert',
-  panel: '.result-investigation-body,.boundary-action-document,.changes-sample,.candidate-workspace,.check-run-focus,.change-rule-table,.change-basis,.material-row-detail,.material-editor,.proof-detail,.recording-capture,.repair-requirement-columns,.result-repair-comparison,.identity-login-steps',
+  // 材料分组与协助入口保持挂载，关闭详情时也能从原高度衔接到收起状态。
+  panel: '.result-investigation-body,.rule-detail-axes,.boundary-action-document,.changes-sample,.candidate-workspace,.check-run-focus,.change-rule-table,.change-basis,.material-group,.agent-assist-entry,.material-editor,.recording-capture,.repair-requirement-columns,.result-repair-comparison,.identity-login-steps,.provided-material-preparation,.light-registration',
   hoverRow: '.overview-entry,.history-record,.action-index button,.proof-index-item,.evidence-material-index > button,.supplemental-list > button,.result-overview-table tbody > tr,.light-table tbody > tr:has(button:not(:disabled),a[href]),.material-row,.change-rule-row:has(button:not(:disabled)),.permission-summary-row:has(button:not(:disabled)),.path-event-list button,.path-range button',
 } as const
 
 export function useProductMotion(mode: 'full' | 'soft' | 'off') {
   useEffect(() => {
-    if (typeof Element.prototype.animate !== 'function') return
+    // 关闭动效时不安装观察器，也不为隐藏页面和静态内容持续测量布局。
+    if (mode === 'off' || typeof Element.prototype.animate !== 'function') return
     const running = new Map<Element, Animation>()
     const copies = new WeakMap<Element, string>()
     const selections = new WeakMap<HTMLElement, Element>()
@@ -26,9 +28,9 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
     const hoverHosts = new Map<HTMLElement,HTMLElement>()
     const seen = new WeakSet<Element>()
     let frame = 0
-    const visible = (node: Element) => Boolean(node.getClientRects().length) && !node.closest('[hidden]')
+    const visible = (node: Element) => !node.closest('[hidden],[inert]') && Boolean(node.getClientRects().length)
     const play = (node: Element, keyframes: Keyframe[], duration: number = metrics.motion.content, delay = 0) => {
-      if (mode === 'off' || !visible(node)) return
+      if (!visible(node)) return
       running.get(node)?.cancel()
       const animation = node.animate(mode === 'soft' ? [{opacity:.8},{opacity:1}] : keyframes,
         {duration:mode === 'soft' ? metrics.motion.fast : duration,delay:mode === 'soft' ? 0 : delay,easing:metrics.ease})
@@ -75,6 +77,8 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
       })
       document.querySelectorAll<HTMLElement>(motionRegistry.panel).forEach(node=>{
         if (!visible(node)) return
+        // 一个嵌套区域只由最外层登记面管理尺寸，避免父子同时拉伸造成正文交叠。
+        if (node.parentElement?.closest(motionRegistry.panel)) return
         const text=node.textContent ?? '',previous=panels.get(node)
         if (previous?.text === text) return
         const moving=running.get(node),before=moving ? node.getBoundingClientRect().height : previous?.height
@@ -82,21 +86,26 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
         const height=node.offsetHeight
         if (!previous) reveal(node)
         else if (mode==='full' && before && Math.abs(before-height)>1)
-          play(node,[{height:`${before}px`},{height:`${height}px`}],metrics.motion.layout)
+          play(node,[{height:`${before}px`,overflow:'clip'},{height:`${height}px`,overflow:'clip'}],metrics.motion.layout)
+        else play(node,[{opacity:.75},{opacity:1}],metrics.motion.fast)
         panels.set(node,{height,text})
       })
       document.querySelectorAll(motionRegistry.list).forEach(list => {
         if (!visible(list)) return
         const previous = rows.get(list), next = new Map<Element,{x:number;y:number}>()
-        Array.from(list.children).filter(node=>!node.matches('.history-columns,.history-date,.material-table-head')).forEach((node,index) => {
-          if (!visible(node)) return
+        const children = Array.from(list.children).filter(node=>!node.matches('.history-columns,.history-date,.material-table-head') && visible(node))
+        const oldOrder = previous ? [...previous.keys()] : []
+        const reordered = children.length !== oldOrder.length || children.some((node,index)=>node !== oldOrder[index])
+        const outer=list.getBoundingClientRect()
+        children.forEach((node,index) => {
           // 坐标相对当前列表，并扣除自身动画位移；上方页面重排不能被误当成行位置变化。
           const current=getComputedStyle(node).transform,matrix=current==='none' ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(current)
-          const rect=node.getBoundingClientRect(),outer=list.getBoundingClientRect()
+          const rect=node.getBoundingClientRect()
           const position = {x:rect.left-outer.left-matrix.m41,y:rect.top-outer.top-matrix.m42}, before = previous?.get(node)
           next.set(node,position)
+          if (node.matches(motionRegistry.panel)) return
           if (!before) reveal(node,Math.min(index*28,112))
-          else if (mode === 'full' && (Math.abs(before.x-position.x) + Math.abs(before.y-position.y) > 1)) {
+          else if (mode === 'full' && reordered && (Math.abs(before.x-position.x) + Math.abs(before.y-position.y) > 1)) {
             play(node,[{transform:`translate(${before.x+matrix.m41-position.x}px,${before.y+matrix.m42-position.y}px)`},{transform:'none'}],metrics.motion.layout)
           }
         })
@@ -105,7 +114,7 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
       document.querySelectorAll(`${motionRegistry.notice},${motionRegistry.invalid}`).forEach(node => {
         if (seen.has(node) || !visible(node)) return
         seen.add(node)
-        if (node.matches(motionRegistry.invalid)) play(node,[{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(2px)'},{transform:'none'}],metrics.motion.copy)
+        if (node.matches(motionRegistry.invalid)) play(node,[{opacity:.6},{opacity:1}],metrics.motion.copy)
         else reveal(node)
       })
     }
@@ -138,7 +147,13 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
       if (icon) play(icon,[{transform:getComputedStyle(icon).transform},{transform:'rotate(180deg)'}],metrics.motion.layout)
     }
     // 仅检查已登记节点；不观察 style，防止自身动画与定位产生递归扫描。
-    const observer = new MutationObserver(schedule)
+    const observer = new MutationObserver(records => {
+      if (records.some(record => {
+        if (record.attributeName === 'hidden') return true
+        const target = record.target instanceof Element ? record.target : record.target.parentElement
+        return target && !target.closest('[hidden],[inert]')
+      })) schedule()
+    })
     observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-current','aria-selected','aria-pressed','aria-invalid','hidden']})
     window.addEventListener('resize',schedule)
     document.addEventListener('pointerover',enter);document.addEventListener('focusin',enter)
@@ -150,6 +165,9 @@ export function useProductMotion(mode: 'full' | 'soft' | 'off') {
       document.removeEventListener('pointerover',enter);document.removeEventListener('focusin',enter)
       document.removeEventListener('pointerout',leave);document.removeEventListener('focusout',leave);document.removeEventListener('click',refreshIcon)
       hoverHosts.forEach((_,host)=>{delete host.dataset.motionHover;host.style.removeProperty('--row-opacity')})
+      document.querySelectorAll<HTMLElement>('[data-motion-track]').forEach(track=>{
+        delete track.dataset.motionTrack;track.style.removeProperty('--selection-x');track.style.removeProperty('--selection-width')
+      })
     }
   },[mode])
 }

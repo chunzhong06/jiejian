@@ -23,17 +23,6 @@ def boundary_task(
     boundary: BusinessBoundaryView,
     pending,
 ) -> PrimaryTaskView | None:
-    endpoint_status = connection_status(understanding)
-    if endpoint_status != "CONFIRMED":
-        return task_view(
-            "CONFIRM_APPLICATION_ENDPOINT",
-            title="确认当前应用连接",
-            why_now="界鉴还不能确认当前本地 Web 应用是否可以访问。",
-            user_responsibility="确认或重新填写当前应用的本地访问地址。",
-            system_will_do="界鉴只检查连接事实，不会向目标应用发起安全测试。",
-            route="/application",
-            facts={"endpoint_status": endpoint_status},
-        )
     if not understanding.source_analysis_authorized:
         return task_view(
             "AUTHORIZE_SOURCE_ANALYSIS",
@@ -210,6 +199,18 @@ def boundary_task(
             route="/permissions",
             facts=action_issue.model_dump(mode="json"),
         )
+    # 规则和源码先整理；进入实际材料准备时才要求可访问的运行实例。
+    endpoint_status = connection_status(understanding)
+    if endpoint_status != "CONFIRMED":
+        return task_view(
+            "CONFIRM_APPLICATION_ENDPOINT",
+            title="确认当前应用连接",
+            why_now="界鉴还不能确认当前本地 Web 应用是否可以访问。",
+            user_responsibility="确认或重新填写当前应用的本地访问地址。",
+            system_will_do="界鉴只检查连接事实，不会向目标应用发起安全测试。",
+            route="/application",
+            facts={"endpoint_status": endpoint_status},
+        )
     return None
 
 
@@ -301,6 +302,10 @@ class PreparationTaskSelection:
 
     def prepare_missing(self):
         action, boundary, slots, slots_by_id = self.action, self.boundary, self.slots, self.slots_by_id
+        if any(code.startswith('REFERENCE_') for code in action.reason_codes):
+            self.add(0,'COMPLETE_RECOVERY',text=('核对取样后的恢复','这份测试资源还有未收口的取样。',
+                '查看原取样并核对资源恢复。','界鉴核对原起点，不重新发送取样操作。'))
+            return
         for slot in slots:
             if slot.status is not PreparationStatus.SATISFIED:
                 self.add(1, "PREPARE_TEST_IDENTITY", slot=slot)

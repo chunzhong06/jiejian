@@ -2,7 +2,7 @@
  * 普通应用接入向导
  *
  * 定位
- *   目录选择、IPv4 loopback 地址确认、源码分析授权和候选审阅组成的默认用户路径
+ *   目录选择、离线源码分析与候选审阅；需要运行时再确认IPv4 loopback地址
  *
  * 职责
  *   恢复后端理解事实｜引导显式授权｜提交权限组与业务动作人工决定
@@ -12,9 +12,10 @@
  * ============================================================================= */
 
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { LoadingState } from '../../shared/ui/LoadingState'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRightOutlined, AppstoreOutlined } from '@ant-design/icons'
-import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/applications/onboarding'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
@@ -82,9 +83,10 @@ function CandidateRow({ candidate, kind, loading, onDecide }: {
   </List.Item>
 }
 
-export function ApplicationSetup({ selected, endpointStatus, officialSampleAvailable, officialSampleBusy, onStartOfficialSample, onConnected, onChanged, onBack, onContinue, onStageChanged }: {
+export function ApplicationSetup({ selected, endpointStatus, requestConnection = false, officialSampleAvailable, officialSampleBusy, onStartOfficialSample, onConnected, onChanged, onBack, onContinue, onStageChanged }: {
   selected: ProjectDto | null
   endpointStatus?: WorkspaceConnectionDto['endpoint_status']
+  requestConnection?: boolean
   officialSampleAvailable?: boolean
   officialSampleBusy?: boolean
   onStartOfficialSample?: () => Promise<boolean>
@@ -96,6 +98,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
 }) {
   const [understanding, setUnderstanding] = useState<ApplicationUnderstandingDto | null>(null)
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null)
+  const [connecting, setConnecting] = useState(requestConnection)
   const [endpoints, setEndpoints] = useState<EndpointDiscoveryDto | null>(null)
   const [manualPath, setManualPath] = useState('')
   const [endpoint, setEndpoint] = useState('')
@@ -118,7 +121,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
     try { await onChanged(); setSyncFailed(false); return true }
     catch { setSyncFailed(true); return false }
   }
-  useEffect(() => { setReviewOpen(false); setSyncFailed(false) }, [selected?.project_id])
+  useEffect(() => { setReviewOpen(false); setSyncFailed(false); setConnecting(requestConnection) }, [selected?.project_id, requestConnection])
   useEffect(() => { if (reviewOpen) reviewSurface.current?.focus() }, [reviewOpen])
   useTaskGuard(loading || Boolean(manualRole.trim() || manualAction.trim()) || (!understanding && Boolean(manualPath.trim())))
   useEffect(() => {
@@ -155,7 +158,8 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       if (!active) return
       if (value.project_id !== selected.project_id) throw new ApiError('STATE_PRECONDITION', '恢复的应用状态与当前应用不一致。')
       applyUnderstanding(value)
-      if (!value.confirmed_endpoint || (endpointStatus !== undefined && endpointStatus !== 'CONFIRMED')) await loadEndpoints(selected.project_id, () => active)
+      // 只有明确进入连接步骤才探测地址；恢复离线整理不得接触目标。
+      if (requestConnection && (!value.confirmed_endpoint || (endpointStatus !== undefined && endpointStatus !== 'CONFIRMED'))) await loadEndpoints(selected.project_id, () => active)
     }).catch((loadError) => {
       if (active && (!(loadError instanceof ApiError) || loadError.code !== 'APPLICATION_UNDERSTANDING_NOT_FOUND')) {
         setRestoreFailed(true)
@@ -165,7 +169,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       }
     }).finally(() => { if (active) setRestoring(false) })
     return () => { active = false }
-  }, [selected?.project_id, endpointStatus, restoreAttempt])
+  }, [selected?.project_id, endpointStatus, restoreAttempt, requestConnection])
 
   const connectPath = async (sourcePath: string) => {
     if (!sourcePath.trim()) return
@@ -175,8 +179,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       applyUnderstanding(connected.understanding)
       setDiscovery(connected.discovery)
       onConnected(connected.project)
-      await loadEndpoints(connected.project.project_id)
-      setMessage('应用目录已连接。请选择界鉴找到的本地地址，或使用手工输入。')
+      setMessage('应用目录已连接。可以先整理业务与权限，应用还不用启动。')
     } catch (connectError) {
       setError(setupError(connectError, '连接应用目录失败，请确认路径存在且可读取。'))
     } finally { setLoading(false) }
@@ -198,6 +201,14 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       globalThis.clearTimeout(timeout)
       setLoading(false)
     }
+  }
+
+  const openConnection = async () => {
+    if (!understanding || loading) return
+    setConnecting(true); setLoading(true); setError(null)
+    try { await loadEndpoints(understanding.project_id) }
+    catch (connectionError) { setError(setupError(connectionError, '暂时没有读到可用地址，可以手工填写。')) }
+    finally { setLoading(false) }
   }
 
   const confirmEndpoint = async () => {
@@ -273,7 +284,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
 
   // 地址是否仍可信由后端 Readiness 实时裁决；历史上保存过地址不能跳过重新确认。
   const endpointReady = endpointStatus === undefined ? Boolean(understanding?.confirmed_endpoint) : endpointStatus === 'CONFIRMED'
-  const currentStep = !understanding ? 1 : !endpointReady ? 2 : !understanding.source_fingerprint ? 3 : 4
+  const currentStep = !understanding ? 1 : connecting && !endpointReady ? 2 : !understanding.source_fingerprint ? 3 : 4
   useEffect(() => { onStageChanged?.(currentStep) }, [currentStep, onStageChanged])
   const reviewComplete = Boolean(understanding?.role_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale)
     && understanding.action_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale))
@@ -288,7 +299,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       action={<Button loading={officialSampleBusy} onClick={() => { void onStartOfficialSample() }}>由界鉴启动官方示例</Button>}
     />
     : null
-  const sequence = ['选择应用目录', '确认本地地址', '授权只读分析', '审阅权限组和业务动作']
+  const sequence = [{step:1,label:'选择应用目录'}, ...(connecting ? [{step:2,label:'确认本地地址'}] : []), {step:3,label:'授权只读分析'}, {step:4,label:'审阅权限组和业务动作'}]
   const primaryAction = currentStep === 1
     ? { label: '选择应用文件夹', onClick: () => void chooseFolder(), loading }
     : currentStep === 2
@@ -297,7 +308,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
         ? { label: understanding?.source_analysis_authorized ? '重新开始分析' : '授权并开始分析', onClick: () => void authorizeAndAnalyze(), loading, disabled: !analysisAuthorized }
         : { label: reviewComplete ? '继续建立权限规则' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete || candidateEditing || loading || syncFailed }
 
-  const candidateReview = endpointReady && understanding?.source_fingerprint ? <CandidateReview
+  const candidateReview = understanding?.source_fingerprint ? <CandidateReview
     key={understanding.project_id} value={understanding} onEditingChange={setCandidateEditing} onApplied={async (value, confirmed) => { applyUnderstanding(value); const synced = await syncWorkspace(); if (confirmed && synced && value.role_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale) && value.action_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale)) onContinue() }}
     manual={<>
       <div className="application-manual"><label className="application-manual-field"><span>权限组</span><Input aria-label="手工补充权限组" value={manualRole} onChange={event=>setManualRole(event.target.value)} placeholder="例如：审核员"/></label><Button aria-label="补充并确认权限组" disabled={!manualRole.trim()} loading={loading} onClick={()=>void addRole()}>补充并确认</Button></div>
@@ -309,15 +320,15 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
   if (restoring || restoreFailed) return <section className="access-next-surface" aria-label="恢复应用接入状态">
     <h2>{restoring ? '正在读取已保存的接入状态' : '暂时无法恢复接入状态'}</h2>
     <p>已有确认信息保留在服务端，读取成功后继续原来的步骤。</p>
-    {restoring ? <Spin/> : <><Alert type="warning" showIcon message={error?.message ?? '应用状态读取失败。'}/><Button type="primary" onClick={() => setRestoreAttempt(value => value + 1)}>重新读取接入状态</Button><Button type="link" onClick={onBack}>返回当前工作</Button></>}
+    {restoring ? <LoadingState>正在读取接入状态…</LoadingState> : <Alert type="warning" showIcon message={error?.message ?? '应用状态读取失败。'}/>}
+    <TaskActionBar back={{label:'返回当前工作',onClick:onBack}} primary={restoreFailed?{label:'重新读取接入状态',onClick:()=>setRestoreAttempt(value=>value+1)}:undefined}/>
   </section>
 
   return <div className="application-setup">
     <ol className="access-progress" aria-label="应用接入进度">
-      {sequence.map((label, index) => {
-        const step = index + 1
+      {sequence.map(({label, step}, index) => {
         const state = step < currentStep ? 'complete' : step === currentStep ? 'current' : 'upcoming'
-        return <li key={label} className={`task-sequence-step is-${state}`}><span>{step < currentStep ? '✓' : step}</span><div><strong>{label}</strong><small>{state === 'complete' ? '已完成' : state === 'current' ? '当前任务' : '随后进行'}</small></div></li>
+        return <li key={label} className={`task-sequence-step is-${state}`}><span>{step < currentStep ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{state === 'complete' ? '已完成' : state === 'current' ? '当前任务' : '随后进行'}</small></div></li>
       })}
     </ol>
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
@@ -325,20 +336,19 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
     {syncFailed && <Alert type="warning" showIcon message="本次操作已经保存，下一步尚未同步" description="已保存的信息会保留。重新同步只读取状态，不会重复提交。" action={<Button onClick={() => void syncWorkspace()}>重新同步下一步</Button>}/>}
     {currentStep === 4 && understanding && !reviewOpen && <section className="access-next-surface access-next-layout" aria-label="接入后的当前任务">
       <div className="access-connection-summary">
-      <header><span className="access-app-icon"><AppstoreOutlined aria-hidden/></span><div><h2>{selected?.name?.trim() || '当前应用'}</h2><p className="editorial-muted">连接已确认，接下来整理业务</p></div></header>
-      <dl className="access-facts"><div><dt>应用地址</dt><dd>已确认</dd></div><div><dt>源码分析</dt><dd>已完成</dd></div><div><dt>业务建议</dt><dd>{reviewComplete ? '已有确认内容，可继续审阅' : '待你审阅'}</dd></div></dl>
-      <details><summary>查看接入详情</summary><p>已确认地址：{understanding.confirmed_endpoint}</p><p>源码分析仅产生建议，不会自动批准权限。</p></details>
+      <header><span className="access-app-icon"><AppstoreOutlined aria-hidden/></span><div><h2>{selected?.name?.trim() || '当前应用'}</h2><p className="editorial-muted">源码已分析，接下来整理业务</p></div></header>
+      <dl className="access-facts"><div><dt>应用地址</dt><dd>{endpointReady ? '已确认' : '实际操作前再连接'}</dd></div><div><dt>源码分析</dt><dd>已完成</dd></div><div><dt>业务建议</dt><dd>{reviewComplete ? '已有确认内容，可继续审阅' : '待你审阅'}</dd></div></dl>
+      <details><summary>查看接入详情</summary>{understanding.confirmed_endpoint && <p>已保存地址：{understanding.confirmed_endpoint}</p>}<p>源码分析仅产生建议，不会自动批准权限。</p></details>{!endpointReady && <Button onClick={() => void openConnection()} loading={loading}>连接已运行的应用</Button>}
       </div>
-      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
+      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} iconPosition="end" onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
     </section>}
     {currentStep === 1 && <ConnectionSupport />}
     {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
-      <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
-      <Typography.Paragraph>如果应用已经启动，直接选择它的源码文件夹。界鉴不会安装依赖、读取秘密或扫描任意端口。</Typography.Paragraph>
+      <Typography.Paragraph>选择项目的源码文件夹。接下来确认读取范围，整理应用中的角色与业务动作；实际演示操作时再连接运行中的应用。</Typography.Paragraph>
       {officialSampleStart}
       <Collapse ghost items={[{ key: 'manual-path', label: '目录选择器不可用？', children: <Space.Compact className="application-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button loading={loading} onClick={() => void connectPath(manualPath)}>连接这个目录</Button></Space.Compact> }]} />
     </section>}
-    {understanding && !endpointReady && <section className="application-step"><h2>确认本地访问地址</h2>
+    {understanding && connecting && !endpointReady && <section className="application-step"><h2>确认本地访问地址</h2><Button type="link" disabled={loading} onClick={() => setConnecting(false)}>先整理规则与材料</Button>
       {discovery && <div className="application-discovery">
         <Typography.Text strong>识别结果</Typography.Text>
         <Space wrap>{discovery.detected_types.length > 0 ? discovery.detected_types.map((item) => <Tag key={item}>{item}</Tag>) : <Typography.Text type="secondary">未识别到明确技术栈</Typography.Text>}</Space>
@@ -358,8 +368,8 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       <Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经启动，并且是本次要检查的应用</Checkbox>
       <Checkbox checked={endpointConfirmed} onChange={(event) => setEndpointConfirmed(event.target.checked)}>确认这是我的本地应用，并允许界鉴访问这个地址</Checkbox>
     </section>}
-    {endpointReady && understanding?.confirmed_endpoint && !understanding.source_fingerprint && <section className="application-step"><h2>分析权限组与关键业务动作</h2>
-      <Typography.Paragraph>已确认地址：<StatusBadge kind="lifecycle" tone="info">{understanding.confirmed_endpoint}</StatusBadge></Typography.Paragraph>
+    {understanding && currentStep === 3 && <section className="application-step"><h2>分析权限组与关键业务动作</h2>
+      {endpointReady ? <Typography.Paragraph>已确认地址：<StatusBadge kind="lifecycle" tone="info">{understanding.confirmed_endpoint}</StatusBadge></Typography.Paragraph> : <Typography.Paragraph>这一步只读取源码，应用可以稍后再启动。<Button type="link" loading={loading} onClick={() => void openConnection()}>连接已运行的应用</Button></Typography.Paragraph>}
       <Alert type="warning" showIcon message="需要你单独授权只读源码分析" description="界鉴不会执行或导入源码，不会运行 npm/python 命令，不会联网，不读取 .env、私钥、凭据和生成目录，也不会把源码正文写入报告、日志或发送给模型。" />
       <Checkbox checked={analysisAuthorized} onChange={(event) => setAnalysisAuthorized(event.target.checked)}>我允许界鉴只读分析当前应用源码，用于寻找权限组与关键业务动作</Checkbox>
     </section>}

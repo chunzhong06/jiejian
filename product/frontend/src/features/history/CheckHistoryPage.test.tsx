@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CheckHistoryItem, CheckHistoryPage as HistoryPage } from '../../api/checks/currentChecks'
-import { CheckHistoryPage } from './CheckHistoryPage'
+import { AllCheckHistory as CheckHistoryPage } from './CheckHistoryPage'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
 
 const api = vi.hoisted(() => ({ history: vi.fn(), submit: vi.fn() }))
@@ -21,6 +21,15 @@ beforeEach(() => { vi.clearAllMocks(); api.history.mockResolvedValue(page()); vi
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('独立检查历史', () => {
+  it('刷新较早记录时使用原页位置，改变筛选则从新范围开始',async()=>{
+    const navigate=vi.fn(),cursor={created_at_us:10,run_id:'old-page'}
+    render(<CheckHistoryPage project={{project_id:'p1'}} onError={error} onNavigate={navigate} renderRun={()=>null} initialOptions={{query:'原范围',cursor}} returnSearch="view=all&page_before_time=10&page_before_run=old-page"/>)
+    await screen.findByText('r1');expect(api.history).toHaveBeenCalledWith('p1',{query:'原范围',cursor})
+    fireEvent.change(screen.getByRole('textbox',{name:'搜索检查历史'}),{target:{value:'新范围'}})
+    fireEvent.click(screen.getByRole('button',{name:'搜索'}))
+    await waitFor(()=>expect(api.history).toHaveBeenLastCalledWith('p1',{query:'新范围',cursor:null}))
+    expect(navigate.mock.lastCall?.[0]).not.toContain('page_before')
+  })
   it('重新进入模块清空旧筛选并立即读取最新记录', async () => {
     const props = { project: { project_id: 'p1' }, onError: error, onNavigate: vi.fn(), renderRun: () => null }
     const view = render(<WorkPageVisible.Provider value={true}><CheckHistoryPage {...props}/></WorkPageVisible.Provider>)

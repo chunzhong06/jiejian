@@ -39,4 +39,13 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`enum`、`hmac`、`product.backend.core.errors`、`product.backend.infra.secrets`、`pydantic`、`secrets`、`threading`、`time`、`typing`、`作用域内：uuid`
 
+### `product/backend/workflows/agent_access/workflow.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/workflow.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class AgentWorkflowContext`
+- `AgentWorkflowContext.read(self, project_id, stage, recording_id, run_id, case_id)`
+
+静态import / dot-source：`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.workflows.recording.source`、`re`、`urllib.parse`
+
 <!-- GENERATED:END -->

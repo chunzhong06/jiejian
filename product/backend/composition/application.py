@@ -17,8 +17,6 @@ from functools import partial
 from pathlib import Path
 from typing import Callable
 
-from product.backend.infra.llm.adapters.httpx_transport import HttpxLLMTransport
-from product.backend.infra.llm.profiles import LLMProfileRegistry
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.jobs.targets import current_check_and_recording_targets
@@ -26,7 +24,6 @@ from product.backend.infra.runtime.worker.supervisor import LocalWorkerSuperviso
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.runtime.maintenance import LocalMaintenanceService
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.secrets import SecretStore as LLMSecretStore
 from product.backend.infra.secrets import SecretStore, default_secret_store
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
@@ -38,9 +35,6 @@ from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.test_identities import TestIdentityService
 from product.backend.workflows.test_identities.preparation import IdentityPreparationManager
-from product.backend.workflows.assistant.current_surfaces import PreparationAssistantSurfaceResolver
-from product.backend.workflows.assistant.service import AssistantService
-from product.backend.workflows.business_boundaries.candidates.drafting import PermissionDraftService
 from product.backend.workflows.workspace import WorkspaceService
 from product.backend.workflows.preparation.bindings.service import PreparationBindingService
 from product.backend.workflows.preparation.service import PreparationService
@@ -54,6 +48,7 @@ from product.backend.workflows.checks.registry import CheckRuntimeRegistry
 from product.backend.workflows.checks.runtime_bundle import CheckRuntimeBuilder
 from product.backend.workflows.checks.service import CheckService
 from product.backend.workflows.checks.reading.results import CheckResultReader
+from product.backend.workflows.checks.history import CheckHistoryService
 from product.backend.workflows.checks.reading.story import CheckStoryBuilder
 from product.backend.workflows.test_identities.execution import TestIdentityExecutionCredentials
 from product.backend import __version__
@@ -66,8 +61,6 @@ class ApplicationCore:
         self,
         var_dir: Path,
         *,
-        llm_transport=None,
-        llm_secret_store: LLMSecretStore | None = None,
         secret_store: SecretStore | None = None,
         environ: Mapping[str, str] | None = None,
         clock_us: Callable[[], int] | None = None,
@@ -95,13 +88,13 @@ class ApplicationCore:
         factory = partial(StorageUnitOfWork, create_session_factory(self.engine))
         self.uow_factory = factory
         from product.backend.infra.runtime.session_secrets import SessionSecretOverlay
-        self.secret_store = SessionSecretOverlay(secret_store or llm_secret_store or default_secret_store())
+        self.secret_store = SessionSecretOverlay(secret_store or default_secret_store())
 
         # 依赖按下列顺序完成；最终运行端口接好后才向控制面暴露组合根。
         self._configure_project_materials(factory, clock_us, control_origin, endpoint_discovery)
         self._configure_checks_and_workspace(factory, clock_us)
         self._configure_execution(factory, clock_us)
-        self._configure_product_services(factory, clock_us, folder_selector, llm_transport, environ)
+        self._configure_product_services(factory, clock_us, folder_selector)
         self._configure_runtime_providers(factory, clock_us, official_sample_root)
         self._validate_connections()
         self.maintenance.assets.retain_live_references()
@@ -159,6 +152,11 @@ class ApplicationCore:
             boundaries=self.business_boundaries, credentials=self.check_credentials, runtime_reader=self.node_runtime.reference,
             source_inspector=self.application_understanding.inspect_source_fingerprint,
             jobs=ProofPreflightJobs(self.var_dir,factory), queue=self.job_queue, clock_us=clock_us)
+        from product.backend.workflows.preparation.proofs.artifact_inputs import ProofArtifactPreparation
+        from product.backend.workflows.preparation.proofs.capture_service import ReferenceCaptureService
+        self.proof_artifacts=ProofArtifactPreparation(self.proof_preparation,self.binding_sources)
+        self.reference_captures=ReferenceCaptureService(self.proof_preparation,self.binding_sources)
+        self.preparation.bind_interruption_reader(self.reference_captures.gaps)
         self.check_registry.bind_persistent_reader(self.proof_preparation.runtime_registration)
 
     def _configure_checks_and_workspace(self, factory, clock_us) -> None:
@@ -172,6 +170,7 @@ class ApplicationCore:
             registry=self.check_registry, queue=self.job_queue, engine_version=__version__, clock_us=clock_us,
             source_inspector=self.application_understanding.inspect_source_fingerprint, code_observations=self.code_observations)
         self.check_results = CheckResultReader(var_dir=self.var_dir, uow_factory=factory)
+        self.check_history = CheckHistoryService(self.check_results,factory)
         self.check_story = CheckStoryBuilder(self.check_results)
         from product.backend.workflows.changes import CurrentSourceChangeService
         from product.backend.workflows.checks.repairs.repair import CurrentRepairService
@@ -181,7 +180,7 @@ class ApplicationCore:
         self.source_identity = SourceIdentityReader(uow_factory=factory, understanding=self.application_understanding,
             changes=self.source_changes, results=self.check_results)
         self.check_repairs = CurrentRepairService(reader=self.check_results,change_context_reader=self.source_changes.context,
-            breakpoint_reader=lambda run,case:next(item.breakpoint for item in self.check_story.build(run,include_repair=False).actions if item.case_id==case))
+            breakpoints_reader=self.check_story.breakpoints_from_verified_package)
         self.source_changes.set_dependencies(plan_reader=self.checks.preview,repair_resolver=self.check_repairs.resolve)
         from product.backend.workflows.development import DevelopmentService
         from product.backend.workflows.development.reading import DevelopmentReader
@@ -202,8 +201,11 @@ class ApplicationCore:
                 changes=self.source_changes, repairs=self.project_repair,
                 source_inspector=self.application_understanding.inspect_source_fingerprint))
         from product.backend.workflows.preparation.guidance.service import PreparationGuidanceService
+        from product.backend.workflows.preparation.guidance.suggestions import PreparationSuggestionService
+        self.preparation_suggestions = PreparationSuggestionService(uow_factory=factory, proofs=self.proof_preparation,
+            boundaries=self.business_boundaries, candidates=self.rule_candidates, preparation=self.preparation, clock_us=clock_us)
         self.preparation_guidance = PreparationGuidanceService(sources=self.proof_preparation,
-            workspace=self.workspace, preparation=self.preparation)
+            workspace=self.workspace, preparation=self.preparation, suggestions=self.preparation_suggestions)
 
     def _configure_execution(self, factory, clock_us) -> None:
         """装配账号、录制与独立 Worker；执行凭据保持最小运行时注入。"""
@@ -236,11 +238,12 @@ class ApplicationCore:
             self.var_dir, factory, self.job_queue, self.job_attempts,
             targets=self.job_targets, environment_provider=self.environment_for_secret_names,
             clock_us=clock_us,
-            job_authorized=self.proof_preparation.job_authorized,
+            job_authorized=lambda job:self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job),
+            capture_publisher=self.reference_captures.jobs,
         )
 
-    def _configure_product_services(self, factory, clock_us, folder_selector, llm_transport, environ) -> None:
-        """连接项目退出、维护、接入与受限模型辅助，复用已经建立的业务服务。"""
+    def _configure_product_services(self, factory, clock_us, folder_selector) -> None:
+        """连接项目退出、维护、接入，复用已经建立的业务服务。"""
 
         self.project_lifecycle = ProjectLifecycleService(
             factory,
@@ -260,25 +263,6 @@ class ApplicationCore:
                 var_dir=self.var_dir,
             )
         )
-        self.llm_profiles = LLMProfileRegistry(
-            factory,
-            transport=llm_transport or HttpxLLMTransport(),
-            secret_store=self.secret_store,
-            environ=environ,
-            clock_us=clock_us,
-        )
-
-        self.assistant_surfaces = PreparationAssistantSurfaceResolver(
-            business_boundaries=self.business_boundaries,
-            application_understanding=self.application_understanding,
-            preparation=self.preparation, recording_lifecycle=self.recording_lifecycle, uow_factory=factory,
-            check_story=self.check_story,
-        )
-        self.assistant_service = AssistantService(self.var_dir, surfaces=self.assistant_surfaces,
-            llm_profiles=self.llm_profiles, clock_us=clock_us)
-        self.permission_drafts = PermissionDraftService(business_boundaries=self.business_boundaries,
-            llm_profiles=self.llm_profiles)
-
     def _configure_runtime_providers(self, factory, clock_us, official_sample_root) -> None:
         """装配官方与普通运行提供方，最后把明确的运行读取端口接入检查和变化。"""
 
@@ -289,20 +273,30 @@ class ApplicationCore:
         self.official_scenario = OfficialScenarioInstaller(self.project_recordings, self.recording_submission,
             self.job_attempts, var_dir=self.var_dir, recording_credentials=self.recording_credentials,
             lifecycle=self.recording_lifecycle, clock_us=clock_us or (lambda: time.time_ns() // 1000), preparation=self.preparation)
-        self.official_experience = OfficialSampleExperience(self.official_samples, understanding=self.application_understanding,
-            boundaries=self.business_boundaries, identities=self.test_identities, secret_store=self.secret_store,
-            registry=self.check_registry, installer=self.official_scenario, bindings=self.preparation_bindings,
-            preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
-            uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
-            reader=self.check_results, project_repairs=self.project_repair, development=self.development)
+        if self.official_samples.installation.runtime_kind=='NODE_ESM':
+            from product.backend.workflows.examples.node_environment import NodeOfficialSampleExperience
+            self.official_experience=NodeOfficialSampleExperience(self.official_samples,runtime=self.node_runtime,
+                understanding=self.application_understanding,boundaries=self.business_boundaries,identities=self.test_identities,
+                identity_preparations=self.identity_preparations,
+                preparation=self.preparation,proofs=self.proof_preparation,artifacts=self.proof_artifacts,installer=self.official_scenario,changes=self.development,
+                reader=self.check_results,repairs=self.project_repair,uow_factory=factory,
+                archive_project=self.project_lifecycle.archive,cancel_check=self.checks.cancel,clock_us=clock_us)
+        else:
+            self.official_experience = OfficialSampleExperience(self.official_samples, understanding=self.application_understanding,
+                boundaries=self.business_boundaries, identities=self.test_identities, secret_store=self.secret_store,
+                registry=self.check_registry, installer=self.official_scenario, bindings=self.preparation_bindings,
+                preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
+                uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
+                reader=self.check_results, project_repairs=self.project_repair, development=self.development)
         from product.backend.workflows.runtime.ports import ProjectRuntimePorts, RuntimeProvider
         def owns_official_project(project_id):
             with factory() as work:
-                return work.sample_workspaces.for_project(project_id) is not None
-        self.runtime_ports = ProjectRuntimePorts((RuntimeProvider("OFFICIAL_SAMPLE", owns_official_project,
-            self.official_experience.runtime_reference, self.official_experience.load_delivery_runtime),
-            RuntimeProvider('CONTROLLED_NODE_ESM',self.node_runtime.owns_project,self.node_runtime.reference,
-                self.node_runtime.require_loaded_delivery)))
+                sample=work.sample_workspaces.for_project(project_id)
+                return sample is not None and sample['runtime_kind']=='PYTHON'
+        providers=[RuntimeProvider('CONTROLLED_NODE_ESM',self.node_runtime.owns_project,self.node_runtime.reference,self.node_runtime.require_loaded_delivery)]
+        if self.official_samples.installation.runtime_kind=='PYTHON':
+            providers.insert(0,RuntimeProvider('OFFICIAL_SAMPLE',owns_official_project,self.official_experience.runtime_reference,self.official_experience.load_delivery_runtime))
+        self.runtime_ports=ProjectRuntimePorts(tuple(providers))
         self.check_runtime_builder.bind_runtime_readers(reference_reader=self.runtime_ports.reference,
             sources_reader=self.proof_preparation.frozen_sources)
         from product.backend.workflows.business_boundaries.reading.rule_details import BusinessRuleDetails
@@ -315,6 +309,16 @@ class ApplicationCore:
             loader=self.runtime_ports.load_delivery, reader=self.runtime_ports.reference,
             node_runtime=self.node_runtime, node_jobs=self.node_runtime.jobs,
             clock=clock_us or (lambda: time.time_ns() // 1000))
+        from product.backend.workflows.preparation.batches import PreparationBatchService
+        self.preparation_batches = PreparationBatchService(uow_factory=factory, proofs=self.proof_preparation,
+            official_prepare=self.official_experience.prepare,
+            official_project=lambda: self.official_experience.status().project_id,
+            guard_reader=lambda project: dict(boundary=self.business_boundaries.view(project).model_dump(mode='json'),
+                runtime=self.node_runtime.reference(project).model_dump(mode='json')), clock_us=clock_us)
+        from product.backend.workflows.agent_access.workflow import AgentWorkflowContext
+        self.agent_workflow = AgentWorkflowContext(projects=self.projects, rules=self.rule_candidates,
+            preparation=self.preparation_guidance, batches=self.preparation_batches, recordings=self.recording_lifecycle,
+            results=self.check_results, uow_factory=factory)
 
     def _validate_connections(self) -> None:
         """装配结束只核对必需端口；不执行回调，不增加启动目标或秘密访问。"""

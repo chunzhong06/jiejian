@@ -20,7 +20,13 @@ class GuiSession:
             action()
         actual = response.value
         if actual.status not in accepted:
-            raise SampleTestError(f"GUI_ACTION_REJECTED: path={path} status={actual.status}")
+            # 真实便携失败需要稳定错误码定位；不保存请求、响应正文或凭据字段。
+            try:
+                code = actual.json().get('error', {}).get('code', '')
+            except (ValueError, AttributeError):
+                code = ''
+            safe_code = code if isinstance(code, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,80}', code) else 'UNKNOWN'
+            raise SampleTestError(f"GUI_ACTION_REJECTED: path={path} status={actual.status} code={safe_code}")
         envelope = actual.json()
         if not isinstance(envelope, dict) or "data" not in envelope:
             raise SampleTestError("GUI_ACTION_RECEIPT_INVALID")

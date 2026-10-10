@@ -41,7 +41,7 @@
 - `class CurrentRepairTask`
 - `class ProjectRepair`
 - `class CurrentProjectRepairService`
-- `CurrentProjectRepairService.evaluate(self, project_id)`
+- `CurrentProjectRepairService.evaluate(self, project_id, readings)`
 
 静态import / dot-source：`__future__`、`product.backend.core.checks.repair`、`product.backend.core.lifecycle`、`product.backend.workflows.checks.repairs.repair_presentation`、`product.protocols.checks.execution_request`、`pydantic`、`typing`、`作用域内：product.backend.workflows.changes.service`
 

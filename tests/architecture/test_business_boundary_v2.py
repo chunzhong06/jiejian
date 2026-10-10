@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from tests.contracts.current import MCP_TOOL_LEVELS, DATABASE_HEAD
 
 from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessRevisionState
 from product.backend.core.boundaries.permissions import PermissionIntentRevision
@@ -159,33 +160,8 @@ def test_current_cli_does_not_register_deferred_product_commands() -> None:
 
 
 def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() -> None:
-    source = _source("product/backend/api/mcp/server.py")
-    expected_read = {
-        "jiejian_project_list",
-        "jiejian_project_show",
-        "jiejian_application_understanding",
-        "jiejian_business_boundary",
-        "jiejian_rule_context",
-        "jiejian_rule_candidate_show",
-        "jiejian_rule_operation",
-        "jiejian_intent_show",
-        "jiejian_identity_list",
-        "jiejian_system_status",
-        "jiejian_change_show",
-        "jiejian_check_status",
-        "jiejian_result_show",
-        "jiejian_repair_show",
-        "jiejian_task_list",
-        "jiejian_task_show",
-        "jiejian_task_context",
-        "jiejian_receipt_show",
-        "jiejian_change_registration_preview",
-    }
-    expected = {name: "READ" for name in expected_read}
-    expected.update(jiejian_change_submit="PREPARE", jiejian_check_run="EXECUTE", jiejian_check_cancel="EXECUTE")
-    expected.update(jiejian_task_create="PREPARE", jiejian_task_accept="PREPARE")
-    expected["jiejian_change_register"] = "PREPARE"
-    expected["jiejian_rule_candidate_save"] = "PREPARE"
+    source = _source("product/backend/api/mcp/server.py") + "\n" + _source("product/backend/api/mcp/preparation.py")
+    expected = MCP_TOOL_LEVELS
     tools = {}
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.FunctionDef):
@@ -195,7 +171,7 @@ def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() 
                 continue
             name = next(ast.literal_eval(item.value) for item in decorator.keywords if item.arg == "name")
             assert name not in tools
-            guards = [item for item in ast.walk(node) if isinstance(item, ast.Call) and ast.unparse(item.func) == "require_mcp_level"]
+            guards = [item for item in ast.walk(node) if isinstance(item, ast.Call) and ast.unparse(item.func) in {"require_mcp_level", "require_level"}]
             assert len(guards) == 1
             tools[name] = ast.unparse(guards[0].args[2]).removeprefix("MCPAccessLevel.")
             if tools[name] != "READ":
@@ -275,20 +251,6 @@ def test_official_recipe_is_not_an_ordinary_product_surface() -> None:
 def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
     versions = ROOT / "product" / "backend" / "migrations" / "versions"
     files = sorted(versions.glob("*.py"))
-    assert [path.name for path in files] == [
-        "0001_business_boundary_v2.py",
-        "0002_business_boundary_maintenance.py",
-        "0003_action_assurance_recording.py",
-        "0004_action_resource_ownership.py",
-        "0005_verification_loop_v3.py",
-        "0006_product_provenance.py",
-        "0007_preparation_recovery.py",
-        "0008_development_delivery.py",
-        "0009_delivery_check_links.py",
-        "0010_rule_candidates.py",
-        "0011_runtime_load_jobs.py",
-        "0012_proof_preparation.py",
-    ]
     revisions = {}
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -299,7 +261,7 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
                 if isinstance(target, ast.Name) and target.id in {"revision", "down_revision"}:
                     assignments[target.id] = ast.literal_eval(node.value)
         revisions[assignments["revision"]] = assignments["down_revision"]
-    assert revisions == {
+    frozen = {
         "0001_business_boundary_v2": None,
         "0002_business_boundary_maintenance": "0001_business_boundary_v2",
         "0003_action_assurance_recording": "0002_business_boundary_maintenance",
@@ -312,4 +274,16 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0010_rule_candidates": "0009_delivery_check_links",
         "0011_runtime_load_jobs": "0010_rule_candidates",
         "0012_proof_preparation": "0011_runtime_load_jobs",
+        "0013_rule_decisions": "0012_proof_preparation",
+        "0014_preparation_suggestions": "0013_rule_decisions",
     }
+
+    # 冻结历史逐项核对；后续扩展从同一根连到独立合同中的 head。
+    assert {revision: revisions.get(revision) for revision in frozen} == frozen
+    chain = set()
+    current = DATABASE_HEAD
+    while current is not None:
+        assert current in revisions and current not in chain
+        chain.add(current)
+        current = revisions[current]
+    assert chain == set(revisions)

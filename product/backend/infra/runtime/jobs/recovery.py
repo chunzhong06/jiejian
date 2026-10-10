@@ -69,6 +69,7 @@ class JobRecovery:
                     recording_id=job.recording_id,
                     runtime_load_id=job.runtime_load_id,
                     preflight_id=job.preflight_id,
+                    reference_capture_id=job.reference_capture_id,
                     attempt=job.attempt,
                     max_attempts=job.max_attempts,
                     lease_owner=job.lease_owner,

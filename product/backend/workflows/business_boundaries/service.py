@@ -31,6 +31,7 @@ from product.backend.workflows.business_boundaries.proposals import planning as 
 from product.backend.workflows.business_boundaries.reading import queries as boundary_queries
 from product.backend.workflows.business_boundaries.proposals import sources as boundary_sources
 from product.backend.workflows.business_boundaries.proposals import validation as boundary_validation
+from product.backend.workflows.business_boundaries.candidates.decisions import validate_approval_source, save_approval_mappings
 
 
 
@@ -213,12 +214,16 @@ class BusinessBoundaryService:
     ) -> BusinessBoundaryView:
         clean_reason = boundary_validation._reason(reason)
         with self._uow_factory() as work:
+            # 与候选保存共用写锁，来源检查与最终批准之间不能插入新的候选修订。
+            work.acquire_write_lock()
             proposal = boundary_validation._pending_proposal(
                 work,
                 project_id,
                 proposal_id,
                 expected_fingerprint,
             )
+            draft = self.maintenance_draft(project_id, work=work, allow_empty=True)
+            candidate_source = validate_approval_source(work, proposal, "rb_" + draft.boundary_state_fingerprint)
             if proposal.unresolved_questions:
                 boundary_validation._raise(
                     ErrorCode.BOUNDARY_PROPOSAL_UNRESOLVED,
@@ -315,6 +320,7 @@ class BusinessBoundaryService:
                 reason=clean_reason,
             )
             work.business_boundaries.add_decision(decision)
+            save_approval_mappings(work, candidate_source, proposal_id, decision.decision_id, permission_plans, action_plans)
             work.commit()
         return self.view(project_id)
 

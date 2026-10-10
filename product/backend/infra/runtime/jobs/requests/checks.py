@@ -12,7 +12,7 @@ from uuid import uuid4
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.checks.check_runtime import CHECK_DOCUMENT_MAX_BYTES, CheckRuntimeBundle, canonical_check_runtime_bytes, parse_check_runtime
-from product.protocols.checks.execution_request import PersistedExecutionRequestV3, canonical_execution_request_v3_bytes, parse_execution_request_v3
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3, canonical_execution_request_bytes, parse_execution_request
 
 
 class CheckRequestStore:
@@ -70,11 +70,11 @@ class CheckRequestStore:
                 logging.getLogger(__name__).warning("CHECK_TEMPORARY_CLEANUP_FAILED")
 
     def write(self, job_id: str, request: PersistedExecutionRequestV3) -> tuple[str, bool]:
-        return self._write(self.path_for(job_id), canonical_execution_request_v3_bytes(request))
+        return self._write(self.path_for(job_id), canonical_execution_request_bytes(request))
 
     def load(self, job_id: str, *, expected_hash: str) -> PersistedExecutionRequestV3:
         try:
-            return parse_execution_request_v3(self._read(self.path_for(job_id), expected_hash))
+            return parse_execution_request(self._read(self.path_for(job_id), expected_hash))
         except ValueError:
             raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "执行快照格式无效") from None
 

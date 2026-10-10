@@ -172,7 +172,8 @@ def test_product_names_do_not_encode_development_generations() -> None:
     versioned_protocols = {PROTOCOLS / "schemas" / "runner" / name for name in (
         "check-runner-result-v2.schema.json", "check-runtime-v2.schema.json")}
     versioned_protocols.update({PROTOCOLS / "schemas" / "development" / "runtime-operation-v2.schema.json",
-        PROTOCOLS / "schemas" / "runtime" / "portable-release-v2.schema.json"})
+        PROTOCOLS / "schemas" / "runtime" / "portable-release-v3.schema.json"})
+    versioned_protocols.add(PROTOCOLS / 'schemas' / 'runner' / 'check-evidence-v2.schema.json')
     assert frozen_root_migration.is_file()
     product_files = []
     for path in (ROOT / "product").rglob("*"):
@@ -236,18 +237,12 @@ def test_product_does_not_mutate_python_import_paths() -> None:
 def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
     samples = ROOT / "samples"
     sample_web = samples / "web"
-    collaboration = sample_web / "collaboration_space"
-    source = collaboration / "source"
-    assert (collaboration / "sample.json").is_file()
-    assert (source / "openapi.json").is_file()
+    assert {path.name for path in sample_web.iterdir() if path.is_dir()} == {"digital_gallery"}
+    gallery = sample_web / "digital_gallery"
+    source = gallery / "source"
+    assert (gallery / "sample.json").is_file()
     assert {path.name for path in source.iterdir() if path.is_file()} == {
-        "authorization_policy.py",
-        "server.py",
-        "page.py",
-        "storage.py",
-        "background.py",
-        "inline_export.py",
-        "openapi.json",
+        "app.mjs", "page.mjs", "delivery.mjs", "preview.mjs", "assets.mjs", "openapi.json",
     }
     for path in _python_files(ROOT / "product"):
         assert not any(item == "samples" or item.startswith("samples.") for item in _imports(path)), path

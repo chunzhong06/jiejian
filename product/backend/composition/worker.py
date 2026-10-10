@@ -29,6 +29,7 @@ from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.infra.storage.db import require_current_database
 from product.backend.workflows.preparation.proofs.jobs import ProofPreflightJobs
+from product.backend.workflows.preparation.proofs.capture_jobs import ReferenceCaptureJobs
 
 
 class WorkerContainer:
@@ -73,6 +74,7 @@ class WorkerContainer:
             self.recording_request_store,
             self._build_recording_submission,
             proof_publisher=ProofPreflightJobs(self.var_dir, self.uow_factory),
+            capture_publisher=ReferenceCaptureJobs(self.var_dir,self.uow_factory),
         )
         self._closed = False
 

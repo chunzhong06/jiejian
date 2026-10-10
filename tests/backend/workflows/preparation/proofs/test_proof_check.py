@@ -10,8 +10,9 @@ from tests.fixtures.runtime.managed_records import ordinary_application, source_
     (False,False,'PASS',None,False),(True,False,'BLOCK',None,False),(False,True,'PASS',None,False),
     (False,False,'PASS',None,True),(True,False,'BLOCK',None,True),
     (True,False,'BLOCK',{'response.mjs':'export function publicationStatus(allowed) { return 403; }'},False),
-    (True,False,'BLOCK',{'response.mjs':'export function publicationStatus(allowed) { return 403; }',
-        'transition.mjs':"export function publicationSteps() { return ['publish','withdraw']; }"},False),
+    # 同一原子提交内还原没有发布发生；正常ALLOW也未完成，因此整轮保持不足，不能判安全。
+    pytest.param(True,False,'INCONCLUSIVE',{'response.mjs':'export function publicationStatus(allowed) { return 403; }',
+        'transition.mjs':"export function publicationSteps() { return ['publish','withdraw']; }"},False,id='atomic-internal-restore'),
     (False,False,'INCONCLUSIVE',{'policy.mjs':'export function mayPublish(actor, ownerId) { return false; }'},False),
 ])
 def test_adopted_json_source_is_consumed_by_formal_check(tmp_path,regression,read_only,expected,source_edits,alternate):

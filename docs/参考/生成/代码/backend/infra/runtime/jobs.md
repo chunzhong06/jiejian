@@ -33,11 +33,9 @@
 - `WORKER_LOG_BACKUPS`
 - `class WorkerDispatcher`
 - `WorkerDispatcher.start(self, job_id, lease_owner, secret_names) -> subprocess.Popen[Any]`
-- `WorkerDispatcher.wait(self, job_id, process, known_secrets, timeout_seconds) -> StagedAttempt`
-- `WorkerDispatcher.wait_recording(self, job_id, process, timeout_seconds) -> JobRecord`
 - `WorkerDispatcher.close_process(process, timeout) -> None`
 
-静态import / dot-source：`__future__`、`collections.abc`、`dataclasses`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`product.backend.infra.storage`、`product.protocols`、`pydantic`、`re`、`subprocess`、`sys`、`time`、`typing`、`作用域内：product.backend.infra.runtime.generated_files`
+静态import / dot-source：`__future__`、`collections.abc`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.runtime.worker.lifetime`、`re`、`subprocess`、`sys`、`typing`、`作用域内：product.backend.infra.runtime.generated_files`
 
 ### `product/backend/infra/runtime/jobs/events.py`
 
@@ -54,7 +52,7 @@
 - `class WorkerHandlerFactory`
 - `WorkerHandlerFactory.build_registry(self, lease_owner, environ) -> JobHandlerRegistry`
 
-静态import / dot-source：`__future__`、`collections.abc`、`pathlib`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.target_handlers.recording`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.storage`、`作用域内：product.backend.infra.runtime.check_runner.supervisor`、`作用域内：product.backend.infra.runtime.proof_runner.supervisor`
+静态import / dot-source：`__future__`、`collections.abc`、`pathlib`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.target_handlers.recording`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.storage`、`作用域内：product.backend.infra.runtime.capture_runner.supervisor`、`作用域内：product.backend.infra.runtime.check_runner.supervisor`、`作用域内：product.backend.infra.runtime.proof_runner.supervisor`
 
 ### `product/backend/infra/runtime/jobs/handlers.py`
 
@@ -133,16 +131,6 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.runtime.jobs.events`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.storage`、`uuid`、`作用域内：contextlib`
 
-### `product/backend/infra/runtime/jobs/reconciliation.py`
-
-[打开源码](../../../../../../../product/backend/infra/runtime/jobs/reconciliation.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `class ReconciliationResult`
-- `class RunReconciler`
-- `RunReconciler.reconcile(self, known_secrets) -> ReconciliationResult`
-
-静态import / dot-source：`__future__`、`collections.abc`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.paths`、`product.backend.infra.storage`、`pydantic`、`time`、`uuid`
-
 ### `product/backend/infra/runtime/jobs/recovery.py`
 
 [打开源码](../../../../../../../product/backend/infra/runtime/jobs/recovery.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -172,19 +160,6 @@
 - `CheckRequestStore.remove_if_matches(self, job_id, request_hash, config_hash) -> None`
 
 静态import / dot-source：`__future__`、`hashlib`、`hmac`、`logging`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.paths`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`re`、`uuid`
-
-### `product/backend/infra/runtime/jobs/requests/execution.py`
-
-[打开源码](../../../../../../../product/backend/infra/runtime/jobs/requests/execution.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `class ExecutionRequestStore`
-- `ExecutionRequestStore.write(self, job_id, request, known_secrets) -> tuple[str, bool]`
-- `ExecutionRequestStore.load(self, job_id, expected_hash, known_secrets) -> PersistedExecutionRequest`
-- `ExecutionRequestStore.load_historical(self, job_id, expected_hash, known_secrets) -> ExecutionRequestDocument`
-- `ExecutionRequestStore.remove_if_matches(self, job_id, request_hash) -> None`
-- `ExecutionRequestStore.path_for(self, job_id) -> Path`
-
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`hmac`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.runtime.paths`、`product.protocols`、`product.protocols.runner.execution_request`、`re`、`uuid`
 
 ### `product/backend/infra/runtime/jobs/target_handlers/__init__.py`
 
@@ -219,6 +194,17 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`logging`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.core.recording.models`、`product.backend.infra.recording.control`、`product.backend.infra.recording.request_store`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.targets`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.control`、`product.backend.infra.runtime.process.environment`、`product.backend.infra.runtime.process.tree`、`product.backend.infra.storage`、`product.protocols`、`subprocess`、`tempfile`、`time`、`typing`
 
+### `product/backend/infra/runtime/jobs/target_handlers/reference_capture.py`
+
+[打开源码](../../../../../../../product/backend/infra/runtime/jobs/target_handlers/reference_capture.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class ReferenceCaptureTargetHandler`
+- `ReferenceCaptureTargetHandler.load(self, work, job)`
+- `ReferenceCaptureTargetHandler.advance_after_claim(self, work, job, now_us)`
+- `ReferenceCaptureTargetHandler.finish(self, work, job, now_us, outcome)`
+
+静态import / dot-source：`product.backend.core.errors`、`product.protocols.preparation.proof_sources`
+
 ### `product/backend/infra/runtime/jobs/target_handlers/runtime_load.py`
 
 [打开源码](../../../../../../../product/backend/infra/runtime/jobs/target_handlers/runtime_load.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -230,18 +216,6 @@
 - `runtime_load_targets()`
 
 静态import / dot-source：`product.backend.core.errors`、`product.backend.infra.runtime.jobs.targets`、`product.protocols.runtime.node_runtime`
-
-### `product/backend/infra/runtime/jobs/target_handlers/verification.py`
-
-[打开源码](../../../../../../../product/backend/infra/runtime/jobs/target_handlers/verification.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `_LOGGER`
-- `class ResultFinalizerPort`
-- `ResultFinalizerPort.finalize(self, run_id) -> Any`
-- `class VerificationRunJobHandler`
-- `VerificationRunJobHandler.run_job(self, job_id) -> StagedAttempt &#124; None`
-
-静态import / dot-source：`__future__`、`collections.abc`、`logging`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.artifacts.run_packages`、`product.backend.infra.artifacts.run_publication`、`product.backend.infra.runtime.jobs.attempts`、`product.backend.infra.runtime.jobs.handlers`、`product.backend.infra.runtime.jobs.reconciliation`、`product.backend.infra.runtime.jobs.requests.execution`、`product.backend.infra.runtime.runner.supervisor`、`product.backend.infra.storage`、`typing`
 
 ### `product/backend/infra/runtime/jobs/targets.py`
 
@@ -272,6 +246,6 @@
 - `CheckJobTargetHandler.finish(self, work, job, now_us, outcome)`
 - `current_check_and_recording_targets() -> JobTargetRegistry`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage`、`typing`、`作用域内：product.backend.infra.runtime.jobs.target_handlers.proof_preflight`、`作用域内：product.backend.infra.runtime.jobs.target_handlers.recording`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.storage`、`typing`、`作用域内：product.backend.infra.runtime.jobs.target_handlers.proof_preflight`、`作用域内：product.backend.infra.runtime.jobs.target_handlers.recording`、`作用域内：product.backend.infra.runtime.jobs.target_handlers.reference_capture`
 
 <!-- GENERATED:END -->

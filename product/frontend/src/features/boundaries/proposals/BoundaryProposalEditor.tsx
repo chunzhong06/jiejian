@@ -104,7 +104,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
     <div className="boundary-editor-list">{actors.map((actor) => <article key={actor.item_id} className="boundary-editor-row-block">
       <Input aria-label="业务主体名称" value={actor.display_name} placeholder="业务主体名称" onChange={(event) => setActors((items) => items.map((item) => item.item_id === actor.item_id ? { ...item, display_name: event.target.value } : item))} />
       <Input.TextArea aria-label={`${actor.display_name || '业务主体'}说明`} value={actor.description} placeholder="用业务语言说明这个主体的职责" autoSize onChange={(event) => setActors((items) => items.map((item) => item.item_id === actor.item_id ? { ...item, description: event.target.value } : item))} />
-      <Button danger type="text" onClick={() => removeActor(actor.item_id)}>移除主体</Button>
+      <Button danger onClick={() => removeActor(actor.item_id)}>移除主体</Button>
     </article>)}</div>
     <Button onClick={() => setActors((items) => [...items, manualActor()])}>手工补充业务主体</Button></details>
 
@@ -120,9 +120,9 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
         <Input aria-label={`${effect.business_label || '业务结果'}资源概念`} value={effect.resource_concept} placeholder="资源概念" onChange={(event) => updateEffect(setActions, action.item_id, effect.item_id, { resource_concept: event.target.value })} />
         {effect.effect_kind === 'DATA_DISCLOSURE' && <Input aria-label={`${effect.business_label || '业务结果'}有限字段`} value={(effect.protected_projection ?? []).join(', ')} placeholder="有限字段，例如 material.title, material.summary" onChange={(event) => updateEffect(setActions, action.item_id, effect.item_id, { protected_projection: splitProjection(event.target.value) })} />}
         <Input.TextArea aria-label={`${effect.business_label || '业务结果'}说明`} value={effect.description} placeholder="说明用户真正得到或改变的业务结果" autoSize onChange={(event) => updateEffect(setActions, action.item_id, effect.item_id, { description: event.target.value })} />
-        <Button danger type="text" onClick={() => updateAction(setActions, action.item_id, { effect_catalog: action.effect_catalog.filter((item) => item.item_id !== effect.item_id) })}>移除业务结果</Button>
+        <Button danger onClick={() => updateAction(setActions, action.item_id, { effect_catalog: action.effect_catalog.filter((item) => item.item_id !== effect.item_id) })}>移除业务结果</Button>
       </div>)}
-      <Space><Button onClick={() => updateAction(setActions, action.item_id, { effect_catalog: [...action.effect_catalog, emptyEffect()] })}>添加业务结果</Button><Button danger type="text" onClick={() => removeAction(action.item_id)}>移除动作</Button></Space>
+      <Space><Button onClick={() => updateAction(setActions, action.item_id, { effect_catalog: [...action.effect_catalog, emptyEffect()] })}>添加业务结果</Button><Button danger onClick={() => removeAction(action.item_id)}>移除动作</Button></Space>
     </article>)}</div>
     <Button onClick={() => { const added = manualAction(); setActions((items) => [...items, added]); setSelectedActionId(added.item_id) }}>手工补充业务动作</Button>
 
@@ -136,7 +136,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
       {permissions.filter(item=>item.business_action_item_id===selectedAction?.item_id).map(permission=><section className="permission-summary-row" key={permission.item_id}>
         <StatusBadge kind="rule" className="permission-badge" tone={permission.expectation === 'ALLOW' ? 'success' : 'danger'}>{permission.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge>
         <RuleSentence>{actors.find(item=>item.item_id===permission.subject_actor_item_id)?.display_name || '操作人'}对{permission.relation==='OWNS'?'自己':actors.find(item=>item.item_id===permission.resource_owner_actor_item_id)?.display_name || '资源所有者'}拥有的资源，{permission.expectation==='ALLOW'?'可以':'不得'}{selectedAction?.display_name}。</RuleSentence>
-        <Button onClick={()=>{setEditingRule({...permission});setReceipt(undefined)}}>编辑这条规则</Button><Button type="text" danger onClick={()=>setPermissions(items=>items.filter(item=>item.item_id!==permission.item_id))}>移除权限规则</Button>
+        <Button onClick={()=>{setEditingRule({...permission});setReceipt(undefined)}}>编辑这条规则</Button><Button danger onClick={()=>setPermissions(items=>items.filter(item=>item.item_id!==permission.item_id))}>移除权限规则</Button>
       </section>)}<Button onClick={addPermission}>添加权限规则</Button></>}
     </div>}
     {error && <Alert className="flow-feedback" type="warning" showIcon message="草稿还不能生成提案" description={error} />}

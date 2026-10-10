@@ -9,19 +9,6 @@
 [打开源码](../../../../../../product/backend/core/reports/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
-### `product/backend/core/reports/models.py`
-
-[打开源码](../../../../../../product/backend/core/reports/models.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `_REPORT_CSS`
-- `render_json(report) -> bytes`
-- `render_html(report) -> bytes`
-- `render_sarif(report) -> bytes`
-- `render_junit(report) -> bytes`
-- `render_format(report, output_format) -> bytes`
-
-静态import / dot-source：`__future__`、`datetime`、`html`、`json`、`product.protocols.report`、`xml.sax.saxutils`
-
 ### `product/backend/core/reports/repair.py`
 
 [打开源码](../../../../../../product/backend/core/reports/repair.py) · Python AST；作用域内import不表示每次调用均执行。

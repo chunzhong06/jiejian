@@ -12,36 +12,6 @@
 
 静态import / dot-source：`importlib`
 
-### `product/protocols/artifacts.py`
-
-[打开源码](../../../../../product/protocols/artifacts.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `_SAFE_ID`
-- `_RELATIVE_PATH`
-- `RULESET_VERSION`
-- `_ARTIFACT_ROOT_VERSIONS`
-- `class ArtifactModel`
-- `class ScanBudget`
-- `class ArtifactCheckRequest`
-- `ArtifactCheckRequest.absolute_path_only(cls, value) -> str`
-- `class ArtifactScanStatus`
-- `class ArtifactVerdict`
-- `class ArtifactEvidence`
-- `ArtifactEvidence.relative_path(cls, value) -> str`
-- `class ArtifactFinding`
-- `ArtifactFinding.validate_identity(self) -> ArtifactFinding`
-- `class ArtifactScanResult`
-- `ArtifactScanResult.validate_result(self) -> ArtifactScanResult`
-- `class ArtifactResultFile`
-- `class ArtifactResultManifest`
-- `parse_artifact_check_request(raw) -> ArtifactCheckRequest`
-- `parse_artifact_scan_result(raw) -> ArtifactScanResult`
-- `parse_artifact_result_manifest(raw) -> ArtifactResultManifest`
-- `stable_artifact_fingerprint(rule_id, path, line, kind) -> str`
-- `stable_artifact_ids(artifact_id, rule_id, path, fingerprint) -> tuple[str, str]`
-
-静态import / dot-source：`__future__`、`enum`、`hashlib`、`json`、`product.backend.core.identifiers`、`pydantic`、`re`、`typing`
-
 ### `product/protocols/report.py`
 
 [打开源码](../../../../../product/protocols/report.py) · Python AST；作用域内import不表示每次调用均执行。

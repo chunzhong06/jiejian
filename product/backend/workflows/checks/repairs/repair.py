@@ -37,29 +37,43 @@ def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
 
 
 class CurrentRepairService:
-    def __init__(self, *, reader, change_context_reader, breakpoint_reader=None):
+    def __init__(self, *, reader, change_context_reader, breakpoint_reader=None, breakpoints_reader=None):
         self._reader = reader
         self._change_context_reader = change_context_reader
         self._breakpoint_reader = breakpoint_reader or (lambda _run,_case:None)
+        self._breakpoints_reader = breakpoints_reader
 
     def contracts(self, run_id):
         package = self._reader.package(run_id)
+        return self.contracts_from_verified_package(package)
+
+    def contracts_from_verified_package(self, package, *, breakpoints=None):
+        """复用本请求严格读取的包；同轮全部原题共享一次断点投影。"""
+        if breakpoints is None and self._breakpoints_reader is not None:
+            breakpoints = self._breakpoints_reader(package)
         return tuple(build_current_repair_contract(package,item.case_id,
-            breakpoint=self._breakpoint_reader(run_id,item.case_id)) for item in package.result.case_results
+            breakpoint=breakpoints.get(item.case_id) if breakpoints is not None else
+                self._breakpoint_reader(package.result.run_id,item.case_id)) for item in package.result.case_results
             if item.verdict is CaseVerdict.VULNERABLE)
 
     def resolve(self, project_id, reference: CurrentRepairReference):
         package = self._reader.package(reference.source_run_id)
         if package.request.project_id != project_id:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"修复引用不属于当前项目")
+        breakpoints = self._breakpoints_reader(package) if self._breakpoints_reader is not None else None
         contract = build_current_repair_contract(package,reference.source_case_id,
-            breakpoint=self._breakpoint_reader(reference.source_run_id,reference.source_case_id))
+            breakpoint=breakpoints.get(reference.source_case_id) if breakpoints is not None else
+                self._breakpoint_reader(reference.source_run_id,reference.source_case_id))
         if contract.repair_fingerprint != reference.repair_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"原题修复引用已失效")
         return contract
 
     def verification(self, run_id):
         package = self._reader.package(run_id)
+        return self.verification_from_verified_package(package)
+
+    def verification_from_verified_package(self, package):
+        """当前包来自严格reader；涉及另一源Run时仍独立核验其发布包。"""
         context = package.request.repair_context
         if context is None:
             return None

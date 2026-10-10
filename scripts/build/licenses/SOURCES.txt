@@ -1,0 +1,16 @@
+Native launcher license sources
+
+MinGW-w64-COPYING.txt and MinGW-w64-NOTICES.txt:
+Unmodified license files from the installed conda-forge MinGW-w64 UCRT CRT and headers distribution,
+version 12.0.0.r4.gg4f2fc60ca-hd8ed1ab_10.
+Upstream: https://www.mingw-w64.org/
+
+GCC-GPL-3.0.txt:
+https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING3
+
+GCC-Runtime-Exception-3.1.txt:
+https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING.RUNTIME
+
+Conda-forge-GCC-COPYING.txt:
+Unmodified license file from gcc-15.2.0-hd556455_18.
+https://github.com/conda-forge/ctng-compilers-feedstock

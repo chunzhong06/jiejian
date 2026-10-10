@@ -24,6 +24,8 @@ import './styles/collaboration.css'
 import '../../shared/styles/collections.css'
 
 type DetailTab='changes'|'verification'|'source'
+const presetNames: Record<string,string> = { VULNERABLE:'错误交付改动', EXPOSE_REVOKE:'先开放后撤回改动', FIXED:'权限修复', PREVIEW_CHANGED:'公开预览改动' }
+const changeReason=(reason:string)=>reason.replace(/预设演示：\s*([A-Z_]+)/,(_all,key)=>`示例改动：${presetNames[key]??key}`)
 const sourceLabel=(value:string|undefined)=>value==='LOCAL_GUI'?'本机登记':value||'来源未提供'
 const statusText=(details:DeliveryDetails|null|undefined)=>!details?'未关联精确检查':!details.verification.run_id?'尚未检查':details.verification.verdict==='PASS'?details.verification.runtime_status==='MATCHED'?'本轮已验证':'已验证，运行对应未确认':details.verification.verdict==='BLOCK'?'发现权限问题':details.verification.verdict==='INCONCLUSIVE'?'证据不足':'尚无已发布结论'
 function ChangeStatus({details, failed=false}:{details?:DeliveryDetails|null;failed?:boolean}) {
@@ -46,12 +48,12 @@ export function ChangesPage({project,onError,onNavigate,onStateChanged,requested
    if(items.some(item=>item.manifest.project_id!==project.project_id)||repairs.project_id!==project.project_id||active&&(active.task.project_id!==project.project_id||active.context.project_id!==project.project_id||active.context.task_id!==active.task.task_id||active.deliveries.some(item=>item.project_id!==project.project_id||item.task_id!==active.task.task_id)))throw new ApiError('STATE_PRECONDITION','修改记录所属应用不一致。')
    const wanted=requested.current
    if(wanted&&!items.some(item=>item.manifest.change_id===wanted)){const exact=await sourceChangesApi.show(project.project_id,wanted);if(exact.manifest.change_id!==wanted||exact.manifest.project_id!==project.project_id)throw new ApiError('STATE_PRECONDITION','所选修改关联不一致。');items.push(exact)}
-   const pairs=await Promise.all(items.map(async item=>{const value=await developmentApi.details(project.project_id,item.manifest.change_id)
+   const pairs=await Promise.all(items.filter(item=>historyOpen || item.manifest.change_id===(wanted??items[0]?.manifest.change_id)).map(async item=>{const value=await developmentApi.details(project.project_id,item.manifest.change_id)
     if(value&&(value.project_id!==project.project_id||value.delivery.change_id!==item.manifest.change_id||value.context.project_id!==project.project_id||value.context.task_id!==value.delivery.task_id||value.context.context_id!==value.delivery.context_id))throw new ApiError('STATE_PRECONDITION','修改与检查关联不一致。')
     return [item.manifest.change_id,value] as const}))
    if(epoch.current===stamp){setChanges(items);setDetails(Object.fromEntries(pairs));setRepair(repairs);setCurrent(active);setFailed(false)}
   }catch(error){if(epoch.current===stamp){setFailed(true);setDetails({});onError(error as ApiError)};throw error}finally{if(epoch.current===stamp)setLoading(false)}}
- const live=useLiveRead(visible?`${project.project_id}:${limit}:${selected??''}`:undefined,read,10000)
+ const live=useLiveRead(visible?`${project.project_id}:${limit}:${selected??''}:${historyOpen}`:undefined,read,10000)
  useEffect(()=>{setChanges([]);setDetails({});setCurrent(null);setRepair(null);setLoading(true);setFailed(false);return()=>{epoch.current+=1}},[project.project_id])
  useEffect(()=>{if(selected||!returnId.current)return;Array.from(root.current?.querySelectorAll<HTMLElement>('[data-change]')??[]).find(button=>button.dataset.change===returnId.current)?.focus({preventScroll:true})},[selected])
  const refresh=async()=>{setLoading(true);await read()}
@@ -69,16 +71,16 @@ export function ChangesPage({project,onError,onNavigate,onStateChanged,requested
  }
  if(issue&&!failed)return <RepairDelivery task={issue} change={changes.find(item=>item.manifest.change_id===issue.change_id)} loadingChange={loading} onNavigate={onNavigate} onBack={back} onViewChange={()=>{if(issue.change_id)open(issue.change_id)}}/>
  return <div ref={root} className="source-changes-page"><EditorialPage label="源码改动">
-  <div className="change-page-heading"><EditorialHeader eyebrow={project.name || '当前应用'} title="源码改动"/>{!registration&&<div className="change-page-tools"><Button type={changes.length?'default':'primary'} disabled={failed||loading} onClick={()=>setRegistration(true)}>登记本地修改</Button><Button onClick={()=>setHistoryOpen(true)}>修改记录</Button></div>}</div>
+  <div className="change-page-heading"><EditorialHeader eyebrow={project.name || '当前应用'} title="源码改动"/>{!registration&&<div className="change-page-tools"><Button onClick={()=>setHistoryOpen(true)}>修改记录</Button><Button type={changes.length?'default':'primary'} disabled={failed||loading} onClick={()=>setRegistration(true)}>登记本地修改</Button></div>}</div>
   {failed&&<p role="alert">无法完整读取修改与检查，已有说明不能替代当前结论。<Button onClick={()=>void refresh().catch(()=>{})}>重新读取</Button></p>}
-  {loading&&!changes.length&&<LoadingState page>正在读取修改记录</LoadingState>}
+  {loading&&!changes.length&&<LoadingState>正在读取修改记录</LoadingState>}
   {reference&&!issue&&!loading&&<p role="alert">未找到指定原问题，当前不会替换为另一条修复要求。</p>}
   {registration?<ChangeRegistration key={project.project_id} projectId={project.project_id} repair={repair} requestedRepair={reference} onError={onError} onCancel={back} onSaved={async id=>{setRegistration(false);open(id);await read();await onStateChanged()}}/>:change&&!failed?<>
     {selected&&selected!==latest?.manifest.change_id&&<Button type="link" onClick={back}>返回最新批次</Button>}
     <section className="change-batch" aria-label={change===latest?'最新一批修改':'所选修改批次'}><div>
       <p className="change-batch-meta"><span>{change===latest?'最新一批':'历史批次'}</span><time>{formatTimestamp(change.manifest.created_at_us)}</time><span>{sourceLabel(change.manifest.submitted_by)}</span></p>
-      <h2>{change.manifest.reason}</h2><p>登记时的权限版本 {change.assessment.payload.policy_epoch} · {change.assessment.payload.action_impacts.length} 项业务动作、{change.assessment.payload.permission_refs.length} 条权限要求</p>
-    </div><div className="change-batch-actions"><ChangeStatus details={linked}/><Button onClick={()=>setTab('changes')}>查看文件变化</Button><Button type="link" onClick={()=>setTab('source')}>查看源码对应</Button></div></section>
+      <h2>{changeReason(change.manifest.reason)}</h2>
+    </div><div className="change-batch-scope"><p>登记时的权限版本 {change.assessment.payload.policy_epoch}</p><div><span><strong>{change.assessment.payload.action_impacts.length}</strong> 项业务动作</span><span><strong>{change.assessment.payload.permission_refs.length}</strong> 条权限要求</span></div></div><div className="change-batch-actions"><ChangeStatus details={linked}/><div className="change-batch-buttons"><Button onClick={()=>setTab('source')}>查看源码对应</Button><Button onClick={()=>setTab('changes')}>查看文件变化</Button></div></div></section>
     <SourceChangeImpact key={project.project_id+':'+change.manifest.change_id} projectId={project.project_id} change={change} onNavigate={onNavigate} onSource={()=>setTab('source')}
       action={currentIssue?<Button type={change.revalidation.status==='READY'?'primary':'default'} onClick={()=>{setReference(currentIssue.contract.repair_fingerprint);onNavigate('/changes?repair_reference='+encodeURIComponent(currentIssue.contract.repair_fingerprint))}}>查看修复依据</Button>:primary(change,linked)}/>
   </>:selected&&!loading&&!failed?<Empty description="所选修改不可读取，请返回记录重新选择。"/>:!loading&&!failed?<section className="changes-empty" aria-label="尚无修改记录"><h2>从一次源码改动开始</h2><p>在开发工具中完成一批修改后登记，或通过上方入口登记本地修改。</p><p>界鉴会核对实际变化，并显示可能涉及的权限。</p></section>:null}

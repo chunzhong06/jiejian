@@ -1,4 +1,10 @@
 /* 页面与Portal共用控件语义；feature样式只安排布局，不重新定义按钮与状态外观。 */
+/* 有业务说明的同级单选卡沿用Radio行为，状态颜色、焦点及减少动效在共享层统一。 */
+[data-product=jiejian] .product-choice-cards .ant-radio-wrapper { margin:0;padding:var(--space-16);align-items:flex-start;border:1px solid var(--color-control-border);border-radius:var(--radius-medium);transition:background-color var(--motion-fast),border-color var(--motion-fast); }
+[data-product=jiejian] .product-choice-cards .ant-radio-wrapper:not(.ant-radio-wrapper-disabled):hover,
+[data-product=jiejian] .product-choice-cards .ant-radio-wrapper-checked { background:var(--color-primary-light);border-color:var(--color-primary); }
+[data-product=jiejian] .product-choice-cards .ant-radio-wrapper:focus-within { outline:2px solid var(--color-focus);outline-offset:3px; }
+[data-product=jiejian][data-motion=none] .product-choice-cards .ant-radio-wrapper { transition:none; }
 [data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled) {
   color: var(--color-primary-ink);
   border-color: var(--color-control-border);
@@ -77,6 +83,10 @@
   margin-inline-end: var(--space-12);
 }
 .permission-badge { flex-shrink: 0; align-self: start; }
+/* 权限选择与已确认规则共用语义颜色；文字仍明确表示允许或禁止。 */
+[data-product=jiejian] .permission-expectation[data-expectation=ALLOW] { --permission-ink:var(--color-safe);--permission-fill:var(--color-safe-light); }
+[data-product=jiejian] .permission-expectation[data-expectation=DENY] { --permission-ink:var(--color-danger);--permission-fill:var(--color-danger-light); }
+[data-product=jiejian] .permission-expectation :is(.ant-segmented-item-selected,.ant-segmented-thumb) { color:var(--permission-ink);background:var(--permission-fill); }
 .flow-number { display: inline-grid; place-items: center; flex: 0 0 var(--space-24); height: var(--space-24); border: var(--line-width) solid var(--color-border); border-radius: 50%; font-size: var(--font-label); color: var(--color-secondary); }
 .flow-number[aria-current=step] { color: var(--color-on-accent); background: var(--color-primary); border-color: var(--color-primary); }
 .editorial-heading-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); }

@@ -239,9 +239,8 @@ class ApplicationUnderstandingService:
         project_id: str,
         *,
         revision: int,
-        for_controlled_start: bool = False,
     ) -> ApplicationUnderstanding:
-        """保存源码读取授权；受控启动预览经GUI明确授权可先于地址连通，普通入口前置不变。"""
+        """保存当前目录的只读授权；源码整理不以应用运行或地址确认作为前提。"""
 
         with self._uow_factory() as work:
             current = work.application_understanding.get(project_id)
@@ -251,11 +250,6 @@ class ApplicationUnderstandingService:
                     "当前项目还没有应用连接记录",
                 )
             self._require_revision(current, revision)
-            if current.confirmed_endpoint is None and not for_controlled_start:
-                raise JiejianError(
-                    ErrorCode.APPLICATION_ENDPOINT_INVALID,
-                    "请先确认当前应用的本地访问地址",
-                )
             if current.source_analysis_authorized:
                 return current
             now_us = self._clock_us()
@@ -316,11 +310,7 @@ class ApplicationUnderstandingService:
                 ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED,
                 "尚未获得源码只读分析授权",
             )
-        if before.confirmed_endpoint is None:
-            raise JiejianError(
-                ErrorCode.APPLICATION_ENDPOINT_INVALID,
-                "请先确认当前应用的本地访问地址",
-            )
+        # 扫描只读取已授权目录；录制、观察和正式检查各自保留真实运行前置。
         result = self.analyzer.analyze(before.project_id, before.source_root)
         return before, result
 

@@ -13,6 +13,16 @@ function Invoke-Package($Toolchain) {
     Prepare-Chromium
     Prepare-SourceFrontend $Toolchain
 
+    $launcherCompiler = [Environment]::GetEnvironmentVariable("JIEJIAN_LAUNCHER_COMPILER")
+    if ([string]::IsNullOrWhiteSpace($launcherCompiler)) {
+        $candidate = Get-Command gcc.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($candidate) { $launcherCompiler = $candidate.Source }
+    }
+    if ([string]::IsNullOrWhiteSpace($launcherCompiler) -or -not (Test-Path -LiteralPath $launcherCompiler -PathType Leaf)) {
+        Fail-Development "portable-launcher" "没有找到固定版本的 MinGW-w64 GCC" "安装 toolchain.json 指定的 GCC，或用 JIEJIAN_LAUNCHER_COMPILER 指定其绝对路径；用户运行发布包不需要编译器"
+    }
+    $launcherCompiler = [IO.Path]::GetFullPath($launcherCompiler)
+
     $releaseRoot = Join-Path $script:DevelopmentRoot "release"
     $buildRoot = Join-Path $releaseRoot "build\wheel"
     $artifactRoot = Join-Path $releaseRoot "artifacts"
@@ -36,13 +46,7 @@ function Invoke-Package($Toolchain) {
     New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
     Get-ChildItem -LiteralPath $buildRoot -Filter "jiejian-*.whl" -File -ErrorAction SilentlyContinue | Remove-Item -Force
     Get-ChildItem -LiteralPath $artifactRoot -Filter "jiejian-*.whl" -File -ErrorAction SilentlyContinue | Remove-Item -Force
-    foreach ($name in @(
-        ($releaseName + ".zip"),
-        ($releaseName + "-nosamples.zip"),
-        "SHA256SUMS.txt"
-    )) {
-        Remove-Item -LiteralPath (Join-Path $artifactRoot $name) -Force -ErrorAction SilentlyContinue
-    }
+    # 已发布 ZIP 在新包写完后由组装器替换；构建前不删除仍可用的交付物。
 
     $env:JIEJIAN_PACKAGE_FRONTEND_DIR = [IO.Path]::GetFullPath($frontend)
     Push-Location -LiteralPath $script:ProjectRoot
@@ -65,7 +69,8 @@ function Invoke-Package($Toolchain) {
         "--python-source", $releasePython,
         "--playwright-source", (Join-Path $script:DevelopmentRoot "tools\playwright"),
         "--node-executable", $script:Node,
-        "--samples-source", (Join-Path $script:ProjectRoot "samples"),
+        "--launcher-compiler", $launcherCompiler,
+        "--samples-source", (Join-Path $script:ProjectRoot "samples\web"),
         "--uv", $script:Uv,
         "--uv-cache", (Join-Path $script:DevelopmentRoot "cache\uv"),
         "--toolchain", $script:ToolchainPath

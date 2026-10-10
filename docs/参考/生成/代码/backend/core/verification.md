@@ -46,6 +46,16 @@
 
 静态import / dot-source：`__future__`、`dataclasses`、`enum`、`product.backend.core.verification.checks`、`product.backend.core.verification.continuity`、`product.backend.core.verification.differential`、`product.backend.core.verification.facts`、`product.backend.core.verification.permissions`、`product.backend.core.verification.trace`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`pydantic`、`re`
 
+### `product/backend/core/verification/business_facts.py`
+
+[打开源码](../../../../../../product/backend/core/verification/business_facts.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `reduce_record_facts(reference, facts, case, expected_state)`
+- `reduce_disclosure_facts(reference, facts, case)`
+- `reduce_file_facts(reference, facts, case)`
+
+静态import / dot-source：`product.protocols.checks.business_facts`
+
 ### `product/backend/core/verification/checks.py`
 
 [打开源码](../../../../../../product/backend/core/verification/checks.py) · Python AST；作用域内import不表示每次调用均执行。

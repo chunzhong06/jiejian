@@ -34,8 +34,8 @@ export function EnvironmentPage({ project, workspace, onChanged, onNavigate, onE
   const stopped = lifecycle === 'STOPPED'
   const title = failed ? '暂时无法核对环境状态' : !official ? '核对当前应用的运行方式' : stopped ? '示例已停止，可重新开始' : lifecycle === 'RUNNING' ? '示例正在运行' : lifecycle === 'FAILED' ? '示例启动未完成' : lifecycle === 'NOT_STARTED' ? '准备一个独立的示例环境' : '核对当前环境，再继续工作'
   // 尚未取得归属事实时不先把示例判成普通应用，避免显示错误的操作入口。
-  if (loading) return <EditorialPage label="应用与环境"><EditorialHeader eyebrow={project?.name || '界鉴设置'} title="应用与环境"></EditorialHeader><LoadingState page>正在读取应用运行状态。</LoadingState></EditorialPage>
-  return <EditorialPage label="应用与环境">
+  if (loading) return <EditorialPage label="应用与环境" width="welcome"><EditorialHeader eyebrow={project?.name || '界鉴设置'} title="应用与环境"/><div className="environment-toolbar"><Button type="link" icon={<ArrowLeftOutlined aria-hidden/>} onClick={() => onNavigate('/workspace')}>返回概览</Button></div><LoadingState>正在读取应用运行状态。</LoadingState></EditorialPage>
+  return <EditorialPage label="应用与环境" width="welcome">
     <div className="environment-toolbar"><Button type="link" icon={<ArrowLeftOutlined aria-hidden/>} onClick={() => onNavigate('/workspace')}>返回概览</Button><Button loading={loading} onClick={() => setRevision(n => n + 1)}>刷新应用运行状态</Button></div>
     <EditorialHeader eyebrow={project?.name || '界鉴设置'} title="应用与环境"><p className="editorial-muted">{title}。</p></EditorialHeader>
     {failed && <Alert className="flow-feedback" type="warning" showIcon message="环境信息读取失败，旧状态已撤下" description="刷新只读取当前事实，不会再次启动或重置环境。"/>}

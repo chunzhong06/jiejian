@@ -1,14 +1,15 @@
 // 验证 R3 总览、单项导航与证据归属隔离；重排界面不能改变服务端结论。
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoryTraceEvent } from '../../api/checks/currentChecks'
 import { CurrentResultStory } from './CurrentResultStory'
-import { story, outcome, observation } from '../../testing/fixtures/results'
+import { story, outcome } from '../../shared/testing/results'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
-const api = vi.hoisted(() => ({ evidence: vi.fn() }))
+const api = vi.hoisted(() => ({ evidence: vi.fn(),evidenceBundle:vi.fn() }))
 vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
-vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
-beforeEach(() => { vi.clearAllMocks(); vi.spyOn(window,'scrollTo').mockImplementation(() => {}) })
+vi.mock('../../shared/ui/AgentAssistEntry', () => ({ AgentAssistEntry: () => null }))
+vi.mock('./observations/EvidenceVerification',()=>({EvidenceVerification:({selection}:{selection:unknown})=><section aria-label="怎样验证这项要求" data-selection={JSON.stringify(selection)}/>}))
+beforeEach(() => { vi.clearAllMocks(); api.evidenceBundle.mockImplementation(async(project_id,run_id,case_id,ids)=>({project_id,run_id,case_id,items:await Promise.all(ids.map(async (id:string)=>({document:await api.evidence(run_id,id),index:{}})))})); vi.spyOn(window,'scrollTo').mockImplementation(() => {}) })
 const node: StoryTraceEvent = { event_id:'task',parent_event_ids:[],kind:'MESSAGE',authorization_decision:null,effect_id:null,dispatch_effect_ids:[],source_component:'应用服务',source_location:'task-record' }
 const evidence = () => ({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:'ev1',outcome,observations:[],trace:null})
 const inspect = () => fireEvent.click(screen.getByRole('button',{name:'查看第 1 项依据'}))
@@ -16,26 +17,13 @@ const inspectTrace = () => { inspect(); fireEvent.click(screen.getByRole('button
 const openSource = () => { const button=screen.getByRole('button',{name:'查看资源状态证据'}); button.focus(); fireEvent.click(button) }
 
 describe('结果总览与单项调查', () => {
-  it('所选证明按操作前后与恢复分组，保留全部对应观察并排除其他要求', async () => {
+  it('所选证明传入准确指纹，细粒度读取由证据阅读面完成',async()=>{
     const value=story()
     value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof',required_level:'VERDICT_REQUIRED',source_label:'导出文件',observed_state:'CONFIRMED',evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
-    api.evidence.mockResolvedValue({...evidence(),observations:[
-      {...observation,phase:'BASELINE',reason_codes:['OBSERVATION_UNINTERPRETED']},
-      observation,
-      {...observation,phase:'EVENTUAL',window_end_us:300},
-      {...observation,phase:'RECOVERY',reason_codes:['OBSERVATION_UNINTERPRETED']},
-      {...observation,effect_id:'unrelated',reason_codes:['EFFECT_PROJECTOR_UNSUPPORTED']},
-      {...observation,proof_fingerprint:'old',reason_codes:['OBSERVER_PHASE_UNAVAILABLE']},
-    ]})
+    api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
     fireEvent.click(screen.getByRole('button',{name:'查看必要证明记录'}))
-    const records=await screen.findByRole('region',{name:'观察记录'})
-    expect(within(records).getByRole('region',{name:'操作前'})).toHaveTextContent('初始对照记录')
-    expect(within(within(records).getByRole('region',{name:'操作后'})).getAllByRole('listitem')).toHaveLength(2)
-    expect(within(records).getByRole('region',{name:'恢复后'})).toHaveTextContent('恢复对照记录')
-    expect(records).not.toHaveTextContent('不能用于判断该业务后果')
-    expect(records).not.toHaveTextContent('本阶段不采集')
-    expect(within(screen.getByRole('region',{name:'已发布证据'})).getAllByText('导出文件',{exact:true})).toHaveLength(1)
+    expect(await screen.findByRole('region',{name:'怎样验证这项要求'})).toHaveAttribute('data-selection',JSON.stringify({proof:'proof'}))
   })
 
   it('默认总览不展开单项或路径，返回恢复原行焦点并提供精确 Case 回调', () => {
@@ -57,10 +45,9 @@ describe('结果总览与单项调查', () => {
     api.evidence.mockResolvedValue({...evidence(),trace:{complete:true,events:[node]}})
     render(<CurrentResultStory story={value} onError={vi.fn()}/>); inspectTrace()
     const trigger=screen.getByRole('button',{name:'查看任务派发的发布证据'});trigger.focus();fireEvent.click(trigger)
-    expect(await screen.findByText('应用服务 · task-record')).toBeInTheDocument()
+    expect(await screen.findByRole('region',{name:'怎样验证这项要求'})).toHaveAttribute('data-selection',JSON.stringify({event:'task'}))
     const reader=screen.getByRole('region',{name:'已发布证据'})
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByText('不能单独证明什么')).toBeInTheDocument()
     fireEvent.keyDown(reader,{key:'Escape'})
     expect(screen.getByRole('button',{name:'查看任务派发的发布证据'})).toHaveFocus()
   })
@@ -81,7 +68,7 @@ describe('结果总览与单项调查', () => {
     fireEvent.click(screen.getByRole('button',{name:'证据记录'}))
     expect(screen.getByRole('region',{name:'本轮要求与证据对应'})).toHaveTextContent('辅助材料不替代必要证明')
     fireEvent.click(screen.getByRole('button',{name:'查看辅助观察记录'}))
-    expect(await screen.findByText('来自所选证明要求')).toBeInTheDocument()
+    expect(await screen.findByRole('region',{name:'怎样验证这项要求'})).toHaveAttribute('data-selection',JSON.stringify({proof:'proof1'}))
     expect(api.evidence).toHaveBeenCalledWith('r1','ev1')
   })
   it('隐藏工作页后取消证据读取，迟到结果和错误都不能污染新页面', async () => {
@@ -119,7 +106,7 @@ describe('结果总览与单项调查', () => {
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
     const trigger=screen.getByRole('button',{name:'查看必要证明记录'});trigger.focus();fireEvent.click(trigger)
-    await screen.findByText('来自所选证明要求')
+    await screen.findByRole('region',{name:'怎样验证这项要求'})
     fireEvent.keyDown(screen.getByRole('region',{name:'已发布证据'}),{key:'Escape'})
     expect(screen.getByRole('button',{name:'查看必要证明记录'})).toHaveFocus()
   })
@@ -143,7 +130,7 @@ describe('结果总览与单项调查', () => {
     const group=screen.getByRole('article',{name:'审计记录的阶段记录'})
     fireEvent.click(group.querySelector('summary')!)
     const trigger=screen.getByRole('button',{name:'查看审计记录最终观察记录'});trigger.focus();fireEvent.click(trigger)
-    await screen.findByText('在哪里看到')
+    await screen.findByRole('region',{name:'怎样验证这项要求'})
     fireEvent.keyDown(screen.getByRole('region',{name:'已发布证据'}),{key:'Escape'})
     expect(screen.getByRole('button',{name:'查看审计记录最终观察记录'})).toHaveFocus()
     expect(screen.getByRole('article',{name:'审计记录的阶段记录'}).querySelector('details')).toHaveAttribute('open')

@@ -243,7 +243,6 @@ def test_complex_coverage_is_stable_and_preserves_batch_semantics() -> None:
     first = build_permission_coverage_plan(contract, engine_version="coverage-v2", seed=7, case_budget=32, max_relation_depth=4)
     second = build_permission_coverage_plan(contract, engine_version="coverage-v2", seed=7, case_budget=32, max_relation_depth=4)
     assert first == second
-    assert first.contract_fingerprint == first.contract_fingerprint
     batch_modes = {case.batch_mode for case in first.cases if case.batch_mode is not None}
     assert batch_modes == {BatchAuthorizationMode.ALL_ALLOW, BatchAuthorizationMode.ALL_DENY, BatchAuthorizationMode.MIXED_AUTHORIZATION}
     assert all(case.atomic for case in first.cases if case.batch_mode is not None)

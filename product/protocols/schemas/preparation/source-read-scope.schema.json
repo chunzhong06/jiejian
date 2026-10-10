@@ -51,11 +51,8 @@
       "type": "array"
     },
     "schema_version": {
-      "default": "2",
-      "enum": [
-        "1",
-        "2"
-      ],
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },

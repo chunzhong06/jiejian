@@ -29,9 +29,11 @@ class JobTargetType(StrEnum):
     RECORDING = "RECORDING"
     RUNTIME_LOAD = "RUNTIME_LOAD"
     PROOF_PREFLIGHT = "PROOF_PREFLIGHT"
+    REFERENCE_CAPTURE='REFERENCE_CAPTURE'
 
     @classmethod
     def from_job(cls, job: JobRecord) -> JobTargetType:
+        if job.reference_capture_id is not None:return cls.REFERENCE_CAPTURE
         if job.preflight_id is not None:
             return cls.PROOF_PREFLIGHT
         if job.runtime_load_id is not None and job.run_id is None and job.recording_id is None:
@@ -207,9 +209,11 @@ def current_check_and_recording_targets() -> JobTargetRegistry:
     """装配短期检查、录制和预检查；长驻运行加载由独立监督器领取。"""
     from product.backend.infra.runtime.jobs.target_handlers.recording import RecordingJobTargetHandler
     from product.backend.infra.runtime.jobs.target_handlers.proof_preflight import ProofPreflightTargetHandler
+    from product.backend.infra.runtime.jobs.target_handlers.reference_capture import ReferenceCaptureTargetHandler
 
     registry = JobTargetRegistry()
     registry.register(JobTargetType.RUN, CheckJobTargetHandler())
     registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
     registry.register(JobTargetType.PROOF_PREFLIGHT, ProofPreflightTargetHandler())
+    registry.register(JobTargetType.REFERENCE_CAPTURE,ReferenceCaptureTargetHandler())
     return registry

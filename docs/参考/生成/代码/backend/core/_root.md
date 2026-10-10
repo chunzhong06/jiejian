@@ -32,8 +32,6 @@
 [打开源码](../../../../../../product/backend/core/errors.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `class ErrorCode`
-- `class LLMWireErrorCode`
-- `LLM_WIRE_TO_INTERNAL`
 - `class JiejianError`
 - `JiejianError.code(self) -> str`
 - `JiejianError.to_dict(self) -> dict[str, Any]`

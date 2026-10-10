@@ -243,9 +243,9 @@
 
 [打开源码](../../../../../../product/backend/infra/observers/checks/check_records.py) · Python AST；作用域内import不表示每次调用均执行。
 
-- `observe_records(owner, source, case, action_id, requirement, proof, phase, baseline_trusted, cleanup, common, source_identity)`
+- `observe_records(owner, source, case, action_id, requirement, proof, phase, baseline_trusted, cleanup, common)`
 
-静态import / dot-source：`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.checks.check_disclosure`、`product.backend.infra.observers.records.record_facts`、`product.backend.infra.observers.records.record_source`、`product.backend.infra.observers.records.source_contracts`、`product.protocols.checks.check_result`、`product.protocols.preparation.proof_sources`、`product.protocols.web.request`、`作用域内：product.backend.infra.observers.checks.check_runtime`
+静态import / dot-source：`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.checks.check_disclosure`、`product.backend.infra.observers.records.record_facts`、`product.backend.infra.observers.records.record_source`、`product.backend.infra.observers.records.source_contracts`、`product.protocols.checks.check_result`、`product.protocols.preparation.proof_sources`、`product.protocols.web.request`、`作用域内：product.backend.core.boundaries.entities`、`作用域内：product.backend.core.verification.business_facts`、`作用域内：product.backend.infra.observers.checks.check_runtime`、`作用域内：product.backend.infra.observers.checks.disclosure_evidence`、`作用域内：product.backend.infra.observers.checks.file_evidence`、`作用域内：product.backend.infra.observers.checks.record_evidence`
 
 ### `product/backend/infra/observers/checks/check_runtime.py`
 
@@ -257,7 +257,7 @@
 - `CheckObserverRuntime.observe(self, case, action_id, requirement, proof, phase, baseline_trusted, cleanup) -> CheckObservedSource`
 - `CheckObserverRuntime.trace(self, action, case)`
 
-静态import / dot-source：`__future__`、`dataclasses`、`pathlib`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.infra.observers.adapters.owner_api`、`product.backend.infra.observers.coordinator`、`product.backend.infra.observers.effect_projector`、`product.protocols.checks.check_result`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.observer`、`secrets`、`time`、`作用域内：product.backend.infra.execution.web.check_runtime`、`作用域内：product.backend.infra.observers.checks.check_disclosure`、`作用域内：product.backend.infra.observers.checks.check_records`、`作用域内：product.backend.infra.observers.checks.check_trace`
+静态import / dot-source：`__future__`、`dataclasses`、`pathlib`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.infra.observers.adapters.owner_api`、`product.backend.infra.observers.coordinator`、`product.backend.infra.observers.effect_projector`、`product.protocols.checks.check_result`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.observer`、`secrets`、`time`、`作用域内：product.backend.infra.execution.web.check_runtime`、`作用域内：product.backend.infra.observers.checks.check_disclosure`、`作用域内：product.backend.infra.observers.checks.check_records`、`作用域内：product.backend.infra.observers.checks.check_trace`、`作用域内：product.backend.infra.observers.checks.managed_trace`
 
 ### `product/backend/infra/observers/checks/check_trace.py`
 
@@ -267,17 +267,60 @@
 
 静态import / dot-source：`json`、`product.backend.core.verification.trace`
 
+### `product/backend/infra/observers/checks/disclosure_evidence.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/checks/disclosure_evidence.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `collect_disclosure_evidence(source, case, requirement, proof, phase, before, view, target, clock, marker, key)`
+
+静态import / dot-source：`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.checks.check_disclosure`、`product.backend.infra.observers.checks.record_evidence`、`product.backend.infra.observers.records.record_facts`、`product.protocols.checks.business_facts`
+
+### `product/backend/infra/observers/checks/file_evidence.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/checks/file_evidence.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `collect_file_evidence(source, case, requirement, proof, phase, before, view, target, clock, marker)`
+
+静态import / dot-source：`product.backend.infra.observers.checks.record_evidence`、`product.protocols.checks.business_facts`
+
+### `product/backend/infra/observers/checks/managed_trace.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/checks/managed_trace.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `managed_execution_trace(owner, action, case)`
+
+静态import / dot-source：`json`、`product.backend.core.errors`、`product.backend.core.verification.trace`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.records.record_source`、`product.backend.infra.observers.records.source_contracts`
+
+### `product/backend/infra/observers/checks/record_evidence.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/checks/record_evidence.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `collect_record_evidence(source, case, requirement, proof, phase, before, view, target, clock, marker, claims)`
+- `identity_facts(common, case, proof)`
+
+静态import / dot-source：`product.backend.infra.observers.records.record_facts`、`product.protocols.checks.business_facts`
+
+### `product/backend/infra/observers/checks/sealed_facts.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/checks/sealed_facts.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `finalize_facts(observations, collected)`
+
+静态import / dot-source：`product.protocols.checks.business_facts`
+
 ### `product/backend/infra/observers/coordinator.py`
 
 [打开源码](../../../../../../product/backend/infra/observers/coordinator.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `class TargetCaseSession`
+- `TargetCaseSession.observe_target(self, spec, binding, correlation, phase)`
 - `class ObserverCoordinator`
 - `ObserverCoordinator.observe_one(self, session, binding, spec, correlation, phase, cursors) -> tuple[ObservationEnvelope &#124; None, ObserverOutcome, tuple[AuditLogStartCursor, ...]]`
 - `ObserverCoordinator.observe_phase(self, session, case, phase, envelopes, outcomes, cursors, requirements_to_run, required_requirements) -> bool`
 - `ObserverCoordinator.complete_required_outcomes(self, case, outcomes, requirements_to_run) -> tuple[ObserverOutcome, ...]`
 - `default_observer_registry() -> ObserverRegistry`
 
-静态import / dot-source：`__future__`、`collections.abc`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.observers.adapters.async_task`、`product.backend.infra.observers.adapters.audit_log`、`product.backend.infra.observers.adapters.azure_blob`、`product.backend.infra.observers.adapters.azure_queue`、`product.backend.infra.observers.adapters.sqlite`、`product.backend.infra.observers.registry`、`product.protocols`、`pydantic`、`typing`、`作用域内：product.backend.infra.execution.port`
+静态import / dot-source：`__future__`、`collections.abc`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.observers.adapters.async_task`、`product.backend.infra.observers.adapters.audit_log`、`product.backend.infra.observers.adapters.azure_blob`、`product.backend.infra.observers.adapters.azure_queue`、`product.backend.infra.observers.adapters.sqlite`、`product.backend.infra.observers.registry`、`product.protocols`、`pydantic`、`typing`
 
 ### `product/backend/infra/observers/effect_projector.py`
 
@@ -302,10 +345,21 @@
 [打开源码](../../../../../../product/backend/infra/observers/records/record_facts.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `record_value(data, path)`
+- `legacy_transaction_fact(before, view, path, expected_state, request_key, subject_id, resource_id, owner_id, collection)`
+- `legacy_request_fact(before, view, path, expected_state, request_nonce, request_digest, subject_id, resource_id, owner_id, collection)`
 - `transaction_fact(before, view, path, expected_state, request_key, subject_id, resource_id, owner_id, collection)`
 - `request_fact(before, view, path, expected_state, request_nonce, request_digest, subject_id, resource_id, owner_id, collection)`
 
 静态import / dot-source：`__future__`、`product.backend.infra.observers.adapters.json_source`
+
+### `product/backend/infra/observers/records/record_history.py`
+
+[打开源码](../../../../../../product/backend/infra/observers/records/record_history.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `read_history(stream, version)`
+- `import_legacy_state(path, target, generation, persist)`
+
+静态import / dot-source：`__future__`、`hashlib`、`json`、`os`、`product.backend.infra.runtime.process.exclusive_file`、`product.protocols.runtime.transaction_records`、`sqlite3`、`struct`
 
 ### `product/backend/infra/observers/records/record_preflight.py`
 
@@ -320,9 +374,9 @@
 [打开源码](../../../../../../product/backend/infra/observers/records/record_source.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `record_provider(var_dir, runtime_reference, require_live) -> RecordProviderReference &#124; None`
-- `read_record_source(var_dir, runtime_reference, config, resource_id, request_nonce, cancelled)`
+- `read_record_source(var_dir, runtime_reference, config, resource_id, request_nonce, cancelled, trace)`
 
-静态import / dot-source：`__future__`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.execution.web.identity`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.runtime.process.controlled.artifact`、`product.backend.infra.runtime.process.controlled.node_owned`、`product.backend.infra.runtime.process.listeners`、`product.backend.infra.runtime.process.records.record_capabilities`、`product.backend.infra.runtime.process.records.record_server`、`product.backend.infra.runtime.process.tree`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.transaction_records`、`product.protocols.web.identity`、`product.protocols.web.request`、`product.protocols.web.target`、`urllib.parse`
+静态import / dot-source：`__future__`、`json`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.execution.web.identity`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.runtime.process.controlled.artifact`、`product.backend.infra.runtime.process.controlled.node_owned`、`product.backend.infra.runtime.process.listeners`、`product.backend.infra.runtime.process.records.record_capabilities`、`product.backend.infra.runtime.process.records.record_server`、`product.backend.infra.runtime.process.tree`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.transaction_records`、`product.protocols.web.identity`、`product.protocols.web.request`、`product.protocols.web.target`、`urllib.parse`、`作用域内：product.protocols.runtime.record_trace`
 
 ### `product/backend/infra/observers/records/source_contracts.py`
 
@@ -338,16 +392,19 @@
 
 - `class RecordStoreError`
 - `class TransactionRecordStore`
+- `TransactionRecordStore.migration_receipt(self) -> RecordStateMigration &#124; None`
 - `TransactionRecordStore.close(self)`
 - `TransactionRecordStore.seed(self, command) -> RecordSnapshot`
 - `TransactionRecordStore.read(self, collection, resource_id) -> RecordSnapshot`
 - `TransactionRecordStore.operation(self, operation_id) -> RecordOperation`
 - `TransactionRecordStore.open_scope(self, request_nonce, request_digest) -> RecordRequestScope`
 - `TransactionRecordStore.close_scope(self, scope_id, complete) -> RecordRequestScope`
+- `TransactionRecordStore.append_trace(self, command)`
+- `TransactionRecordStore.trace_view(self, collection, resource_id, request_nonce)`
 - `TransactionRecordStore.proof_view(self, collection, resource_id, operation_id, request_nonce) -> RecordProofView`
 - `TransactionRecordStore.transact(self, command) -> RecordOperation`
 
-静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`os`、`pathlib`、`product.protocols.runtime.transaction_records`、`sqlite3`、`struct`、`threading`、`uuid`、`作用域内：product.backend.infra.runtime.process.exclusive_file`
+静态import / dot-source：`__future__`、`contextlib`、`hashlib`、`json`、`os`、`pathlib`、`product.backend.infra.observers.records.record_history`、`product.protocols.runtime.transaction_records`、`sqlite3`、`struct`、`threading`、`time`、`uuid`、`zlib`、`作用域内：product.backend.infra.runtime.process.exclusive_file`、`作用域内：product.protocols.runtime.record_trace`
 
 ### `product/backend/infra/observers/registry.py`
 

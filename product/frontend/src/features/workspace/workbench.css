@@ -9,6 +9,9 @@
 .overview-task { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--space-40); align-items:center; padding:var(--space-24) 0 var(--rhythm-heroGap); border-bottom:1px solid var(--color-border); }
 .overview-task h2 { font-size:clamp(24px,2vw,30px); font-weight:var(--weight-strong); line-height:1.55; margin:var(--space-20) 0; }
 .overview-task-copy > p:last-child { color:var(--color-secondary); max-width:54ch; line-height:1.9; }
+.overview-task--quiet { grid-template-columns:minmax(0,1fr);justify-items:center; }
+.overview-task--quiet .overview-task-copy { width:fit-content;max-width:100%; }
+.overview-task--quiet .overview-task-actions { display:none; }
 .overview-task-actions { align-self:end;max-width:360px; }
 .overview-task-actions > p { color:var(--color-secondary); margin:0 0 20px; }.overview-action { display:flex; justify-content:flex-end; margin-top:28px; }
 .overview-records { display:grid; gap:8px; }

@@ -175,7 +175,7 @@ def test_workspace_primary_task_follows_single_fixed_priority(tmp_path: Path) ->
     try:
         first = core.workspace.get(project_id)
         assert first.primary_task is not None
-        assert first.primary_task.task_kind == "CONFIRM_APPLICATION_ENDPOINT"
+        assert first.primary_task.task_kind == "AUTHORIZE_SOURCE_ANALYSIS"
         assert core.workspace.get(project_id).primary_task == first.primary_task
 
         current = core.application_understanding.get(project_id)

@@ -116,6 +116,49 @@
 [打开源码](../../../../../product/frontend/src/shared/styles/typography.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
+### `product/frontend/src/shared/testing/results.ts`
+
+[打开源码](../../../../../product/frontend/src/shared/testing/results.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../api/checks/currentChecks`
+
+### `product/frontend/src/shared/testing/setup.ts`
+
+[打开源码](../../../../../product/frontend/src/shared/testing/setup.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`@testing-library/jest-dom/vitest`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/shared/ui/agent-assist.css`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/agent-assist.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/shared/ui/AgentAssistEntry.test.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/AgentAssistEntry.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../api/system/mcp`、`../runtime/visibility`、`./AgentAssistEntry`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/shared/ui/AgentAssistEntry.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/AgentAssistEntry.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `AgentAssistContext`
+- `AgentAssistEntry`
+
+静态import / dot-source：`../../api/system/mcp`、`../runtime/useLiveRead`、`../runtime/visibility`、`./agent-assist.css`、`@ant-design/icons`、`antd`、`react`
+
+### `product/frontend/src/shared/ui/AgentWorkflowEntry.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/AgentWorkflowEntry.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `AgentWorkflowEntry`
+
+静态import / dot-source：`../../api/http`、`./AgentAssistEntry`
+
 ### `product/frontend/src/shared/ui/Editorial.test.tsx`
 
 [打开源码](../../../../../product/frontend/src/shared/ui/Editorial.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -142,7 +185,7 @@
 
 - `LoadingState`
 
-静态import / dot-source：`antd`
+静态import / dot-source：`antd`、`react`
 
 ### `product/frontend/src/shared/ui/MotionPresenceList.test.tsx`
 

@@ -185,7 +185,7 @@ describe('RecordingPage', () => {
     api.createRecording.mockResolvedValue({ recording: { ...target, state: 'CREATED' } })
     render(<RecordingPage {...props} task={task} />)
     const checkbox = await screen.findByRole('checkbox', { name: '我确认本次演示的测试资源属于“资源所有者账号”' })
-    const button = screen.getByRole('button', { name: '打开浏览器并开始准备' })
+    const button = await screen.findByRole('button', { name: '打开浏览器并开始准备' })
     expect(checkbox).not.toBeChecked(); expect(button).toBeDisabled()
     fireEvent.click(checkbox); fireEvent.click(button)
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', expect.objectContaining({
@@ -198,7 +198,7 @@ describe('RecordingPage', () => {
     const task = demonstrationTask()
     const props = pageProps(); props.onStateChanged.mockResolvedValue({ primary_task: demonstrationTask({ resource_owner_test_identity_id: 'changed' }) })
     render(<RecordingPage {...props} task={task} />)
-    const button = screen.getByRole('button', { name: '打开浏览器并开始准备' })
+    const button = await screen.findByRole('button', { name: '打开浏览器并开始准备' })
     await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button)
     expect(await screen.findByText(/准备要求已变化/)).toBeInTheDocument()
     expect(api.createRecording).not.toHaveBeenCalled()

@@ -1,0 +1,125 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "SELECT",
+        "CORRECT",
+        "DEFER",
+        "DISMISS"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "candidate_id": {
+      "pattern": "^rcd_[0-9a-f]{32}$",
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "correction": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Correction"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "decision_id": {
+      "pattern": "^rcdcn_[0-9a-f]{32}$",
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "expected_basis_id": {
+      "pattern": "^rb_[0-9a-f]{64}$",
+      "title": "Expected Basis Id",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 1,
+      "title": "Expected Revision",
+      "type": "integer"
+    },
+    "operation_id": {
+      "pattern": "^[0-9a-f]{32}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "option_id": {
+      "anyOf": [
+        {
+          "pattern": "^rop_[0-9a-f]{16}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Option Id"
+    },
+    "output_revision": {
+      "minimum": 2,
+      "title": "Output Revision",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "request_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "scenario_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Scenario Fingerprint",
+      "type": "string"
+    },
+    "scenario_id": {
+      "pattern": "^rsc_[0-9a-f]{16}$",
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "submitted_via": {
+      "const": "LOCAL_GUI",
+      "default": "LOCAL_GUI",
+      "title": "Submitted Via",
+      "type": "string"
+    }
+  },
+  "required": [
+    "operation_id",
+    "expected_basis_id",
+    "expected_revision",
+    "scenario_id",
+    "scenario_fingerprint",
+    "action",
+    "decision_id",
+    "project_id",
+    "candidate_id",
+    "output_revision",
+    "request_fingerprint",
+    "created_at_us"
+  ],
+  "title": "RuleCandidateDecision",
+  "type": "object"
+}

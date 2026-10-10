@@ -14,6 +14,8 @@ from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
 from product.backend.core.boundaries.proposals import ProposedActionItem, ProposedActorItem, ProposedPermissionItem
 from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
+from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide
+from product.backend.core.boundaries.rule_preview import RulePreviewCommand
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
     BoundaryMaintenanceActorItem,
@@ -84,6 +86,14 @@ class RuleCandidateProposalRequest(ApiModel):
     revision: int = Field(ge=1)
 
 
+class RulePreviewRequest(ApiModel):
+    reference: dict[str, object]
+    situation: dict[str, object] | None = None
+
+    def to_command(self):
+        return RulePreviewCommand.model_validate_json(self.model_dump_json())
+
+
 class BoundaryMaintenanceCreateRequest(ApiModel):
     schema_version: Literal["1"]
     expected_boundary_state_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -123,6 +133,10 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
     prefix = "/api/projects/{project_id}/business-boundaries"
 
+    @router.post(f"{prefix}/rule-preview", response_model=ApiResponse)
+    def rule_preview(project_id: str, body: RulePreviewRequest):
+        return data_response(jsonable_encoder(context.rule_candidates.preview(project_id, body.to_command())))
+
     @router.get(f"{prefix}/rules/{{intent_id}}", response_model=ApiResponse)
     def rule_details(project_id: str, intent_id: str, revision: int | None = None):
         return data_response(context.rule_details.read(project_id,intent_id,revision=revision))
@@ -145,8 +159,12 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         return data_response(jsonable_encoder(context.rule_candidates.propose(project_id, candidate_id,
             revision=body.revision, operation_id=body.operation_id)), status_code=201)
 
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/decisions", response_model=ApiResponse, status_code=201)
+    def decide_rule_candidate(project_id: str, candidate_id: str, body: RuleCandidateDecide):
+        return data_response(jsonable_encoder(context.rule_candidates.decide(project_id, candidate_id, body)), status_code=201)
+
     @router.get(f"{prefix}/rule-operations/{{kind}}/{{operation_id}}", response_model=ApiResponse)
-    def rule_operation(project_id: str, kind: Literal["SAVE", "PROPOSE"], operation_id: str):
+    def rule_operation(project_id: str, kind: Literal["SAVE", "PROPOSE", "DECIDE"], operation_id: str):
         return data_response(jsonable_encoder(context.rule_candidates.operation(project_id, kind, operation_id)))
 
     @router.get(prefix, response_model=ApiResponse)

@@ -63,7 +63,7 @@ class OfficialScenarioInstaller:
     ) -> tuple[str, str]:
         """发布两条已审阅场景流程；它们只定义考题，不代表任何运行结果。"""
 
-        export_recording = self._install_recording(
+        export_recording = self.install_recording(
             project_id=project_id,
             action_id=export_action_id,
             identity_id=owner_identity_id,
@@ -74,7 +74,7 @@ class OfficialScenarioInstaller:
             source_fingerprint=source_fingerprint,
             runtime_instance_id=runtime_instance_id,
         )
-        view_recording = self._install_recording(
+        view_recording = self.install_recording(
             project_id=project_id,
             action_id=view_action_id,
             identity_id=member_identity_id,
@@ -86,13 +86,13 @@ class OfficialScenarioInstaller:
             target_request_id="request_000002",
             runtime_instance_id=runtime_instance_id,
         )
-        self._install_recording(project_id=project_id,action_id=export_action_id,identity_id=owner_identity_id,
+        self.install_recording(project_id=project_id,action_id=export_action_id,identity_id=owner_identity_id,
             endpoint=endpoint,event_factory=_recovery_events,resource_consumer=ValueSlotConsumer.JSON_BODY,
             resource_location="$.resource_id",source_fingerprint=source_fingerprint,
             purpose=RecordingPurpose.RECOVERY,parent_recording_id=export_recording,runtime_instance_id=runtime_instance_id)
         return export_recording, view_recording
 
-    def _install_recording(
+    def install_recording(
         self,
         *,
         project_id: str,
@@ -107,12 +107,13 @@ class OfficialScenarioInstaller:
         parent_recording_id=None,
         target_request_id="request_000001",
         runtime_instance_id=None,
+        resource_owner_identity_id=None,
     ) -> str:
         from product.backend.workflows.preparation.demonstrations import legal_demonstrations
         action=next(item for item in self._preparation.get(project_id).actions if item.action_id==action_id)
         choices=legal_demonstrations(action.assurance_contract,action.permissions,action.identity_requirements)
         choice=next((item for item in choices if item.can_execute and item.subject_test_identity_id==identity_id
-            and item.resource_owner_test_identity_id==identity_id),None)
+            and item.resource_owner_test_identity_id==(resource_owner_identity_id or identity_id)),None)
         if choice is None:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"官方示例缺少已确认的合法演示组合")
         key=(project_id,action_id,action.action_revision,identity_id,choice.resource_owner_test_identity_id,

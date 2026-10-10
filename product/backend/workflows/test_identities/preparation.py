@@ -102,6 +102,7 @@ class _ActivePreparation:
     startup_failed: bool = False
     result_read: bool = False
     result: IdentityPreparationResult | None = None
+    official_account: str | None = None
 
 
 class IdentityPreparationManager:
@@ -140,6 +141,43 @@ class IdentityPreparationManager:
             )
 
     def start(self, identity_id: str) -> IdentityPreparationView:
+        return self._start(identity_id)
+
+    def prepare_official(self, identity_id: str, *, account: str, origin: str) -> IdentityPreparationView | None:
+        """复用受监督登录进程自动准备官方虚构账号；普通登录 API 不能选择此配方。"""
+        with self._lock:
+            identity = self._identities.get(identity_id)
+            endpoint, _ = self._source(identity)
+            if account not in {'curator', 'judge'} or endpoint.rstrip('/') != origin.rstrip('/') or urlsplit(origin).hostname != '127.0.0.1':
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '示例登录地址尚未与当前应用核对')
+            active = next((item for item in self._active.values() if item.request.identity_id == identity_id), None)
+            if active and active.official_account != account:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, '请先完成或关闭这个账号已打开的登录窗口')
+            if active is None:
+                if identity.status is TestIdentityStatus.PREPARED:
+                    return None
+                if identity.status is TestIdentityStatus.NEEDS_REVIEW:
+                    raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, '账号与当前角色对应需要复核，请先在账号页处理')
+                if identity.auth_method is not None:
+                    self._identities.reset(identity_id)
+                view = self._start(identity_id, official_account=account)
+                active = self._active[view.preparation_id]
+        # 已启动的同一进程由原状态回读收口；未知结果不再启动第二次登录。
+        try:
+            active.process.wait(timeout=40)
+        except subprocess.TimeoutExpired:
+            with self._lock:
+                if active.request.preparation_id in self._active:
+                    write_identity_preparation_marker(active.controls.cancel, root=active.controls.root)
+                    terminate_process_tree(active.process, 2.0)
+            self.status(active.request.preparation_id)
+            raise JiejianError(ErrorCode.EXEC_TIMEOUT, '示例账号准备超时，已停止本次登录，请核对环境后重试') from None
+        result = self.status(active.request.preparation_id)
+        if result.status is not IdentityPreparationStatus.PREPARED:
+            raise JiejianError(ErrorCode.IDENTITY_PREPARATION_FAILED, '示例账号自动登录未完成，请核对环境或使用登录浏览器')
+        return result
+
+    def _start(self, identity_id: str, *, official_account: str | None = None) -> IdentityPreparationView:
         with self._lock:
             view = self._identities.get(identity_id)
             if view.status is not TestIdentityStatus.NOT_PREPARED:
@@ -173,7 +211,8 @@ class IdentityPreparationManager:
                     register_generated_file(self._paths.root, log_path, 'identity-log')
                     process = self._process_launcher(
                         self._environment,
-                        "product.backend.infra.identity.process",
+                        "product.backend.infra.samples.gallery_login" if official_account else "product.backend.infra.identity.process",
+                        *((official_account,) if official_account else ()),
                         role=ProcessEnvironmentRole.IDENTITY_PREPARATION,
                         extra_environment={
                             "JIEJIAN_IDENTITY_PREPARATION_DIR": str(attempt_dir)
@@ -185,7 +224,7 @@ class IdentityPreparationManager:
                         tree_name=f"identity-preparation-{preparation_id}",
                     )
                     # 取得进程立即纳入监督；日志句柄或 stdin 关闭失败也不能遗失所有权。
-                    active = _ActivePreparation(request, process, controls, log_path, source_fingerprint)
+                    active = _ActivePreparation(request, process, controls, log_path, source_fingerprint, official_account=official_account)
                     self._active[preparation_id] = active
                 assert process.stdin is not None
                 process.stdin.write(canonical_identity_preparation_json_bytes(request))
@@ -507,6 +546,12 @@ class IdentityPreparationManager:
         return active
 
     def _project_root(self) -> Path:
+        # 发布版没有源码仓库；登录子进程与控制面复用同一包内产品和运行身份。
+        if self._environment.get("JIEJIAN_RUNTIME_MODE") == "portable":
+            release = self._environment.get("JIEJIAN_RELEASE_ROOT")
+            if not release or not (Path(release).resolve() / "app").is_dir():
+                raise JiejianError(ErrorCode.RUNTIME_ENVIRONMENT_INVALID, "界鉴启动环境缺少包内产品目录")
+            return Path(release).resolve() / "app"
         configured = self._environment.get("JIEJIAN_PROJECT_ROOT")
         if not configured:
             raise JiejianError(

@@ -50,6 +50,6 @@ Task的业务效果可以仍UNKNOWN；它证明执行终态，不证明ZIP。仅
 
 ## 验证入口
 
-优先`tests/backend/workflows/checks/test_http_classification.py`、`tests/protocols/test_check_runtime.py`及`tests/backend/infra/execution/test_check_executor.py`的直接项。Sample端点与恢复见`tests/samples/web/test_collaboration_space.py`；完整当前发布三态见`tests/backend/workflows/test_current_official_sample.py`。经`dev.ps1 test`串行，协议变化更新并检查schema。
+优先`tests/backend/workflows/checks/test_http_classification.py`、`tests/protocols/test_check_runtime.py`及`tests/backend/infra/execution/test_check_executor.py`的直接项。Sample端点与恢复见`tests/samples/web/test_digital_gallery.py`；完整当前发布三态见`tests/backend/workflows/test_current_official_sample.py`。经`dev.ps1 test`串行，协议变化更新并检查schema。
 
 最终默认sample-test保留真实新实例、浏览器控制会话、Worker/Runner与精确清理；关键GUI技术动作须与实际前端接通，API成功和截图不替代交互验收。视觉验收另核视口、主题、焦点与遮挡。不用完整L5反复调试局部分类问题。

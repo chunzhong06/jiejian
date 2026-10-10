@@ -98,11 +98,10 @@
 [打开源码](../../../../../product/frontend/src/app/shell/AppHeader.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 - `AppHeader`
-- `aiStatusLabel`
 - `mcpStatusLabel`
 - `systemStatusLabel`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/assistance/llm`、`../../api/system/mcp`、`../../api/system/system`、`../navigation/ApplicationSwitcher`、`../navigation/EntrySearch`、`../theme/ThemeContext`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/system/mcp`、`../../api/system/system`、`../navigation/ApplicationSwitcher`、`../navigation/EntrySearch`、`../theme/ThemeContext`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/app/shell/ControlShell.test.tsx`
 
@@ -117,7 +116,7 @@
 
 - `ControlShell`
 
-静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../api/system/system`、`../../api/workspace`、`../../features/access/AccessPage`、`../../features/boundaries/BusinessBoundaryPage`、`../../features/changes/ChangesPage`、`../../features/checks/CurrentTestsPage`、`../../features/environment/EnvironmentPage`、`../../features/environment/OfficialDevelopmentJourney`、`../../features/environment/OfficialSamplePanel`、`../../features/history/CheckHistoryPage`、`../../features/settings/LLMSettingsDrawer`、`../../features/system/RuntimePage`、`../../features/tools/ToolsPage`、`../../features/workspace/WorkbenchPage`、`../../shared/runtime/editGuard`、`../../styles.css`、`../navigation/ModuleNavigation`、`../navigation/routes`、`../notifications/FrontendBuildNotice`、`../notifications/NotificationCenter`、`../state/useCheckActivity`、`../state/useProjectWorkspace`、`../state/useSystemStatus`、`./AppHeader`、`./ErrorRecovery`、`./RetainedWorkPages`、`antd`、`react`、`react-router-dom`
+静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../api/system/system`、`../../api/workspace`、`../../features/access/AccessPage`、`../../features/boundaries/BusinessBoundaryPage`、`../../features/changes/ChangesPage`、`../../features/checks/CurrentTestsPage`、`../../features/environment/EnvironmentPage`、`../../features/environment/OfficialDevelopmentJourney`、`../../features/environment/OfficialSamplePanel`、`../../features/history/CheckHistoryPage`、`../../features/system/RuntimePage`、`../../features/tools/ToolsPage`、`../../features/workspace/WorkbenchPage`、`../../shared/runtime/editGuard`、`../../shared/ui/LoadingState`、`../../styles.css`、`../navigation/ModuleNavigation`、`../navigation/routes`、`../notifications/FrontendBuildNotice`、`../notifications/NotificationCenter`、`../state/useCheckActivity`、`../state/useNewApplication`、`../state/useProjectWorkspace`、`../state/useSystemStatus`、`./AppHeader`、`./ErrorRecovery`、`./RetainedWorkPages`、`antd`、`react`、`react-router-dom`
 
 ### `product/frontend/src/app/shell/ErrorRecovery.tsx`
 
@@ -162,6 +161,21 @@
 
 静态import / dot-source：`../../api/checks/currentChecks`、`../../shared/presentation/execution`、`react`
 
+### `product/frontend/src/app/state/useNewApplication.test.ts`
+
+[打开源码](../../../../../product/frontend/src/app/state/useNewApplication.test.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`./useNewApplication`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/app/state/useNewApplication.ts`
+
+[打开源码](../../../../../product/frontend/src/app/state/useNewApplication.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `useNewApplication`
+
+静态import / dot-source：`../../api/applications/experience`、`../../api/http`、`react`
+
 ### `product/frontend/src/app/state/useProjectWorkspace.test.ts`
 
 [打开源码](../../../../../product/frontend/src/app/state/useProjectWorkspace.test.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -183,7 +197,7 @@
 
 - `useSystemStatus`
 
-静态import / dot-source：`../../api/assistance/llm`、`../../api/system/system`、`react`
+静态import / dot-source：`../../api/system/system`、`react`
 
 ### `product/frontend/src/app/theme/theme.ts`
 

@@ -1,23 +1,40 @@
 // 验证当前检查的显式提交、竞态隔离、服务端结论与两次点击内的证据访问。
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ready, status, observation, outcome, story } from '../../testing/fixtures/results'
+import { ready, status, observation, outcome, story } from '../../shared/testing/results'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import type { ResultStory } from '../../api/checks/currentChecks'
 import { CurrentTestsPage } from './CurrentTestsPage'
 import { ApiError } from '../../api/http'
-const api = vi.hoisted(() => ({ preview: vi.fn(), list: vi.fn(), status: vi.fn(), submit: vi.fn(), story: vi.fn(), evidence: vi.fn() }))
+const api = vi.hoisted(() => ({ preview: vi.fn(), list: vi.fn(), status: vi.fn(), submit: vi.fn(), story: vi.fn(), evidenceBundle: vi.fn() }))
 vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: ({ runId }: { runId: string }) => <div>受限结果解释 {runId}</div> }))
+vi.mock('../results/observations/EvidenceVerification',()=>({EvidenceVerification:()=> <section aria-label="怎样验证这项要求">实际读取封存片段</section>}))
 vi.mock('../preparation/PreparationPage', () => ({ PreparationPage: ({ onNavigate }: { onNavigate: (path: string) => void }) => <><input aria-label="当前材料临时输入" defaultValue=""/><button onClick={() => onNavigate('/tests')}>完成材料准备</button></> }))
 vi.mock('../changes/delivery/SourceIdentityPanel', () => ({ SourceIdentityPanel: () => <section>本轮源码对应内容</section> }))
 const props = () => ({ project: { project_id: 'p1' }, workspace: null, onStateChanged: vi.fn(), onError: vi.fn(), onNavigate: vi.fn() })
 beforeEach(() => {
   vi.clearAllMocks(); api.preview.mockResolvedValue(ready); api.list.mockResolvedValue([]); api.status.mockResolvedValue(status())
   api.submit.mockResolvedValue({ run: status().run, job: null }); api.story.mockResolvedValue(story())
-  api.evidence.mockResolvedValue({ schema_version: '1', evidence_id: 'ev1', run_id: 'r1', action_id: 'a1', case: { case_id: 'c1', resource_id: '项目一' }, outcome, observations: [observation], trace: null })
+  api.evidenceBundle.mockResolvedValue({project_id:'p1',run_id:'r1',case_id:'c1',items:[{
+    document:{ schema_version: '1', evidence_id: 'ev1', run_id: 'r1', action_id: 'a1', case: { case_id: 'c1', resource_id: '项目一' }, outcome, observations: [observation], trace: null },
+    index:{project_id:'p1',run_id:'r1',case_id:'c1',action_id:'a1',evidence_id:'ev1',records:[]},
+  }]})
 })
 afterEach(cleanup)
+it('首次读取未完成时，后台刷新不废弃原请求也不让加载状态永久持续',async()=>{
+  let finish!: (value: typeof ready) => void
+  const first=new Promise<typeof ready>(resolve=>{finish=resolve})
+  api.preview.mockReturnValue(first)
+  render(<CurrentTestsPage {...props()}/>)
+  await waitFor(()=>expect(api.preview).toHaveBeenCalledTimes(1))
+  fireEvent.focus(window)
+  fireEvent.focus(window)
+  expect(api.preview).toHaveBeenCalledTimes(1)
+  await act(async()=>{finish(ready);await first})
+  expect(await screen.findByRole('button',{name:'开始检查'})).toBeEnabled()
+  expect(api.submit).not.toHaveBeenCalled()
+})
 describe('当前检查工作区', () => {
   it('没有提交时只读条件，不出现提交未知或检查已保存提示', async () => {
     render(<CurrentTestsPage {...props()} />)
@@ -199,9 +216,8 @@ describe('当前检查工作区', () => {
     const evidenceButtons = screen.getAllByRole('button', { name: '查看资源状态证据' })
     fireEvent.click(evidenceButtons[0])
     const drawer = await screen.findByRole('region', { name: '已发布证据' })
-    expect(await within(drawer).findByText('在哪里看到')).toBeInTheDocument()
-    expect(within(drawer).getByText('不能单独证明接口权限检查正确')).toBeInTheDocument()
-    expect(api.evidence).toHaveBeenCalledWith('r1', 'ev1')
+    expect(await within(drawer).findByRole('region',{name:'怎样验证这项要求'})).toBeInTheDocument()
+    expect(api.evidenceBundle).toHaveBeenCalledWith('p1', 'r1', 'c1', ['ev1'])
   })
   it('完整性失效时不读取故事或展示旧结论', async () => {
     api.list.mockResolvedValue([status()]); api.status.mockResolvedValue(status({ result_integrity: 'INVALID' }))
@@ -211,7 +227,7 @@ describe('当前检查工作区', () => {
     expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
   })
   it('证据完整性读取失败撤下整轮故事', async () => {
-    api.list.mockResolvedValue([status()]); api.evidence.mockRejectedValue(new Error('invalid evidence'))
+    api.list.mockResolvedValue([status()]); api.evidenceBundle.mockRejectedValue(new Error('invalid evidence'))
     render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
     fireEvent.click(await screen.findByRole('button', { name: '查看第 1 项依据' }))
     fireEvent.click(screen.getByRole('button', { name: '查看资源状态证据' }))

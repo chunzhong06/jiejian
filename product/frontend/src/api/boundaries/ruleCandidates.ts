@@ -2,22 +2,33 @@
 import { request } from '../http'
 import type { ProposedActorDto, ProposedActionDto, ProposedPermissionDto } from './businessBoundaries'
 
+export type RuleScenario = {
+  scenario_id: string; scenario_fingerprint: string; original_excerpt: string; question: string
+  options: Array<{option_id: string; label: string; explanation: string; replacements: ProposedPermissionDto[]}>
+}
+export type MeaningChoice = {scenario_id: string; scenario_fingerprint: string; action: 'SELECT'|'CORRECT'|'DEFER'|'DISMISS'; option_id?: string; correction?: string}
+export type ScenarioDecision = {scenario_id: string; status: MeaningChoice['action']|'NEEDS_DECISION'; decision: null|{decision_id: string; option_id: string|null; correction: string|null}}
+
 export type RuleCandidateView = {
   candidate: {
     candidate_id: string; project_id: string; revision: number; basis_id: string
     submitted_via: 'MCP' | 'LOCAL_GUI'; created_at_us: number
     content: { original_text: string; actors: ProposedActorDto[]; actions: ProposedActionDto[]
       permissions: ProposedPermissionDto[]; examples: Array<{description: string; permission_item_id: string | null; uncovered_reason: string | null}>
-      unresolved_questions: string[]; unsupported_constraints: string[] }
+      unresolved_questions: string[]; unsupported_constraints: string[]; scenarios?: RuleScenario[] }
   }
   assessment: 'REVIEWABLE' | 'NEEDS_CHANGES' | 'DECIDED' | 'ALREADY_CONFIRMED'
-  issues: Array<{code: string; message: string}>
+  issues: Array<{code: string; message: string; scenario_id?: string}>
+  scenario_decisions?: ScenarioDecision[]
+  meaning_context?: {actors:Array<{item_id:string;display_name:string}>;actions:Array<{item_id:string;display_name:string;effect_catalog:Array<{item_id:string;business_label:string}>}>}
+  approval_mappings?: Array<{permission_item_id: string; intent_id: string; revision: number; scenario_decision_ids: string[]}>
   proposal_id: string | null
   decision: {decision: 'APPROVED' | 'REJECTED'; reason: string} | null
   reuse: {status: string; message: string; actions?: Array<{item_id: string; display_name: string; status: string; materials: string[]; message: string}>}
   review_url: string
 }
 export type RuleCandidateContext = {
+  project_id: string; basis_id: string
   candidates: Array<{candidate_id: string; revision: number; original_text: string; submitted_via: string; created_at_us: number}>
   next_offset: number | null
 }
@@ -26,5 +37,6 @@ export const ruleCandidatesApi = {
   context: (project: string, offset = 0) => request<RuleCandidateContext>(`${prefix(project)}/rule-context?offset=${offset}`),
   show: (project: string, candidate: string, revision?: number) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}${revision ? `?revision=${revision}` : ''}`),
   propose: (project: string, candidate: string, revision: number, operation: string) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}/proposals`, {method: 'POST', body: JSON.stringify({revision, operation_id: operation})}),
-  receipt: (project: string, operation: string) => request<{status: 'FOUND' | 'UNKNOWN'; candidate?: RuleCandidateView}>(`${prefix(project)}/rule-operations/PROPOSE/${operation}`),
+  decide: (project: string, candidate: string, revision: number, basis: string, operation: string, choice: MeaningChoice) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}/decisions`, {method:'POST', body:JSON.stringify({...choice, expected_revision:revision, expected_basis_id:basis, operation_id:operation})}),
+  receipt: (project: string, operation: string, kind: 'PROPOSE'|'DECIDE' = 'PROPOSE') => request<{status: 'FOUND' | 'UNKNOWN'; candidate?: RuleCandidateView}>(`${prefix(project)}/rule-operations/${kind}/${operation}`),
 }

@@ -1,16 +1,19 @@
 # 验证停止、重开控制面、再次运行与重置的项目身份和源码保留边界。
 from pathlib import Path
+import pytest
 from product.backend.composition import ApplicationCore
 from product.backend.core.lifecycle import ProjectStatus
 from tests.fixtures.secrets import InMemorySecretStore
 from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
+@pytest.mark.process
+@pytest.mark.slow
 def test_stop_restart_creates_clean_project_and_archives_history(tmp_path):
     root = Path(__file__).resolve().parents[3]
     var_dir = tmp_path / "var"
     def create():
-        return ApplicationCore(var_dir, official_sample_root=root / "samples/web/collaboration_space",
+        return ApplicationCore(var_dir, official_sample_root=root / "samples/web/digital_gallery",
             secret_store=InMemorySecretStore(), environ=runtime_identity_environment(var_dir))
     core = create()
     try:
@@ -19,11 +22,12 @@ def test_stop_restart_creates_clean_project_and_archives_history(tmp_path):
             receipt = work.environment_operations.get(first.operation_id)
             work.environment_operations.save({**receipt, "state": "UNKNOWN"})
             work.commit()
-        assert core.official_experience.status().lifecycle == "UNKNOWN"
+        status = core.official_experience.status()
+        assert status.lifecycle == "RUNNING" and status.operation_state == "UNKNOWN"
         owned = core.official_experience.reconcile()
         assert owned.lifecycle == "RUNNING" and owned.recovery_state == "OWNED_RUNNING"
-        assert owned.operation_state == "UNKNOWN"
-        source = core.official_samples.active.source_root
+        assert owned.operation_state == "SUCCEEDED"
+        source = Path(core.application_understanding.get(core.official_experience.status().project_id).source_root)
         marker = source / "user_note.txt"
         marker.write_text("retained source", encoding="utf-8")
         assert core.official_experience.start(consent=True).experience_id == first.experience_id
@@ -40,20 +44,18 @@ def test_stop_restart_creates_clean_project_and_archives_history(tmp_path):
         second = core.official_experience.start(consent=True)
         assert second.project_id != first.project_id
         assert second.experience_id != first.experience_id
-        assert core.official_samples.active.source_root != source
-        assert not (core.official_samples.active.source_root / "user_note.txt").exists()
+        assert Path(core.application_understanding.get(core.official_experience.status().project_id).source_root) != source
+        assert not (Path(core.application_understanding.get(core.official_experience.status().project_id).source_root) / "user_note.txt").exists()
         assert core.projects.get(first.project_id).status is ProjectStatus.ARCHIVED
         assert marker.read_text(encoding="utf-8") == "retained source"
         assert not second.scenario_prepared and second.scenario_version.value == "BASELINE"
-        from product.backend.infra.runtime.process.tree import terminate_process_tree
-        interrupted_root = core.official_samples.active.experience_root
-        terminate_process_tree(core.official_samples.active.process, 3.0)
-        assert core.official_experience.status().lifecycle == "UNKNOWN"
+        # 通用运行实例被单独停止后，官方入口只能确认退出并建立新项目。
+        reference = core.node_runtime.reference(second.project_id)
+        core.node_runtime.stop(second.project_id, instance_id=reference.instance_id)
         assert core.official_experience.reconcile().recovery_state == "EXITED"
         resumed = core.official_experience.start(consent=True)
         assert resumed.project_id != second.project_id and resumed.experience_id != second.experience_id
         assert core.projects.get(second.project_id).status is ProjectStatus.ARCHIVED
-        assert not interrupted_root.exists()
         third = core.official_experience.reset(consent=True)
         assert third.project_id != resumed.project_id
         assert core.projects.get(resumed.project_id).status is ProjectStatus.ARCHIVED
@@ -82,11 +84,13 @@ def test_unknown_foreign_identity_never_becomes_exited(tmp_path, monkeypatch):
     assert observed[0]["outcome"] == "OWNERSHIP_UNCONFIRMED"
 
 
+@pytest.mark.process
+@pytest.mark.slow
 def test_restarted_sample_requires_fresh_approval_and_materials(tmp_path):
     from tests.backend.workflows._support_current_official_sample import prepare_sample
     root = Path(__file__).resolve().parents[3]
     var_dir = tmp_path / "var"
-    core = ApplicationCore(var_dir, official_sample_root=root / "samples/web/collaboration_space",
+    core = ApplicationCore(var_dir, official_sample_root=root / "samples/web/digital_gallery",
         secret_store=InMemorySecretStore(), environ=runtime_identity_environment(var_dir))
     try:
         project = prepare_sample(core)
@@ -101,12 +105,15 @@ def test_restarted_sample_requires_fresh_approval_and_materials(tmp_path):
         with core.uow_factory() as work:
             assert not work.test_identities.list_for_project(new_project)
             assert not work.recordings.list_for_project(new_project)
-        assert "HUMAN_BOUNDARY_APPROVAL_REQUIRED" in core.official_experience.prepare().pending_tasks
+        from product.backend.core.errors import JiejianError
+        import pytest
+        with pytest.raises(JiejianError):
+            core.official_experience.prepare()
         assert prepare_sample(core) == new_project
         with core.uow_factory() as work:
             new_recordings = {item.recording_id for item in work.recordings.list_for_project(new_project)}
             assert old_recordings == {item.recording_id for item in work.recordings.list_for_project(project)}
-            assert old_recordings.isdisjoint(new_recordings) and len(new_recordings) == 3
+            assert old_recordings.isdisjoint(new_recordings) and len(new_recordings) == 4
         assert core.official_experience.prepare().scenario_prepared
     finally:
         core.close(); core.official_samples.stop(); core.engine.dispose()

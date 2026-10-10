@@ -35,6 +35,6 @@
 
 - `RuntimePage`
 
-静态import / dot-source：`../../api/assistance/llm`、`../../api/system/system`、`../../shared/runtime/buildIdentity`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./MaintenancePanel`、`./runtime.css`、`antd`
+静态import / dot-source：`../../api/system/system`、`../../shared/runtime/buildIdentity`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`./MaintenancePanel`、`./runtime.css`、`antd`
 
 <!-- GENERATED:END -->

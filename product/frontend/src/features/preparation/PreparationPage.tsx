@@ -1,4 +1,5 @@
 // 动作级检查准备：展示现场材料，操作顺序与定位只消费最新 Workspace 主任务。
+import { AgentAssistEntry } from '../../shared/ui/AgentAssistEntry'
 import { LoadingState } from '../../shared/ui/LoadingState'
 import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { WorkPageVisible } from '../../shared/runtime/visibility'
@@ -9,7 +10,6 @@ import type { ProjectDto } from '../../api/applications/projects'
 import { preparationApi, type AllowControlRequirement, type MaterialReference, type MaterialRecordingContext, type PreparationDraft, type PreparationView } from '../../api/preparation/preparation'
 import { testIdentitiesApi, type IdentityPreparationDto } from '../../api/preparation/testIdentities'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
-import { AssistantPanel } from '../assistant/AssistantPanel'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { taskDestination } from '../../shared/navigation/taskDestination'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
@@ -20,9 +20,12 @@ import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { MaterialOverview } from './materials/MaterialOverview'
 import { MaterialEditor, materialName } from './materials/MaterialEditor'
 import { EvidenceMaterials } from './evidence/EvidenceMaterials'
+import { ProvidedMaterialPreparation } from './proof-sources/ProvidedMaterialPreparation'
 import { ProofSourcesPanel } from './proof-sources/ProofSourcesPanel'
 import { proofSourcesApi } from '../../api/preparation/proofSources'
-import type { PreparationGuidance } from '../../api/preparation/preparationGuidance'
+import { preparationSuggestionsApi } from '../../api/preparation/preparationSuggestions'
+import { useMaterialSuggestions } from './materials/useMaterialSuggestions'
+import { materialSuggestionEntries, UnboundMaterialSuggestions } from './materials/MaterialSuggestions'
 
 function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: MaterialReference) {
   if (!task?.can_execute || task.business_action_id !== ref.action_id || task.action_revision !== ref.action_revision) return false
@@ -32,7 +35,7 @@ function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: Mate
   return ['DEMONSTRATE_ACTION', 'PREPARE_ACTION_RESOURCE'].includes(task.task_kind) || (task.task_kind === 'REVIEW_RECORDING' && task.recording_purpose === 'TARGET')
 }
 
-export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback, requestedProofSources, requestedProofSource, requestedActionId, requestedIdentities }: {
+export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback, requestedProofSources, requestedProofSource, requestedActionId, requestedIdentities, assistReturnTo, requestedSuggestionId, requestedSuggestionRevision, requestedMaterialKind }: {
   project: ProjectDto
   onProvidedMaterials?: () => Promise<unknown>
   workspace: WorkspaceViewDto | null
@@ -44,15 +47,19 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   requestedProofSource?: string | null
   requestedActionId?: string | null
   requestedIdentities?: boolean
+  assistReturnTo?: string
+  requestedSuggestionId?: string | null
+  requestedSuggestionRevision?: string | null
+  requestedMaterialKind?: string | null
 }) {
   const visible = useContext(WorkPageVisible)
+  const [providedOpen,setProvidedOpen] = useState(false)
   const [preparation, setPreparation] = useState<PreparationView | null>(null)
   const [currentWorkspace, setCurrentWorkspace] = useState(workspace)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [syncError, setSyncError] = useState<string>()
   const [receipt, setReceipt] = useState<string>()
-  const [guidance, setGuidance] = useState<PreparationGuidance>()
   const [guidanceEpoch, setGuidanceEpoch] = useState(0)
   const [selectedAction, setSelectedAction] = useState<string>()
   const [material, setMaterial] = useState<{ reference: MaterialReference; label: string }>()
@@ -62,7 +69,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   useEffect(() => { setProofSources(Boolean(requestedProofSources)) },[project.project_id,requestedProofSources])
   const draftRef = useRef<PreparationDraft | undefined>(undefined)
   const [returnMaterial, setReturnMaterial] = useState<MaterialReference>()
-  useTaskGuard(busy || Boolean(syncError))
+  useTaskGuard(!proofSources && (busy || Boolean(syncError)))
   const feedback = (message: string) => { setReceipt(message); onFeedback?.(message) }
   const [mode, setMode] = useState<'materials' | 'identities' | 'recording'>('materials')
   const [recordingTask, setRecordingTask] = useState<PrimaryTaskDto>()
@@ -77,14 +84,18 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   useEffect(() => { if (workspace?.project.project_id === project.project_id) setCurrentWorkspace(workspace) }, [workspace, project.project_id])
-  useEffect(() => {
-    let active = true
-    setGuidance(undefined)
-    if (!proofSources) void proofSourcesApi.context(project.project_id).then(value => {
-      if (active && value.project_id === project.project_id && value.guidance?.project_id === project.project_id) setGuidance(value.guidance)
-    }).catch(() => { /* 原材料和Workspace仍可读取；未知建议不替代它们。 */ })
-    return () => { active = false }
-  }, [project.project_id, currentWorkspace?.primary_task?.task_id, currentWorkspace?.primary_task?.stale_fingerprint, guidanceEpoch, proofSources])
+  const suggestions = useMaterialSuggestions(project.project_id, visible && (!onProvidedMaterials || Boolean(requestedSuggestionId)) && !busy && mode === 'materials' && !material && !proofSources && !evidenceAction,
+    `${currentWorkspace?.primary_task?.task_id}:${currentWorkspace?.primary_task?.stale_fingerprint}:${guidanceEpoch}`, requestedSuggestionId, requestedSuggestionRevision)
+  const guidance = suggestions.guidance
+  const materialReturnPath = (actionId?: string | null) => {
+    const query = new URLSearchParams(assistReturnTo?.split('?')[1])
+    query.set('project_id', project.project_id); query.set('materials', '1')
+    if (actionId) query.set('action_id', actionId)
+    if (requestedSuggestionId != null) query.set('suggestion_id', requestedSuggestionId)
+    if (requestedSuggestionRevision != null) query.set('suggestion_revision', requestedSuggestionRevision)
+    if (requestedMaterialKind) query.set('material_kind', requestedMaterialKind)
+    return `/tests?${query}`
+  }
   useEffect(() => {
     let active = true
     setLoading(true); setPreparation(null); setChoices({}); setMode(requestedIdentities ? 'identities' : 'materials'); setSyncError(undefined); setMaterial(undefined); setSelectedAction(undefined); setEvidenceAction(undefined)
@@ -117,7 +128,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     setSyncError(undefined)
     return { preparation: next, workspace: nextWorkspace }
   }, [project.project_id, onStateChanged])
-  const materialSync = useLiveRead(visible && !busy && mode === 'materials' ? project.project_id : undefined, async () => {
+  const materialSync = useLiveRead(visible && !busy && !proofSources && !evidenceAction && mode === 'materials' ? project.project_id : undefined, async () => {
     if (syncError) {
       if (!await reload()) throw new Error('Preparation workspace synchronization unavailable')
       return
@@ -129,7 +140,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   }, 5000, false)
   const syncChild = async () => (await reload())?.workspace
   const showMaterials = async () => {
-    if (requestedIdentities) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${encodeURIComponent(requestedActionId)}` : ''}`)
+    if (requestedIdentities) onNavigate(materialReturnPath(requestedActionId))
     try { await reload(); if (alive.current) { setMode('materials'); if (materialRecording && recordingReturn.current) setMaterial(recordingReturn.current); setMaterialRecording(undefined) } } catch (error) { if (alive.current) onError(error as ApiError) }
   }
   const refresh = async () => {
@@ -137,23 +148,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     try { await reload() } catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
-  const installProvidedMaterials = async () => {
-    if (!onProvidedMaterials || selecting.current || busy || syncError) return
-    selecting.current = true; setBusy(true)
-    try {
-      await onProvidedMaterials()
-      if (!alive.current || projectRef.current !== project.project_id) return
-      feedback('提供的测试材料已保存。准备材料不代表实际身份或安全结论。')
-      setSyncError('材料已保存，正在同步下一步。')
-      await reload()
-    }
-    catch (error) {
-      if (alive.current && projectRef.current === project.project_id) {
-        onError(error as ApiError)
-        try { await reload() } catch { setSyncError('材料操作回执尚未确认，请刷新后核对；不要重复提交。') }
-      }
-    } finally { selecting.current = false; if (alive.current && projectRef.current === project.project_id) setBusy(false) }
-  }
+  const providedControl = (updated:()=>Promise<unknown> = refresh) => onProvidedMaterials ? <ProvidedMaterialPreparation projectId={project.project_id} onChanged={updated} prepared={preparation?.preparation_complete} onContinue={()=>onNavigate('/tests')} open={providedOpen} onOpenChange={setProvidedOpen}/> : undefined
   const selectControl = async (control: AllowControlRequirement) => {
     const selected = control.candidate_allow_permissions.find((item) => item.intent_id === choices[control.selection_fingerprint])
     if (!selected || selecting.current || busy || syncError) return
@@ -240,7 +235,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         material: null, candidate_recording_id: null, base_fingerprint: null, pending_operation_id: null })
     } catch (error) { onError(error as ApiError) }
   }
-  if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} onChanged={refresh} onNavigate={onNavigate} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${requestedActionId}` : ''}`) }}/>
+  if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} providedPreparation={updated=>providedControl(async()=>{await updated();await refresh()})} providedMaterials={Boolean(onProvidedMaterials)} onChanged={refresh} onNavigate={onNavigate} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(materialReturnPath(requestedActionId)) }}/>
   if (evidenceAction) return <EvidenceMaterials projectId={project.project_id} actionId={evidenceAction} onBack={() => { setFocusSourceEntry(true); setEvidenceAction(undefined) }} />
   if (material) return <MaterialEditor key={JSON.stringify(material.reference)} projectId={project.project_id} reference={material.reference}
     onEvidence={() => setEvidenceAction(material.reference.action_id)}
@@ -260,9 +255,9 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   if (mode === 'recording' && (recordingTask || materialRecording)) return <RecordingPage key={`${project.project_id}:${materialRecording?.context_id ?? recordingTask?.task_id}`} project={project} task={recordingTask} materialContext={materialRecording}
     effectName={currentWorkspace?.actions.find((item) => item.action_id === (materialRecording ?? recordingTask)?.business_action_id)?.effect_catalog.find((item) => item.effect_id === (materialRecording ?? recordingTask)?.effect_id)?.business_label}
     onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} />
-  if (loading) return <EditorialPage><LoadingState page>正在读取检查准备材料…</LoadingState></EditorialPage>
-  if (requestedActionId && preparation && !preparation.actions.some(item=>item.action_id===requestedActionId)) return <EditorialPage><EditorialHeader title="这项业务的材料已不在当前范围"/><p>原链接指向的动作已经变化，未替换成另一项业务。</p><Button onClick={()=>onNavigate('/permissions')}>核对权限要求</Button></EditorialPage>
-  if (!preparation) return <EditorialPage><EditorialHeader eyebrow={project.name || '当前应用'} title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><Button loading={busy} onClick={() => void refresh()}>重新读取材料</Button></EditorialPage>
+  if (loading) return <EditorialPage width="summary"><LoadingState>正在读取检查准备材料…</LoadingState><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}}/></EditorialPage>
+  if (requestedActionId && preparation && !preparation.actions.some(item=>item.action_id===requestedActionId)) return <EditorialPage width="summary"><EditorialHeader title="这项业务的材料已不在当前范围"/><p>原链接指向的动作已经变化，未替换成另一项业务。</p><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}} primary={{label:'核对权限要求',onClick:()=>onNavigate('/permissions')}}/></EditorialPage>
+  if (!preparation) return <EditorialPage width="summary"><EditorialHeader eyebrow={project.name || '当前应用'} title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}} primary={{label:'重新读取材料',loading:busy,onClick:()=>void refresh()}}/></EditorialPage>
   const task = currentWorkspace?.primary_task
   const nextAction = guidance?.state === 'CURRENT' && guidance.next_action?.task_id === task?.task_id ? guidance.next_action : undefined
   const chosenActionId = preparation?.actions.find(action => action.action_id === selectedAction)?.action_id
@@ -270,19 +265,58 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const actorName = (id: string) => currentWorkspace?.actors.find((item) => item.actor_id === id)?.display_name ?? '业务主体'
   const taskStage: Record<string, number> = { PREPARE_TEST_IDENTITY: 0, DEMONSTRATE_ACTION: 1, PREPARE_ACTION_RESOURCE: 2, COMPLETE_EFFECT_EVIDENCE: 3, COMPLETE_RECOVERY: 4 }
   const currentStage = task?.task_kind === 'REVIEW_RECORDING' ? task.recording_purpose === 'OBSERVATION' ? 3 : task.recording_purpose === 'RECOVERY' ? 4 : 1 : task ? taskStage[task.task_kind] : undefined
-  const providedAvailable = Boolean(onProvidedMaterials && !preparation?.preparation_complete && task?.route === '/tests' && currentStage !== undefined)
-  const guidedProof = !providedAvailable && task?.task_kind === 'COMPLETE_EFFECT_EVIDENCE' && nextAction?.kind !== task.task_kind ? nextAction : undefined
-  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? guidedProof ? <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying} onClick={() => onNavigate(guidedProof.gui_url.slice(1))}>{guidedProof.handler === 'AGENT' ? '让 Agent 完善这项证明' : '核对证明来源'}</Button> : <Button type={providedAvailable ? 'default' : 'primary'} loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
+  const guidedProof = nextAction?.kind==='REVIEW_REFERENCE_RECOVERY' ? nextAction : task?.task_kind === 'COMPLETE_EFFECT_EVIDENCE' && nextAction?.kind !== task.task_kind ? nextAction : undefined
+  const assistQuery = new URLSearchParams(materialReturnPath(chosenActionId).split('?')[1])
+  const entries = materialSuggestionEntries(suggestions.view)
+  const unbound = entries.filter(entry => entry.view.resolved_target.state !== 'APPROVED' || !preparation.actions.some(action => action.action_id === entry.view.resolved_target.action_id && action.action_revision === entry.view.resolved_target.action_revision))
+  const readSuggestions = async () => {
+    if (requestedSuggestionId != null && requestedSuggestionRevision != null) {
+      const query = new URLSearchParams(assistQuery); query.delete('suggestion_revision')
+      onNavigate(`/tests?${query}`)
+    } else await suggestions.read()
+  }
+  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? guidedProof ? <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => onNavigate(guidedProof.gui_url.slice(1))}>核对证明来源</Button> : <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
     {task.task_kind === 'PREPARE_TEST_IDENTITY' ? task.test_identity_id ? '打开登录浏览器' : '创建账号并登录' : task.route === '/tests' && currentStage !== undefined ? '继续准备这项材料' : task.action_label ?? '前往处理'}
   </Button> : null
   return <EditorialPage label="检查材料" width="summary">
     <EditorialHeader eyebrow={project.name || '当前应用'} title="检查准备"/>
-    {!!preparation?.actions.length && <Select className="materials-action-picker" aria-label="选择业务动作" disabled={busy}
-      value={chosenActionId} onChange={id => void selectAction(id)}
-      options={preparation.actions.map(action => ({ value: action.action_id, label: action.display_name }))} />}
-    {(receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对准备材料'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
+    {providedControl()}
+    {!onProvidedMaterials && <AgentAssistEntry projectId={project.project_id} contextKey={`materials:${chosenActionId ?? ''}:${requestedSuggestionId ?? ''}:${requestedSuggestionRevision ?? ''}`}
+      title="整理检查需要的材料" description="让原来的 Agent 核对已有材料，并说明缺少的账号、操作、测试资源、证明或恢复方式怎样准备。"
+      heading={<div className="materials-context">
+        {!!preparation.actions.length && <><label htmlFor="materials-action">当前业务动作</label><Select id="materials-action" className="materials-action-picker" aria-label="选择业务动作" disabled={busy}
+          value={chosenActionId} onChange={id => void selectAction(id)}
+          options={preparation.actions.map(action => ({ value: action.action_id, label: action.display_name }))}/></>}
+        {suggestions.view && <span className="editorial-muted">材料建议 · 修订 {suggestions.view.suggestion.revision}</span>}
+      </div>}
+      actions={<Button loading={suggestions.loading} onClick={() => void readSuggestions()}>读取建议</Button>}
+      returnTo={`/tests?${assistQuery}`}
+      onNavigate={onNavigate}
+      loadContext={async () => {
+        const value = await proofSourcesApi.context(project.project_id)
+        const context = value.suggestion_context
+        if (context?.state !== 'CURRENT' || !context.basis_id) throw new Error('suggestion context unavailable')
+        const view = requestedSuggestionId != null ? await preparationSuggestionsApi.show(project.project_id, requestedSuggestionId, requestedSuggestionRevision) : context.latest
+        if (view && view.suggestion.project_id !== project.project_id) throw new Error('suggestion project mismatch')
+        if (view && view.current_basis_id !== context.basis_id) throw new Error('suggestion context changed')
+        return { projectId:value.project_id,revisionKey:`${context.basis_id}:${view?.suggestion.suggestion_id}:${view?.suggestion.revision}:${view?.latest_revision}`,
+          requestText:[`请协助整理界鉴项目 ${value.project_id} 的检查材料。`,
+            chosenActionId ? `本次动作：${chosenActionId}。` : '先检查当前规则及全部动作所需材料。',
+            '调用 jiejian_preparation_context 读取最新材料、可用接口和缺口。逐项核对真实账号、动作录制、测试资源、结果证明、恢复方式，保留可用材料。',
+            '没有运行环境或实际数据时，先给出建立办法；有应用开发授权后才协助补齐，再由界鉴核对。不要编造账号、资源、录制或证据。',
+            '先执行你已经获授权且工具支持的材料准备，例如保存来源候选、提交已获读取授权的预检查；不要只留下建议让我逐项重做。不能自动处理的部分，说明具体缺少的账号、文件或决定。再按 suggestion_context.input_schema 通过 jiejian_preparation_suggestion_save 保存五类有限建议。代码位置使用已核验候选引用；其他办法明确标为假设。规则尚未批准时保留候选局部引用。',
+            view ? `当前查看建议 ${view.suggestion.suggestion_id} 的修订 ${view.suggestion.revision}。先调用 jiejian_preparation_suggestion_show 核对该建议最新修订，再决定如何更新。` : '当前尚无指定建议，保存后返回建议的精确查看入口。',
+            '登录、规则批准、读取范围和来源采用由用户完成。建议不能把实际材料改成已齐备。',
+            `复制时的建议依据：${context.basis_id}；保存前重新读取。未知写入结果只调用 jiejian_preparation_suggestion_receipt 查询原 operation_id，不重复提交。`].join('\n') }
+      }}/>}
+    {suggestions.error && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.error} action={requestedSuggestionId != null && <Button onClick={() => { const query = new URLSearchParams(assistQuery); query.delete('suggestion_id'); query.delete('suggestion_revision'); onNavigate(`/tests?${query}`) }}>返回当前材料</Button>}/>}
+    {!suggestions.error && suggestions.context && suggestions.context.state !== 'CURRENT' && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.context.note ?? '准备依据正在变化，请重新读取材料建议。'}/>}
+    {!suggestions.error && suggestions.context?.state === 'CURRENT' && suggestions.view && suggestions.view.state !== 'CURRENT' && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.view.state === 'SUPERSEDED' ? '这份建议已有新修订，可用“读取建议”查看。' : '规则、源码或材料已经变化，以下原建议仅供回看；请让 Agent 按当前依据重新整理。'}/>}
+    {suggestions.view && suggestions.view.suggestion.content.unresolved_questions.length > 0 && <details className="material-dependencies"><summary>整理时还未确定的事项</summary><ul>{suggestions.view.suggestion.content.unresolved_questions.map((question, index) => <li key={index}>{question}</li>)}</ul></details>}
+    {!preparation.actions.length && (receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对准备材料'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
     {materialSync.retrying && <Alert className="flow-feedback" type="warning" message="材料状态暂未同步" description={materialSync.stopped ? '当前读取未通过校验，请重新读取后再继续。' : '以下保留上次读取的内容，界鉴正在重新同步。继续操作前会再次核对。'} />}
-    {!preparation?.actions.length && <Empty description="请先在业务边界中确认动作和权限" />}
+    {!preparation?.actions.length && !unbound.length && <Empty description={suggestions.loaded ? '尚未确认业务动作。可以先让 Agent 整理规则与材料建立办法。' : '正在读取材料建议…'} />}
+    <UnboundMaterialSuggestions entries={unbound} allEntries={entries} returnKind={requestedMaterialKind} projectId={project.project_id} onNavigate={onNavigate}/>
     {preparation?.actions.filter(action => action.action_id === chosenActionId).map((action) => {
       const business = currentWorkspace?.actions.find((item) => item.action_id === action.action_id)
       const current = task?.business_action_id === action.action_id && task.action_revision === action.action_revision
@@ -300,17 +334,19 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
             <Space direction="vertical">{control.candidate_allow_permissions.map((candidate) => <Radio value={candidate.intent_id} key={candidate.intent_id}>{permissionLabel(candidate.intent_id)}</Radio>)}</Space>
           </Radio.Group><div className="confirmation-actions"><Button type="primary" loading={busy} disabled={!choices[control.selection_fingerprint] || !task.can_execute || Boolean(syncError)} onClick={() => void selectControl(control)}>确认正常对照</Button></div>
         </section>)}
-        <MaterialOverview action={action} currentStage={current ? currentStage : undefined}
+        <MaterialOverview feedback={(receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对准备材料'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>} action={action} currentStage={current ? currentStage : undefined}
+          suggestions={entries.filter(entry => entry.view.resolved_target.state === 'APPROVED' && entry.view.resolved_target.action_id === action.action_id && entry.view.resolved_target.action_revision === action.action_revision)} allSuggestions={entries}
           advice={guidance?.state === 'CURRENT' && !materialSync.retrying ? guidance.materials : undefined}
           outdated={materialSync.retrying}
           showFocus={!(current && task?.task_kind === 'SELECT_ALLOW_CONTROL')}
           effectName={id => business?.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果'}
           taskTitle={syncError ? '材料已保存，正在同步下一步' : current ? nextAction?.title ?? task?.title : undefined} taskWhy={syncError ? '正在读取最新任务，不需要重新准备已经保存的材料。' : current ? nextAction?.reason ?? task?.why_now : undefined}
-          primary={current ? <>{primaryButton}{providedAvailable && <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task?.can_execute} onClick={() => void installProvidedMaterials()}>使用已提供的测试材料</Button>}</> : <Button type="primary" onClick={() => onNavigate('/tests')}>核对检查条件</Button>}
+          primary={current ? primaryButton : <Button type="primary" onClick={() => onNavigate('/tests')}>核对检查条件</Button>}
           onProofSources={() => setProofSources(true)}
-          onIdentity={() => { setLogin(undefined); setMode('identities') }} onMaterial={(reference, label) => void openMaterial(reference, label)} returnKind={returnMaterial?.action_id === action.action_id ? returnMaterial.kind : undefined}>
+          fileEffectIds={business?.effect_catalog.filter(effect=>effect.effect_kind==='FILE_CONTENT_DELIVERY').map(effect=>effect.effect_id)}
+          renderFileProof={business?.effect_catalog.length ? close=><ProofSourcesPanel key={`${action.action_id}:${action.action_revision}`} embedded actionId={action.action_id} providedMaterials={Boolean(onProvidedMaterials)} projectId={project.project_id} onBack={close} onChanged={refresh} onNavigate={onNavigate}/> : undefined}
+          onIdentity={() => { setLogin(undefined); setMode('identities') }} onMaterial={(reference, label) => void openMaterial(reference, label)} returnKind={returnMaterial?.action_id === action.action_id ? returnMaterial.kind : requestedMaterialKind ?? undefined}>
           <h3>已确认的权限</h3>{action.permissions.map(permission => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}
-          <AssistantPanel projectId={project.project_id} surface="preparation-explanation" focus={{ business_action_id: action.action_id }} title="理解这项动作的准备要求" actionLabel="解释准备缺口" />
         </MaterialOverview>
       </section>
     })}

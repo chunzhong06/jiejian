@@ -337,9 +337,10 @@ def test_sqlite_observer_rejects_non_local_database_path(tmp_path: Path, source:
 
 def test_atomic_protocol_temp_is_removed_on_replace_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     target = tmp_path / "sqlite-observer-output.json"
-    monkeypatch.setattr(sqlite_observer.os, "replace", lambda *args: (_ for _ in ()).throw(OSError("replace failed")))
-    with pytest.raises(OSError):
-        sqlite_observer._write_atomic(target, b"{}")
+    with monkeypatch.context() as patch:
+        patch.setattr(sqlite_observer.os, "replace", lambda *args: (_ for _ in ()).throw(OSError("replace failed")))
+        with pytest.raises(OSError):
+            sqlite_observer._write_atomic(target, b"{}")
     assert not target.exists()
     assert not target.with_name(f".{target.name}.tmp").exists()
 

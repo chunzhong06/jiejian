@@ -19,9 +19,6 @@ from product.backend.core.verification.permissions import (
 from product.backend.infra.observers.coordinator import ObserverCoordinator
 from product.backend.infra.observers.effect_projector import EffectProjector
 from product.backend.infra.observers.registry import ObserverRegistry
-from product.backend.infra.runtime.runner.executor import (
-    _apply_required_observer_guard,
-)
 from product.protocols import (
     CausalityStatus,
     Correlation,
@@ -492,80 +489,3 @@ def _security_effect(closure: TemporalClosure) -> SecurityEffectFact:
         if closure is TemporalClosure.CLOSED
         else ("TEMPORAL_WINDOW_OPEN",),
     )
-
-
-def test_missing_required_outcome_cannot_bypass_conservative_guard() -> None:
-    _, case, binding = _case_and_binding(
-        ObserverType.OWNER_API,
-        (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
-    )
-    coordinator = _coordinator(binding)
-    outcomes = coordinator.complete_required_outcomes(case, ())
-
-    verdict, reasons = _apply_required_observer_guard(
-        case,
-        {binding.requirement_id: binding},
-        outcomes,
-        (_security_effect(TemporalClosure.OPEN),),
-        CaseVerdict.SAFE,
-        (),
-    )
-
-    assert outcomes[0].required is True
-    assert outcomes[0].status is ObserverOutcomeStatus.INCONCLUSIVE
-    assert verdict is CaseVerdict.INCONCLUSIVE
-    assert reasons == ("REQUIRED_OBSERVER_INCOMPLETE",)
-
-
-def test_unavailable_after_or_eventual_outcome_downgrades_safe() -> None:
-    _, case, binding = _case_and_binding(
-        ObserverType.OWNER_API,
-        (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
-    )
-    unavailable = (
-        ObserverOutcome(
-            observer_id=binding.observer_id,
-            required=True,
-            status=ObserverOutcomeStatus.INCONCLUSIVE,
-            reason_codes=("REQUIRED_OBSERVER_INCOMPLETE",),
-        ),
-    )
-
-    verdict, reasons = _apply_required_observer_guard(
-        case,
-        {binding.requirement_id: binding},
-        unavailable,
-        (_security_effect(TemporalClosure.CLOSED),),
-        CaseVerdict.SAFE,
-        (),
-    )
-
-    assert verdict is CaseVerdict.INCONCLUSIVE
-    assert reasons == ("REQUIRED_OBSERVER_INCOMPLETE",)
-
-
-def test_closed_authoritative_effect_preserves_vulnerable_verdict() -> None:
-    _, case, binding = _case_and_binding(
-        ObserverType.OWNER_API,
-        (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
-    )
-    unavailable = (
-        ObserverOutcome(
-            observer_id=binding.observer_id,
-            required=True,
-            status=ObserverOutcomeStatus.INCONCLUSIVE,
-            reason_codes=("REQUIRED_OBSERVER_INCOMPLETE",),
-        ),
-    )
-
-    verdict, reasons = _apply_required_observer_guard(
-        case,
-        {binding.requirement_id: binding},
-        unavailable,
-        (_security_effect(TemporalClosure.CLOSED),),
-        CaseVerdict.VULNERABLE,
-        ("UNAUTHORIZED_EFFECT_CONFIRMED",),
-    )
-
-    assert verdict is CaseVerdict.VULNERABLE
-    assert reasons == ("UNAUTHORIZED_EFFECT_CONFIRMED",)

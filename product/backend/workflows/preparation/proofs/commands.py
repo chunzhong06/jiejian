@@ -2,7 +2,7 @@
 from typing import Literal
 from pydantic import Field
 from product.protocols.runtime.runtime_identity import RuntimeModel
-from product.protocols.preparation.proof_sources import AnyProofSourceConfig, SourceId, PreflightId, ScopeId, OperationId
+from product.protocols.preparation.proof_sources import CurrentProofSourceConfig, SourceId, PreflightId, ScopeId, OperationId
 
 
 class ProofOperation(RuntimeModel):
@@ -13,7 +13,7 @@ class ProofOperation(RuntimeModel):
 class SaveProofSource(ProofOperation):
     source_id: SourceId | None = None
     expected_revision: int | None = Field(default=None, ge=1)
-    config: AnyProofSourceConfig
+    config: CurrentProofSourceConfig
 
 
 class StartProofPreflight(ProofOperation):

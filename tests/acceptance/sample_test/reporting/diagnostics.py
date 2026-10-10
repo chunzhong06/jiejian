@@ -53,7 +53,14 @@ def _failure_identity(error: Exception) -> tuple[str, str]:
         if "Execution context was destroyed" in message:
             return "PLAYWRIGHT_CONTEXT_CHANGED", "浏览器操作期间页面上下文已改变"
         if type(error).__name__ == "TimeoutError":
-            return "PLAYWRIGHT_TIMEOUT", "浏览器等待超时"
+            cause=error.__context__
+            for _ in range(4):
+                if cause is None:break
+                message+='\n'+str(cause);cause=cause.__context__
+            reasons=[label for token,label in [('not enabled','控件禁用'),('not stable','控件位置未稳定'),
+                ('intercepts pointer events','点击被遮挡'),('not visible','控件不可见'),('waiting for get_by_role','等待角色定位'),('waiting for locator','等待定位')]
+                if token in message]
+            return "PLAYWRIGHT_TIMEOUT", "浏览器等待超时"+('：'+'、'.join(reasons) if reasons else '')
         return "PLAYWRIGHT_ERROR", "Playwright 自动化边界失败"
     return type(error).__name__.upper(), "自动 L5 出现未分类失败"
 

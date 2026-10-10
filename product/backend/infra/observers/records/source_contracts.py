@@ -5,12 +5,12 @@ import hashlib
 import json
 
 from product.backend.infra.observers.records.record_source import record_provider
-from product.protocols.preparation.proof_sources import ManagedProofSourceConfig, ProofContractAttestation
+from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig,ProofContractAttestation
 
 
 def audit_source_contract(var_dir, reference, config, *, require_live=True):
     """只签发内建通用组件的来源依据；旧应用自报 JSON 及历史专用依据不能重新激活。"""
-    if not isinstance(config, ManagedProofSourceConfig):
+    if not isinstance(config, AtomicProofSourceConfig):
         return None
     provider = record_provider(var_dir, reference, require_live=require_live)
     if provider is None:
@@ -21,5 +21,6 @@ def audit_source_contract(var_dir, reference, config, *, require_live=True):
         'collection': config.collection, 'contract_id': config.source_contract_id}
     fingerprint = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return ProofContractAttestation(contract_id=config.source_contract_id,
-        implementation_profile='CONTROLLED_TRANSACTION_RECORDS_V1', fingerprint=fingerprint,
-        approved_effect_kind='STATE_MUTATION' if config.source_contract_id == 'TRANSACTION_HISTORY_V1' else 'DATA_DISCLOSURE')
+        implementation_profile='CONTROLLED_FILE_RECEIPT_V1' if isinstance(config,FileProofSourceConfig) else 'CONTROLLED_TRANSACTION_RECORDS_V2',fingerprint=fingerprint,
+        approved_effect_kind='FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else
+            'STATE_MUTATION' if config.source_contract_id=='TRANSACTION_HISTORY_V2' else 'DATA_DISCLOSURE')

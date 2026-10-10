@@ -43,11 +43,6 @@
 - `class RunFinalizationRow`
 - `class RunFinalizationRecord`
 - `RunFinalizationRecord.validate_state_fields(self) -> RunFinalizationRecord`
-- `class RunFinalizationRepository`
-- `RunFinalizationRepository.add(self, record) -> None`
-- `RunFinalizationRepository.get(self, run_id) -> RunFinalizationRecord &#124; None`
-- `RunFinalizationRepository.save(self, record) -> None`
-- `RunFinalizationRepository.ensure_initial(self, run_id, publication_sha256, now_us) -> RunFinalizationRecord`
 
 静态import / dot-source：`__future__`、`enum`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.infra.storage.base`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`
 
@@ -59,15 +54,6 @@
 - `class FindingOccurrenceRow`
 - `class FindingRecord`
 - `class FindingOccurrenceRecord`
-- `class FindingRepository`
-- `FindingRepository.add(self, record) -> None`
-- `FindingRepository.get(self, finding_id) -> FindingRecord &#124; None`
-- `FindingRepository.list_for_project(self, project_id) -> tuple[FindingRecord, ...]`
-- `FindingRepository.touch(self, finding_id, updated_at_us) -> None`
-- `FindingRepository.add_occurrence(self, record) -> None`
-- `FindingRepository.get_occurrence(self, finding_id, run_id) -> FindingOccurrenceRecord &#124; None`
-- `FindingRepository.latest_occurrence(self, finding_id) -> FindingOccurrenceRecord &#124; None`
-- `FindingRepository.list_occurrences_for_run(self, run_id) -> tuple[FindingOccurrenceRecord, ...]`
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
@@ -79,15 +65,30 @@
 - `class GateResultRow`
 - `class RegressionBaselineRecord`
 - `class GateResultRecord`
-- `class GatingRepository`
-- `GatingRepository.add_baseline(self, record) -> None`
-- `GatingRepository.get_baseline(self, baseline_id) -> RegressionBaselineRecord &#124; None`
-- `GatingRepository.get_baseline_for_run(self, project_id, accepted_run_id) -> RegressionBaselineRecord &#124; None`
-- `GatingRepository.add_gate_result(self, record) -> None`
-- `GatingRepository.get_gate_result(self, gate_result_id) -> GateResultRecord &#124; None`
-- `GatingRepository.get_gate_result_for_input(self, baseline_id, run_id, policy_version, input_hash) -> GateResultRecord &#124; None`
-- `GatingRepository.latest_gate_result(self, baseline_id, run_id) -> GateResultRecord &#124; None`
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
+
+### `product/backend/infra/storage/results/rule_history.py`
+
+[打开源码](../../../../../../../product/backend/infra/storage/results/rule_history.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class RuleCheckIndexRow`
+- `class RuleHistoryRunRow`
+- `class RuleHistoryCoverageRow`
+- `class RuleHistoryReceiptRow`
+- `class RuleHistoryRepository`
+- `RuleHistoryRepository.index(self, project_id, run_id, manifest_hash, created_at_us, permissions, error_code)`
+- `RuleHistoryRepository.coverage(self, project_id)`
+- `RuleHistoryRepository.save_coverage(self, value)`
+- `RuleHistoryRepository.receipt(self, project_id, operation_id)`
+- `RuleHistoryRepository.save_receipt(self, value)`
+- `RuleHistoryRepository.missing(self, project_id)`
+- `RuleHistoryRepository.unreadable(self, project_id)`
+- `RuleHistoryRepository.upper(self, project_id)`
+- `RuleHistoryRepository.scan(self, project_id, cursor, upper, limit)`
+- `RuleHistoryRepository.runs(self, project_id, reference, limit, before_time, before_run)`
+- `RuleHistoryRepository.rules(self, project_id, limit, after, include_archived)`
+
+静态import / dot-source：`__future__`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`、`作用域内：sqlalchemy`
 
 <!-- GENERATED:END -->

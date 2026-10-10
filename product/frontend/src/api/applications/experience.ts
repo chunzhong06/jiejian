@@ -4,10 +4,11 @@ import { request } from '../http'
 import type { RepairReference } from '../checks/repairs'
 import type { BoundaryProposalViewDto } from '../boundaries/businessBoundaries'
 
-export type OfficialScenarioVersion = 'BASELINE' | 'VULNERABLE' | 'EVIDENCE_LIMITED' | 'FIXED'
+export type OfficialScenarioVersion = 'BASELINE' | 'VULNERABLE' | 'EVIDENCE_LIMITED' | 'FIXED' | 'EXPOSE_REVOKE' | 'PREVIEW_CHANGED'
 
 export type OfficialExperienceDto = {
   available: boolean
+  runtime_kind?: 'PYTHON' | 'NODE_ESM'
   display_name: string
   unavailable_reason: string | null
   active: boolean
@@ -19,6 +20,7 @@ export type OfficialExperienceDto = {
   scenario_changed_at_us?: number | null
   vulnerable_change_id: string | null
   repair_change_id: string | null
+  current_change_id?: string | null
   evidence_limited?: boolean
   pending_tasks?: string[]
   lifecycle?: 'NOT_STARTED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'STOPPED' | 'FAILED' | 'UNKNOWN'
@@ -72,7 +74,7 @@ export const experienceApi = {
     }),
   prepare: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
-  boundaryProposal: () => request<BoundaryProposalViewDto>('/api/experience/official-sample/boundary-proposal', { method: 'POST' }),
+  boundaryProposal: (exhibitionDownload?: boolean) => request<BoundaryProposalViewDto>('/api/experience/official-sample/boundary-proposal', { method: 'POST', ...(exhibitionDownload===undefined?{}:{body:JSON.stringify({exhibition_download:exhibitionDownload})}) }),
   switchVersion: (version: OfficialScenarioVersion, reference?: RepairReference) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/version', {
       method: 'POST',

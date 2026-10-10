@@ -14,7 +14,7 @@ from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.checks.check_publication import CheckPublicationManifest, CheckPublishedFile
 from product.protocols.checks.check_result import CheckEvidence, CheckRunnerResult, check_request_marker, parse_check_document
 from product.protocols.checks.check_runtime import CheckRuntimeBundle, parse_check_runtime
-from product.protocols.checks.execution_request import PersistedExecutionRequestV3, parse_execution_request_v3
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3, parse_execution_request
 
 MANIFEST_NAME = "publication-manifest.json"
 MAX_FILE_BYTES = 1_048_576
@@ -95,7 +95,7 @@ def validate_check_package(directory: Path, *, published=False, known_secrets=()
                     raise ValueError("package budget exceeded")
                 raw_files[relative] = raw
         result = parse_check_document(raw_files["result.json"], CheckRunnerResult, known_secrets=known_secrets)
-        request = parse_execution_request_v3(raw_files["request.json"])
+        request = parse_execution_request(raw_files["request.json"])
         bundle = parse_check_runtime(raw_files["runtime.json"])
         validate_check_inputs(request, bundle)
         runtime_reference = getattr(bundle, "runtime_reference", None)
@@ -138,6 +138,8 @@ def validate_check_package(directory: Path, *, published=False, known_secrets=()
                     raise ValueError("observation source or window association")
                 if observation.correlated and check_request_marker(result.run_id, result.job_id, result.attempt, case.case_id) not in observation.correlation_refs:
                     raise ValueError("observation run marker association")
+            from product.backend.infra.artifacts.checks.fact_validation import validate_frozen_facts
+            validate_frozen_facts(item,bundle,result.started_at_us,result.completed_at_us)
             evidence[item.evidence_id] = item
         referenced = []
         for item in result.case_results:

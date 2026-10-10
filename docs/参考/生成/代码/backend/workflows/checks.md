@@ -9,6 +9,19 @@
 [打开源码](../../../../../../product/backend/workflows/checks/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
+### `product/backend/workflows/checks/history.py`
+
+[打开源码](../../../../../../product/backend/workflows/checks/history.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class MaintainHistory`
+- `class CheckHistoryService`
+- `CheckHistoryService.status(self, project_id)`
+- `CheckHistoryService.receipt(self, project_id, operation_id)`
+- `CheckHistoryService.maintain(self, project_id, command)`
+- `CheckHistoryService.rules(self, project_id, limit, after, include_archived)`
+
+静态import / dot-source：`__future__`、`hashlib`、`product.backend.core.errors`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`pydantic`、`time`
+
 ### `product/backend/workflows/checks/local_observer_wiring.py`
 
 [打开源码](../../../../../../product/backend/workflows/checks/local_observer_wiring.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -36,6 +49,29 @@
 
 静态import / dot-source：`__future__`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`typing`
 
+### `product/backend/workflows/checks/reading/record_text.py`
+
+[打开源码](../../../../../../product/backend/workflows/checks/reading/record_text.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `METHODS`
+- `REASONS`
+- `PHASES`
+- `TRACE_LABELS`
+- `JUDGEMENTS`
+
+### `product/backend/workflows/checks/reading/records.py`
+
+[打开源码](../../../../../../product/backend/workflows/checks/reading/records.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class RecordLink`
+- `class EvidenceRecordIndex`
+- `class VerificationSection`
+- `class EvidenceRecordView`
+- `record_index(package, evidence_id, case_id)`
+- `record_view(package, evidence_id, case_id, record_id)`
+
+静态import / dot-source：`__future__`、`hashlib`、`product.backend.core.errors`、`product.backend.workflows.checks.reading.record_text`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
+
 ### `product/backend/workflows/checks/reading/results.py`
 
 [打开源码](../../../../../../product/backend/workflows/checks/reading/results.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -50,14 +86,17 @@
 - `class CheckHistoryPage`
 - `class CheckResultReader`
 - `CheckResultReader.list_for_project(self, project_id) -> tuple[CheckRunStatus, ...]`
+- `CheckResultReader.project_readings(self, project_id)`
 - `CheckResultReader.active_for_project(self, project_id) -> CheckRunStatus &#124; None`
-- `CheckResultReader.history(self, project_id, limit, before_created_at_us, before_run_id, query, verdict, lifecycle) -> CheckHistoryPage`
+- `CheckResultReader.history(self, project_id, limit, before_created_at_us, before_run_id, query, verdict, lifecycle, rule_reference) -> CheckHistoryPage`
 - `CheckResultReader.status(self, run_id, project_id) -> CheckRunStatus`
 - `CheckResultReader.package(self, run_id, project_id) -> CheckPackage`
 - `CheckResultReader.evidence_index(self, run_id)`
 - `CheckResultReader.evidence(self, run_id, evidence_id)`
+- `CheckResultReader.evidence_records(self, run_id, evidence_id, case_id, project_id, record_id)`
+- `CheckResultReader.evidence_bundle(self, project_id, run_id, case_id, evidence_ids)`
 
-静态import / dot-source：`__future__`、`hashlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.checks.check_packages`、`product.backend.infra.artifacts.checks.check_validation`、`product.backend.infra.runtime.jobs.requests.checks`、`product.backend.infra.runtime.paths`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`hashlib`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.lifecycle`、`product.backend.infra.artifacts.checks.check_packages`、`product.backend.infra.artifacts.checks.check_validation`、`product.backend.infra.runtime.jobs.requests.checks`、`product.backend.infra.runtime.paths`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`pydantic`、`typing`、`作用域内：product.backend.workflows.checks.reading.records`
 
 ### `product/backend/workflows/checks/reading/story.py`
 
@@ -77,6 +116,7 @@
 - `CheckStoryBuilder.bind_repairs(self, repairs)`
 - `CheckStoryBuilder.validate_connections(self)`
 - `CheckStoryBuilder.build(self, run_id, include_repair) -> ResultStory`
+- `CheckStoryBuilder.breakpoints_from_verified_package(self, package)`
 
 静态import / dot-source：`__future__`、`product.backend.core.checks.repair`、`product.backend.core.lifecycle`、`product.backend.core.verification.breakpoints`、`product.backend.core.verification.checks`、`product.backend.core.verification.trace`、`product.backend.workflows.checks.reading.observation_reading`、`product.backend.workflows.checks.reading.story_text`、`product.backend.workflows.checks.repairs.repair_presentation`、`product.protocols.checks.check_result`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
 
@@ -108,12 +148,13 @@
 - `CheckRuntimeRegistry.bind_persistent_reader(self, reader)`
 - `CheckRuntimeRegistry.validate_connections(self)`
 - `CheckRuntimeRegistry.snapshot(self, project_id) -> CheckRuntimeRegistration &#124; None`
+- `CheckRuntimeRegistry.read_scope(self, project_id)`
 - `CheckRuntimeRegistry.unregister(self, project_id) -> None`
 - `CheckRuntimeRegistry.proof(self, project_id, reference, effect_id)`
 - `CheckRuntimeRegistry.contains(self, project_id, reference)`
 - `CheckRuntimeRegistry.capability(self, project_id, reference, effect_id)`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.observer`、`product.protocols.web.target`、`pydantic`、`threading`
+静态import / dot-source：`__future__`、`contextlib`、`contextvars`、`product.backend.core.boundaries.entities`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.observer`、`product.protocols.web.target`、`pydantic`、`threading`
 
 ### `product/backend/workflows/checks/repairs/__init__.py`
 
@@ -127,8 +168,10 @@
 - `build_current_repair_contract(package, source_case_id, breakpoint)`
 - `class CurrentRepairService`
 - `CurrentRepairService.contracts(self, run_id)`
+- `CurrentRepairService.contracts_from_verified_package(self, package, breakpoints)`
 - `CurrentRepairService.resolve(self, project_id, reference)`
 - `CurrentRepairService.verification(self, run_id)`
+- `CurrentRepairService.verification_from_verified_package(self, package)`
 
 静态import / dot-source：`__future__`、`product.backend.core.checks.repair`、`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.protocols.checks.execution_request`
 
@@ -161,7 +204,7 @@
 - `CheckRuntimeBuilder.build(self, project_id, work)`
 - `derive_target_classifiers(config, specs, identities)`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.infra.artifacts.checks.check_packages`、`product.backend.infra.recording.request_store`、`product.backend.workflows.recording.lifecycle`、`product.backend.workflows.recording.source`、`product.protocols.checks.check_runtime`、`product.protocols.observer`、`product.protocols.recording.flow_draft`、`product.protocols.recording.recording_flow`、`product.protocols.runtime.node_runtime`、`product.protocols.web.request`、`product.protocols.web.response`、`typing`、`urllib.parse`、`作用域内：product.backend.workflows.runtime.ports`、`作用域内：product.protocols.checks.json_check_runtime`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.infra.artifacts.checks.check_packages`、`product.backend.infra.recording.request_store`、`product.backend.workflows.recording.lifecycle`、`product.backend.workflows.recording.source`、`product.protocols.checks.check_runtime`、`product.protocols.observer`、`product.protocols.recording.flow_draft`、`product.protocols.recording.recording_flow`、`product.protocols.runtime.node_runtime`、`product.protocols.web.request`、`product.protocols.web.response`、`typing`、`urllib.parse`、`作用域内：product.backend.workflows.preparation.proofs.capture_jobs`、`作用域内：product.backend.workflows.runtime.ports`、`作用域内：product.protocols.checks.json_check_runtime`
 
 ### `product/backend/workflows/checks/service.py`
 
@@ -177,6 +220,6 @@
 - `CheckService.preview(self, project_id, change_id) -> CheckPreview`
 - `CheckService.submit(self, project_id, expected_plan_fingerprint, idempotency_key, change_id)`
 
-静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`logging`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.infra.artifacts.checks.check_validation`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.requests.checks`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`pydantic`、`threading`、`time`、`typing`、`uuid`、`作用域内：product.backend.core.checks.repair`、`作用域内：product.backend.infra.runtime.jobs.models`、`作用域内：product.backend.infra.storage`、`作用域内：product.backend.workflows.changes.observations`、`作用域内：product.backend.workflows.changes.service`、`作用域内：product.backend.workflows.checks.repairs.repair`
+静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`logging`、`product.backend.core.checks.plan`、`product.backend.core.errors`、`product.backend.infra.artifacts.checks.check_validation`、`product.backend.infra.runtime.jobs.models`、`product.backend.infra.runtime.jobs.requests.checks`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`pydantic`、`threading`、`time`、`typing`、`uuid`、`作用域内：product.backend.core.checks.repair`、`作用域内：product.backend.infra.runtime.jobs.models`、`作用域内：product.backend.infra.storage`、`作用域内：product.backend.workflows.changes.observations`、`作用域内：product.backend.workflows.changes.service`、`作用域内：product.backend.workflows.checks.repairs.repair`、`作用域内：product.protocols.checks.execution_request`
 
 <!-- GENERATED:END -->

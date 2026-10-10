@@ -2,29 +2,13 @@
 
 import { Button, Dropdown, Layout, Space } from 'antd'
 import { useEffect, useState } from 'react'
-import { ApiOutlined, BgColorsOutlined, LogoutOutlined, SettingOutlined, RobotOutlined, SearchOutlined, AppstoreOutlined } from '@ant-design/icons'
-import type { LLMProfile, AIAssistanceSettings } from '../../api/assistance/llm'
+import { ApiOutlined, BgColorsOutlined, LogoutOutlined, SettingOutlined, SearchOutlined, AppstoreOutlined } from '@ant-design/icons'
 import type { MCPAccessView } from '../../api/system/mcp'
 import type { ProjectDto } from '../../api/applications/projects'
 import type { SystemStatus } from '../../api/system/system'
 import { ApplicationSwitcher } from '../navigation/ApplicationSwitcher'
 import { useThemeMode, type ThemeMode, type MotionMode, type DensityMode } from '../theme/ThemeContext'
 import { EntrySearch } from '../navigation/EntrySearch'
-
-export function aiStatusLabel(
-  profiles: LLMProfile[],
-  settings: AIAssistanceSettings,
-  profilesFailed: boolean,
-  settingsFailed: boolean,
-) {
-  if (profilesFailed || settingsFailed) return 'AI辅助 · 状态未知'
-  if (!settings.enabled) return 'AI辅助 · 未开启'
-  if (!settings.default_profile_name) return 'AI辅助 · 待配置'
-  const profile = profiles.find((item) => item.profile_name === settings.default_profile_name)
-  if (!profile) return 'AI辅助 · 待配置'
-  if (profile.model) return `AI辅助 · ${profile.model}`
-  return 'AI辅助 · 已配置'
-}
 
 export function systemStatusLabel(status: SystemStatus) {
   if (status.api === 'unknown') return '状态未知'
@@ -57,8 +41,6 @@ type AppHeaderProps = {
   onSelectProject: (project: ProjectDto) => void
   onConnectNew: () => void
   onNavigate: (path: string) => void
-  aiLabel: string
-  onOpenAI: () => void
   onRequestShutdown: () => void
 }
 
@@ -71,8 +53,6 @@ export function AppHeader({
   onSelectProject,
   onConnectNew,
   onNavigate,
-  aiLabel,
-  onOpenAI,
   onRequestShutdown,
 }: AppHeaderProps) {
   const { mode, setMode, motion, setMotion, density, setDensity } = useThemeMode()
@@ -119,14 +99,12 @@ export function AppHeader({
           items: [
             { key: 'system', icon: <span className="system-state-icon" aria-hidden="true"><i className={`system-state-dot${systemStatusLabel(systemStatus) === '系统正常' ? ' is-ready' : ''}`} /></span>, label: systemStatusLabel(systemStatus) },
             { key: 'application', icon: <AppstoreOutlined />, label: '应用与环境' },
-            { key: 'ai', icon: <RobotOutlined />, label: `界鉴 AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
             { type: 'divider' },
             { key: 'shutdown', danger: true, icon: <LogoutOutlined />, label: '退出界鉴' },
           ],
             onClick: ({ key }) => {
               setMenuOpen(false)
-            if (key === 'ai') onOpenAI()
-            else if (key === 'application') onNavigate('/environment')
+            if (key === 'application') onNavigate('/environment')
             else if (key === 'system') onNavigate('/settings/system')
             else if (key === 'shutdown') onRequestShutdown()
             else if (key.startsWith('theme:')) setMode(key.slice('theme:'.length) as ThemeMode)

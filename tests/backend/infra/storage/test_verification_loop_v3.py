@@ -8,6 +8,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
+from product.backend.core.errors import ErrorCode, JiejianError
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
@@ -73,8 +74,9 @@ def test_nonempty_old_run_rejected_without_changes(tmp_path):
         connection.execute("INSERT INTO projects(project_id,name,status,target_type,created_at_us,updated_at_us) VALUES ('test','test','DRAFT','WEB',1,1)")
         connection.execute("INSERT INTO runs VALUES (?, 'test', 'old-contract', 1, 'test', 'QUEUED', NULL, 1, 1, NULL)", ("run_" + "1" * 32,))
     before = database_dump(database)
-    with pytest.raises(Exception):
+    with pytest.raises(JiejianError) as caught:
         upgrade_database(database)
+    assert caught.value.code == ErrorCode.STORAGE_MIGRATION
     assert database_dump(database) == before
 
 
@@ -152,7 +154,7 @@ def test_schema_drift_rejected_before_ddl(tmp_path):
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE unknown_table(value TEXT)")
     before = database_dump(database)
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="STATE_PRECONDITION"):
         command.upgrade(migration_config(database), "head")
     assert database_dump(database) == before
 

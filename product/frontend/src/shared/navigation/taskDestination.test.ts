@@ -13,3 +13,5 @@ it('原题复验保留精确变化，结果入口保留原 Run',()=>{
  expect(taskDestination({...task,task_kind:'VERIFY_REPAIR',change_id:'change-one'})).toBe('/tests?change_id=change-one')
  expect(taskDestination({...task,task_kind:'VIEW_CURRENT_RESULT',run_id:'run-one'})).toBe('/tests?run_id=run-one')
 })
+
+it('连接任务直接打开原接入页的地址步骤',()=>expect(taskDestination({...task,task_kind:'CONFIRM_APPLICATION_ENDPOINT',route:'/application'})).toBe('/application?step=connection'))

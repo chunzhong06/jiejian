@@ -13,6 +13,23 @@ from tests.fixtures.preparation.action_preparation import build_preparation_harn
 from tests.fixtures.checks.check_service import ready_check_harness
 
 
+def test_registration_read_scope_reuses_only_current_read_and_restores_after_failure():
+    from product.backend.workflows.checks.registry import CheckRuntimeRegistry
+    registry=CheckRuntimeRegistry();reads=[]
+    registry.bind_persistent_reader(lambda project:reads.append(project))
+    with registry.read_scope('first'):
+        assert registry.snapshot('first') is None
+        with registry.read_scope('first'):assert registry.snapshot('first') is None
+        with pytest.raises(RuntimeError):
+            with registry.read_scope('second'):
+                assert registry.snapshot('second') is None
+                raise RuntimeError('interrupted read')
+        assert registry.snapshot('first') is None
+    assert reads==['first','second']
+    with registry.read_scope('first'):assert registry.snapshot('first') is None
+    assert reads==['first','second','first']
+
+
 def test_unprepared_preview_keeps_all_actions_and_never_submits(tmp_path):
     harness = build_preparation_harness(tmp_path)
     try:
@@ -34,7 +51,8 @@ def test_ready_preview_is_readonly_and_does_not_read_secret_values(tmp_path, mon
         preview = harness.core.checks.preview(harness.project_id)
         assert preview.can_execute, preview.model_dump()
         assert preview.case_count == 1 and preview.action_count == 1
-        assert all(sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
+        # BEGIN仅建立现有的一致读取事务；预览仍不允许任何业务写语句。
+        assert all(sql.strip().upper() == 'BEGIN' or sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
         assert harness.core.checks.preview(harness.project_id).plan_fingerprint == preview.plan_fingerprint
     finally:
         harness.close()

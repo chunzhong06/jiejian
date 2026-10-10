@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import ast
 from pathlib import Path
 
-import httpx
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -17,11 +15,9 @@ from product.backend.infra.samples.official import _new_secret_values
 from product.backend.infra.runtime.process.environment import (
     minimal_process_environment,
 )
-from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment, write_python_installation_contract
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[4]
-_SAMPLE_ROOT = _PROJECT_ROOT / "samples" / "web" / "collaboration_space"
 
 
 def test_generated_observer_sas_matches_blob_and_queue_contracts(
@@ -78,7 +74,7 @@ def test_start_failure_log_keeps_only_stable_error_and_process_state(
 
     manager = OfficialSampleManager(
         var_dir,
-        _SAMPLE_ROOT,
+        write_python_installation_contract(tmp_path / "installation-contract"),
         runtime_identity_environment(var_dir),
         process_launcher=fail_launch,
     )
@@ -115,7 +111,7 @@ def test_start_failure_log_identifies_missing_common_identity_without_values(
 
     manager = OfficialSampleManager(
         var_dir,
-        _SAMPLE_ROOT,
+        write_python_installation_contract(tmp_path / "installation-contract"),
         runtime_identity_environment(var_dir),
         process_launcher=fail_launch,
     )
@@ -135,106 +131,3 @@ def test_start_failure_log_identifies_missing_common_identity_without_values(
         "reason": "COMMON_IDENTITY_MISSING",
         "missing_names": ["JIEJIAN_RUNTIME_FINGERPRINT"],
     }
-
-
-def test_official_sample_runs_from_copied_source_with_dynamic_port_and_no_secret_files(
-    tmp_path: Path,
-) -> None:
-    var_dir = tmp_path / "var"
-    manager = OfficialSampleManager(
-        var_dir,
-        _SAMPLE_ROOT,
-        runtime_identity_environment(var_dir),
-    )
-    assert manager.installation.available is True
-
-    runtime = manager.start()
-    try:
-        assert runtime.experience_id.startswith("exp_")
-        assert runtime.source_root == (
-            var_dir / "runtime" / "official-samples" / runtime.experience_id / "source"
-        ).resolve()
-        assert runtime.runtime_root == (
-            var_dir / "runtime" / "official-samples" / runtime.experience_id / "state"
-        ).resolve()
-        assert runtime.origin.startswith("http://127.0.0.1:")
-        assert not runtime.origin.endswith(":8865")
-        assert (runtime.source_root / "server.py").is_file()
-        tree = ast.parse((runtime.source_root / "authorization_policy.py").read_text(encoding="utf-8"))
-        authorization = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "export_authorization_order")
-        assert ast.literal_eval(authorization.body[-1].value) == "ENQUEUE_BEFORE_AUTHORIZE"
-        assert manager.export_execution_mode(runtime.experience_id) == "QUEUED"
-        assert not (runtime.source_root / "collaboration_space").exists()
-        assert runtime.descriptor_path.is_file()
-        descriptor = json.loads(runtime.descriptor_path.read_text(encoding="utf-8"))
-        assert "mode" not in descriptor
-        with httpx.Client(base_url=runtime.origin, trust_env=False) as client:
-            assert client.get("/health").status_code == 200
-        requested = manager.resolve_secret_names(
-            [
-                "JIEJIAN_SAMPLE_OWNER_OBSERVER",
-                "JIEJIAN_SAMPLE_QUEUE_SAS",
-                "JIEJIAN_SAMPLE_BLOB_SAS",
-                "UNRELATED_SECRET",
-            ]
-        )
-        assert set(requested) == {
-            "JIEJIAN_SAMPLE_OWNER_OBSERVER",
-            "JIEJIAN_SAMPLE_QUEUE_SAS",
-            "JIEJIAN_SAMPLE_BLOB_SAS",
-        }
-        assert parse_queue_sas(requested["JIEJIAN_SAMPLE_QUEUE_SAS"])
-        assert parse_blob_sas(requested["JIEJIAN_SAMPLE_BLOB_SAS"])
-        secret_values = tuple(runtime.secrets.values())
-        for root in (runtime.source_root, runtime.runtime_root):
-            for path in root.rglob("*"):
-                if path.is_file():
-                    content = path.read_bytes()
-                    assert not any(value.encode("utf-8") in content for value in secret_values)
-    finally:
-        manager.stop(runtime.experience_id)
-    assert manager.active is None
-    assert not runtime.experience_root.exists()
-    assert runtime.log_path.is_file()
-    assert runtime.secrets == {}
-
-
-def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
-    tmp_path: Path,
-) -> None:
-    var_dir = tmp_path / "var"
-    manager = OfficialSampleManager(
-        var_dir,
-        _SAMPLE_ROOT,
-        runtime_identity_environment(var_dir),
-    )
-    runtime = manager.start()
-    try:
-        from product.backend.infra.runtime.process.controlled.correspondence import runtime_corresponds
-        before = manager.runtime_reference(runtime.experience_id)
-        assert before is not None and runtime_corresponds(var_dir, before)
-        switched = manager.switch_behavior(
-            runtime.experience_id,
-            authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-            owner_observation="UNAVAILABLE",
-            blob_observation="UNAVAILABLE",
-        )
-        assert switched.origin == runtime.origin
-        assert switched.source_root == runtime.source_root
-        after = manager.runtime_reference(switched.experience_id)
-        assert after is not None and after.instance_id != before.instance_id
-        assert not runtime_corresponds(var_dir, before)
-        assert runtime_corresponds(var_dir, after)
-        assert json.loads(runtime.control_path.read_text(encoding="utf-8")) == {
-            "schema_version": "1",
-            "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",
-            "owner_observation": "UNAVAILABLE",
-            "blob_observation": "UNAVAILABLE",
-        }
-        policy = (runtime.source_root / "authorization_policy.py").read_text(
-            encoding="utf-8"
-        )
-        authorization = next(node for node in ast.parse(policy).body if isinstance(node, ast.FunctionDef) and node.name == "export_authorization_order")
-        assert ast.literal_eval(authorization.body[-1].value) == "AUTHORIZE_BEFORE_ENQUEUE"
-    finally:
-        manager.stop()

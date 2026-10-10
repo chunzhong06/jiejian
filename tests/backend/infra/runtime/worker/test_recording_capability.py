@@ -399,7 +399,7 @@ def test_worker_container_has_current_targets_and_does_not_upgrade_missing_datab
     try:
         container = WorkerContainer(harness.var_dir, environ={})
         try:
-            assert container.job_targets.target_types == (JobTargetType.PROOF_PREFLIGHT, JobTargetType.RECORDING, JobTargetType.RUN)
+            assert container.job_targets.target_types == (JobTargetType.PROOF_PREFLIGHT, JobTargetType.RECORDING, JobTargetType.REFERENCE_CAPTURE, JobTargetType.RUN)
             registry = container.handler_factory.build_registry("recording-worker", {})
             recording_job = JobRecord(
                 job_id="job_" + "b" * 32,

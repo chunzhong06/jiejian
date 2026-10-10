@@ -14,8 +14,10 @@
   border-top: var(--line-width) solid var(--color-border);
 }
 
+.recording-capture,.recording-review,.recording-summary { width:min(100%,var(--layout-summary));margin-inline:auto; }
+
 /* 当前任务与账号资源横向分布，操作窗口保持独立，控制区使用共享 TaskActionBar。 */
-.recording-workspace { padding:var(--space-24) 0; }
+.recording-workspace { padding:var(--space-24) 0;width:min(100%,var(--layout-summary));margin-inline:auto; }
 .recording-workspace h2,.recording-capture-guide h2 { font-size:var(--font-section);margin:0 0 var(--space-24); }
 .recording-facts { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-24);margin:0 0 var(--space-24); }
 .recording-facts dt { color:var(--color-secondary);font-size:var(--font-secondary);margin-bottom:var(--space-12); }

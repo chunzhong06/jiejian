@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { StoryTraceEvent } from '../../../api/checks/currentChecks'
-import { story } from '../../../testing/fixtures/results'
+import { story } from '../../../shared/testing/results'
 import { ExecutionPath } from './ExecutionPath'
 
 const event = (event_id: string, kind: StoryTraceEvent['kind'], parents: string[] = []): StoryTraceEvent => ({ event_id, kind, parent_event_ids: parents, authorization_decision: kind === 'AUTHORIZATION' ? 'DENY' : null, effect_id: null, dispatch_effect_ids: [], source_component: '应用服务', source_location: '/export', })

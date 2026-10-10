@@ -20,6 +20,30 @@
 
 静态import / dot-source：`__future__`、`enum`、`pydantic`
 
+### `product/backend/core/boundaries/candidate_scenarios.py`
+
+[打开源码](../../../../../../product/backend/core/boundaries/candidate_scenarios.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `SCENARIO_ID_PATTERN`
+- `OPTION_ID_PATTERN`
+- `normalized_rule_text(value) -> str`
+- `class RuleScenarioOption`
+- `RuleScenarioOption.unique_replacements(self)`
+- `class RuleScenarioInput`
+- `RuleScenarioInput.bounded_options(self)`
+- `class RuleScenario`
+- `freeze_scenario(scenario, content) -> RuleScenario`
+- `class RuleCandidateDecide`
+- `RuleCandidateDecide.action_payload(self)`
+- `class RuleCandidateDecision`
+- `RuleCandidateDecision.adjacent_revision(self)`
+- `class CandidateActorReference`
+- `class CandidateActionReference`
+- `class CandidateEffectReference`
+- `class CandidateApprovalEntities`
+
+静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`typing`、`unicodedata`
+
 ### `product/backend/core/boundaries/entities.py`
 
 [打开源码](../../../../../../product/backend/core/boundaries/entities.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -136,15 +160,37 @@
 - `OPERATION_ID_PATTERN`
 - `class RuleExample`
 - `RuleExample.require_mapping_or_limitation(self) -> RuleExample`
+- `class LegacyRuleCandidateContent`
+- `LegacyRuleCandidateContent.bounded_original(cls, value) -> str`
+- `LegacyRuleCandidateContent.bounded_questions(cls, values) -> tuple[str, ...]`
+- `LegacyRuleCandidateContent.unique_items(self) -> LegacyRuleCandidateContent`
+- `class LegacyRuleCandidateRevision`
+- `class RuleCandidateContentInput`
+- `RuleCandidateContentInput.scenario_references(self)`
 - `class RuleCandidateContent`
-- `RuleCandidateContent.bounded_original(cls, value) -> str`
-- `RuleCandidateContent.bounded_questions(cls, values) -> tuple[str, ...]`
-- `RuleCandidateContent.unique_items(self) -> RuleCandidateContent`
+- `RuleCandidateContent.verify_fingerprints(self)`
 - `class RuleCandidateRevision`
+- `RuleCandidateRevision.bounded_root(self)`
+- `freeze_candidate_content(value) -> RuleCandidateContent`
+- `read_candidate_revision(payload)`
+- `rule_candidate_revision_schema()`
 - `class RuleCandidateSave`
 - `RuleCandidateSave.paired_revision(self) -> RuleCandidateSave`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`typing`
+
+### `product/backend/core/boundaries/rule_preview.py`
+
+[打开源码](../../../../../../product/backend/core/boundaries/rule_preview.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class ApprovedRuleReference`
+- `class ApprovedRuleSet`
+- `class ProposalRuleSet`
+- `class CandidateRuleSet`
+- `class RuleSituation`
+- `class RulePreviewCommand`
+
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`pydantic`、`typing`
 
 ### `product/backend/core/boundaries/semantics.py`
 

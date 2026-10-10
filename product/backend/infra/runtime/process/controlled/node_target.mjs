@@ -103,13 +103,24 @@ async function main() {
     return Object.freeze({
       seed: (resource_id, owner_id, data) => recordRequest('/resource/seed', {schema_version:'1',collection,resource_id,owner_id,data}),
       read: resource_id => recordRequest('/resource/read', {collection,resource_id}),
+      trace: async (resource_id, event) => {
+        const scope = requestScopes.getStore()
+        if (!scope || scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
+        scope.pending += 1
+        try {
+          // scope 由宿主绑定，应用只提交显式父事件与有限公开标识。
+          const receipt = await recordRequest('/trace/append', {schema_version:'1',collection,resource_id,event,scope_id:scope.id})
+          if (receipt.schema_version !== '1' || typeof receipt.event?.event_id !== 'string') throw new Error('TRACE_RECEIPT_INVALID')
+          return receipt.event
+        } finally { scope.pending -= 1 }
+      },
       transact: async input => {
         const scope = requestScopes.getStore()
         if (!scope || scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
         scope.pending += 1
         try {
           // 操作关联由宿主注入，业务模块不能回放旧事务或借用另一请求的完成记录。
-          return await recordRequest('/resource/transact', {...input,schema_version:'1',collection,
+          return await recordRequest('/resource/transact', {...input,schema_version:'2',collection,
             scope_id:scope.id,request_key:crypto.randomBytes(32).toString('hex')})
         } finally { scope.pending -= 1 }
       },

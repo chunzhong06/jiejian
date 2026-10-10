@@ -1,6 +1,8 @@
 // 应用运行属于环境准备；预览、启动回执和当前进程分开，不把启动成功表示为安全通过。
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Checkbox, Input, InputNumber, Spin } from 'antd'
+import { Alert, Button, Checkbox, Input, InputNumber } from 'antd'
+import { LoadingState } from '../../shared/ui/LoadingState'
+import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import {projectsApi,type ApplicationUnderstandingDto} from '../../api/applications/projects'
 import { controlledRuntimeApi as api, type RuntimePreview, type RuntimeState } from '../../api/applications/controlledRuntime'
 import { ApiError } from '../../api/http'
@@ -22,8 +24,8 @@ export function ApplicationRuntimeSettings({projectId,onNavigate}:{projectId:str
     }).catch(()=>{if(current)setError(true)})
     return ()=>{current=false}
   },[projectId,revision])
-  if(error)return <Alert type="warning" message="暂时无法读取应用运行配置" action={<Button onClick={()=>setRevision(value=>value+1)}>重新读取</Button>}/>
-  if(!understanding)return <Spin/>
+  if(error)return <><Alert type="warning" message="暂时无法读取应用运行配置"/><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}} primary={{label:'重新读取',onClick:()=>setRevision(value=>value+1)}}/></>
+  if(!understanding)return <><LoadingState>正在读取应用运行配置…</LoadingState><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}}/></>
   return <div className="controlled-runtime-settings"><ControlledRuntimePanel key={projectId} projectId={projectId}
     revision={understanding.revision} sourceAuthorized={understanding.source_analysis_authorized}
     onChanged={()=>{void projectsApi.understanding(projectId).then(value=>{if(value.project_id===projectId)setUnderstanding(value)}).catch(()=>setError(true))}}
@@ -151,9 +153,9 @@ export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, 
     {state?.running && !state.source_matches && <Alert type="warning" showIcon message="本地源码已变化，当前运行仍对应上一次启动副本。"/>}
     {state?.running && state.operation?.receipt && <p>当前运行地址：http://127.0.0.1:{state.operation.receipt.reference.port}</p>}
     <footer><span>{state?.operation?.state==='SUCCEEDED' && !state.running?'已保留上次启动回执；当前没有确认到仍运行的实例。':'运行状态不代表权限检查结果。'}</span><div className="confirmation-actions">
-      {queued && <Button disabled={busy} onClick={()=>void cancelStart()}>取消本次启动</Button>}
-      {state?.running && <Button disabled={busy||Boolean(queued)} onClick={()=>void stop()}>停止本次运行</Button>}
       <Button loading={busy} onClick={()=>void refresh()}>{pending?'查询原操作结果':'刷新运行状态'}</Button>
+      {state?.running && <Button danger disabled={busy||Boolean(queued)} onClick={()=>void stop()}>停止本次运行</Button>}
+      {queued && <Button danger disabled={busy} onClick={()=>void cancelStart()}>取消本次启动</Button>}
       {!pending && !queued && (preview?<Button type="primary" disabled={busy} onClick={()=>void start()}>确认启动应用</Button>:<Button type="primary" disabled={busy||!entry.trim()||port===null||(!sourceAuthorized&&!consent)} onClick={()=>void readPreview()}>预览启动</Button>)}
     </div></footer>
   </section>

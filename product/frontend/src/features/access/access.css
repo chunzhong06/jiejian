@@ -380,6 +380,8 @@
   justify-self: start;
 }
 
+/* 权限组与动作共用列表间距；多个选中面仍能辨认各自的操作范围。 */
+.candidate-selection-list { display:grid; gap:var(--space-12); }
 .candidate-selection-row {
   display: grid;
   grid-template-columns: auto minmax(0,1fr);
@@ -392,6 +394,10 @@
 .candidate-selection-row>.ant-checkbox-wrapper {
   margin-top: var(--space-8);
 }
+
+.candidate-selection-row{padding-inline:var(--space-16);border-radius:var(--radius-small);transition:background-color var(--motion-normal) var(--ease-standard)}
+.candidate-selection-row[data-selected=true]{background:var(--color-primary-light)}
+[data-motion=off] .candidate-selection-row{transition:none}
 
 .candidate-selection-row p {
   font-size: var(--font-secondary);

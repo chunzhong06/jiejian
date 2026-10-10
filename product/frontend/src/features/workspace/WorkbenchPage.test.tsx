@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import { WorkbenchPage } from './WorkbenchPage'
 import { currentChecksApi } from '../../api/checks/currentChecks'
-import { status, story } from '../../testing/fixtures/results'
+import { status, story } from '../../shared/testing/results'
 
 vi.mock('../../api/preparation/preparation',()=>({preparationApi:{get:vi.fn().mockResolvedValue({project_id:'p1',actions:[],preparation_complete:false})}}))
 vi.mock('../../api/checks/currentChecks',()=>({currentChecksApi:{history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}),story:vi.fn().mockImplementation(async()=>story())}}))

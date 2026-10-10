@@ -30,7 +30,7 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/test-identities",
         response_model=ApiResponse,
     )
-    async def list_test_identities(project_id: str):
+    def list_test_identities(project_id: str):
         return data_response(
             [
                 item.model_dump(mode="json")
@@ -43,7 +43,7 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         response_model=ApiResponse,
         status_code=201,
     )
-    async def create_test_identity(
+    def create_test_identity(
         project_id: str,
         body: TestIdentityCreateRequest,
     ):
@@ -59,7 +59,7 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         "/api/test-identities/{identity_id}",
         response_model=ApiResponse,
     )
-    async def get_test_identity(identity_id: str):
+    def get_test_identity(identity_id: str):
         return data_response(
             context.test_identities.get(identity_id).model_dump(mode="json")
         )
@@ -68,7 +68,7 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         "/api/test-identities/{identity_id}/reset",
         response_model=ApiResponse,
     )
-    async def reset_test_identity(
+    def reset_test_identity(
         identity_id: str,
         body: TestIdentityResetRequest,
     ):
@@ -81,24 +81,24 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         "/api/test-identities/{identity_id}",
         response_model=ApiResponse,
     )
-    async def delete_test_identity(identity_id: str):
+    def delete_test_identity(identity_id: str):
         context.test_identities.delete(identity_id)
         return data_response({"deleted": True, "identity_id": identity_id})
 
     @router.post("/api/test-identities/{identity_id}/preparations", response_model=ApiResponse)
-    async def start_preparation(identity_id: str, body: TestIdentityResetRequest):
+    def start_preparation(identity_id: str, body: TestIdentityResetRequest):
         return data_response(context.identity_preparations.start(identity_id).model_dump(mode="json"))
 
     @router.get("/api/identity-preparations/{preparation_id}", response_model=ApiResponse)
-    async def get_preparation(preparation_id: str):
+    def get_preparation(preparation_id: str):
         return data_response(context.identity_preparations.status(preparation_id).model_dump(mode="json"))
 
     @router.post("/api/identity-preparations/{preparation_id}/confirm", response_model=ApiResponse)
-    async def confirm_preparation(preparation_id: str, body: TestIdentityResetRequest):
+    def confirm_preparation(preparation_id: str, body: TestIdentityResetRequest):
         return data_response(context.identity_preparations.confirm(preparation_id).model_dump(mode="json"))
 
     @router.post("/api/identity-preparations/{preparation_id}/cancel", response_model=ApiResponse)
-    async def cancel_preparation(preparation_id: str, body: TestIdentityResetRequest):
+    def cancel_preparation(preparation_id: str, body: TestIdentityResetRequest):
         return data_response(context.identity_preparations.cancel(preparation_id).model_dump(mode="json"))
 
     return router

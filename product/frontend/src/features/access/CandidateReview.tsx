@@ -36,7 +36,8 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
   const candidates = [...base.role_candidates.map(item => ({ ...item, kind: 'ROLE' as const })), ...base.action_candidates.map(item => ({ ...item, kind: 'ACTION' as const }))]
   const choices = candidates.filter(item => !item.stale && item.decision !== 'REVIEW_REQUIRED').map(item => edits[item.candidate_id] ?? {
     kind: item.kind, candidate_id: item.candidate_id, display_name: item.display_name,
-    decision: item.decision === 'CONFIRMED' || item.decision === 'REJECTED' ? item.decision : item.confidence === 'LOW' ? 'PROPOSED' : 'CONFIRMED',
+    // 新权限组先勾入本次审阅；既有排除决定保留，保存仍须用户核对完整摘要。
+    decision: item.decision === 'CONFIRMED' || item.decision === 'REJECTED' ? item.decision : item.kind === 'ACTION' && item.confidence === 'LOW' ? 'PROPOSED' : 'CONFIRMED',
   } as CandidateSelection)
   const changes = choices.filter(item => { const original = candidates.find(candidate => candidate.candidate_id === item.candidate_id)!; return original.decision !== item.decision || original.display_name !== item.display_name.trim() })
   const patch = (item: CandidateSelection, update: Partial<CandidateSelection>) => {
@@ -75,24 +76,24 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
     {(dirty || uncertain || changed) && <Popconfirm title="放弃本次未确认的编辑并读取最新业务信息？" onConfirm={async()=>{ const next=await projectsApi.understanding(base.project_id).catch(()=>null);if (!alive.current)return;if(next){setBase(next);setEdits({});setReview(false);setUncertain(false);setIssue(undefined);onApplied(next)}else setIssue('最新信息读取失败，当前编辑继续保留。') }}><Button disabled={busy}>放弃本次编辑并刷新</Button></Popconfirm>}
   </>
   return <section className="application-step candidate-workspace" aria-label="审阅业务候选">
-    <header><p className="editorial-eyebrow">{review ? '第 2 步 / 核对总览' : '第 1 步 / 整理业务'}</p><h2 ref={heading} tabIndex={-1}>{review ? '核对业务总览' : '整理权限组与业务动作'}</h2><p className="editorial-muted">{review ? '一起核对两类业务信息，确认后保存。正式权限规则仍需单独批准。' : '先调整应用里有哪些权限组、可以做哪些事，再统一确认。'}</p></header>
+    <header><p className="editorial-eyebrow">{review ? '第 2 步 / 核对总览' : '第 1 步 / 整理业务'}</p><h2 ref={heading} tabIndex={-1}>{review ? '核对业务总览' : '整理权限组与业务动作'}</h2><p className="editorial-muted">{review ? '保存应用里的角色和动作后，将进入权限规则：决定哪些角色可以执行这些动作、可以操作谁的资源。' : '先调整应用里有哪些权限组、可以做哪些事，再统一确认。'}</p></header>
     {receipt && <TaskReceipt message={receipt} />}
     {(issue || changed) && <Alert className="flow-feedback" type="warning" showIcon message={issue ?? '应用信息已有更新。当前编辑保留，请读取最新信息后重新审阅。'} />}
     {!review && <><Segmented aria-label="候选类别" options={[{label:`权限组 · ${base.role_candidates.length}`,value:'ROLE'}, {label:`业务动作 · ${base.action_candidates.length}`,value:'ACTION'}]} value={tab} onChange={setTab} />
-    {choices.filter(item => item.kind === tab).map(item => {
+    <div className="candidate-selection-list">{choices.filter(item => item.kind === tab).map(item => {
       const source = candidates.find(candidate => candidate.candidate_id === item.candidate_id)!
-      return <section className="candidate-selection-row" key={item.candidate_id}>
+      return <section className="candidate-selection-row" data-selected={item.decision === 'CONFIRMED'} key={item.candidate_id}>
         <Checkbox aria-label={`纳入${source.display_name}`} checked={item.decision === 'CONFIRMED'} disabled={busy || uncertain || changed} onChange={event => patch(item,{decision:event.target.checked?'CONFIRMED':'REJECTED'})}/>
         <div><Input aria-label={`${item.kind === 'ROLE' ? '权限组' : '业务动作'}名称：${source.display_name}`} value={item.display_name} maxLength={item.kind === 'ROLE' ? 128 : 256} disabled={busy || uncertain || changed} onChange={event=>patch(item,{display_name:event.target.value})}/>
-          <p>{item.decision === 'PROPOSED' ? '暂不决定，继续保留待审' : item.decision === 'REJECTED' ? source.decision === 'REJECTED' ? '已排除的候选' : '将在本次审阅中明确排除' : source.decision === 'CONFIRMED' && source.display_name === item.display_name ? '已确认的业务信息' : '建议纳入，尚未提交'}</p>
+          <p>{item.decision === 'PROPOSED' ? '暂不决定，继续保留待审' : item.decision === 'REJECTED' ? source.decision === 'REJECTED' ? '已排除的候选' : '将在本次审阅中明确排除' : source.decision === 'CONFIRMED' && source.display_name === item.display_name ? '已确认的业务信息' : '已选入本次审阅，确认后保存'}</p>
           <details><summary>查看识别依据</summary>{source.evidence.map((e,index)=><p key={index}>{e.relative_path}:{e.line_start}{e.symbol ? ` · ${e.symbol}`:''}</p>)}{!source.evidence.length && <p>由你手工补充。</p>}</details>
           {source.origin !== 'MANUAL' && <Button type="link" size="small" disabled={busy || uncertain || changed} onClick={()=>patch(item,{decision:'PROPOSED'})}>保留待审</Button>}
         </div>
       </section>
-    })}
+    })}</div>
     {staleReview}
     <details className="application-manual-section"><summary>没有找到？手工补充</summary><p className="application-manual-note">手工补充会立即保存；请先确认或放弃上方正在编辑的选择。</p><fieldset className="application-manual-fields" disabled={dirty || busy || uncertain}>{manual}</fieldset></details>
-    {(changes.length > 0 || dirty || uncertain || changed) && <div className="candidate-step-footer">{changes.length > 0 && <div><strong>核对本次整理</strong><p>已纳入 {choices.filter(item=>item.kind==='ROLE' && item.decision==='CONFIRMED').length} 个权限组、{choices.filter(item=>item.kind==='ACTION' && item.decision==='CONFIRMED').length} 项业务动作</p></div>}<div className="candidate-step-actions">{editingActions}{changes.length > 0 && <Button ref={nextButton} type="primary" disabled={busy || uncertain || changed || changes.length > 256 || changes.some(item=>!item.display_name.trim())} onClick={()=>setReview(true)}>下一步：核对业务总览</Button>}</div></div>}</>}
+    {(changes.length > 0 || dirty || uncertain || changed) && <div className="candidate-step-footer">{changes.length > 0 && <div><strong>核对本次整理</strong><p>已纳入 {choices.filter(item=>item.kind==='ROLE' && item.decision==='CONFIRMED').length} 个权限组、{choices.filter(item=>item.kind==='ACTION' && item.decision==='CONFIRMED').length} 项业务动作</p></div>}<div className="candidate-step-actions">{editingActions}{changes.length > 0 && <Button ref={nextButton} type="primary" disabled={busy || uncertain || changed || changes.length > 256 || changes.some(item=>!item.display_name.trim())} onClick={()=>setReview(true)}>核对业务总览</Button>}</div></div>}</>}
     {review && <section className="candidate-batch-review" aria-label="本次选择完整摘要"><div className="candidate-review-columns">{(['ROLE','ACTION'] as const).map(kind=><section key={kind}><h3>{kind==='ROLE'?'权限组':'业务动作'}</h3>{(['CONFIRMED','REJECTED','PROPOSED'] as const).map(decision=>{const items=choices.filter(item=>item.kind===kind&&item.decision===decision);return <div key={decision}><h4>{decision==='CONFIRMED'?'纳入':decision==='REJECTED'?'排除':'保留待审'} · {items.length}</h4>{items.length ? <ul>{items.map(item=><li key={item.candidate_id}>{item.display_name}</li>)}</ul> : <p className="editorial-muted">无</p>}</div>})}</section>)}</div><div className="candidate-step-footer"><Button disabled={busy} onClick={()=>setReview(false)}>返回修改</Button><div className="candidate-step-actions">{editingActions}<Button type="primary" loading={busy} disabled={uncertain || changed} onClick={()=>void submit()}>确认这些业务信息</Button></div></div></section>}
 
   </section>

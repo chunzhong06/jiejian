@@ -23,7 +23,7 @@
 
 - `execute_preflight(input, var_dir, uow_factory, environ, cancellation_requested)`
 
-静态import / dot-source：`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.execution.web.check_runtime`、`product.backend.infra.execution.web.identity`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.records.record_facts`、`product.backend.infra.observers.records.record_preflight`、`product.backend.infra.observers.records.record_source`、`product.backend.infra.observers.records.source_contracts`、`product.backend.infra.runtime.process.controlled.node_locator`、`product.backend.infra.runtime.process.controlled.node_owned`、`product.protocols.preparation.proof_sources`、`product.protocols.web.request`、`time`、`动态引用：os`
+静态import / dot-source：`product.backend.core.errors`、`product.backend.core.lifecycle`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.execution.web.check_runtime`、`product.backend.infra.execution.web.identity`、`product.backend.infra.observers.adapters.json_source`、`product.backend.infra.observers.records.record_facts`、`product.backend.infra.observers.records.record_preflight`、`product.backend.infra.observers.records.record_source`、`product.backend.infra.observers.records.source_contracts`、`product.backend.infra.runtime.process.controlled.node_locator`、`product.backend.infra.runtime.process.controlled.node_owned`、`product.protocols.preparation.proof_sources`、`product.protocols.web.request`、`time`、`作用域内：product.backend.infra.artifacts.proof_artifacts`、`动态引用：os`
 
 ### `product/backend/infra/runtime/proof_runner/supervisor.py`
 

@@ -9,7 +9,7 @@
 [打开源码](../../../../../../product/frontend/src/features/results/CurrentResultStory.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../api/checks/currentChecks`、`../../shared/runtime/visibility`、`../../testing/fixtures/results`、`./CurrentResultStory`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../api/checks/currentChecks`、`../../shared/runtime/visibility`、`../../shared/testing/results`、`./CurrentResultStory`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/results/CurrentResultStory.tsx`
 
@@ -17,14 +17,14 @@
 
 - `CurrentResultStory`
 
-静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/StatusBadge`、`../assistant/AssistantPanel`、`../changes/repair/RepairComparison`、`./investigation/DiagnosisSummary`、`./investigation/ExecutionPath`、`./investigation/trace-investigation.css`、`./investigation/tracePresentation`、`./observations/EvidenceRecords`、`./observations/ObservationSources`、`./observations/observationPresentation`、`./overview/ProofCoverage`、`./overview/ResultOverview`、`./overview/result-review.css`、`./testing.css`、`antd`、`react`
+静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../changes/repair/RepairComparison`、`./ResultAgentHandoff`、`./investigation/DiagnosisSummary`、`./investigation/ExecutionPath`、`./investigation/trace-investigation.css`、`./observations/EvidenceVerification`、`./observations/ObservationSources`、`./observations/observationPresentation`、`./overview/ProofCoverage`、`./overview/ResultOverview`、`./overview/result-review.css`、`./testing.css`、`antd`、`react`
 
 ### `product/frontend/src/features/results/investigation/DiagnosisSummary.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/results/investigation/DiagnosisSummary.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../../testing/fixtures/results`、`./DiagnosisSummary`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../../shared/testing/results`、`./DiagnosisSummary`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/results/investigation/DiagnosisSummary.tsx`
 
@@ -39,7 +39,7 @@
 [打开源码](../../../../../../product/frontend/src/features/results/investigation/ExecutionPath.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../../api/checks/currentChecks`、`../../../testing/fixtures/results`、`./ExecutionPath`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../../api/checks/currentChecks`、`../../../shared/testing/results`、`./ExecutionPath`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/results/investigation/ExecutionPath.tsx`
 
@@ -67,20 +67,28 @@
 
 静态import / dot-source：`../../../api/checks/currentChecks`
 
-### `product/frontend/src/features/results/observations/EvidenceRecords.tsx`
+### `product/frontend/src/features/results/observations/EvidenceVerification.test.tsx`
 
-[打开源码](../../../../../../product/frontend/src/features/results/observations/EvidenceRecords.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+[打开源码](../../../../../../product/frontend/src/features/results/observations/EvidenceVerification.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
-- `EvidenceRecords`
 
-静态import / dot-source：`../../../api/checks/currentChecks`、`../../../shared/format/time`、`./observationPresentation`
+静态import / dot-source：`../../../api/checks/currentChecks`、`./EvidenceVerification`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/features/results/observations/EvidenceVerification.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/results/observations/EvidenceVerification.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `EvidenceSelection`
+- `EvidenceVerification`
+
+静态import / dot-source：`../../../api/checks/currentChecks`、`../../../api/http`、`../../../shared/ui/AgentAssistEntry`、`../../../shared/ui/StatusBadge`、`antd`、`react`
 
 ### `product/frontend/src/features/results/observations/observationPresentation.test.ts`
 
 [打开源码](../../../../../../product/frontend/src/features/results/observations/observationPresentation.test.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../../testing/fixtures/results`、`./observationPresentation`、`vitest`
+静态import / dot-source：`../../../shared/testing/results`、`./observationPresentation`、`vitest`
 
 ### `product/frontend/src/features/results/observations/observationPresentation.ts`
 
@@ -99,7 +107,7 @@
 [打开源码](../../../../../../product/frontend/src/features/results/observations/ObservationSources.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../../api/checks/currentChecks`、`../../../testing/fixtures/results`、`./ObservationSources`、`./observationPresentation`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../../api/checks/currentChecks`、`../../../shared/testing/results`、`./ObservationSources`、`./observationPresentation`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/results/observations/ObservationSources.tsx`
 
@@ -134,6 +142,21 @@
 - `resourceOwner`
 
 静态import / dot-source：`../../../api/checks/currentChecks`、`../../../api/checks/repairs`、`../../../shared/runtime/visibility`、`../../../shared/ui/StatusBadge`、`antd`、`react`
+
+### `product/frontend/src/features/results/ResultAgentHandoff.test.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/results/ResultAgentHandoff.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../shared/testing/results`、`./ResultAgentHandoff`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/features/results/ResultAgentHandoff.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/results/ResultAgentHandoff.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `ResultAgentHandoff`
+
+静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/ui/AgentAssistEntry`
 
 ### `product/frontend/src/features/results/testing.css`
 

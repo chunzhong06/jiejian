@@ -323,15 +323,30 @@ class PersistedExecutionRequestV3(WireModel):
         return self
 
 
+class PersistedExecutionRequestV4(PersistedExecutionRequestV3):
+    schema_version:Literal['4']='4'
+    evidence_schema_version:Literal['2']='2'
+
+
 class ExecutionV3Error(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
 
 def canonical_execution_request_v3_bytes(request: PersistedExecutionRequestV3) -> bytes:
+    return _canonical_execution_request(request,PersistedExecutionRequestV3)
+
+
+def canonical_execution_request_bytes(request):
+    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4}.get(request.schema_version)
+    if model is None:raise ExecutionV3Error('执行快照格式无效')
+    return _canonical_execution_request(request,model)
+
+
+def _canonical_execution_request(request,model):
     # 重新校验以拒绝 model_copy/model_construct 绕过；字段不允许秘密正文或绝对路径。
     try:
         payload = request.model_dump(mode="json")
-        parsed = PersistedExecutionRequestV3.model_validate_json(json.dumps(payload), strict=True)
+        parsed = model.model_validate_json(json.dumps(payload), strict=True)
         payload = parsed.model_dump(mode="json")
         payload["actions"].sort(key=lambda item: item["action_id"])
         for action in payload["actions"]:
@@ -348,6 +363,14 @@ def canonical_execution_request_v3_bytes(request: PersistedExecutionRequestV3) -
 
 
 def parse_execution_request_v3(raw: bytes) -> PersistedExecutionRequestV3:
+    return _parse_execution_request(raw,PersistedExecutionRequestV3)
+
+
+def parse_execution_request(raw):
+    return _parse_execution_request(raw,None)
+
+
+def _parse_execution_request(raw,model):
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -358,10 +381,12 @@ def parse_execution_request_v3(raw: bytes) -> PersistedExecutionRequestV3:
     try:
         if type(raw) is not bytes or len(raw) > RUNNER_INPUT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
             raise ValueError("execution bytes")
-        json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
+        payload=json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
                    parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        request = PersistedExecutionRequestV3.model_validate_json(raw, strict=True)
-        if canonical_execution_request_v3_bytes(request) != raw:
+        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4}.get(payload.get('schema_version'))
+        if model is None:raise ValueError('unsupported execution version')
+        request=model.model_validate_json(raw,strict=True)
+        if _canonical_execution_request(request,model)!=raw:
             raise ValueError("noncanonical")
         return request
     except (ValueError, TypeError, UnicodeError):

@@ -9,6 +9,34 @@
 [打开源码](../../../../../product/protocols/checks/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
+### `product/protocols/checks/business_facts.py`
+
+[打开源码](../../../../../product/protocols/checks/business_facts.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class FactProofReference`
+- `class CommittedFieldChange`
+- `class CommittedStateFact`
+- `CommittedStateFact.commit_sequence(self)`
+- `class IdentityCheckFact`
+- `class FieldContentComparison`
+- `FieldContentComparison.exact_comparison(self)`
+- `class FieldDisclosureFact`
+- `class ArtifactManifestReference`
+- `class ReferenceArtifactFact`
+- `class FileReceiptFact`
+- `FileReceiptFact.complete_match(self)`
+- `fact_content_id(payload)`
+- `class BusinessFact`
+- `BusinessFact.bounded_fact(self)`
+- `seal_business_fact(**values)`
+- `class RecordObservationWindow`
+- `class DisclosureObservationWindow`
+- `class FileObservationWindow`
+- `class ObservationFactReference`
+- `ObservationFactReference.reference_shape(self)`
+
+静态import / dot-source：`__future__`、`hashlib`、`json`、`product.protocols.checks.execution_request`、`pydantic`、`typing`
+
 ### `product/protocols/checks/check_publication.py`
 
 [打开源码](../../../../../product/protocols/checks/check_publication.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -35,12 +63,14 @@
 - `class CheckCaseOutcome`
 - `class CheckEvidence`
 - `CheckEvidence.validate_associations(self)`
+- `class DetailedCheckEvidence`
+- `DetailedCheckEvidence.validate_fact_associations(self)`
 - `class CheckCaseResult`
 - `class CheckPrimaryError`
 - `class CheckRunnerResult`
 - `CheckRunnerResult.validate_result(self)`
 - `evidence_content_id(payload) -> str`
-- `seal_check_evidence(**fields) -> CheckEvidence`
+- `seal_check_evidence(detailed, **fields) -> CheckEvidence`
 - `class ControlledCheckRunnerResult`
 - `class NodeCheckRunnerResult`
 - `class CheckResultProtocolError`
@@ -48,7 +78,7 @@
 - `canonical_check_document(document, known_secrets) -> bytes`
 - `parse_check_document(raw, model, known_secrets) -> CheckDocument`
 
-静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.lifecycle`、`product.backend.core.verification.trace`、`product.protocols.checks.check_publication`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.runtime_identity`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.lifecycle`、`product.backend.core.verification.trace`、`product.protocols.checks.business_facts`、`product.protocols.checks.check_publication`、`product.protocols.checks.check_runtime`、`product.protocols.checks.execution_request`、`product.protocols.runtime.node_runtime`、`product.protocols.runtime.runtime_identity`、`pydantic`、`re`、`typing`
 
 ### `product/protocols/checks/check_runtime.py`
 
@@ -118,9 +148,12 @@
 - `RepairContext.validate_sets(self)`
 - `class PersistedExecutionRequestV3`
 - `PersistedExecutionRequestV3.validate_project(self)`
+- `class PersistedExecutionRequestV4`
 - `class ExecutionV3Error`
 - `canonical_execution_request_v3_bytes(request) -> bytes`
+- `canonical_execution_request_bytes(request)`
 - `parse_execution_request_v3(raw) -> PersistedExecutionRequestV3`
+- `parse_execution_request(raw)`
 
 静态import / dot-source：`__future__`、`enum`、`hashlib`、`json`、`pydantic`、`re`、`typing`
 
@@ -131,6 +164,10 @@
 - `class JsonCheckRuntimeBundle`
 - `JsonCheckRuntimeBundle.source_coverage(self)`
 - `class ManagedCheckRuntimeBundle`
+- `class CurrentCheckProofConfig`
+- `class CurrentCheckActionConfig`
+- `class ProofCheckRuntimeBundle`
+- `ProofCheckRuntimeBundle.proof_coverage(self)`
 
 静态import / dot-source：`product.protocols.checks.check_runtime`、`product.protocols.preparation.proof_sources`、`pydantic`、`typing`
 

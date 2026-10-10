@@ -18,22 +18,23 @@ from product.backend.infra.observers.adapters.json_source import strict_json
 from product.backend.infra.observers.records.transaction_store import TransactionRecordStore, RecordStoreError
 from product.protocols.runtime.transaction_records import RecordKey, RecordSeed, RecordTransaction
 from product.protocols.runtime.transaction_records import RecordProviderReference, RecordProofRequest
+from product.protocols.runtime.record_trace import RecordTraceWrite,RecordTraceReceipt
 from product.protocols.runtime.node_runtime import ProjectId
 
 
 def record_store_path(var_dir: Path, project_id: str) -> Path:
     TypeAdapter(ProjectId).validate_python(project_id, strict=True)
-    return var_dir.resolve() / "data" / "transaction-records" / project_id / "records.journal"
+    return var_dir.resolve() / "data" / "transaction-records" / project_id / "records-atomic.journal"
 
 
 def record_provider_fingerprint() -> str:
     """冻结产品记录组件本身的实现身份；与任何接入应用的文件名、角色或业务无关。"""
-    from product.backend.infra.observers.records import transaction_store
-    from product.protocols.runtime import transaction_records
+    from product.backend.infra.observers.records import transaction_store, record_history
+    from product.protocols.runtime import transaction_records, record_trace
     record_capabilities = import_module('product.backend.infra.runtime.process.records.record_capabilities')
     exclusive_file = import_module('product.backend.infra.runtime.process.exclusive_file')
     digest = hashlib.sha256()
-    for module in (transaction_store, transaction_records, record_capabilities, exclusive_file):
+    for module in (transaction_store, record_history, transaction_records, record_trace, record_capabilities, exclusive_file):
         path = Path(module.__file__)
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
@@ -46,7 +47,8 @@ class OwnedRecordServer:
     """仅在 Runtime Worker 中启动；能力令牌只放入受控 Node 宿主环境，不写持久文件。"""
 
     def __init__(self, var_dir: Path, project_id: str, instance_id: str):
-        self.store = TransactionRecordStore(record_store_path(var_dir, project_id))
+        path = record_store_path(var_dir, project_id)
+        self.store = TransactionRecordStore(path,legacy_database=path.with_name('records.journal'))
         self.var_dir = var_dir
         self.token = secrets.token_urlsafe(32)
         self.read_token = secrets.token_urlsafe(32)
@@ -106,6 +108,8 @@ class OwnedRecordServer:
                         if command.scope_id is None:
                             raise RecordStoreError('RECORD_SCOPE_REQUIRED')
                         result = owner.store.transact(command)
+                    elif self.path == '/trace/append':
+                        result = RecordTraceReceipt(event=owner.store.append_trace(RecordTraceWrite.model_validate_json(json.dumps(data,allow_nan=False))))
                     else:
                         return self.reply(404, {"error": "RECORD_OPERATION_UNSUPPORTED"})
                     return self.reply(200, {"data": result.model_dump(mode="json")})
@@ -122,11 +126,12 @@ class OwnedRecordServer:
                         return self.reply(403, {'error':'RECORD_READ_DENIED'})
                     parsed = urlsplit(self.path)
                     parts = parsed.path.split('/')
-                    if parsed.query or parsed.fragment or parts[:3] != ['', 'proof', 'read'] or len(parts) not in {5,6}:
+                    trace = parts[:3] == ['', 'trace', 'read'] and len(parts)==6
+                    if parsed.query or parsed.fragment or not trace and (parts[:3] != ['', 'proof', 'read'] or len(parts) not in {5,6}):
                         return self.reply(404, {'error':'RECORD_READ_UNSUPPORTED'})
                     command = RecordProofRequest(collection=unquote(parts[3]), resource_id=unquote(parts[4]),
                         request_nonce=unquote(parts[5]) if len(parts)==6 else None)
-                    result = owner.store.proof_view(command.collection, command.resource_id, request_nonce=command.request_nonce)
+                    result = owner.store.trace_view(command.collection,command.resource_id,command.request_nonce) if trace else owner.store.proof_view(command.collection, command.resource_id, request_nonce=command.request_nonce)
                     return self.reply(200, {'data':result.model_dump(mode='json')})
                 except RecordStoreError as error:
                     return self.reply(409, {'error':str(error)})

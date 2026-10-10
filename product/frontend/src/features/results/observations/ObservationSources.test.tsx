@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import type { EvidenceExplanation, ObservationReading } from '../../../api/checks/currentChecks'
 import { ObservationSources } from './ObservationSources'
 import { observationGroups } from './observationPresentation'
-import { source } from '../../../testing/fixtures/results'
+import { source } from '../../../shared/testing/results'
 
 const process: ObservationReading = { kind:'PROCESS',label:'已取得关联过程记录',detail:'仅用于追踪本次操作，不能单独证明交付包生成。',attention:false }
 const failure: ObservationReading = { kind:'UNAVAILABLE',label:'来源读取超时',detail:'未取得完整来源记录。',attention:true }

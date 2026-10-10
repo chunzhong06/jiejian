@@ -94,7 +94,7 @@ class CheckWebRuntime:
                 slot_values=self._values(template, case, {}), identity_runtime=runtime, cleanup_request=cleanup)
             return response
 
-    def execute_flow(self, action: CheckActionConfig, case: ExecutionCase, *, verify_identity=False):
+    def execute_flow(self, action: CheckActionConfig, case: ExecutionCase, *, verify_identity=False,entity_policy=None,before_target=None):
         """每个 Case 的 TARGET 最多发送一次；传输异常后也不清除已执行标记。"""
         if case.case_id in self._executed:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "TARGET already executed for this case session")
@@ -105,10 +105,16 @@ class CheckWebRuntime:
                     # SETUP 可能改变会话；实际主体确认必须紧邻 TARGET 且复用同一身份容器。
                     identity_status = self._verify_identity(runtime, case.subject_test_identity_id, case) if verify_identity else None
                     self._actual_identities[case.case_id] = identity_status or "UNKNOWN"
+                    if before_target is not None:before_target(identity_status)
                     self._executed.add(case.case_id)
+                target_policy=entity_policy
+                if target_policy is None and any(proof.effect_kind=='FILE_CONTENT_DELIVERY' for proof in action.proofs):
+                    from product.backend.infra.execution.web.file_entity import FileEntityPolicy
+                    target_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes)
                 execution, response = self.adapter.execute_detailed(step.request, case_id=case.case_id,
                     action_id=action.action_id, classifier=step.classifier,
-                    slot_values=self._values(step.request, case, responses), identity_runtime=runtime)
+                    slot_values=self._values(step.request, case, responses),identity_runtime=runtime,
+                    entity_policy=target_policy if step.purpose=='TARGET' else None)
                 responses[step.step_id] = response
                 if step.purpose == "TARGET":
                     if not hasattr(self, "_target_responses"):

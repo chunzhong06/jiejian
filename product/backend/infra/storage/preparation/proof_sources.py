@@ -4,6 +4,7 @@ from sqlalchemy.orm import Mapped,mapped_column
 from product.backend.infra.storage.base import Base,_flush,ensure_storage_payload_safe
 from product.backend.core.errors import ErrorCode,JiejianError
 from product.protocols.preparation.proof_sources import ProofSourceRevision, SourceReadScope, ProofPreflightInput, ProofSourceAdoption, proof_fingerprint
+from product.protocols.preparation.proof_sources import read_source_revision, read_source_scope, read_preflight_input
 
 
 class ProofSourceRow(Base):
@@ -54,7 +55,7 @@ class ProofSourceRepository:
         if head is None or head.project_id!=project_id:return None
         row=self._session.get(ProofSourceRevisionRow,(source_id,head.revision if revision is None else revision))
         if row is None:return None
-        value=ProofSourceRevision.model_validate_json(row.payload)
+        value=read_source_revision(row.payload)
         if (value.project_id,value.source_id,value.revision,value.fingerprint)!=(project_id,row.source_id,row.revision,row.fingerprint):
             raise JiejianError(ErrorCode.STORAGE_STATE,'来源修订关联不一致')
         return value
@@ -63,6 +64,12 @@ class ProofSourceRepository:
         heads=self._session.scalars(select(ProofSourceRow).where(ProofSourceRow.project_id==project_id)
             .order_by(ProofSourceRow.created_at_us,ProofSourceRow.source_id).offset(offset).limit(limit)).all()
         return tuple(self.source(project_id,row.source_id) for row in heads)
+
+    def preparation_references(self,project_id):
+        """依据覆盖本项目全部来源头；不受列表分页限制，也不装载配置正文。"""
+        rows=self._session.execute(select(ProofSourceRow.source_id,ProofSourceRow.revision,ProofSourceRow.adoption_json)
+            .where(ProofSourceRow.project_id==project_id).order_by(ProofSourceRow.source_id))
+        return tuple(dict(row._mapping) for row in rows)
 
     def save(self,value,*,expected_revision=None):
         ensure_storage_payload_safe(value.model_dump(mode='json'),self._secrets)
@@ -94,7 +101,7 @@ class ProofSourceRepository:
     def scope(self,project_id,scope_id):
         row=self._session.get(ProofReadScopeRow,scope_id)
         if row is None or row.project_id!=project_id or row.revoked_at_us is not None:return None
-        value=SourceReadScope.model_validate_json(row.payload)
+        value=read_source_scope(row.payload)
         if (value.project_id,value.scope_id,proof_fingerprint(value))!=(project_id,scope_id,row.fingerprint):
             raise JiejianError(ErrorCode.STORAGE_STATE,'来源读取授权关联不一致')
         return value
@@ -123,7 +130,7 @@ class ProofSourceRepository:
     def preflight(self,project_id,preflight_id):
         row=self._session.get(ProofPreflightRow,preflight_id)
         if row is None or row.project_id!=project_id:return None
-        value=ProofPreflightInput.model_validate_json(row.input_json)
+        value=read_preflight_input(row.input_json)
         if (value.project_id,value.preflight_id,value.source_id,value.source_revision,proof_fingerprint(value))!=(project_id,preflight_id,row.source_id,row.source_revision,row.input_fingerprint):
             raise JiejianError(ErrorCode.STORAGE_STATE,'预检查输入关联不一致')
         return value

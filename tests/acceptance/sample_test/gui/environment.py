@@ -20,9 +20,10 @@ class EnvironmentActions(GuiSession):
     def switch(self, version, reference):
         from tests.acceptance.sample_test.harness.state import SampleTestError
         labels = {"VULNERABLE": "应用预设异步优化", "FIXED": "应用预设修复"}
-        versions = {"BASELINE", "VULNERABLE", "EVIDENCE_LIMITED", "FIXED"}
+        versions = {"BASELINE", "VULNERABLE", "EVIDENCE_LIMITED", "FIXED", "EXPOSE_REVOKE", "PREVIEW_CHANGED"}
         experience = self.client.call("GET", "/api/experience/official-sample")
         project = experience.get("project_id")
+        if experience.get("runtime_kind")=="NODE_ESM":labels={"VULNERABLE":"应用预设交付改动","EXPOSE_REVOKE":"继续体验先开放后撤回","FIXED":"应用预设修复","PREVIEW_CHANGED":"应用后续预览修改"}
         if not experience.get("active") or not project or experience.get("scenario_version") not in versions:
             raise SampleTestError("GUI_SAMPLE_PROJECT_MISSING")
         repair = None

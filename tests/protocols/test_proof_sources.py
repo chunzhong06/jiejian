@@ -2,7 +2,7 @@
 import json
 import pytest
 from pydantic import ValidationError
-from product.protocols.preparation.proof_sources import ProofSourceConfig, SourceReadScope
+from product.protocols.preparation.proof_sources import ProofSourceConfig, SourceReadScope, LegacyProofSourceRevision, ProofSourceRevision, read_source_revision, proof_fingerprint
 
 
 def config():
@@ -38,3 +38,28 @@ def test_read_scope_cannot_expand_loopback_origin(origin):
     with pytest.raises(ValidationError):SourceReadScope.model_validate_json(json.dumps(dict(scope_id='prs_'+'1'*32,
         project_id='project',origin=origin,path_templates=['/api/me','/api/resources/{resource_id}'],
         identity_ids=['tid_'+'1'*32],resource_binding_ids=['res_'+'1'*32],max_response_bytes=1024,timeout_us=1000,created_at_us=0)))
+
+
+def test_legacy_source_root_is_read_without_upgrading_its_proof_standard():
+    old_config=ProofSourceConfig.model_validate_json(json.dumps(config()))
+    old=LegacyProofSourceRevision(schema_version='2',project_id='project',source_id='psr_'+'1'*32,revision=1,
+        config=old_config,basis_id='pb_'+'1'*64,fingerprint=proof_fingerprint(old_config),submitted_via='MCP',client_name='test',created_at_us=1)
+    raw=old.model_dump_json()
+    with pytest.raises(ValueError):read_source_revision(raw[:-1]+',"schema_version":"2"}')
+    restored=read_source_revision(raw)
+    assert type(restored) is LegacyProofSourceRevision and restored.model_dump_json()==raw
+    with pytest.raises(ValidationError):ProofSourceRevision.model_validate_json(raw)
+
+
+def test_atomic_source_contract_cannot_enter_a_legacy_root():
+    from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,ManagedProofSourceConfig
+    value=config()|{'source_kind':'MANAGED_TRANSACTION_RECORDS','source_contract_id':'TRANSACTION_HISTORY_V2','collection':'items',
+        'relative_path_template':'/collections/items/{resource_id}','mappings':{'resource_id':['resource_id'],'owner_id':['owner_id'],'state':['data','state']},
+        'identity_claims':[{'identity_id':'tid_'+'1'*32,'application_subject_id':'alice','request_path':'/session','subject_path':['id'],'role_path':['role'],'application_role':'owner'}]}
+    atomic=AtomicProofSourceConfig.model_validate_json(json.dumps(value))
+    with pytest.raises(ValidationError):ManagedProofSourceConfig.model_validate_json(json.dumps(value))
+    root=ProofSourceRevision(project_id='project',source_id='psr_'+'1'*32,revision=1,config=atomic,
+        basis_id='pb_'+'1'*64,fingerprint=proof_fingerprint(atomic),submitted_via='MCP',client_name='test',created_at_us=1)
+    payload=root.model_dump(mode='json');payload['schema_version']='2'
+    with pytest.raises(ValidationError):read_source_revision(json.dumps(payload))
+    assert read_source_revision(root.model_dump_json()).schema_version=='3'

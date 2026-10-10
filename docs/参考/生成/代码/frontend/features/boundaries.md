@@ -27,7 +27,7 @@
 
 - `BusinessBoundaryPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskReceipt`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/TaskReceipt`、`./PermissionRuleRows`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/definitions/BoundaryObjectsWorkspace.tsx`
 
@@ -55,7 +55,7 @@
 
 - `ImplementationSelector`
 
-静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../assistant/AssistantPanel`、`../draft/boundaryLabels`、`antd`
+静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../shared/ui/AgentWorkflowEntry`、`../draft/boundaryLabels`、`antd`
 
 ### `product/frontend/src/features/boundaries/draft/boundaryLabels.ts`
 
@@ -81,15 +81,15 @@
 
 - `BoundaryMaintenanceEditor`
 
-静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../api/boundaries/permissionDrafts`、`../../../shared/runtime/editGuard`、`../../../shared/ui/SearchField`、`../../../shared/ui/StatusBadge`、`../definitions/BoundaryObjectsWorkspace`、`../definitions/CurrentBoundaryObjects`、`../rules/PermissionRuleForm`、`./PermissionDraftAssist`、`antd`、`react`
+静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../shared/runtime/editGuard`、`../../../shared/ui/AgentWorkflowEntry`、`../../../shared/ui/SearchField`、`../../../shared/ui/StatusBadge`、`../definitions/BoundaryObjectsWorkspace`、`../definitions/CurrentBoundaryObjects`、`../rules/PermissionRuleForm`、`antd`、`react`
 
-### `product/frontend/src/features/boundaries/draft/PermissionDraftAssist.tsx`
+### `product/frontend/src/features/boundaries/PermissionRuleRows.tsx`
 
-[打开源码](../../../../../../product/frontend/src/features/boundaries/draft/PermissionDraftAssist.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+[打开源码](../../../../../../product/frontend/src/features/boundaries/PermissionRuleRows.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
-- `PermissionDraftAssist`
+- `PermissionRuleRows`
 
-静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../api/boundaries/permissionDrafts`、`./boundaryLabels`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/businessBoundaries`、`../../shared/ui/StatusBadge`、`antd`
 
 ### `product/frontend/src/features/boundaries/proposals/BoundaryProposalEditor.tsx`
 
@@ -112,7 +112,7 @@
 
 - `BoundaryProposalReview`
 
-静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../shared/ui/StatusBadge`、`../draft/boundaryLabels`、`./proposal-review.css`、`antd`、`react`
+静态import / dot-source：`../../../api/boundaries/businessBoundaries`、`../../../shared/ui/StatusBadge`、`../RuleCoveragePreview`、`../draft/boundaryLabels`、`./proposal-review.css`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/proposals/proposal-review.css`
 
@@ -137,7 +137,22 @@
 
 - `RuleCandidatesPanel`
 
-静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./rule-candidates.css`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentAssistEntry`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleMeaningReview`、`./rule-candidates.css`、`antd`、`react`
+
+### `product/frontend/src/features/boundaries/RuleCoveragePreview.test.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RuleCoveragePreview.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`./RuleCoveragePreview`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/features/boundaries/RuleCoveragePreview.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RuleCoveragePreview.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RuleCoveragePreview`
+
+静态import / dot-source：`../../api/boundaries/rulePreview`、`./rule-candidates.css`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/RuleDetailsPanel.test.tsx`
 
@@ -152,7 +167,15 @@
 
 - `RuleDetailsPanel`
 
-静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../shared/format/time`、`../../shared/styles/proof-details.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../shared/format/time`、`../../shared/styles/proof-details.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleCoveragePreview`、`antd`、`react`
+
+### `product/frontend/src/features/boundaries/RuleMeaningReview.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RuleMeaningReview.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RuleMeaningReview`
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/rules/PermissionRuleForm.tsx`
 

@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "BatchSource": {
+      "additionalProperties": false,
+      "properties": {
+        "config_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Config Hash",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "title": "Label",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Id"
+        },
+        "source_id": {
+          "pattern": "^psr_[0-9a-f]{32}$",
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "revision",
+        "config_hash",
+        "label"
+      ],
+      "title": "BatchSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "basis_id": {
+      "pattern": "^pb_[0-9a-f]{64}$",
+      "title": "Basis Id",
+      "type": "string"
+    },
+    "guard": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Guard",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "OFFICIAL",
+        "REVIEWED"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "project_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "runtime_origin": {
+      "maxLength": 2048,
+      "title": "Runtime Origin",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/BatchSource"
+      },
+      "maxItems": 64,
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "mode",
+    "basis_id",
+    "runtime_origin",
+    "guard",
+    "sources"
+  ],
+  "title": "PreparationBatchPlan",
+  "type": "object"
+}

@@ -1,0 +1,179 @@
+{
+  "$defs": {
+    "RecordTraceEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "ALLOW",
+                "DENY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authorization Decision"
+        },
+        "event_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "ENTRY",
+            "IDENTITY",
+            "AUTHORIZATION",
+            "PERSISTENT_EFFECT",
+            "MESSAGE",
+            "RECOVERY"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Id"
+        },
+        "parent_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Event Id"
+        },
+        "recorded_at_us": {
+          "minimum": 0,
+          "title": "Recorded At Us",
+          "type": "integer"
+        },
+        "semantic_key": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "source_component": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Component",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Location",
+          "type": "string"
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Id"
+        }
+      },
+      "required": [
+        "kind",
+        "semantic_key",
+        "source_component",
+        "source_location",
+        "event_id",
+        "recorded_at_us"
+      ],
+      "title": "RecordTraceEvent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "collection": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Collection",
+      "type": "string"
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RecordTraceEvent"
+      },
+      "maxItems": 128,
+      "title": "Events",
+      "type": "array"
+    },
+    "generation": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Generation",
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "request_nonce": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Nonce",
+      "type": "string"
+    },
+    "resource_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Resource Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Scope Id",
+      "type": "string"
+    },
+    "scope_state": {
+      "default": "OPEN",
+      "enum": [
+        "OPEN",
+        "COMPLETE",
+        "INCOMPLETE"
+      ],
+      "title": "Scope State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scope_id",
+    "generation",
+    "request_nonce",
+    "request_digest",
+    "collection",
+    "resource_id"
+  ],
+  "title": "RecordTraceLog",
+  "type": "object"
+}

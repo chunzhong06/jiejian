@@ -22,7 +22,7 @@
 
 - `AccessPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/workspace`、`../../shared/ui/Editorial`、`./ApplicationSetup`、`./access.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/workspace`、`../../shared/ui/Editorial`、`./ApplicationSetup`、`./access.css`、`react`
 
 ### `product/frontend/src/features/access/ApplicationSetup.test.tsx`
 

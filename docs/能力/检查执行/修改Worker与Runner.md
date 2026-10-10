@@ -54,6 +54,8 @@ Worker 发布核对 run/job/attempt/fencing、文档版本与 hash；所有终�
 
 ## Case 执行与恢复的证据边界
 
+`REFERENCE_CAPTURE`复用原Job调度、attempt/fence、取消、进程收口和publication，独立目标字段为`reference_capture_id`，不创建安全Run或Verdict。最大一次attempt；目标可能已运行时不重放。GUI可明确授权RESTORE请求，复用已保存的原资源起点和恢复操作。Supervisor确认旧进程退出后，恢复只接收已封存且仍有原授权的准确报告。完整过程和材料阻塞见[证明来源](../证明来源/修改证明来源.md)。
+
 具体顺序、身份、资源、proof 和恢复策略由冻结输入定义，不能从 live 页面状态重建。当前 Observation 角色为 VERDICT_REQUIRED、SUPPORTING、DIAGNOSIS_REQUIRED；必需证据的充分性由 Verification 判定。202 完成要求原响应谓词与精确可信任务终态同时成立，任务缺失、关联冲突或观察不完整不能变为成功，见[Web 执行](修改Web执行.md)。
 
 恢复只撤销本 Case 的当前效果，使用明确 owner 与精确资源，不清空整个应用、不删除既有审计和任务历史。marker/引用不匹配拒绝；部分恢复失败保留独立状态，不覆盖首个执行错误，也不把曾经形成的禁止效果改为未发生。

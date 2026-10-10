@@ -44,3 +44,13 @@ def runtime_identity_environment(
     )
     environment.update(extra or {})
     return environment
+
+
+def write_python_installation_contract(root: Path) -> Path:
+    """只构造旧安装格式的文件契约，入口立即失败；没有业务服务或第二套示例。"""
+    import json
+    source=root/'source';source.mkdir(parents=True)
+    (source/'server.py').write_text('# 仅用于安装及启动失败边界。\nraise RuntimeError("installation probe")\n',encoding='utf-8')
+    (root/'sample.json').write_text(json.dumps(dict(schema_version='1',sample_id='collaboration-space',display_name='协作空间',
+        source_root='source',entry_module='server',health_path='/health'),ensure_ascii=False),encoding='utf-8')
+    return root

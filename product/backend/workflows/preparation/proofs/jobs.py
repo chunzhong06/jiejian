@@ -34,21 +34,22 @@ class ProofPreflightJobs:
             work.acquire_write_lock()
             job = work.jobs.get(report.job_id)
             request = None if job is None else work.proof_sources.preflight(job.project_id, report.preflight_id)
-            if (request is None or job.preflight_id != report.preflight_id
+            if (request is None or request.schema_version != '3' or report.schema_version != '2' or job.preflight_id != report.preflight_id
                     or proof_fingerprint(request) != report.request_fingerprint
                     or request.source_fingerprint != report.source_fingerprint
                     or work.proof_sources.scope(request.project_id, request.scope.scope_id) != request.scope):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '预检查输入或读取授权已失效')
             if report.assessment == 'USABLE':
                 from collections import Counter
-                from product.protocols.preparation.proof_sources import ManagedProofSourceConfig
-                if not isinstance(request.config,ManagedProofSourceConfig) or request.contract is None or request.contract.implementation_profile!='CONTROLLED_TRANSACTION_RECORDS_V1':
+                from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig
+                if not isinstance(request.config,AtomicProofSourceConfig) or request.contract is None or request.contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1'}:
                     raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID,'来源没有当前支持的完整证明依据')
                 required = Counter({('MAPPING_READABLE',key):1 for key in request.config.mappings})
                 required.update({('ACTUAL_IDENTITY_MATCH',None):len(request.identities),
                     ('RESOURCE_OWNER_MATCH',None):1,('SOURCE_CONTRACT_VERIFIED',None):1})
                 if request.config.protected_projection:
                     required[('PROTECTED_FIELD_READABLE',None)] = len(request.config.protected_projection)
+                if isinstance(request.config,FileProofSourceConfig):required[('REFERENCE_ARTIFACT_VERIFIED',None)]=1
                 if request.contract is None or Counter((item.code,item.mapping_key) for item in report.checks) != required:
                     raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID,'预检查报告缺少必须核对的项目')
             if job.state is JobState.SUCCEEDED and work.proof_sources.report_hash(job.project_id, report.preflight_id) == digest:
@@ -69,6 +70,7 @@ class ProofPreflightJobs:
         return report
 
     def read(self, work, project_id, preflight_id):
+        work.begin_read_snapshot()
         request = work.proof_sources.preflight(project_id, preflight_id)
         if request is None:
             raise JiejianError(ErrorCode.RECORD_NOT_FOUND, '预检查不存在')

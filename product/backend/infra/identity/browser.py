@@ -1,5 +1,5 @@
 # =============================================================================
-# 测试身份 headed browser 适配器
+# 测试身份受控浏览器适配器
 #
 # 定位
 #   独立身份准备进程中的 Playwright、网络安全和 SecretStore 边界。
@@ -48,7 +48,7 @@ _CREDENTIAL_SECRET_MAX_BYTES = 2_560
 
 
 class IdentityPreparationBrowserAdapter:
-    """只在用户明确确认后把当前目标的最小登录状态写入 SecretStore。"""
+    """根据明确登录授权保存当前目标的最小状态；普通流程有窗口，固定官方配方可无窗口。"""
 
     def run(
         self,
@@ -60,6 +60,7 @@ class IdentityPreparationBrowserAdapter:
         cancellation_requested: Callable[[], bool],
         before_secret_write: Callable[[tuple[str, ...]], None] = lambda _refs: None,
         interaction: Callable[[Page], None] | None = None,
+        headless: bool = False,
         error_observer: Callable[[BaseException], None] | None = None,
         now_us: Callable[[], int] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
@@ -73,7 +74,7 @@ class IdentityPreparationBrowserAdapter:
         requests_used = 0
         try:
             playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch(headless=headless)
             context = browser.new_context(
                 accept_downloads=False,
                 service_workers="block",

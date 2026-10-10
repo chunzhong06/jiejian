@@ -11,7 +11,7 @@ from product.backend.core.identities.models import TestIdentityAuthMethod,TestId
 from product.backend.core.recording.models import RecordingPurpose
 from product.backend.workflows.business_boundaries.models import BoundaryProposalCommand
 from product.backend.workflows.test_identities.service import PreparedLoginState
-from product.protocols.preparation.proof_sources import ManagedProofSourceConfig
+from product.protocols.preparation.proof_sources import AtomicProofSourceConfig
 from tests.fixtures.preparation.action_preparation import MemorySecretStore, PreparationHarness, add_recording
 from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
@@ -26,10 +26,24 @@ def wait_for(read, terminal=('SUCCEEDED','FAILED','CANCELLED')):
     raise AssertionError('bounded task wait expired')
 
 
-def ordinary_application(tmp_path, *, regression=False, read_only=False, core=None, source_edits=None, alternate=False):
+def ordinary_application(tmp_path, *, regression=False, read_only=False, core=None, source_edits=None, alternate=False,file_delivery=False,recovery_failures=0):
     source = tmp_path/'application'
     from tests.fixtures.preparation.record_driver import write_record_driver
     write_record_driver(source,alternate=alternate)
+    if recovery_failures:
+        # 故障仅在临时应用中注入；公开计数证明恢复路径没有重发正常TARGET。
+        driver=source/'app.mjs';text=driver.read_text(encoding='utf-8')
+        text=text.replace("const roles=",f"let recoveryFailures={int(recovery_failures)},publishCalls=0;\nconst roles=")
+        text=text.replace("    if(req.url==='/api/login')", "    if(req.url==='/__test_counts')return reply(200,{publishCalls});\n    if(req.url==='/api/login')")
+        text=text.replace("    const allowed=", "    if(action==='publish')publishCalls++;\n    if(action==='withdraw'&&recoveryFailures-->0)return reply(503,{error:'recovery'});\n    const allowed=")
+        driver.write_text(text,encoding='utf-8')
+    if file_delivery:
+        assert not alternate and not read_only
+        driver=source/'app.mjs'
+        original=driver.read_text(encoding='utf-8')
+        marker="    return reply(action==='withdraw'?(allowed?200:403):publicationStatus(allowed),{ok:allowed});"
+        assert marker in original
+        driver.write_text(original.replace(marker,"    if(action==='publish'&&allowed){res.writeHead(publicationStatus(allowed),{'Content-Type':'application/octet-stream'});return res.end(Buffer.from('controlled test file content'));}\n"+marker.replace('{ok:allowed}',"allowed?{ok:true}:{error:'denied'}")),encoding='utf-8')
     entry='workbench.mjs' if alternate else 'app.mjs'
     if regression:
         (source/'policy.mjs').write_text("export function mayPublish(actor, ownerId) { return true; }",encoding='utf8')
@@ -79,6 +93,10 @@ def ordinary_application(tmp_path, *, regression=False, read_only=False, core=No
             command['proposed_permissions']=[dict(item_id='pperm_'+'1'*16,write_mode='CREATE',effective_state='ACTIVE',
                 subject_actor_item_id=member,business_action_item_id=action_item,resource_owner_actor_item_id=member,
                 relation='OWNS',expectation='ALLOW',protected_effect_item_ids=[effect_item])]
+        if file_delivery:
+            command['proposed_actions'][0]['display_name']='取得测试文件'
+            command['proposed_actions'][0]['effect_catalog'][0].update(effect_kind='FILE_CONTENT_DELIVERY',
+                business_label='完整测试文件已接收',expected_state=None,description='实际接收已确认的文件字节')
         proposed = core.business_boundaries.create_initial_proposal(project,BoundaryProposalCommand.model_validate_json(json.dumps(command)))
         boundary = core.business_boundaries.approve(project,proposed.proposal.proposal_id,
             expected_fingerprint=proposed.proposal.proposal_fingerprint,reason='核对发布资料规则')
@@ -121,10 +139,10 @@ def source_configuration(harness):
     paths = {'resource_id':('resource_id',),'owner_id':('owner_id',)}
     if not read_only:
         paths['state']=('data','phase' if alternate else 'state')
-    return ManagedProofSourceConfig(action_id=harness.action.action_id,action_revision=1,effect_id=harness.effect_id,
+    return AtomicProofSourceConfig(action_id=harness.action.action_id,action_revision=1,effect_id=harness.effect_id,
         observation_identity_id=harness.identities[1 if read_only else 0].identity_id,resource_binding_id=context['resources'][0]['resource_binding_id'],
         collection=collection,relative_path_template=f'/collections/{collection}/{{resource_id}}',mappings=paths,
-        source_contract_id='RESOURCE_FIELDS_V1' if read_only else 'TRANSACTION_HISTORY_V1',
+        source_contract_id='RESOURCE_FIELDS_V1' if read_only else 'TRANSACTION_HISTORY_V2',
         protected_projection=('summary','title') if read_only else (),
         identity_claims=tuple(dict(identity_id=item.identity_id,application_subject_id=item.label,
             request_path='/session/current' if alternate else '/api/me',subject_path=('id',),role_path=('role',),application_role='owner' if item.label=='alice' else 'member')

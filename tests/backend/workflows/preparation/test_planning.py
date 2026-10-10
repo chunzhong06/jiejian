@@ -21,7 +21,9 @@ def test_current_plan_keeps_gaps_and_builder_rejects_without_writing(tmp_path):
             harness.core.preparation.build_execution_request_v3(harness.project_id, engine_version="test-1",
                 config_fingerprint="a"*64, budget_fingerprint="b"*64)
         assert error.value.code == "STATE_PRECONDITION"
-        assert all(sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
+        # 一致性读取会显式 BEGIN；它不写数据，不能与 BEGIN IMMEDIATE 或 DML 混为一谈。
+        assert statements
+        assert all(sql.strip().upper() == 'BEGIN' or sql.lstrip().upper().startswith(("SELECT", "PRAGMA")) for sql in statements)
     finally:
         harness.close()
 

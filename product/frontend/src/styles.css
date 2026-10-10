@@ -387,9 +387,9 @@ samp {
 }
 
 .assistant-panel {
-  border: var(--line-width) solid transparent;
+  border: var(--line-width) solid var(--color-border);
   border-radius: var(--radius-medium);
-  background: var(--color-ai-light);
+  background: var(--color-reading-surface);
   padding: var(--space-16);
 }
 

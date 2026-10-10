@@ -6,6 +6,9 @@ from importlib import import_module
 
 
 _STORAGE_ORM_MODULES = (
+    "product.backend.infra.storage.preparation.batches",
+    "product.backend.infra.storage.preparation.proof_artifacts",
+    "product.backend.infra.storage.preparation.suggestions",
     "product.backend.infra.storage.preparation.proof_sources",
     "product.backend.infra.storage.runtime.runtime_loads",
     "product.backend.infra.storage.boundaries.rule_candidates",
@@ -27,6 +30,7 @@ _STORAGE_ORM_MODULES = (
     "product.backend.infra.storage.preparation.recordings",
     "product.backend.infra.storage.results.evidence",
     "product.backend.infra.storage.results.check_publications",
+    "product.backend.infra.storage.results.rule_history",
     "product.backend.infra.storage.results.finalizations",
     "product.backend.infra.storage.results.findings",
     "product.backend.infra.storage.results.gating",

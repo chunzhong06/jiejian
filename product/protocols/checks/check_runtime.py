@@ -328,9 +328,9 @@ def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool
 
 
 def canonical_check_runtime_bytes(bundle: CheckRuntimeBundle) -> bytes:
-    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle
+    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle
     try:
-        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle, NodeCheckRuntimeBundle, JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle):
+        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle, NodeCheckRuntimeBundle, JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle):
             raise ValueError("unsupported runtime document")
         parsed = type(bundle).model_validate_json(bundle.model_dump_json(), strict=True)
         payload = parsed.model_dump(mode="json")
@@ -347,7 +347,7 @@ def check_runtime_fingerprint(bundle: CheckRuntimeBundle) -> str:
 
 
 def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
-    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle
+    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle
     def unique(pairs):
         values = {}
         for key, value in pairs:
@@ -361,7 +361,7 @@ def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
         payload = json.loads(raw.decode(), object_pairs_hook=unique,
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
         # 格式 1 的历史配置仍按其原字节和范围读取，绝不补造受控运行证明。
-        model = {'1':CheckRuntimeBundle,'2':ControlledCheckRuntimeBundle,'3':NodeCheckRuntimeBundle,'4':JsonCheckRuntimeBundle,'5':ManagedCheckRuntimeBundle}.get(payload.get('schema_version')) if isinstance(payload,dict) else None
+        model = {'1':CheckRuntimeBundle,'2':ControlledCheckRuntimeBundle,'3':NodeCheckRuntimeBundle,'4':JsonCheckRuntimeBundle,'5':ManagedCheckRuntimeBundle,'6':ProofCheckRuntimeBundle}.get(payload.get('schema_version')) if isinstance(payload,dict) else None
         if model is None:
             raise ValueError('unsupported runtime version')
         bundle = model.model_validate_json(raw, strict=True)

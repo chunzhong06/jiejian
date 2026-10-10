@@ -10,10 +10,12 @@ from product.backend.workflows.workspace.models import PrimaryTaskView
 
 def source_context():
     return {'project_id': 'app_guidance', 'basis_id': 'basis-current', 'runtime_available': True,
+        'resources': [{'resource_binding_id':'resource-one','resource_id':'test-resource','owner_identity_id':'test-owner'}],
+        'reference_recovery_gaps': [],
         'actions': [{'action_id':'action-one', 'revision':3, 'effects':[{'effect_id':'effect-one'}]}],
         'sources': [{'source_id': 'source-one', 'revision': 2, 'supported': True, 'adopted': False,
             'read_scope_confirmed': True, 'preflight': None,
-            'config': {'action_id': 'action-one', 'action_revision': 3, 'effect_id': 'effect-one'}}]}
+            'config': {'action_id': 'action-one', 'action_revision': 3, 'effect_id': 'effect-one', 'resource_binding_id':'resource-one'}}]}
 
 
 def task(kind='COMPLETE_EFFECT_EVIDENCE'):

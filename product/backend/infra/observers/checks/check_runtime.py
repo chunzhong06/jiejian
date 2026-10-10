@@ -80,6 +80,7 @@ class CheckObserverRuntime:
         self._disclosure_key = secrets.token_bytes(32)
         self._trusted_histories = {}
         self._json_histories = {}
+        self._evidence_sources = {}
         self._json_sources = {'json_' + item.source_id[4:]:item for item in getattr(bundle,'json_sources',())}
         self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if self._json_sources else None
 
@@ -109,12 +110,13 @@ class CheckObserverRuntime:
                 return self._unknown(common, "OBSERVER_CORRELATION_INVALID")
             if self.cancelled() and not cleanup:
                 raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
-            source_identity = self.web.verify_identity(proof.observation_identity_id, case, cleanup=cleanup)
             if proof.observer_id in self._json_sources:
+                # 通用记录来源会核对所有实际主体的账号与角色；不在这里重复请求同一观察账号。
                 from product.backend.infra.observers.checks.check_records import observe_records
                 return observe_records(self,source=self._json_sources[proof.observer_id],case=case,action_id=action_id,
                     requirement=requirement,proof=proof,phase=phase,baseline_trusted=baseline_trusted,
-                    cleanup=cleanup,common=common,source_identity=source_identity)
+                    cleanup=cleanup,common=common)
+            source_identity = self.web.verify_identity(proof.observation_identity_id, case, cleanup=cleanup)
             if proof.rule != "REGISTERED_EFFECT":
                 response = self.web.request(proof.request, case=case, action_id=action_id,
                     identity_id=proof.observation_identity_id, cleanup=cleanup)
@@ -210,7 +212,7 @@ class CheckObserverRuntime:
         except JiejianError as exc:
             if exc.code == ErrorCode.EXEC_CANCELLED.value and not cleanup:
                 raise
-            return self._unknown(common, "REQUIRED_OBSERVER_INCOMPLETE")
+            return self._unknown(common, exc.code if exc.code == ErrorCode.EXEC_BUDGET.value else "REQUIRED_OBSERVER_INCOMPLETE")
         except (ValueError, TypeError, KeyError):
             return self._unknown(common, "OBSERVER_CORRELATION_INVALID")
 
@@ -224,7 +226,8 @@ class CheckObserverRuntime:
         sources = [(proof, source) for proof in action.proofs for source in proof.auxiliary_sources
                    if source.trace_namespace is not None]
         if not sources:
-            return None
+            from product.backend.infra.observers.checks.managed_trace import managed_execution_trace
+            return managed_execution_trace(self,action,case)
         identity = next(item for item in self.bundle.identities if item.identity_id == case.subject_test_identity_id)
         namespaces = {source.trace_namespace for _, source in sources}
         mapped = identity.verification if identity.verification is not None and identity.verification.namespace in namespaces and len(namespaces) == 1 else None

@@ -47,7 +47,7 @@ def record_provider(var_dir: Path, runtime_reference, *, require_live=True) -> R
         return None
 
 
-def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False):
+def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False):
     """仅由预检查/正式检查 Runner 调用；每次读取前后都核对同一来源拥有者，响应不进入公共日志。"""
     provider = record_provider(var_dir, runtime_reference)
     if provider is None or cancelled():
@@ -65,7 +65,8 @@ def read_record_source(var_dir, runtime_reference, config, resource_id, *, reque
     adapter = HttpExecutionAdapter(scope, known_secrets=(capability,), cancellation_requested=cancelled, executor_process_id=os.getpid())
     try:
         identity.bootstrap(lambda *_a, **_k:None)
-        path = '/proof/read/'+quote(config.collection,safe='')+'/'+quote(resource_id,safe='')
+        if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
+        path = ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe='')
         if request_nonce is not None:
             path += '/'+quote(request_nonce,safe='')
         _, response = adapter.execute_detailed(HttpRequestTemplate(method='GET',path=path),
@@ -74,10 +75,12 @@ def read_record_source(var_dir, runtime_reference, config, resource_id, *, reque
             raise SourceReadError('RECORD_SOURCE_UNAVAILABLE')
         body = strict_json(response.body, config.max_response_bytes)
         try:
-            value = RecordProofView.model_validate_json(json.dumps(body.get('data'),allow_nan=False))
+            from product.protocols.runtime.record_trace import RecordTraceLog
+            value = (RecordTraceLog if trace else RecordProofView).model_validate_json(json.dumps(body.get('data'),allow_nan=False))
         except (ValueError, TypeError):
             raise SourceReadError('RECORD_SOURCE_INVALID') from None
-        if value.snapshot.collection != config.collection or value.snapshot.resource_id != resource_id:
+        selected=value if trace else value.snapshot
+        if selected.collection != config.collection or selected.resource_id != resource_id or trace and value.request_nonce!=request_nonce:
             raise SourceReadError('OPERATION_CORRELATION_INVALID')
         if record_provider(var_dir,runtime_reference) != provider or cancelled():
             raise SourceReadError('RECORD_PROVIDER_UNAVAILABLE')

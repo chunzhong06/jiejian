@@ -1,15 +1,18 @@
 // 只读同步调度：请求串行执行，暂时失败退避重试，页面恢复可见时立即核对；绝不重放写操作。
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../../api/http'
+import { WorkPageVisible } from './visibility'
 
 export function useLiveRead(key: string | undefined, read: () => Promise<boolean | void>, interval = 5000, immediate = true) {
+  const visible = useContext(WorkPageVisible)
   const reader = useRef(read)
   reader.current = read
   const [retrying, setRetrying] = useState(false)
   const [stopped, setStopped] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<number>()
   useEffect(() => {
-    if (!key) return
+    // 保留页仍挂载，但只有可见工作面订阅读取；壳层默认可见，继续同步全局状态。
+    if (!key || !visible) return
     let disposed = false, pending = false, finished = false, failures = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     setRetrying(false); setStopped(false); setUpdatedAt(undefined)
@@ -45,6 +48,6 @@ export function useLiveRead(key: string | undefined, read: () => Promise<boolean
       window.removeEventListener('online', resume)
       document.removeEventListener('visibilitychange', resume)
     }
-  }, [key, interval, immediate])
+  }, [key, interval, immediate, visible])
   return { retrying, stopped, updatedAt }
 }

@@ -21,7 +21,6 @@ def _status_for(code: str) -> int:
         ErrorCode.JOB_NOT_FOUND.value,
         ErrorCode.REPORT_NOT_FOUND.value,
         ErrorCode.ARTIFACT_NOT_PUBLISHED.value,
-        ErrorCode.LLM_PROFILE_NOT_FOUND.value,
         ErrorCode.EXECUTION_PROFILE_NOT_FOUND.value,
         ErrorCode.RESULT_FINALIZATION_NOT_FOUND.value,
         ErrorCode.BOUNDARY_PROPOSAL_NOT_FOUND.value,
@@ -38,7 +37,6 @@ def _status_for(code: str) -> int:
         ErrorCode.CONTRACT_NOT_ACTIVE.value,
         ErrorCode.JOB_CANCEL_CONFLICT.value,
         ErrorCode.JOB_TERMINAL_CONFLICT.value,
-        ErrorCode.LLM_TEST_IN_PROGRESS.value,
         ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT.value,
         ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT.value,
         ErrorCode.RESULT_FINALIZATION_NOT_READY.value,
@@ -58,10 +56,6 @@ def _status_for(code: str) -> int:
         ErrorCode.API_NOT_READY.value,
         ErrorCode.API_BINDING_REJECTED.value,
         ErrorCode.SERVE_FAILED.value,
-        ErrorCode.LLM_PROVIDER_UNAVAILABLE.value,
-        ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE.value,
-        ErrorCode.LLM_SECRET_UNAVAILABLE.value,
-        ErrorCode.LLM_PROFILE_STORAGE_FAILED.value,
         ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE.value,
         ErrorCode.EXECUTION_PROFILE_STORAGE_FAILED.value,
         ErrorCode.LOCAL_MAINTENANCE_FAILED.value,
@@ -74,16 +68,9 @@ def _status_for(code: str) -> int:
     }:
         return 413
     if code in {
-        ErrorCode.LLM_AUTH_FAILED.value,
         ErrorCode.MCP_AUTH_REQUIRED.value,
     }:
         return 401
-    if code == ErrorCode.LLM_RATE_LIMITED.value:
-        return 429
-    if code == ErrorCode.LLM_TIMEOUT.value:
-        return 504
-    if code == ErrorCode.LLM_INVALID_RESPONSE.value:
-        return 502
     if code in {
         ErrorCode.API_CONTROL_REJECTED.value,
         ErrorCode.MCP_PERMISSION_REQUIRED.value,

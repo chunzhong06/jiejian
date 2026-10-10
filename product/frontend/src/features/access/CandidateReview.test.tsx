@@ -16,7 +16,7 @@ beforeEach(() => vi.resetAllMocks())
 it('没有业务变更时不再显示第二次确认入口', () => {
   const confirmed = { ...value, role_candidates: value.role_candidates.map(item => ({ ...item, decision: 'CONFIRMED' as const })) }
   render(<CandidateReview value={confirmed} onApplied={vi.fn()} manual={null} staleReview={null}/>)
-  expect(screen.queryByRole('button', { name: '下一步：核对业务总览' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '核对业务总览' })).not.toBeInTheDocument()
   expect(api.decideCandidates).not.toHaveBeenCalled()
 })
 it('两类选择共用下一步，进入独立总览后隐藏编辑器，返回仍保留选择', async () => {
@@ -24,8 +24,8 @@ it('两类选择共用下一步，进入独立总览后隐藏编辑器，返回�
   render(<CandidateReview value={both} onApplied={vi.fn()} manual={null} staleReview={null} />)
   fireEvent.change(screen.getByDisplayValue('成员'), { target: { value: '普通成员' } })
   fireEvent.click(screen.getByText('业务动作 · 1'))
-  expect(screen.getAllByRole('button', { name: '下一步：核对业务总览' })).toHaveLength(1)
-  fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' }))
+  expect(screen.getAllByRole('button', { name: '核对业务总览' })).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: '核对业务总览' }))
   expect(screen.getByRole('heading', { name: '核对业务总览' })).toHaveFocus()
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   expect(screen.getByRole('region', { name: '本次选择完整摘要' })).toHaveTextContent('普通成员')
@@ -35,20 +35,20 @@ it('两类选择共用下一步，进入独立总览后隐藏编辑器，返回�
   fireEvent.click(screen.getByText('权限组 · 2'))
   expect(screen.getByDisplayValue('普通成员')).toBeInTheDocument()
 })
-function begin() { fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' })); fireEvent.click(screen.getByRole('button', { name: '确认这些业务信息' })) }
+function begin() { fireEvent.click(screen.getByRole('button', { name: '核对业务总览' })); fireEvent.click(screen.getByRole('button', { name: '确认这些业务信息' })) }
 
-it('低置信项不默认纳入；排除明确列入摘要且审阅之前不写入', () => {
+it('新权限组默认勾入本次审阅；排除明确列入摘要且审阅之前不写入', () => {
   render(<CandidateReview value={value} onApplied={vi.fn()} manual={null} staleReview={null}/>)
-  expect(screen.getByRole('checkbox', { name: '纳入可能的访客' })).not.toBeChecked()
+  expect(screen.getByRole('checkbox', { name: '纳入可能的访客' })).toBeChecked()
   fireEvent.click(screen.getByRole('checkbox', { name: '纳入成员' }))
-  fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' }))
+  fireEvent.click(screen.getByRole('button', { name: '核对业务总览' }))
   expect(screen.getByRole('region', { name: '本次选择完整摘要' })).toHaveTextContent('排除 · 1成员')
   expect(api.decideCandidates).not.toHaveBeenCalled()
 })
 
 it('回执不明后只回读；匹配的新 revision 恢复成功并且不再次提交', async () => {
   api.decideCandidates.mockRejectedValue(new Error('lost acknowledgement'))
-  api.understanding.mockResolvedValue({ ...value, revision: 4, role_candidates: value.role_candidates.map((item, index) => index ? item : { ...item, decision: 'CONFIRMED' }) })
+  api.understanding.mockResolvedValue({ ...value, revision: 4, role_candidates: value.role_candidates.map(item => ({ ...item, decision: 'CONFIRMED' })) })
   const applied = vi.fn()
   render(<CandidateReview value={value} onApplied={applied} manual={null} staleReview={null}/>)
   begin()
@@ -65,7 +65,7 @@ it('新 revision 不覆盖输入，且不可按旧 revision 提交', async () =>
   fireEvent.change(screen.getByDisplayValue('成员'), { target: { value: '保留的本地名称' } })
   view.rerender(<CandidateReview {...props} value={{ ...value, revision: 4 }}/>)
   expect(screen.getByDisplayValue('保留的本地名称')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '下一步：核对业务总览' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '核对业务总览' })).toBeDisabled()
   expect(api.decideCandidates).not.toHaveBeenCalled()
 })
 
@@ -74,7 +74,7 @@ it('卸载后的旧提交回执不会更新新项目，连续点击只发送一�
   api.decideCandidates.mockImplementation(() => new Promise(done => { resolve = done }))
   const applied = vi.fn()
   const view = render(<CandidateReview value={value} onApplied={applied} manual={null} staleReview={null}/>)
-  fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' }))
+  fireEvent.click(screen.getByRole('button', { name: '核对业务总览' }))
   const submit = screen.getByRole('button', { name: '确认这些业务信息' })
   fireEvent.click(submit); fireEvent.click(submit)
   expect(api.decideCandidates).toHaveBeenCalledOnce()

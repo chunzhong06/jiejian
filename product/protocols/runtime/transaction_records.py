@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from product.protocols.runtime.runtime_identity import RuntimeModel, Digest, InstanceId
 from product.protocols.runtime.node_runtime import ProjectId
@@ -68,7 +68,7 @@ class RecordSeed(RuntimeModel):
         return bounded_record_data(value)
 
 
-class RecordTransaction(RuntimeModel):
+class LegacyRecordTransaction(RuntimeModel):
     schema_version: Literal["1"] = "1"
     collection: RecordKey
     resource_id: RecordKey
@@ -96,7 +96,7 @@ class RecordTransition(RuntimeModel):
     after: dict[str, Any]
 
 
-class RecordOperation(RuntimeModel):
+class LegacyRecordOperation(RuntimeModel):
     schema_version: Literal["1"] = "1"
     operation_id: RecordKey
     generation: RecordKey
@@ -141,9 +141,71 @@ class RecordRequestScope(RuntimeModel):
     state: Literal['OPEN', 'COMPLETE', 'INCOMPLETE'] = 'OPEN'
 
 
-class RecordProofView(RuntimeModel):
+class LegacyRecordProofView(RuntimeModel):
     schema_version: Literal['1'] = '1'
+    snapshot: RecordSnapshot
+    operation: LegacyRecordOperation | None = None
+    scope: RecordRequestScope | None = None
+    operations: tuple[LegacyRecordOperation, ...] = Field(default=(), max_length=32)
+
+
+# 新宿主的一次调用形成一次原子提交；旧根继续由独立分支严格读取，不能默认补新含义。
+class RecordTransaction(LegacyRecordTransaction):
+    schema_version: Literal['2'] = '2'
+
+
+class RecordOperation(LegacyRecordOperation):
+    schema_version: Literal['2'] = '2'
+    scope_ordinal: int | None = Field(default=None, ge=0, le=31)
+    commit_semantics: Literal['ATOMIC_COMMIT'] = 'ATOMIC_COMMIT'
+
+    @model_validator(mode='after')
+    def exact_commit(self):
+        if (self.scope_id is None) != (self.scope_ordinal is None):
+            raise ValueError('scope ordinal must accompany the exact request scope')
+        if self.after_version != self.before_version + 1:
+            raise ValueError('commit versions must be consecutive')
+        for index,transition in enumerate(self.transitions):
+            bounded_record_data(transition.before);bounded_record_data(transition.after)
+            if transition.ordinal != index or (index and transition.before != self.transitions[index-1].after):
+                raise ValueError('transaction transitions must be continuous')
+        return self
+
+
+class RecordProofView(RuntimeModel):
+    schema_version: Literal['2'] = '2'
     snapshot: RecordSnapshot
     operation: RecordOperation | None = None
     scope: RecordRequestScope | None = None
     operations: tuple[RecordOperation, ...] = Field(default=(), max_length=32)
+
+    @model_validator(mode='after')
+    def complete_scope_sequence(self):
+        bounded_record_data(self.snapshot.data)
+        if len({item.operation_id for item in self.operations})!=len(self.operations):
+            raise ValueError('duplicate committed operation')
+        for index,item in enumerate(self.operations):
+            if self.scope is None or item.scope_id!=self.scope.scope_id or item.scope_ordinal!=index or item.generation!=self.scope.generation:
+                raise ValueError('request commit sequence mismatch')
+        return self
+
+
+class RecordStateMigration(RuntimeModel):
+    schema_version: Literal['1'] = '1'
+    source_generation: RecordKey
+    target_generation: RecordKey
+    source_history_sha256: Digest
+    source_state_sha256: Digest
+    target_state_sha256: Digest
+    resource_count: int = Field(ge=0)
+
+    @model_validator(mode='after')
+    def preserve_business_state(self):
+        if self.source_generation == self.target_generation or self.source_state_sha256 != self.target_state_sha256:
+            raise ValueError('migration must preserve state in a new generation')
+        return self
+
+
+def read_record_proof(raw: str | bytes):
+    """按原根版本解析；历史字节不升级、不补字段，也不重新计算旧记录。"""
+    return TypeAdapter(Annotated[LegacyRecordProofView | RecordProofView, Field(discriminator='schema_version')]).validate_json(raw)

@@ -18,7 +18,6 @@ from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import JiejianError
 from product.backend.api.errors import jiejian_error_handler, validation_error_handler
-from product.backend.api.routers.system.llm import build_llm_router
 from product.backend.api.routers.applications.onboarding import build_onboarding_router
 from product.backend.api.routers.applications.projects import build_projects_router
 from product.backend.api.routers.system.system import build_system_router
@@ -30,8 +29,7 @@ from product.backend.api.routers.system.mcp_access import build_mcp_access_route
 from product.backend.api.routers.workspace import build_workspace_router
 from product.backend.api.routers.preparation.recordings import build_recordings_router
 from product.backend.api.routers.preparation.preparation import build_preparation_router
-from product.backend.api.routers.system.assistant import build_assistant_router
-from product.backend.api.routers.boundaries.permission_drafts import build_permission_drafts_router
+from product.backend.api.routers.system.agent_workflow import build_agent_workflow_router
 from product.backend.api.routers.checks.checks import build_checks_router
 from product.backend.api.routers.checks.runs import build_runs_router
 from product.backend.api.routers.checks.results import build_results_router
@@ -52,8 +50,6 @@ def create_app(
     control_session_token: str | None = None,
     frontend_dir: Path | None = None,
     start_worker: bool = True,
-    llm_transport=None,
-    llm_secret_store=None,
     secret_store=None,
     environ=None,
     clock_us=None,
@@ -68,8 +64,6 @@ def create_app(
     context = ApplicationCore(
         var_dir,
         control_origin=local_control_guard.origin,
-        llm_transport=llm_transport,
-        llm_secret_store=llm_secret_store,
         secret_store=secret_store,
         environ=environ,
         clock_us=clock_us,
@@ -129,15 +123,13 @@ def create_app(
     app.include_router(build_test_identities_router(context))
     app.include_router(build_recordings_router(context))
     app.include_router(build_preparation_router(context))
-    app.include_router(build_assistant_router(context))
-    app.include_router(build_permission_drafts_router(context))
+    app.include_router(build_agent_workflow_router(context))
     app.include_router(build_checks_router(context))
     app.include_router(build_runs_router(context))
     app.include_router(build_results_router(context))
     app.include_router(build_source_changes_router(context))
     app.include_router(build_development_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))
-    app.include_router(build_llm_router(context))
     app.include_router(build_onboarding_router(context))
 
     @app.on_event("startup")
@@ -148,6 +140,8 @@ def create_app(
         if start_worker:
             context.worker.start()
             context.runtime_worker.start()
+            app.state.batch_stop = asyncio.Event()
+            app.state.batch_coordinator = asyncio.create_task(_advance_preparation_batches(context, app.state.batch_stop))
         _log_startup_timing("ready_total", ready_started)
         # 可重建运行数据维护不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
         app.state.local_maintenance_task = asyncio.create_task(
@@ -156,6 +150,9 @@ def create_app(
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
+        if hasattr(app.state, 'batch_coordinator'):
+            app.state.batch_stop.set()
+            await app.state.batch_coordinator
         await asyncio.to_thread(context.worker.stop)
         await asyncio.to_thread(context.runtime_worker.stop)
         mcp_access.close()
@@ -194,6 +191,20 @@ def _log_startup_timing(stage: str, started: float) -> None:
             "elapsed_ms": round((perf_counter() - started) * 1_000, 3),
         },
     )
+
+
+async def _advance_preparation_batches(context, stopped):
+    """有限后台编排只推进已确认批次；访问目标的子操作沿用原Worker边界。"""
+    while not stopped.is_set():
+        try:
+            await asyncio.to_thread(context.preparation_batches.advance)
+        except Exception:
+            # 短暂存储读取失败不能终止整个协调器；下一轮仍先读取持久进度，绝不重放未知写入。
+            logger.warning('preparation batch coordinator read failed')
+        try:
+            await asyncio.wait_for(stopped.wait(), timeout=2)
+        except TimeoutError:
+            pass
 
 
 async def _run_local_maintenance(context: ApplicationCore, app: FastAPI) -> None:

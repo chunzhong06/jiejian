@@ -39,9 +39,35 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const pendingReads = new Map<string, Promise<unknown>>()
+let readGeneration = 0
+
+export function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const read = !init?.method || init.method.toUpperCase() === 'GET'
+  if (!read) {
+    // 写入开始后，新的读取不得合并到写入前仍在途的旧请求。
+    readGeneration += 1; pendingReads.clear()
+    return send<T>(path, init)
+  }
+  if (init?.signal || init?.headers) return send<T>(path, init)
+  const key = `${readGeneration}:${path}`
+  const existing = pendingReads.get(key)
+  if (existing) return existing as Promise<T>
+  const operation = send<T>(path, init).finally(() => {
+    if (pendingReads.get(key) === operation) pendingReads.delete(key)
+  })
+  pendingReads.set(key, operation)
+  return operation
+}
+
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
+  const read = !init?.method || init.method.toUpperCase() === 'GET'
+  const controller = read && !init?.signal ? new AbortController() : undefined
+  const timer = controller ? setTimeout(() => controller.abort(), 30_000) : undefined
+  try {
   const response = await fetch(path, {
     ...init,
+    ...(controller ? {signal:controller.signal} : {}),
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
   const body = await response.json().catch(() => ({}))
@@ -56,6 +82,10 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis, body.error?.details?.execution_started)
   }
   return body.data as T
+  } catch (error) {
+    if (controller?.signal.aborted) throw new ApiError('READ_TIMEOUT', '读取尚未完成，可以返回或稍后重试；已提交的操作请查询原回执。')
+    throw error
+  } finally { if (timer) clearTimeout(timer) }
 }
 
 function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis; details?:{execution_started?:boolean} }; trace_id?: string } {

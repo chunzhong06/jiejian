@@ -98,16 +98,6 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`product.backend.core.errors`、`product.backend.workflows.recording.json_locations`、`product.protocols.recording.flow_draft`、`product.protocols.web.workflow`、`pydantic`、`typing`、`urllib.parse`
 
-### `product/backend/workflows/recording/run_service.py`
-
-[打开源码](../../../../../../product/backend/workflows/recording/run_service.py) · Python AST；作用域内import不表示每次调用均执行。
-
-- `class RecordingRunService`
-- `RecordingRunService.run(self, command, timeout_seconds, secret_names)`
-- `RecordingRunService.capture(self, started, lifecycle, capture_control, timeout_seconds)`
-
-静态import / dot-source：`__future__`、`collections.abc`、`os`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.jobs.dispatch`、`product.backend.infra.storage`、`product.backend.workflows.recording.submission`、`product.protocols`、`time`
-
 ### `product/backend/workflows/recording/source.py`
 
 [打开源码](../../../../../../product/backend/workflows/recording/source.py) · Python AST；作用域内import不表示每次调用均执行。

@@ -66,6 +66,30 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
         verification = identity.verification
         if verification is None or proof.rule == "RECORDED_SUPPORT":
             raise ValueError("repair requires independently verified decisive standard")
+        if bundle.schema_version=='6':
+            sources=[source for source in bundle.json_sources if (source.config.action_id,source.config.effect_id)==(action.action_id,requirement.effect_id)]
+            if len(sources)!=1:raise ValueError('repair requires one frozen current source')
+            source=sources[0]
+            if source.source_fingerprint!=proof.descriptor_fingerprint:raise ValueError('repair source differs from frozen proof')
+            # 修订、预检查和来源路径用于追溯；等价比较保留采集语义，避免把技术重准备当作换题。
+            config=source.config.model_dump(mode='json',exclude={'action_id','action_revision','effect_id','resource_binding_id','read_scope_id','source_files','reference_origin'})
+            claims=sorted(config.pop('identity_claims'),key=lambda item:item['identity_id'])
+            config['protected_projection']=sorted(config.get('protected_projection',()))
+            identities_used=[]
+            for claim in claims:
+                actual=identities[claim['identity_id']]
+                if actual.verification is None:raise ValueError('repair identity standard missing')
+                identities_used.append(dict(claim=claim,verification=actual.verification.model_dump(mode='json'),role=source.identity_roles[claim['identity_id']]))
+            if source.config.source_kind=='REFERENCE_FILE' and source.config.reference_artifact is None:
+                raise ValueError('repair file reference missing')
+            payload=dict(effect_id=proof.effect_id,effect_kind=proof.effect_kind,level=requirement.level,rule=proof.rule,
+                expected_state=proof.expected_state,protected_projection=sorted(proof.protected_projection),
+                exclusive_resource_window=proof.exclusive_resource_window,config=config,identities=identities_used,
+                contract=source.contract.model_dump(mode='json'),resource_id=case.resource_id,owner_identity_id=case.resource_owner_test_identity_id,owner_subject_id=source.owner_subject_id,
+                commit_semantics='ATOMIC_COMMIT',completeness='ATTRIBUTED_COMPLETE_CLOSED',
+                file_comparison='FULL_ENTITY_SIZE_SHA256' if source.config.source_kind=='REFERENCE_FILE' else None)
+            standards.append(content_hash('CurrentProofRepairStandard',payload))
+            continue
         payload = {name:getattr(proof,name) for name in (
             "effect_id", "effect_kind", "expected_state", "protected_projection", "rule",
             "observation_identity_id", "exclusive_resource_window", "descriptor_fingerprint")}

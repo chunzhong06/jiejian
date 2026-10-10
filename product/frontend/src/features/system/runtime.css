@@ -1,5 +1,7 @@
 /* 系统页只安排运行事实与维护区域，控件外观由公共样式提供。 */
 .runtime-panel { min-width:0; max-width:100%; }
+.runtime-panel .ant-statistic { width:fit-content;max-width:100%;margin-inline:auto; }
+@media(max-width:600px) { .runtime-panel .ant-statistic { margin-inline:0; } }
 .runtime-panel .ant-card-body { display: grid; grid-template-columns:minmax(0,1fr); gap: var(--rhythm-fieldGap); }
 .runtime-panel .ant-card-body > * { min-width:0; }
 .runtime-panel .ant-alert-content { min-width:0; overflow-wrap:anywhere; }

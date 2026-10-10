@@ -30,7 +30,6 @@ def test_worker_dispatch_uses_import_root_for_child_cwd(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     dispatcher = WorkerDispatcher(
         var_dir=var_dir,
-        uow_factory=lambda: None,
         environ=runtime_identity_environment(var_dir),
         popen=fake_popen,
     )
@@ -72,7 +71,6 @@ def test_worker_dispatch_captures_bootstrap_stderr_and_rotates_by_job_id(
     var_dir = tmp_path / "var"
     dispatcher = WorkerDispatcher(
         var_dir=var_dir,
-        uow_factory=lambda: None,
         environ=runtime_identity_environment(
             var_dir,
             extra={"NEEDED_SECRET": "sentinel"},

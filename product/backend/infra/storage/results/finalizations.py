@@ -1,3 +1,4 @@
+# 历史表与只读记录形状保留用于无损升级；当前产品已退出这组仓储写入。
 # =============================================================================
 # Run 结果最终化仓储
 #
@@ -137,48 +138,6 @@ class RunFinalizationRecord(StorageRecord):
         return self
 
 
-class RunFinalizationRepository:
-    def __init__(self, session: Session, known_secrets: tuple[str, ...] = ()) -> None:
-        self._session = session
-        self._known_secrets = known_secrets
-
-    def add(self, record: RunFinalizationRecord) -> None:
-        ensure_storage_payload_safe(record.model_dump(mode="json"), self._known_secrets)
-        self._session.add(RunFinalizationRow(**record.model_dump(mode="python")))
-        _flush(self._session)
-
-    def get(self, run_id: str) -> RunFinalizationRecord | None:
-        row = _scalar(self._session, select(RunFinalizationRow).where(RunFinalizationRow.run_id == run_id))
-        return None if row is None else _record(row)
-
-
-    def save(self, record: RunFinalizationRecord) -> None:
-        ensure_storage_payload_safe(record.model_dump(mode="json"), self._known_secrets)
-        row = _scalar(self._session, select(RunFinalizationRow).where(RunFinalizationRow.run_id == record.run_id))
-        if row is None:
-            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_FOUND, "结果最终化记录不存在")
-        for key, value in record.model_dump(mode="python").items():
-            setattr(row, key, value)
-        _flush(self._session)
-
-    def ensure_initial(self, run_id: str, publication_sha256: str, now_us: int) -> RunFinalizationRecord:
-        current = self.get(run_id)
-        if current is not None:
-            if current.publication_sha256 != publication_sha256:
-                raise JiejianError(ErrorCode.RESULT_FINALIZATION_CONFLICT, "publication 摘要与最终化记录不一致")
-            return current
-        record = RunFinalizationRecord(
-            run_id=run_id,
-            publication_sha256=publication_sha256,
-            findings_state=FindingFinalizationState.PENDING,
-            findings_attempt=0,
-            base_report_state=BaseReportFinalizationState.BLOCKED,
-            base_report_attempt=0,
-            created_at_us=now_us,
-            updated_at_us=now_us,
-        )
-        self.add(record)
-        return record
 
 
 def _record(row: RunFinalizationRow) -> RunFinalizationRecord:

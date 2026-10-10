@@ -17,7 +17,7 @@
 
 - `_CREDENTIAL_SECRET_MAX_BYTES`
 - `class IdentityPreparationBrowserAdapter`
-- `IdentityPreparationBrowserAdapter.run(self, request, secret_store, ready_callback, save_requested, cancellation_requested, before_secret_write, interaction, error_observer, now_us, monotonic) -> IdentityPreparationResult`
+- `IdentityPreparationBrowserAdapter.run(self, request, secret_store, ready_callback, save_requested, cancellation_requested, before_secret_write, interaction, headless, error_observer, now_us, monotonic) -> IdentityPreparationResult`
 
 静态import / dot-source：`__future__`、`collections.abc`、`playwright.sync_api`、`product.backend.core.errors`、`product.backend.core.identities.models`、`product.backend.infra.execution.web.adapter`、`product.backend.infra.recording.transport`、`product.backend.infra.secrets`、`product.protocols`、`product.protocols.web.target`、`time`、`urllib.parse`
 

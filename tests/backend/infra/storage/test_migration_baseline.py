@@ -186,7 +186,7 @@ def test_fresh_database_reaches_current_head_idempotently(tmp_path: Path) -> Non
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 66
+    assert len(Base.metadata.tables) == 79
     assert "check_publications" in tables
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
@@ -255,6 +255,12 @@ def test_repository_contains_frozen_migration_chain() -> None:
         "0010_rule_candidates.py",
         "0011_runtime_load_jobs.py",
         "0012_proof_preparation.py",
+        "0013_rule_decisions.py",
+        "0014_preparation_suggestions.py",
+        "0015_reference_capture.py",
+        "0016_capture_recovery.py",
+        "0017_rule_history.py",
+        "0018_node_sample.py",
     ]
 
 

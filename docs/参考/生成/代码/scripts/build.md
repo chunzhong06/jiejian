@@ -23,12 +23,20 @@
 - `NOSAMPLES_ARCHIVE`
 - `_FORBIDDEN_PARTS`
 - `_TEXT_SUFFIXES`
-- `_START_CMD`
 - `_START_PS1`
+- `_USER_GUIDE`
 - `_README`
 - `build(arguments) -> None`
 - `main() -> None`
 
-静态import / dot-source：`__future__`、`argparse`、`collections.abc`、`hashlib`、`json`、`os`、`pathlib`、`product.backend`、`product.protocols.runtime.portable_release`、`shutil`、`subprocess`、`sys`、`zipfile`
+静态import / dot-source：`__future__`、`argparse`、`collections.abc`、`hashlib`、`json`、`os`、`pathlib`、`product.backend`、`product.protocols.runtime.portable_release`、`shutil`、`subprocess`、`sys`、`zipfile`、`作用域内：re`
+
+### `scripts/build/portable_start.ps1`
+
+[打开源码](../../../../../scripts/build/portable_start.ps1) · PowerShell词法提取；动态dot-source未静态确定。
+
+- `param $NoOpen`
+- `param $Port`
+- `param $ReopenEvent`
 
 <!-- GENERATED:END -->

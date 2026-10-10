@@ -4,13 +4,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { TaskActionBar } from './TaskActionBar'
 
 describe('共享操作区合同', () => {
-  it('只有主操作使用主按钮，刷新和返回保留独立可访问名称', () => {
-    const refresh = vi.fn()
-    render(<TaskActionBar back={{ label: '返回' }} refresh={{ label: '刷新状态', onClick: refresh }} primary={{ label: '确认采用' }} />)
-    expect(screen.getByRole('button', { name: '确认采用' })).toHaveClass('ant-btn-primary')
-    expect(screen.getByRole('button', { name: '返回' })).not.toHaveClass('ant-btn-primary')
+  it('刷新和返回有独立入口，不会触发采用', () => {
+    const refresh = vi.fn(), back = vi.fn(), adopt = vi.fn()
+    render(<TaskActionBar back={{ label: '返回', onClick: back }} refresh={{ label: '刷新状态', onClick: refresh }} primary={{ label: '确认采用', onClick: adopt }} />)
     fireEvent.click(screen.getByRole('button', { name: '刷新状态' }))
     expect(refresh).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+    expect(back).toHaveBeenCalledOnce()
+    expect(adopt).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认采用' }))
+    expect(adopt).toHaveBeenCalledOnce()
   })
   it.each(['loading', 'disabled'] as const)('主操作处于 %s 时不能重复提交', (state) => {
     const submit = vi.fn()

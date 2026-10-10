@@ -67,8 +67,9 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
         )
 
     @router.post("/api/experience/official-sample/boundary-proposal", response_model=ApiResponse)
-    def official_boundary_proposal():
-        return data_response(context.official_experience.boundary_proposal().model_dump(mode="json"))
+    def official_boundary_proposal(body: OfficialBoundaryChoice | None = None):
+        options={} if context.official_samples.installation.runtime_kind=='PYTHON' else {'exhibition_download':None if body is None else body.exhibition_download}
+        return data_response(context.official_experience.boundary_proposal(**options).model_dump(mode="json"))
 
     @router.post(
         "/api/experience/official-sample/version",
@@ -101,8 +102,12 @@ class OfficialSampleStopRequest(ApiModel):
 
 class OfficialSampleVersionRequest(ApiModel):
     schema_version: Literal["1"]
-    version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"]
+    version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED", "EXPOSE_REVOKE", "PREVIEW_CHANGED"]
     repair_reference: CurrentRepairReference | None = None
+
+
+class OfficialBoundaryChoice(ApiModel):
+    exhibition_download: bool
 
 
 class OfficialObservationRequest(ApiModel):

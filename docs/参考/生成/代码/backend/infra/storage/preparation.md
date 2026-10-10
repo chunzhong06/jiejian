@@ -32,6 +32,19 @@
 
 静态import / dot-source：`__future__`、`collections.abc`、`json`、`product.backend.core.errors`、`product.backend.core.preparation.bindings`、`product.backend.core.preparation.requirements`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
+### `product/backend/infra/storage/preparation/batches.py`
+
+[打开源码](../../../../../../../product/backend/infra/storage/preparation/batches.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class PreparationBatchRow`
+- `class PreparationBatchRepository`
+- `PreparationBatchRepository.get(self, project, operation)`
+- `PreparationBatchRepository.latest(self, project)`
+- `PreparationBatchRepository.active(self, project)`
+- `PreparationBatchRepository.save(self, value)`
+
+静态import / dot-source：`json`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
+
 ### `product/backend/infra/storage/preparation/preparation_recovery.py`
 
 [打开源码](../../../../../../../product/backend/infra/storage/preparation/preparation_recovery.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -49,6 +62,33 @@
 
 静态import / dot-source：`json`、`product.backend.core.errors`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
+### `product/backend/infra/storage/preparation/proof_artifacts.py`
+
+[打开源码](../../../../../../../product/backend/infra/storage/preparation/proof_artifacts.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class ProofArtifactInputRow`
+- `class ReferenceCaptureAuthorizationRow`
+- `class ReferenceCaptureRow`
+- `class ProofArtifactReferenceRow`
+- `class ProofArtifactRepository`
+- `ProofArtifactRepository.input(self, project_id, asset_id)`
+- `ProofArtifactRepository.inputs(self, project_id)`
+- `ProofArtifactRepository.add_input(self, value)`
+- `ProofArtifactRepository.update_input(self, value, expected_state)`
+- `ProofArtifactRepository.add_capture(self, request)`
+- `ProofArtifactRepository.reference(self, project_id, asset_id, source_id, revision)`
+- `ProofArtifactRepository.referenced(self, asset_id)`
+- `ProofArtifactRepository.capture(self, project_id, capture_id)`
+- `ProofArtifactRepository.captures(self, project_id)`
+- `ProofArtifactRepository.authorized(self, request)`
+- `ProofArtifactRepository.unresolved_captures(self, project_id)`
+- `ProofArtifactRepository.resolve_recovery(self, project_id, capture_id, digest, now)`
+- `ProofArtifactRepository.revoke(self, request, now)`
+- `ProofArtifactRepository.report_hash(self, project_id, capture_id)`
+- `ProofArtifactRepository.publish(self, project_id, capture_id, digest)`
+
+静态import / dot-source：`product.backend.core.errors`、`product.backend.infra.storage.base`、`product.protocols.preparation.proof_artifacts`、`product.protocols.preparation.proof_sources`、`product.protocols.preparation.reference_capture`、`sqlalchemy`、`sqlalchemy.orm`
+
 ### `product/backend/infra/storage/preparation/proof_sources.py`
 
 [打开源码](../../../../../../../product/backend/infra/storage/preparation/proof_sources.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -60,6 +100,7 @@
 - `class ProofSourceRepository`
 - `ProofSourceRepository.source(self, project_id, source_id, revision)`
 - `ProofSourceRepository.list(self, project_id, offset, limit)`
+- `ProofSourceRepository.preparation_references(self, project_id)`
 - `ProofSourceRepository.save(self, value, expected_revision)`
 - `ProofSourceRepository.adoption(self, project_id, source_id)`
 - `ProofSourceRepository.adopt(self, value)`
@@ -92,12 +133,29 @@
 - `RecordingRepository.replace(self, record) -> None`
 - `RecordingRepository.get(self, recording_id) -> RecordingRecord &#124; None`
 - `RecordingRepository.list_for_project(self, project_id) -> tuple[RecordingRecord, ...]`
+- `RecordingRepository.preparation_references(self, project_id)`
 - `class FlowDraftRevisionRepository`
 - `FlowDraftRevisionRepository.add(self, record) -> None`
 - `FlowDraftRevisionRepository.list_for_recording(self, recording_id) -> tuple[FlowDraftRevisionRecord, ...]`
 - `FlowDraftRevisionRepository.latest(self, recording_id) -> FlowDraftRevisionRecord &#124; None`
 
 静态import / dot-source：`__future__`、`collections.abc`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.core.identifiers`、`product.backend.core.recording.models`、`product.backend.infra.storage.base`、`product.protocols`、`pydantic`、`sqlalchemy`、`sqlalchemy.orm`、`typing`、`作用域内：product.protocols.recording.flow_draft`、`作用域内：product.protocols.recording.recording_legacy`
+
+### `product/backend/infra/storage/preparation/suggestions.py`
+
+[打开源码](../../../../../../../product/backend/infra/storage/preparation/suggestions.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class PreparationSuggestionRow`
+- `class PreparationSuggestionRevisionRow`
+- `class PreparationSuggestionReceiptRow`
+- `class PreparationSuggestionRepository`
+- `PreparationSuggestionRepository.get(self, project_id, suggestion_id, revision)`
+- `PreparationSuggestionRepository.list(self, project_id, limit)`
+- `PreparationSuggestionRepository.append(self, value, expected_revision)`
+- `PreparationSuggestionRepository.receipt(self, project_id, operation_id)`
+- `PreparationSuggestionRepository.add_receipt(self, project_id, operation_id, fingerprint, value)`
+
+静态import / dot-source：`product.backend.core.errors`、`product.backend.core.preparation.suggestions`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
 ### `product/backend/infra/storage/preparation/supplemental_materials.py`
 

@@ -1,4 +1,4 @@
-# 验证验收脚本的跨应用事实与聚合。
+# 验证验收脚本的独立协议验证夹具的事实与聚合；官方体验统一走数字展馆。
 from __future__ import annotations
 import tests.acceptance.sample_test.validation.suite as sample_validation_suite
 import tests.acceptance.sample_test.validation.summary as sample_validation_summary
@@ -17,10 +17,9 @@ def test_validation_registry_has_stable_public_cases_and_allow_controls() -> Non
     payload = registry.public_registry_payload(ROOT, cases)
     encoded = json.dumps(payload, ensure_ascii=False)
 
-    assert len(cases) == 30
-    assert len({item.case_id for item in cases}) == 30
+    assert len(cases) == 15
+    assert len({item.case_id for item in cases}) == 15
     assert {item.application_id for item in cases} == {
-        "collaboration-space",
         "tenant-records",
     }
     assert all(item.allow_control_identity for item in cases)
@@ -36,7 +35,7 @@ def test_validation_registry_has_stable_public_cases_and_allow_controls() -> Non
         for item in cases
     } == {
         (application, mode, implementation, observation)
-        for application in ("collaboration-space", "tenant-records")
+        for application in ("tenant-records",)
         for mode in (
             "object_tenant_check_missing",
             "new_entry_inheritance",
@@ -131,7 +130,7 @@ def test_validation_adapter_only_translates_public_trace_structure() -> None:
     assert "core.verification.continuity" not in source
     assert "core.verification.breakpoints" not in source
 
-def test_validation_representatives_run_both_real_apps_without_public_oracle_leak(
+def test_validation_representatives_runs_protocol_fixture_without_public_oracle_leak(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -163,9 +162,9 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
     encoded = json.dumps(summary, ensure_ascii=False)
 
     assert summary["status"] == "accepted"
-    assert summary["case_count"] == 6
-    assert continuity_calls == 6
-    assert breakpoint_calls == 6
+    assert summary["case_count"] == 3
+    assert continuity_calls == 3
+    assert breakpoint_calls == 3
     assert summary["full_method_sources"] == {
         "case_verdict": (
             "product.backend.core.verification.permissions.evaluation."
@@ -180,9 +179,9 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
             "BreakpointLocator.locate"
         ),
     }
-    assert summary["applications"] == ["collaboration-space", "tenant-records"]
+    assert summary["applications"] == ["tenant-records"]
     results = summary["results"]
-    assert len(results) == 6
+    assert len(results) == 3
     assert {item["verdict"] for item in results} == {
         "BLOCK",
         "PASS",
@@ -194,42 +193,42 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
     assert all(item["allow_control_valid"] for item in results if item["verdict"] != "INCONCLUSIVE")
     assert summary["method_metrics"]["full"]["wrong_pass_vulnerable"] == 0
     assert summary["method_metrics"]["full"]["wrong_pass_evidence_gap"] == 0
-    assert summary["method_metrics"]["full"]["exact_match_count"] == 6
-    assert summary["method_metrics"]["full"]["effect_decision_correct_count"] == 6
+    assert summary["method_metrics"]["full"]["exact_match_count"] == 3
+    assert summary["method_metrics"]["full"]["effect_decision_correct_count"] == 3
     assert (
         summary["method_metrics"]["full"]["continuity_or_orphan_correct_count"]
-        == 6
+        == 3
     )
-    assert summary["method_metrics"]["full"]["actual_identity_attributed_count"] == 6
-    assert summary["method_metrics"]["full"]["allow_control_valid_count"] == 6
-    assert summary["method_metrics"]["full"]["recovery_success_count"] == 6
+    assert summary["method_metrics"]["full"]["actual_identity_attributed_count"] == 3
+    assert summary["method_metrics"]["full"]["allow_control_valid_count"] == 3
+    assert summary["method_metrics"]["full"]["recovery_success_count"] == 3
     assert (
         summary["method_metrics"]["full"]["repair_verification_applicable_count"]
-        == 2
+        == 1
     )
     assert (
         summary["method_metrics"]["full"]["repair_verification_success_count"]
-        == 2
+        == 1
     )
-    assert summary["method_metrics"]["http_only"]["exact_match_count"] == 4
-    assert summary["method_metrics"]["http_only"]["wrong_pass_evidence_gap"] == 2
-    assert summary["method_metrics"]["single_state"]["exact_match_count"] == 6
+    assert summary["method_metrics"]["http_only"]["exact_match_count"] == 2
+    assert summary["method_metrics"]["http_only"]["wrong_pass_evidence_gap"] == 1
+    assert summary["method_metrics"]["single_state"]["exact_match_count"] == 3
     assert (
         summary["method_metrics"]["authorization_regression"][
             "wrong_pass_evidence_gap"
         ]
-        == 2
+        == 1
     )
     assert summary["repeat_consistency"]["inconsistent_case_count"] == 0
     assert (tmp_path / "runtime" / "validation").is_dir()
 
     presentation = sample_validation_summary.build_presentation_summary(summary)
-    assert presentation["case_count"] == 6
-    assert presentation["application_count"] == 2
+    assert presentation["case_count"] == 3
+    assert presentation["application_count"] == 1
     assert presentation["mode_count"] == 1
     assert presentation["state_count"] == 3
-    assert presentation["full_exact_match_count"] == 6
-    assert presentation["http_wrong_pass_per_matrix"] == 2
+    assert presentation["full_exact_match_count"] == 3
+    assert presentation["http_wrong_pass_per_matrix"] == 1
     assert "results" not in presentation
     assert "method_metrics" not in presentation
     published_path = tmp_path / "published" / "latest-validation-summary.json"

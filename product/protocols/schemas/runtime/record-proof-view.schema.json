@@ -18,6 +18,12 @@
           "title": "Collection",
           "type": "string"
         },
+        "commit_semantics": {
+          "const": "ATOMIC_COMMIT",
+          "default": "ATOMIC_COMMIT",
+          "title": "Commit Semantics",
+          "type": "string"
+        },
         "generation": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
           "title": "Generation",
@@ -44,8 +50,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "1",
-          "default": "1",
+          "const": "2",
+          "default": "2",
           "title": "Schema Version",
           "type": "string"
         },
@@ -61,6 +67,20 @@
           ],
           "default": null,
           "title": "Scope Id"
+        },
+        "scope_ordinal": {
+          "anyOf": [
+            {
+              "maximum": 31,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Ordinal"
         },
         "state": {
           "const": "COMMITTED",
@@ -263,8 +283,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
       "type": "string"
     },

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.verification.catalog import fingerprint, plan
+from tests.support.verification.catalog import fingerprint, plan, test_dependencies as dependency_paths
 from tests.support.verification.reporting import public_node, result_status, write_report
 from tests.support.verification.runner import can_reuse
 
@@ -49,18 +49,53 @@ def test_reuse_requires_same_task_tree_environment_and_full_pass():
     assert not can_reuse(previous, current, task)
 
 
-def test_unknown_changed_file_expands_and_shared_styles_cover_all_frontend():
+def test_unknown_change_expands_but_shared_css_uses_browser_evidence():
     unknown = plan(ROOT, level="L2", areas=[], changed=["unknown-file.py"], l5=[])
     assert unknown["reasons"] and "storage" in unknown["areas"]
     shared = plan(ROOT, level="L2", areas=[], changed=["product/frontend/src/styles.css"], l5=[])
-    task = next(t for t in shared["tasks"] if t["id"] == "frontend")
-    assert len(task["args"]) > 30
+    ids = {t["id"] for t in shared["tasks"]}
+    assert ids == {"build", "browser-core", "browser-process", "browser-materials", "browser-references", "browser-history"}
 
 
 def test_local_ui_plan_does_not_trigger_full_backend_or_sample_test():
     result = plan(ROOT, level="L2", areas=[], changed=["product/frontend/src/features/system/RuntimePage.tsx"], l5=[])
-    assert [task["id"] for task in result["tasks"]] == ["contracts", "frontend"]
+    assert [task["id"] for task in result["tasks"]] == ["frontend"]
     assert all("features/system/" in p for p in result["tasks"][-1]["args"])
+
+
+def test_proof_layout_plan_only_builds_and_checks_reference_pages():
+    # 已有用户反馈明确指向证明页面；不应顺带启动账号、后端或整套组件回归。
+    result = plan(ROOT, level="L1", areas=[], changed=["product/frontend/src/shared/styles/proof-details.css"], l5=[])
+    assert [(task["command"], task["args"]) for task in result["tasks"]] == [
+        ("prepare", []), ("verify", ["browser", "--ui", "references"])]
+
+
+def test_explicit_ui_scope_and_full_regression_are_not_silently_narrowed():
+    result = plan(ROOT, level="L2", areas=[], changed=[], l5=[], ui=["references"])
+    assert [task["id"] for task in result["tasks"]] == ["build", "browser-references"]
+    full = plan(ROOT, level="L4", areas=[], changed=[], l5=[], ui=["references"])
+    assert {"browser-core","browser-history","frontend","contracts"} <= {t["id"] for t in full["tasks"]}
+    with pytest.raises(ValueError, match="UNKNOWN_UI_SCOPE"):
+        plan(ROOT, level="L2", areas=[], changed=[], l5=[], ui=["typo"])
+
+
+@pytest.mark.parametrize('level', ['L1','L2'])
+def test_named_test_runs_instead_of_only_collecting_or_expanding_every_sibling(level):
+    result = plan(ROOT, level=level, areas=[], changed=["tests/scripts/test_portable.py"], l5=[])
+    task = next(t for t in result["tasks"] if t["id"] == "backend-tooling")
+    assert [p for p in task["args"] if p.endswith(".py")] == ["tests/scripts/test_portable.py"]
+
+
+def test_ancestor_fixtures_and_their_imports_invalidate_existing_evidence(tmp_path):
+    directory=tmp_path/'tests/runtime';directory.mkdir(parents=True)
+    (directory/'test_job.py').write_text('def test_job(shared): pass',encoding='utf-8')
+    (directory/'conftest.py').write_text('from tests.support import shared',encoding='utf-8')
+    (tmp_path/'tests/support.py').write_text('shared = 1',encoding='utf-8')
+    paths=dependency_paths(tmp_path, {'tests/runtime/test_job.py'})
+    assert {'tests/runtime/conftest.py','tests/support.py'} <= paths
+    before=fingerprint(tmp_path,list(paths))
+    (directory/'conftest.py').write_text('from tests.support import shared\nshared = 2',encoding='utf-8')
+    assert fingerprint(tmp_path,list(dependency_paths(tmp_path,{'tests/runtime/test_job.py'}))) != before
 
 
 def test_explicit_scope_and_repo_relative_paths_required():
@@ -70,7 +105,11 @@ def test_explicit_scope_and_repo_relative_paths_required():
         plan(ROOT, level="L2", areas=[], changed=["../other"], l5=[])
 
 
-def test_frontend_evidence_includes_api_and_protocol_consumers(monkeypatch):
+@pytest.mark.parametrize('area,task_id,prefixes', [
+    ('frontend','frontend',('product/backend/api/','product/protocols/')),
+    ('contracts','backend-contracts',('product/frontend/','tests/validation/')),
+])
+def test_evidence_includes_cross_boundary_consumers_and_oracles(monkeypatch, area, task_id, prefixes):
     from tests.support.verification import catalog as module
     observed = {}
     def capture(_root, paths):
@@ -78,8 +117,7 @@ def test_frontend_evidence_includes_api_and_protocol_consumers(monkeypatch):
         observed[key] = paths
         return key
     monkeypatch.setattr(module, "fingerprint", capture)
-    result = module.plan(ROOT, level="L2", areas=["frontend"], changed=[], l5=[])
-    task = next(t for t in result["tasks"] if t["id"] == "frontend")
+    result = module.plan(ROOT, level="L2", areas=[area], changed=[], l5=[])
+    task = next(t for t in result["tasks"] if t["id"] == task_id)
     paths = observed[task["fingerprint"]]
-    assert any(p.startswith("product/backend/api/") for p in paths)
-    assert any(p.startswith("product/protocols/") for p in paths)
+    assert all(any(p.startswith(prefix) for p in paths) for prefix in prefixes)

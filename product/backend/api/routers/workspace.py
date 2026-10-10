@@ -22,7 +22,7 @@ def build_workspace_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/projects/{project_id}/workspace", response_model=ApiResponse)
-    async def get_workspace(project_id: str):
+    def get_workspace(project_id: str):
         return data_response(context.workspace.get(project_id).model_dump(mode="json"))
 
     return router

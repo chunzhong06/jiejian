@@ -25,19 +25,15 @@ from product.backend.infra.storage import (
 )
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.models import ClaimJob, RequestCancellation, WaitingFatalFailure
-from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.jobs.requests.execution import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
 from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from tests.fixtures.checks.check_execution import execution_pair
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.storage import ProjectRecord
 from types import SimpleNamespace
-from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
-from product.backend.infra.runtime.jobs.requests.execution import PersistedExecutionRequest
 from product.protocols.runner.execution_request import build_permission_policy_snapshot
 from product.protocols import (
     CleanupIssue,
@@ -370,109 +366,3 @@ def test_local_supervisor_recovers_expired_job_only_after_exit_proof(
         assert manager.recovered_jobs == 1
     finally:
         parts.engine.dispose()
-
-
-def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
-    runner_input = make_runner_input()
-    request = PersistedExecutionRequest(
-        schema_version="2",
-        source_fingerprint="d" * 64,
-        budget=runner_input.budget,
-        permission_policy=build_permission_policy_snapshot(
-            runner_input.project_snapshot.project_id,
-            0,
-            (),
-        ),
-        project_snapshot=runner_input.project_snapshot,
-    )
-    command = SimpleNamespace(
-        request=request,
-        idempotency_key="worker-current-bridge",
-        available_at_us=NOW_US,
-        now_us=NOW_US,
-        run_id=runner_input.run_id,
-        job_id=runner_input.job_id,
-    )
-    supervisor = RunnerSupervisor(
-        var_dir=tmp_path / "var",
-        lease_owner="worker-current-bridge",
-        uow_factory=lambda **kwargs: None,
-        attempt_service=None,
-        request_store=ExecutionRequestStore(tmp_path / "var"),
-        publication_service=None,
-    )
-    job = type("Job", (), {
-        "run_id": runner_input.run_id,
-        "job_id": runner_input.job_id,
-        "attempt": 1,
-        "lease_owner": "worker-current-bridge",
-        "fencing_token": 1,
-        "updated_at_us": NOW_US,
-    })()
-    built = supervisor._runner_input(job, command.request)
-    assert isinstance(built, RunnerInput)
-    assert built.schema_version == "1"
-    assert canonical_runner_json_bytes(built)
-
-
-def test_worker_current_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Path) -> None:
-    class FatalCapture:
-        def __init__(self) -> None:
-            self.calls = []
-
-        def record_fatal_failure(self, mutation) -> None:
-            self.calls.append(mutation)
-
-    attempts = FatalCapture()
-    supervisor = RunnerSupervisor(
-        var_dir=tmp_path / "var",
-        lease_owner="worker-current-fatal",
-        uow_factory=lambda **kwargs: None,
-        attempt_service=attempts,
-        request_store=ExecutionRequestStore(tmp_path / "var"),
-        publication_service=None,
-        utc_now_us=lambda: NOW_US,
-    )
-    job = type("Job", (), {"job_id": "job_" + "b" * 32, "fencing_token": 3})()
-    result = RunnerResult(
-        run_id="run_" + "b" * 32,
-        job_id=job.job_id,
-        attempt=1,
-        lease_owner="worker-current-fatal",
-        fencing_token=3,
-        finished_at_us=NOW_US,
-        result_type=RunnerResultType.FATAL_ERROR,
-        run_lifecycle=RunLifecycle.FAILED,
-        job_state=JobState.FAILED,
-        verdict=None,
-        cleanup=CleanupResult(
-            status=CleanupStatus.FAILED,
-            finished_at_us=NOW_US,
-            issues=(
-                CleanupIssue(
-                    code=CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
-                    cause_code="TARGET_UNREACHABLE",
-                ),
-            ),
-        ),
-        error=RunnerError(
-            code="RUNNER_FATAL",
-            phase=RunnerFailurePhase.TARGET_VALIDATION,
-            cause_code="EXEC_REQUEST",
-            retryable=False,
-        ),
-        plan_fingerprint="0" * 64,
-        coverage_record_count=0,
-        coverage_gap_count=0,
-    )
-
-    supervisor._apply_non_success_result(job, result)
-
-    assert len(attempts.calls) == 1
-    assert attempts.calls[0].job_id == job.job_id
-    assert attempts.calls[0].error_code == "RUNNER_FATAL"
-    assert attempts.calls[0].phase is RunnerFailurePhase.TARGET_VALIDATION
-    assert attempts.calls[0].cause_code == "EXEC_REQUEST"
-    assert attempts.calls[0].cleanup_issue_codes == (
-        CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
-    )

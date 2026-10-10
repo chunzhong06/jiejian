@@ -1,3 +1,4 @@
+# 历史表与只读记录形状保留用于无损升级；当前产品已退出这组仓储写入。
 # Permission Execution Profile 的非秘密治理元数据映射。
 
 from __future__ import annotations
@@ -78,71 +79,3 @@ class ExecutionProfileRecord(StorageRecord):
         if self.updated_at_us < self.created_at_us:
             raise ValueError("profile update time precedes creation")
         return self
-
-
-class ExecutionProfileRepository:
-    def __init__(self, session: Session, known_secrets: Sequence[str]) -> None:
-        self._session = session
-        self._known_secrets = known_secrets
-
-    def add(self, record: ExecutionProfileRecord) -> None:
-        values = record.model_dump(mode="json")
-        ensure_storage_payload_safe(values, self._known_secrets)
-        self._session.add(ExecutionProfileRow(**values))
-        _flush(self._session)
-
-    def get(self, profile_id: str) -> ExecutionProfileRecord | None:
-        row = _scalar(
-            self._session,
-            select(ExecutionProfileRow).where(
-                ExecutionProfileRow.profile_id == profile_id
-            ),
-        )
-        return None if row is None else self._record(row)
-
-    def list_for_project(self, project_id: str) -> tuple[ExecutionProfileRecord, ...]:
-        rows = _scalars(
-            self._session,
-            select(ExecutionProfileRow)
-            .where(ExecutionProfileRow.project_id == project_id)
-            .order_by(ExecutionProfileRow.profile_id),
-        )
-        return tuple(self._record(row) for row in rows)
-
-    def replace(self, record: ExecutionProfileRecord) -> None:
-        values = record.model_dump(mode="json")
-        ensure_storage_payload_safe(values, self._known_secrets)
-        row = _scalar(
-            self._session,
-            select(ExecutionProfileRow).where(
-                ExecutionProfileRow.profile_id == record.profile_id
-            ),
-        )
-        if row is None:
-            raise JiejianError(ErrorCode.EXECUTION_PROFILE_NOT_FOUND, "权限 Profile 不存在")
-        if row.project_id != record.project_id:
-            raise JiejianError(
-                ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT,
-                "权限 Profile 与项目不匹配",
-            )
-        for key, value in values.items():
-            setattr(row, key, value)
-        _flush(self._session)
-
-    @staticmethod
-    def _record(row: ExecutionProfileRow) -> ExecutionProfileRecord:
-        return ExecutionProfileRecord.model_validate(
-            {
-                "profile_id": row.profile_id,
-                "project_id": row.project_id,
-                "source_path": row.source_path,
-                "source_hash": row.source_hash,
-                "contract_id": row.contract_id,
-                "contract_version": row.contract_version,
-                "contract_fingerprint": row.contract_fingerprint,
-                "plan_fingerprint": row.plan_fingerprint,
-                "engine_version": row.engine_version,
-                "created_at_us": row.created_at_us,
-                "updated_at_us": row.updated_at_us,
-            }
-        )

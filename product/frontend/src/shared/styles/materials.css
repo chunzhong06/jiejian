@@ -54,21 +54,29 @@
 [data-product=jiejian] :is(.ant-input-affix-wrapper,.ant-select-selector):has(input:focus-visible) { outline:2px solid var(--color-focus); outline-offset:3px; box-shadow:none; }
 
 /* 留白的小对勾替换组件库实心点；原生 input 和 Ant Design 保留原有语义与键盘行为。 */
-[data-product=jiejian] :is(.ant-checkbox-inner,.ant-radio-inner) { width: 20px; height: 20px; background: transparent; border: 1px solid var(--color-border-strong); }
+[data-product=jiejian] :is(.ant-checkbox-inner,.ant-radio-inner) { position:relative;overflow:hidden;width:20px;height:20px;background:transparent;border:1px solid var(--color-border-strong); }
 [data-product=jiejian] .ant-checkbox-inner { border-radius: 5px; }
 [data-product=jiejian] .ant-checkbox-checked:not(.ant-checkbox-disabled) .ant-checkbox-inner { background: var(--color-primary-light); border-color: var(--color-primary-ink); }
 [data-product=jiejian] .ant-radio-checked:not(.ant-radio-disabled) .ant-radio-inner { background: transparent; border-color: var(--color-primary-ink); }
 /* 组件库的“悬浮且选中”优先级高于普通选中，需共用浅底，不能悬浮后变回实心块。 */
 [data-product=jiejian] .ant-checkbox-wrapper:not(.ant-checkbox-wrapper-disabled):hover .ant-checkbox-checked:not(.ant-checkbox-disabled) .ant-checkbox-inner { background:var(--color-primary-light); border-color:var(--color-primary-ink); }
 [data-product=jiejian] .ant-radio-wrapper:not(.ant-radio-wrapper-disabled):hover .ant-radio-checked:not(.ant-radio-disabled) .ant-radio-inner { background:transparent; border-color:var(--color-primary-ink); }
-[data-product=jiejian] .ant-checkbox-checked .ant-checkbox-inner::after,
-[data-product=jiejian] .ant-radio-checked .ant-radio-inner::after {
-  width: 14px; height: 14px; top: 50%; left: 50%; margin: 0; border:0;
-  background:var(--color-primary-ink); mask:var(--choice-check) center / contain no-repeat; border-radius:0; transform:translate(-50%,-50%); transform-origin:center; opacity:1;
+/* 未选中与选中共享中心坐标，避免继承组件库的边距/定位过渡，让勾形从框外滑入。 */
+[data-product=jiejian] :is(.ant-checkbox-inner,.ant-radio-inner)::after {
+  content:'';position:absolute;width:14px;height:14px;top:50%;left:50%;margin:0;border:0;pointer-events:none;
+  background:var(--color-primary-ink);mask:var(--choice-check) center / contain no-repeat;border-radius:0;
+  transform:translate(-50%,-50%) rotate(-35deg) scale(.75);transform-origin:center;opacity:0;
+  transition:opacity var(--motion-fast),transform var(--motion-layer) var(--ease-standard);
 }
-[data-product=jiejian] .ant-checkbox-indeterminate .ant-checkbox-inner::after { width: 9px; height: 1.7px; top: 50%; left: 50%; border: 0; mask:none; background: var(--color-primary-ink); transform: translate(-50%,-50%); }
-[data-product=jiejian] [data-choice-feedback=full]::after { animation:choice-check-appear 260ms var(--ease-standard); }
+[data-product=jiejian] .ant-checkbox-checked .ant-checkbox-inner::after,
+[data-product=jiejian] .ant-radio-checked .ant-radio-inner::after {transform:translate(-50%,-50%) rotate(0) scale(1);opacity:1;}
+/* 禁用且选中的 Radio 有更高优先级的缩点规则；保留勾形中心，避免准备中切换状态时偏向右下。 */
+[data-product=jiejian] .ant-radio-wrapper .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {transform:translate(-50%,-50%) rotate(0) scale(1);}
+[data-product=jiejian] .ant-checkbox-indeterminate .ant-checkbox-inner::after { width: 9px; height: 1.7px; top: 50%; left: 50%; border: 0; mask:none; background: var(--color-primary-ink); transform: translate(-50%,-50%);opacity:1; }
+[data-product=jiejian] [data-choice-feedback=full]::after { animation:choice-check-appear var(--motion-layer) var(--ease-standard); }
 @keyframes choice-check-appear { from { opacity:.25; transform:translate(-50%,-50%) rotate(-55deg) scale(.85); } to { opacity:1; transform:translate(-50%,-50%) rotate(0) scale(1); } }
+[data-product=jiejian]:is([data-motion=soft],[data-motion=off]) :is(.ant-checkbox-inner,.ant-radio-inner)::after{transform:translate(-50%,-50%);transition-property:opacity;animation:none}
+[data-product=jiejian][data-motion=off] :is(.ant-checkbox-inner,.ant-radio-inner)::after{transition:none}
 [data-product=jiejian] :is(.ant-checkbox-wrapper,.ant-radio-wrapper) { min-height: 36px; align-items: center; gap: 6px; }
 [data-product=jiejian] :is(.ant-checkbox-label,.ant-radio-label),[data-product=jiejian] .ant-radio-button-wrapper > span:last-child { display: inline-block; }
 [data-product=jiejian] :is(.ant-checkbox-wrapper-checked,.ant-radio-wrapper-checked),
@@ -85,7 +93,8 @@
 [data-product=jiejian] input:is([type=checkbox],[type=radio]):not(.ant-checkbox-input):not(.ant-radio-input):checked::after {
   content: ''; width:14px; height:14px; border:0; background:var(--color-primary-ink); mask:var(--choice-check) center / contain no-repeat;
 }
-[data-product=jiejian] input:is([type=checkbox],[type=radio]):disabled { cursor: not-allowed; opacity: .55; }
+/* Ant 控件的原生 input 必须保持透明；否则禁用时会在自绘勾形上再出现浏览器圆点。 */
+[data-product=jiejian] input:is([type=checkbox],[type=radio]):not(.ant-checkbox-input):not(.ant-radio-input):disabled { cursor: not-allowed; opacity: .55; }
 [data-product=jiejian] details > summary {
   min-height: 44px; align-content: center; color: var(--color-secondary); background: transparent; border-radius: 0; box-shadow: none; cursor: pointer;
 }

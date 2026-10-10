@@ -23,7 +23,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/jobs/{job_id}/cancel", response_model=ApiResponse)
-    async def cancel_recording_job(job_id: str):
+    def cancel_recording_job(job_id: str):
         with context.uow_factory() as work:
             job = work.jobs.get(job_id)
         if job is None:
@@ -40,7 +40,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         response_model=ApiResponse,
         status_code=202,
     )
-    async def create_recording(project_id: str, body: RecordingCreateRequest):
+    def create_recording(project_id: str, body: RecordingCreateRequest):
         started = context.project_recordings.submit(
             project_id,
             business_action_id=body.business_action_id,
@@ -71,7 +71,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     @router.get(
         "/api/projects/{project_id}/recordings/setup", response_model=ApiResponse
     )
-    async def recording_setup(project_id: str):
+    def recording_setup(project_id: str):
         boundary = context.business_boundaries.view(project_id)
         current_actions = {
             (item.action_id, item.action_revision)
@@ -95,7 +95,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         )
 
     @router.get("/api/recordings/{recording_id}", response_model=ApiResponse)
-    async def get_recording(recording_id: str):
+    def get_recording(recording_id: str):
         status = context.recording_lifecycle.status(recording_id)
         view = status.model_dump(mode="json")
         with context.uow_factory() as work:
@@ -124,24 +124,24 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         return data_response(view)
 
     @router.post("/api/recordings/{recording_id}/discard", response_model=ApiResponse)
-    async def discard_recording(recording_id: str, body: FinalizeRequest):
+    def discard_recording(recording_id: str, body: FinalizeRequest):
         view = context.recording_lifecycle.discard_review(recording_id, now_us=time.time_ns() // 1_000)
         return data_response(view.model_dump(mode="json"))
 
     @router.post("/api/recordings/{recording_id}/capture/start", response_model=ApiResponse)
-    async def start_recording(recording_id: str):
+    def start_recording(recording_id: str):
         view = context.recording_lifecycle.start_capture(recording_id)
         return data_response(view.model_dump(mode="json"))
 
     @router.post("/api/recordings/{recording_id}/capture/stop", response_model=ApiResponse)
-    async def stop_recording(recording_id: str):
+    def stop_recording(recording_id: str):
         view = context.recording_lifecycle.stop_capture(recording_id)
         return data_response(view.model_dump(mode="json"))
 
     @router.get(
         "/api/projects/{project_id}/recordings", response_model=ApiResponse
     )
-    async def list_recordings(project_id: str):
+    def list_recordings(project_id: str):
         context.projects.get(project_id)
         with context.uow_factory() as work:
             recordings = work.recordings.list_for_project(project_id)
@@ -156,7 +156,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     @router.post(
         "/api/recordings/{recording_id}/review", response_model=ApiResponse
     )
-    async def review_recording(recording_id: str, body: ReviewRequest):
+    def review_recording(recording_id: str, body: ReviewRequest):
         command = parse_flow_draft_review_command(
             json.dumps(body.command, ensure_ascii=False).encode("utf-8")
         )
@@ -166,7 +166,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     @router.post(
         "/api/recordings/{recording_id}/finalize", response_model=ApiResponse
     )
-    async def finalize_recording(
+    def finalize_recording(
         recording_id: str,
         body: FinalizeRequest | None = None,
     ):

@@ -1,9 +1,10 @@
-# 八个有限MCP准备工具：可保存候选和预检查，读取授权与采用仍只能由本机GUI确认。
+# 有限MCP准备工具：可保存材料建议、来源和预检查，读取授权与采用仍只能由本机GUI确认。
 import json
 from typing import Any, Literal
 from mcp.server.mcpserver import Context
 from product.backend.workflows.agent_access.service import MCPAccessLevel
 from product.backend.workflows.preparation.proofs.commands import SaveProofSource, StartProofPreflight, CancelProofPreflight
+from product.backend.core.preparation.suggestions import SavePreparationSuggestion
 
 
 def public_preparation(value):
@@ -19,6 +20,42 @@ def public_preparation(value):
 
 def register_preparation_tools(server, context, access, *, require_level, invoke, client_name):
     service = context.proof_preparation
+
+    @server.tool(name='jiejian_preparation_batch_plan',structured_output=True)
+    def batch_plan(ctx:Context, project_id:str, mode:Literal['OFFICIAL','REVIEWED']='REVIEWED')->dict[str,Any]:
+        """只读固定材料清单；开始批次必须由用户在界鉴确认，MCP不能代为批准。"""
+        require_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return invoke(lambda:context.preparation_batches.preview(project_id,mode).model_dump(mode='json'))
+
+    @server.tool(name='jiejian_preparation_batch_status',structured_output=True)
+    def batch_status(ctx:Context,project_id:str,operation_id:str|None=None)->dict[str,Any]:
+        """续查已批准的后台批次；任务自动续行，BLOCKED必须回界鉴重新核对，不重发未知步骤。"""
+        require_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return {'batch':invoke(lambda:context.preparation_batches.show(project_id,operation_id))}
+
+    @server.tool(name='jiejian_preparation_batch_cancel',structured_output=True)
+    def batch_cancel(ctx:Context,project_id:str,operation_id:str)->dict[str,Any]:
+        """停止后续准备并等待本批子任务收口，保留已经形成的材料。"""
+        require_level(access,ctx,MCPAccessLevel.EXECUTE,project_id=project_id)
+        return invoke(lambda:context.preparation_batches.cancel(project_id,operation_id))
+
+    @server.tool(name='jiejian_preparation_suggestion_save',structured_output=True)
+    def suggestion_save(ctx:Context,project_id:str,suggestion:dict[str,Any])->dict[str,Any]:
+        """保存五类材料的有限建议，不创建账号、执行代码、采用材料或宣称准备完成。"""
+        require_level(access,ctx,MCPAccessLevel.PREPARE,project_id=project_id)
+        return public_preparation(invoke(lambda:context.preparation_suggestions.save(project_id,
+            SavePreparationSuggestion.model_validate_json(json.dumps(suggestion,allow_nan=False)),submitted_via='MCP')))
+
+    @server.tool(name='jiejian_preparation_suggestion_show',structured_output=True)
+    def suggestion_show(ctx:Context,project_id:str,suggestion_id:str,revision:int|None=None)->dict[str,Any]:
+        require_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return public_preparation(invoke(lambda:context.preparation_suggestions.show(project_id,suggestion_id,revision)))
+
+    @server.tool(name='jiejian_preparation_suggestion_receipt',structured_output=True)
+    def suggestion_receipt(ctx:Context,project_id:str,operation_id:str)->dict[str,Any]:
+        """建议保存响应未知时查询原键；UNKNOWN不能作为重新写入的依据。"""
+        require_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
+        return public_preparation(invoke(lambda:context.preparation_suggestions.receipt(project_id,operation_id)))
 
     @server.tool(name='jiejian_preparation_context',structured_output=True)
     def preparation_context(ctx:Context, project_id:str)->dict[str,Any]:

@@ -57,4 +57,33 @@
 
 静态import / dot-source：`__future__`、`collections`、`enum`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.semantics`、`product.backend.core.identifiers`、`pydantic`
 
+### `product/backend/core/preparation/suggestions.py`
+
+[打开源码](../../../../../../product/backend/core/preparation/suggestions.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `SUGGESTION_ID_PATTERN`
+- `SUGGESTION_ITEM_PATTERN`
+- `SUGGESTION_BASIS_PATTERN`
+- `class ApprovedMaterialTarget`
+- `ApprovedMaterialTarget.paired_actor(self)`
+- `class CandidateMaterialTarget`
+- `class SuggestionSource`
+- `SuggestionSource.source_declaration(self)`
+- `class IdentitySuggestion`
+- `class ExecutionSuggestion`
+- `class ResourceFieldRequirement`
+- `class ResourceSuggestion`
+- `class EvidenceSuggestion`
+- `class RecoverySuggestion`
+- `class PreparationSuggestionItem`
+- `PreparationSuggestionItem.precise_material_target(self)`
+- `class PreparationSuggestionContent`
+- `PreparationSuggestionContent.dependency_graph(self)`
+- `class PreparationSuggestionRevision`
+- `PreparationSuggestionRevision.bounded_root(self)`
+- `class SavePreparationSuggestion`
+- `SavePreparationSuggestion.paired_revision(self)`
+
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`product.backend.core.identifiers`、`pydantic`、`typing`
+
 <!-- GENERATED:END -->

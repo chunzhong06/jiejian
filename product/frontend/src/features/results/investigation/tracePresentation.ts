@@ -26,6 +26,7 @@ const reasonLabels: Record<string, string> = {
   BREAKPOINT_TRACE_UNRESOLVED: '已有路径不足以确定断裂位置。',
 }
 export function traceEventLabel(event: StoryTraceEvent) {
+  if (event.kind === 'MESSAGE' && event.semantic_key === 'response_prepared') return '准备返回业务响应'
   return event.kind === 'AUTHORIZATION' && event.authorization_decision
     ? `权限判断 · ${event.authorization_decision === 'DENY' ? '拒绝' : '允许'}` : traceKindLabels[event.kind]
 }

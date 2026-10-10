@@ -36,6 +36,12 @@
     "source": "https://registry.npmjs.org/pnpm/-/pnpm-11.21.0.tgz",
     "integrity": "sha512-UhcFvOaJkk6scvWjWHEi82JonvZXHlW6gAdv1jfBETLs/62ib61Op5xIW/3b/T1aKlsFgFp36JPeceyKbMo7sQ=="
   },
+  "launcher": {
+    "compiler": "gcc",
+    "version": "15.2.0",
+    "target": "x86_64-w64-mingw32",
+    "verification": "exact-version-target-and-system-dll-imports"
+  },
   "playwright": {
     "python_requirement": ">=1.61,<1.62",
     "browser": "chromium",

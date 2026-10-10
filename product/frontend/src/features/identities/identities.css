@@ -108,8 +108,10 @@
 }
 
 .identity-account-row {
-  display: grid;
-  gap: var(--space-12);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16) var(--space-24);
 }
 
 .identity-account-row + .identity-account-row {
@@ -120,6 +122,19 @@
 .identity-account-row > div:first-child {
   display: grid;
   gap: var(--space-4);
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 窄屏换行时，操作仍沿本账号行的右边缘排列。 */
+.identity-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  margin-inline-start: auto;
+  max-width: 100%;
 }
 
 .identity-login-steps {

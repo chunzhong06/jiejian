@@ -82,7 +82,7 @@ export function SourceChangeImpact({ projectId, change, action, onNavigate, onSo
         {rows.length ? <div role="table" aria-label="按权限规则查看影响" className="change-rule-table">
           <div role="row" className="change-rule-head"><span role="columnheader">登记时已确认的要求</span><span role="columnheader">{unknown ? '与当前源码的关联' : '与本批改动的关联'}</span></div>
           {rowElements(attention)}
-          {!!other.length && <div role="rowgroup"><div className="change-other-heading"><Button type="link" aria-expanded={showOther} aria-controls="change-other-rules" onClick={() => setShowOther(value => !value)}>{showOther ? '收起' : '展开'}暂未发现直接关联的权限 · {other.length} 条</Button><span>仍纳入完整检查</span></div><div id="change-other-rules" hidden={!showOther}>{showOther && rowElements(other)}</div></div>}
+          {!!other.length && (attention.length===0 ? <div role="rowgroup">{rowElements(other)}</div> : <div role="rowgroup"><div className="change-other-heading"><Button type="link" aria-expanded={showOther} aria-controls="change-other-rules" onClick={() => setShowOther(value => !value)}>{showOther ? '收起' : '展开'}暂未发现直接关联的权限 · {other.length} 条</Button><span>仍纳入完整检查</span></div><div id="change-other-rules" hidden={!showOther}>{showOther && rowElements(other)}</div></div>)}
         </div> : <p className="editorial-muted">本批没有已确认的权限引用。</p>}
         <p className="change-impact-note">{unknown ? '登记时的依据仅对应原批次。' : ''}是否符合权限要求，由正式检查判断。</p>
       </section>

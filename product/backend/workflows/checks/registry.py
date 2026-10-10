@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from threading import RLock
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from pydantic import Field, model_validator
 
@@ -96,6 +98,7 @@ class CheckRuntimeRegistry:
         self._lock = RLock()
         self._snapshots = {}
         self._persistent_reader = None
+        self._read_scope = ContextVar('check_registration_read_scope', default=None)
 
     def register(self, snapshot: CheckRuntimeRegistration, *, expected_fingerprint: str | None = None):
         snapshot = CheckRuntimeRegistration.model_validate_json(snapshot.model_dump_json(), strict=True)
@@ -119,10 +122,31 @@ class CheckRuntimeRegistry:
             raise ValueError("生产来源注册表尚未连接持久读取者")
 
     def snapshot(self, project_id: str) -> CheckRuntimeRegistration | None:
+        scope = self._read_scope.get()
+        cache = scope[1] if scope is not None and scope[0] == project_id else None
+        if cache is not None and 'value' in cache:
+            return cache['value']
         with self._lock:
             registered = self._snapshots.get(project_id)
         # 官方注册与普通持久来源由明确项目所有者分流，不合并冲突配置或互相兜底。
-        return registered if registered is not None or self._persistent_reader is None else self._persistent_reader(project_id)
+        value = registered if registered is not None or self._persistent_reader is None else self._persistent_reader(project_id)
+        if cache is not None:
+            cache['value'] = value
+        return value
+
+    @contextmanager
+    def read_scope(self, project_id: str):
+        """一次只读编译共用来源快照；作用域结束即废弃，提交前的第二次冻结重新核对。"""
+        current = self._read_scope.get()
+        if current is not None and current[0] == project_id:
+            yield
+            return
+        # 延迟到首次读取才构造，保留调用方对缺失来源及读取错误的原处理。
+        token = self._read_scope.set((project_id, {}))
+        try:
+            yield
+        finally:
+            self._read_scope.reset(token)
 
     def unregister(self, project_id: str) -> None:
         with self._lock:

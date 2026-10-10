@@ -4,7 +4,8 @@ import pytest
 
 from product.backend.infra.observers.records.record_facts import transaction_fact
 from product.backend.infra.observers.records.transaction_store import TransactionRecordStore
-from product.protocols.runtime.transaction_records import RecordSeed, RecordChange, RecordTransaction
+from product.protocols.runtime.transaction_records import RecordSeed, RecordChange, RecordTransaction, read_record_proof
+import json
 
 
 def example(tmp_path, changes):
@@ -23,11 +24,23 @@ def evaluate(before, after, **changes):
     return transaction_fact(before,after,**(values|changes))
 
 
-@pytest.mark.parametrize('changes,expected', [((), 'ABSENT'), (('protected',),'CONFIRMED'), (('protected','initial'),'CONFIRMED')])
-def test_complete_transaction_retains_intermediate_occurrence(tmp_path,changes,expected):
+@pytest.mark.parametrize('changes,expected', [((), 'ABSENT'), (('protected',),'CONFIRMED'), (('protected','initial'),'ABSENT')])
+def test_complete_atomic_transaction_uses_committed_start_and_end(tmp_path,changes,expected):
     before, after = example(tmp_path,changes)
     assert evaluate(before,after).state == expected
     assert evaluate(before,after).closure == 'CLOSED'
+
+
+def test_legacy_root_keeps_its_original_intermediate_step_meaning(tmp_path):
+    before,after=example(tmp_path,('protected','initial'))
+    payload=after.model_dump(mode='json');payload['schema_version']='1'
+    payload['operation']['schema_version']='1'
+    payload['operation'].pop('scope_ordinal');payload['operation'].pop('commit_semantics')
+    legacy=read_record_proof(json.dumps(payload))
+    assert legacy.schema_version=='1' and evaluate(before,legacy).state=='CONFIRMED'
+    assert evaluate(before,after).state=='ABSENT'
+    payload['operation']['commit_semantics']='ATOMIC_COMMIT'
+    with pytest.raises(ValueError):read_record_proof(json.dumps(payload))
 
 
 @pytest.mark.parametrize('field,value', [('request_key','other'),('subject_id','other'),('resource_id','other'),('owner_id','other'),('collection','other')])

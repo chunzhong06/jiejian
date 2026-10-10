@@ -380,13 +380,20 @@ def _playwright_check() -> DoctorCheck:
         package_version = version("playwright")
         from playwright.sync_api import sync_playwright
 
-        playwright = sync_playwright().start()
-        try:
-            chromium = Path(playwright.chromium.executable_path)
+        configured = os.environ.get("JIEJIAN_PLAYWRIGHT_EXECUTABLE")
+        if configured:
+            # 启动器已经确定受控浏览器路径；状态轮询只核对文件，避免反复启动驱动子进程。
+            chromium = Path(configured)
             executable = str(chromium.resolve())
             available = chromium.is_file()
-        finally:
-            playwright.stop()
+        else:
+            playwright = sync_playwright().start()
+            try:
+                chromium = Path(playwright.chromium.executable_path)
+                executable = str(chromium.resolve())
+                available = chromium.is_file()
+            finally:
+                playwright.stop()
     except (PackageNotFoundError, OSError, RuntimeError) as exc:
         reason = type(exc).__name__
     return DoctorCheck(

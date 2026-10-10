@@ -947,7 +947,7 @@
           "title": "Config"
         },
         "contract": {
-          "$ref": "#/$defs/ProofContractAttestation"
+          "$ref": "#/$defs/LegacyProofContractAttestation"
         },
         "identity_roles": {
           "patternProperties": {
@@ -1311,6 +1311,47 @@
         "value"
       ],
       "title": "JsonBody",
+      "type": "object"
+    },
+    "LegacyProofContractAttestation": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_effect_kind": {
+          "enum": [
+            "STATE_MUTATION",
+            "DATA_DISCLOSURE"
+          ],
+          "title": "Approved Effect Kind",
+          "type": "string"
+        },
+        "contract_id": {
+          "enum": [
+            "SYNC_RESOURCE_HISTORY_V1",
+            "OWNER_RESOURCE_VIEW_V1",
+            "TRANSACTION_HISTORY_V1",
+            "RESOURCE_FIELDS_V1"
+          ],
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "implementation_profile": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Implementation Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_id",
+        "implementation_profile",
+        "fingerprint",
+        "approved_effect_kind"
+      ],
+      "title": "LegacyProofContractAttestation",
       "type": "object"
     },
     "ManagedIdentityClaim": {
@@ -1999,47 +2040,6 @@
         "cookies"
       ],
       "title": "PreparedCookieSessionIdentityBinding",
-      "type": "object"
-    },
-    "ProofContractAttestation": {
-      "additionalProperties": false,
-      "properties": {
-        "approved_effect_kind": {
-          "enum": [
-            "STATE_MUTATION",
-            "DATA_DISCLOSURE"
-          ],
-          "title": "Approved Effect Kind",
-          "type": "string"
-        },
-        "contract_id": {
-          "enum": [
-            "SYNC_RESOURCE_HISTORY_V1",
-            "OWNER_RESOURCE_VIEW_V1",
-            "TRANSACTION_HISTORY_V1",
-            "RESOURCE_FIELDS_V1"
-          ],
-          "title": "Contract Id",
-          "type": "string"
-        },
-        "fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Fingerprint",
-          "type": "string"
-        },
-        "implementation_profile": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-          "title": "Implementation Profile",
-          "type": "string"
-        }
-      },
-      "required": [
-        "contract_id",
-        "implementation_profile",
-        "fingerprint",
-        "approved_effect_kind"
-      ],
-      "title": "ProofContractAttestation",
       "type": "object"
     },
     "ProofSourceConfig": {

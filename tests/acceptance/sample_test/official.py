@@ -30,7 +30,11 @@ def _load_evidence(client, run_id):
     return result["evidence_index"], result["evidence"]
 
 
-def _gui_complete(records, *, stop_after_setup=False):
+def _gui_complete(records, *, stop_after_setup=False, gallery=False):
+    if gallery:
+        required={'start','human-approve','meaning-choice','identity-login','reference-capture-and-confirm','proof-scope','proof-adoption','prepare','exit'}
+        if not stop_after_setup:required|={'gallery-baseline','gallery-vulnerable','gallery-expose_revoke','gallery-fixed','gallery-preview_changed','evidence-reading','evidence-deep-link','single-history','history-search','history-return','repair-via-changes','mcp-responsibility','mcp-cleanup'}
+        return required.issubset({item['event'] for item in records if item.get('status')=='PASSED'})
     required = {"start", "human-approve", "prepare", "exit"}
     if not stop_after_setup:
         required |= {"submit-check", "baseline-result", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
@@ -136,49 +140,60 @@ def run(
         sample_port = int(str(experience["origin"]).rsplit(":", 1)[1])
         if not experience.get("active") or experience.get("scenario_version") != "BASELINE" or project_run_ids(client, project_id):
             raise sample_harness_state.SampleTestError("SAMPLE_NEW_INSTANCE_INVALID")
-        _phase(state, 3)
-        if not stop_after_setup or verify_workspace_ui:
-            from tests.acceptance.sample_test.gui.business_review import verify_business_selection
-            verify_business_selection(gui, project_id)
-        prepare_current(client, project_id, initial=True, gui=gui)
-        prepared_identities = client.call("GET", f"/api/projects/{project_id}/test-identities")
-        identities = {str(index): str(item["identity_id"]) for index, item in enumerate(prepared_identities)}
-        if not stop_after_setup:
-            from tests.acceptance.sample_test.gui.material_recovery import verify_material_reuse
-            verify_material_reuse(gui, project_id)
-        if not stop_after_setup or verify_workspace_ui:
-            from tests.acceptance.sample_test.gui.business_review import verify_identity_layout, verify_maintenance_layout
-            verify_identity_layout(gui)
-            verify_maintenance_layout(gui)
-        if stop_after_setup:
-            runs = []
+        gallery=experience.get('runtime_kind')=='NODE_ESM'
+        if gallery:
+            from tests.acceptance.sample_test.gallery import run_sequence as run_gallery
+            _phase(state,3)
+            runs,identities=run_gallery(client,gui,project_id,state,source_runtime.playwright_executable,stop_after_setup=stop_after_setup)
+            _phase(state,7)
+            if not stop_after_setup:
+                from tests.acceptance.sample_test.current_mcp import run as run_mcp
+                mcp_evidence=run_mcp(client,gui,project_id,runs,state,profile='gallery')
+            else:mcp_evidence=None
         else:
-            _phase(state, 4)
-            runs = run_sequence(client, project_id, state, checkpoint=checkpoint, gui=gui)
-        _phase(state, 7)
-        page.goto(client.origin + "/#/tests", wait_until="networkidle")
-        if not stop_after_setup:
-            checkpoint("evidence-and-repair", {"project_id": project_id, "runs": runs})
-            from tests.acceptance.sample_test.current_mcp import run as run_mcp
-            mcp_evidence = run_mcp(client, gui, project_id, runs, state)
-            from tests.acceptance.sample_test.gui.material_recovery import verify_environment_restart
-            sample_port, restarted_project = verify_environment_restart(gui, project_id)
-            identities = {str(index): str(item["identity_id"]) for index, item in enumerate(
-                client.call("GET", f"/api/projects/{restarted_project}/test-identities"))}
-        else:
-            mcp_evidence = None
+            _phase(state, 3)
+            if not stop_after_setup or verify_workspace_ui:
+                from tests.acceptance.sample_test.gui.business_review import verify_business_selection
+                verify_business_selection(gui, project_id)
+            prepare_current(client, project_id, initial=True, gui=gui)
+            prepared_identities = client.call("GET", f"/api/projects/{project_id}/test-identities")
+            identities = {str(index): str(item["identity_id"]) for index, item in enumerate(prepared_identities)}
+            if not stop_after_setup:
+                from tests.acceptance.sample_test.gui.material_recovery import verify_material_reuse
+                verify_material_reuse(gui, project_id)
+            if not stop_after_setup or verify_workspace_ui:
+                from tests.acceptance.sample_test.gui.business_review import verify_identity_layout, verify_maintenance_layout
+                verify_identity_layout(gui)
+                verify_maintenance_layout(gui)
+            if stop_after_setup:
+                runs = []
+            else:
+                _phase(state, 4)
+                runs = run_sequence(client, project_id, state, checkpoint=checkpoint, gui=gui)
+            _phase(state, 7)
+            page.goto(client.origin + "/#/tests", wait_until="networkidle")
+            if not stop_after_setup:
+                checkpoint("evidence-and-repair", {"project_id": project_id, "runs": runs})
+                from tests.acceptance.sample_test.current_mcp import run as run_mcp
+                mcp_evidence = run_mcp(client, gui, project_id, runs, state)
+                from tests.acceptance.sample_test.gui.material_recovery import verify_environment_restart
+                sample_port, restarted_project = verify_environment_restart(gui, project_id)
+                identities = {str(index): str(item["identity_id"]) for index, item in enumerate(
+                    client.call("GET", f"/api/projects/{restarted_project}/test-identities"))}
+            else:
+                mcp_evidence = None
         _phase(state, 8)
         sample_harness_lifecycle._shutdown_owned_runtime(client, state, identities, browser, playwright, process, var_dir, sample_port, shutdown_action=gui.shutdown)
         browser = None
         playwright = None
         process = None
         state.product_ready = False
-        gui_complete = _gui_complete(gui.records, stop_after_setup=stop_after_setup)
+        gui_complete = _gui_complete(gui.records, stop_after_setup=stop_after_setup, gallery=gallery)
         sample_reporting_diagnostics._write_summary(audit_dir, {"schema_version": "1", "project_id": project_id,
-            "scenario_versions": [] if stop_after_setup else ["BASELINE", "VULNERABLE", "FIXED"],
-            "observation_conditions": [] if stop_after_setup else ["AVAILABLE", "UNAVAILABLE"],
+            "scenario_versions": [] if stop_after_setup else ["BASELINE", "VULNERABLE", "EXPOSE_REVOKE", "FIXED", "PREVIEW_CHANGED"] if gallery else ["BASELINE", "VULNERABLE", "FIXED"],
+            "observation_conditions": [] if stop_after_setup or gallery else ["AVAILABLE", "UNAVAILABLE"],
             "runs": [{"run_id": item["run_id"], "verdict": item["story"]["verdict"]} for item in runs],
-            "mcp_evidence": mcp_evidence, "total_run_count": 0 if stop_after_setup else 5,
+            "mcp_evidence": mcp_evidence, "total_run_count": 0 if stop_after_setup else len(runs)+1,
             "read_projections": ["ResultStory", "Evidence", "RunHistory", "ProjectRepair"],
             "gui_status": "PASSED" if gui_complete else "GUI_INTEGRATION_INCOMPLETE", "gui_checkpoints": gui.records,
             "control_port_closed": True, "sample_port_closed": True, "owned_process_tree_closed": True})
@@ -187,6 +202,11 @@ def run(
         print("默认官方示例验收完成。", flush=True)
     except Exception as error:
         primary_failure = error
+        if gui is not None:
+            try:
+                gui.capture('failure-current-page')
+            except Exception:
+                pass
         try:
             failure_cleanup = sample_harness_lifecycle._cleanup_after_failure(client, state, identities, gui=gui)
         except Exception as cleanup_error:

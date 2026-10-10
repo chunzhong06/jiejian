@@ -1,6 +1,8 @@
 // 材料编辑只选择已核对来源；保存前先预览，回执不明时回读同一操作，不重复提交。
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Radio, Select, Spin } from 'antd'
+import { Alert, Button, Radio, Select } from 'antd'
+import { LoadingState } from '../../../shared/ui/LoadingState'
+import { TaskActionBar } from '../../../shared/ui/TaskActionBar'
 import { preparationApi, type MaterialChange, type MaterialDetails, type MaterialPreview, type MaterialReference, type MaterialRecordingContext, type PreparationDraft } from '../../../api/preparation/preparation'
 import { ApiError } from '../../../api/http'
 import { EditorialHeader, EditorialPage } from '../../../shared/ui/Editorial'
@@ -145,7 +147,7 @@ export function MaterialEditor({ projectId, reference, actionLabel, effectLabel,
     {details && ['STALE', 'BLOCKED'].includes(details.status) && <Alert className="flow-feedback" type="warning" message="原材料已保留，当前还不能复用"
       description={[...new Set(details.reason_codes.map(code => reasons[code] ?? '当前依据未通过核对，请返回检查材料处理当前缺口。'))].join(' ')} />}
     {pending && <Alert className="flow-feedback" type="warning" message="正在等待保存回执" description="重新打开页面后仍可核对这次操作，不会自动再次提交。" action={<Button loading={busy} onClick={() => void readReceipt()}>核对保存回执</Button>} />}
-    {!details || !draft ? !error && <Spin /> : <section className="material-editor">
+    {!details || !draft ? !error && <><LoadingState>正在读取这项材料…</LoadingState><TaskActionBar back={{label:'返回材料',onClick:onBack}}/></> : <section className="material-editor">
       <div className="material-editor-main">
         <p className="material-section-label">{reference.kind === 'evidence' ? '需要证明什么' : '本次处理的材料'}</p>
         <h2 className="material-purpose">{effectLabel ?? names[reference.kind]}</h2>
@@ -170,6 +172,6 @@ export function MaterialEditor({ projectId, reference, actionLabel, effectLabel,
         <p className="material-history-note">已有检查与证据保留。材料保存不会修改历史结论。</p></aside>
       <footer className="material-editor-footer"><p className="editorial-muted">保存后重新核对材料，不会开始检查。</p><div><Button disabled={busy} onClick={onBack}>返回材料</Button>{inputMode === 'existing' && (preview ? <Button type="primary" loading={busy} disabled={Boolean(pending) || Boolean(error)} onClick={() => void submit()}>确认{selected ? '替换此项' : '沿用材料'}</Button> : <Button type="primary" loading={busy} disabled={Boolean(pending) || Boolean(error) || (!selected && details.status !== 'SATISFIED')} onClick={() => void inspect()}>核对本次影响</Button>)}</div></footer>
     </section>}
-    {error && <Button onClick={onBack}>返回材料重新核对</Button>}
+    {error && <TaskActionBar back={{label:'返回材料重新核对',onClick:onBack}}/>}
   </EditorialPage>
 }

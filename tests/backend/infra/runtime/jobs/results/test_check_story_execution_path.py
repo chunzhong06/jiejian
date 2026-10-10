@@ -44,7 +44,7 @@ def test_complete_branch_copies_only_contract_fields_without_inferred_edges():
     expected = {"entry": (), "message": ("entry",), "authorization": ("message",),
         "worker": ("message",), "effect": ("worker",), "final": ("authorization", "effect")}
     assert {event.event_id: event.parent_event_ids for event in path.events} == expected
-    fields = {"event_id", "parent_event_ids", "kind", "authorization_decision", "effect_id",
+    fields = {"event_id", "semantic_key", "parent_event_ids", "kind", "authorization_decision", "effect_id",
         "dispatch_effect_ids", "source_component", "source_location"}
     for projected, original in zip(path.events, trace.events, strict=True):
         assert set(projected.model_dump()) == fields
@@ -117,6 +117,10 @@ def test_real_published_story_keeps_case_isolation_and_existing_facts(package_pa
     package = CheckPublisher(var_dir, factory, clock_us=lambda: NOW+20).publish(staging)
     reader = CheckResultReader(var_dir=var_dir, uow_factory=factory)
     builder = CheckStoryBuilder(reader)
+    from product.backend.workflows.checks.repairs.repair import CurrentRepairService
+    # 正式装配包括原题读取；每次点击只核验一次同轮包，下一次点击仍检测篡改。
+    builder.bind_repairs(CurrentRepairService(reader=reader, change_context_reader=lambda *_: None,
+        breakpoints_reader=builder.breakpoints_from_verified_package))
     # 对同一已发布包关闭新增投影，比较全部旧字段；不以替身 reader 冒充完整性通过。
     with monkeypatch.context() as context:
         context.setattr(story_module, "_execution_path", lambda documents: None)

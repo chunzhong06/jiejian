@@ -13,7 +13,7 @@ from product.backend.infra.observers.records.record_preflight import managed_sou
 from product.backend.infra.observers.records.record_facts import record_value
 from product.backend.infra.runtime.process.controlled.node_owned import node_corresponds
 from product.backend.infra.runtime.process.controlled.node_locator import controlled_node_executable
-from product.protocols.preparation.proof_sources import ProofCheckItem, ProofPreflightReport, proof_fingerprint, ManagedProofSourceConfig
+from product.protocols.preparation.proof_sources import ProofCheckItem,ProofPreflightReport,proof_fingerprint,AtomicProofSourceConfig,FileProofSourceConfig
 from product.protocols.web.request import HttpRequestTemplate
 
 
@@ -42,7 +42,7 @@ def execute_preflight(input, *, var_dir, uow_factory, environ, cancellation_requ
     adapter = HttpExecutionAdapter(request.target, known_secrets=known,
         cancellation_requested=lambda: not active(), executor_process_id=__import__('os').getpid())
     try:
-        if not isinstance(request.config,ManagedProofSourceConfig):
+        if not isinstance(request.config,AtomicProofSourceConfig):
             checks.append(ProofCheckItem(code='SOURCE_REQUIRES_MIGRATION',status='UNSUPPORTED'))
         elif any(not environ.get(name) for name in names):
             checks.append(ProofCheckItem(code='IDENTITY_SESSION_MISSING', status='MISSING'))
@@ -71,6 +71,14 @@ def execute_preflight(input, *, var_dir, uow_factory, environ, cancellation_requ
                         view = read_record_source(var_dir,request.runtime_reference,request.config,request.resource_id,cancelled=lambda:not active())
                         checks.extend(managed_source_checks(view, request.config, resource_id=request.resource_id,
                             owner_subject_id=request.owner_subject_id, contract=contract))
+                        if isinstance(request.config,FileProofSourceConfig):
+                            from product.backend.infra.artifacts.proof_artifacts import ProofArtifactStore
+                            with uow_factory() as work:
+                                artifact=work.proof_artifacts.input(request.project_id,request.config.reference_artifact.asset_id)
+                            matching=(artifact is not None and artifact.state=='COMPLETE' and artifact.manifest==request.config.reference_artifact
+                                and artifact.resource_id==request.resource_id and artifact.owner_identity_id==request.config.reference_owner_identity_id)
+                            if matching:ProofArtifactStore(var_dir).read(request.project_id,artifact.manifest,known_secrets=known)
+                            checks.append(ProofCheckItem(code='REFERENCE_ARTIFACT_VERIFIED',status='CONFIRMED' if matching else 'MISSING'))
                 finally:
                     runtime.close()
             if not active():
