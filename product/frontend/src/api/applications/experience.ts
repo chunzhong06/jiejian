@@ -26,6 +26,9 @@ export type OfficialExperienceDto = {
   lifecycle?: 'NOT_STARTED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'STOPPED' | 'FAILED' | 'UNKNOWN'
   history_project_id?: string | null
   last_error_code?: string | null
+  operation_phase?: string | null
+  operation_started_at_us?: number | null
+  operation_finished_at_us?: number | null
   operation_id?: string | null
   operation_state?: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN' | null
   workspace_retained?: boolean
@@ -65,7 +68,8 @@ export const experienceApi = {
   observation: (available: boolean) => request<OfficialExperienceDto>('/api/experience/official-sample/observation', { method: 'POST', body: JSON.stringify({ schema_version: '1', available }) }),
   reconcile: () => request<OfficialExperienceDto>('/api/experience/official-sample/reconcile', { method: 'POST' }),
   reset: (operationId: string) => request<OfficialExperienceDto>('/api/experience/official-sample/reset', { method: 'POST', body: JSON.stringify({ schema_version: '1', consent: true, operation_id: operationId }) }),
-  status: () => request<OfficialExperienceDto>('/api/experience/official-sample'),
+  status: (operationId?: string, lightweight=false) => request<OfficialExperienceDto>(`/api/experience/official-sample?lightweight=${lightweight}${operationId?'&operation_id='+encodeURIComponent(operationId):''}`),
+  resume: (operationId: string) => request<OfficialExperienceDto>('/api/experience/official-sample/resume', {method:'POST',body:JSON.stringify({schema_version:'1',consent:true,operation_id:operationId})}),
   validationSummary: () => request<CompetitionValidationSummaryViewDto>('/api/experience/official-sample/validation-summary'),
   start: (operationId?: string) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/start', {

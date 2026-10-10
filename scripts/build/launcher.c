@@ -13,21 +13,131 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "startup-brand.h"
 
 #define WM_STAGE (WM_APP + 1)
-static HWND window, label;
+#define ID_REOPEN 101
+static HWND window, reopen_button;
 static HANDLE output, log_file;
+static HANDLE reopen_event;
 static int no_open;
 static wchar_t error_text[256];
+static int current_stage, ready, gui_failed, animate = 1;
+static ULONGLONG started_at, ready_at;
+static HFONT body_font, title_font, art_font, button_font;
+
+static void paint_text(HDC dc, const wchar_t *text, int x, int y, int width, COLORREF color, HFONT font, UINT align) {
+    RECT rect = {x, y, x + width, y + 32};
+    SelectObject(dc, font); SetTextColor(dc, color);
+    DrawTextW(dc, text, -1, &rect, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | align);
+}
+
+static void paint_panel(HWND hwnd) {
+    PAINTSTRUCT paint; RECT client;
+    HDC target = BeginPaint(hwnd, &paint);
+    GetClientRect(hwnd, &client);
+    if (client.right <= 0 || client.bottom <= 0) { EndPaint(hwnd, &paint); return; }
+    /* 双缓冲只重绘展示；同一单调时钟计时，界面动画不延迟真实启动。 */
+    HDC dc = CreateCompatibleDC(target);
+    HBITMAP bitmap = CreateCompatibleBitmap(target, client.right, client.bottom);
+    HGDIOBJ old_bitmap = SelectObject(dc, bitmap);
+    SetMapMode(dc, MM_ANISOTROPIC); SetWindowExtEx(dc, 920, 640, NULL);
+    SetViewportExtEx(dc, client.right, client.bottom, NULL);
+    RECT canvas = {0, 0, 920, 640};
+    HBRUSH background = CreateSolidBrush(RGB(31, 37, 53));
+    FillRect(dc, &canvas, background); DeleteObject(background);
+    SetBkMode(dc, TRANSPARENT);
+    int art_width = 0; SIZE extent;
+    SelectObject(dc, art_font);
+    for (int i = 0; i < 6; ++i) {
+        GetTextExtentPoint32W(dc, brand_art[i], (int)wcslen(brand_art[i]), &extent);
+        if (extent.cx > art_width) art_width = extent.cx;
+    }
+    for (int i = 0; i < 6; ++i) {
+        SetTextColor(dc, brand_colors[i]);
+        TextOutW(dc, (920 - art_width) / 2, 46 + i * 22, brand_art[i], (int)wcslen(brand_art[i]));
+    }
+    wchar_t brand[80], elapsed[80];
+    swprintf(brand, 80, L"界鉴  JIEJIAN  %ls", brand_version);
+    paint_text(dc, brand, 64, 206, 590, RGB(186,196,249), title_font, DT_LEFT);
+    paint_text(dc, ready ? (gui_failed ? L"界面待打开" : L"已就绪") : L"正在启动", 664, 206, 192,
+               gui_failed ? RGB(237,163,169) : RGB(186,196,249), body_font, DT_RIGHT);
+    paint_text(dc, L"让权限要求与实际行为对应起来", 64, 244, 792, RGB(166,173,192), body_font, DT_LEFT);
+    HPEN line = CreatePen(PS_SOLID, 1, RGB(59,69,91));
+    HGDIOBJ old_pen = SelectObject(dc, line);
+    MoveToEx(dc, 64, 300, NULL); LineTo(dc, 856, 300);
+    const wchar_t *labels[] = {L"核对发行组件", L"核对运行环境", L"启动服务与界面"};
+    ULONGLONG now = GetTickCount64();
+    for (int i = 0; i < 3; ++i) {
+        int done = ready ? !(gui_failed && i == 2) : i < current_stage;
+        int active = !ready && i == current_stage;
+        COLORREF color = active ? RGB(186,196,249) : RGB(166,173,192);
+        const wchar_t *mark = done ? L"✓" : active ? L"›" : L"·";
+        const wchar_t *state = done ? L"已就绪" : active ? L"处理中" : gui_failed && i == 2 ? L"请重试打开" : L"等待";
+        paint_text(dc, mark, 64, 334 + i * 52, 32, color, body_font, DT_CENTER);
+        paint_text(dc, labels[i], 110, 334 + i * 52, 530, color, body_font, DT_LEFT);
+        paint_text(dc, state, 674, 334 + i * 52, 182, color, body_font, DT_RIGHT);
+        if (active && animate) {
+            const wchar_t *dots[] = {L"·", L"··", L"···", L"··"};
+            paint_text(dc, dots[(now / 350) % 4], 630, 334 + i * 52, 44, color, body_font, DT_LEFT);
+        }
+    }
+    MoveToEx(dc, 64, 512, NULL); LineTo(dc, 856, 512);
+    swprintf(elapsed, 80, ready ? L"启动用时 %.1f 秒" : L"启动已用 %.1f 秒", (double)((ready ? ready_at : now) - started_at) / 1000.0);
+    paint_text(dc, elapsed, 64, 538, 390, RGB(186,196,249), body_font, DT_LEFT);
+    paint_text(dc, ready ? L"关闭面板可收起；退出服务请使用网页入口。" : L"准备完成后自动打开界面，关闭面板不会中断启动。",
+               64, 585, 792, RGB(166,173,192), body_font, DT_LEFT);
+    SelectObject(dc, old_pen); DeleteObject(line);
+    SetMapMode(dc, MM_TEXT);
+    BitBlt(target, 0, 0, client.right, client.bottom, dc, 0, 0, SRCCOPY);
+    SelectObject(dc, old_bitmap); DeleteObject(bitmap); DeleteDC(dc);
+    EndPaint(hwnd, &paint);
+}
 
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_STAGE) {
-        if (w == 5) { ShowWindow(hwnd, SW_HIDE); MessageBoxW(hwnd, error_text, L"界鉴界面暂未打开", MB_OK | MB_ICONWARNING); return 0; }
-        if (w == 3) ShowWindow(hwnd, SW_HIDE);
-        else SetWindowTextW(label, w == 1 ? L"正在核对包内程序…" : w == 2 ? L"正在启动界鉴服务…" : L"服务仍在启动，请稍候…");
+        if (w == 1) current_stage = 0;
+        if (w == 6) current_stage = 1;
+        if (w == 2 || w == 4) current_stage = 2;
+        if (w == 3 || w == 5) {
+            if (!ready) ready_at = GetTickCount64();
+            ready = 1; gui_failed = w == 5;
+            ShowWindow(reopen_button, SW_SHOW);
+            SetWindowTextW(hwnd, gui_failed ? L"界鉴 · 界面待打开" : L"界鉴 · 已就绪");
+        }
+        InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
-    if (message == WM_CLOSE) return 0; /* 迁移或启动期间不把关闭提示窗解释成强制结束数据库进程。 */
+    if (message == WM_PAINT) { paint_panel(hwnd); return 0; }
+    if (message == WM_ERASEBKGND) return 1;
+    if (message == WM_TIMER) { if (!ready) InvalidateRect(hwnd, NULL, FALSE); return 0; }
+    if (message == WM_SIZE && reopen_button) {
+        MoveWindow(reopen_button, LOWORD(l) * 636 / 920, HIWORD(l) * 532 / 640, LOWORD(l) * 220 / 920, HIWORD(l) * 48 / 640, TRUE);
+        return 0;
+    }
+    if (message == WM_COMMAND && LOWORD(w) == ID_REOPEN) {
+        if (ready && reopen_event) SetEvent(reopen_event);
+        return 0;
+    }
+    if (message == WM_DRAWITEM && w == ID_REOPEN) {
+        DRAWITEMSTRUCT *item = (DRAWITEMSTRUCT *)l;
+        int saved_dc = SaveDC(item->hDC);
+        HBRUSH background = CreateSolidBrush(RGB(31,37,53));
+        FillRect(item->hDC, &item->rcItem, background); DeleteObject(background);
+        COLORREF fill = item->itemState & ODS_SELECTED ? RGB(143,157,224) : RGB(186,196,249);
+        HBRUSH brush = CreateSolidBrush(fill); HPEN pen = CreatePen(PS_SOLID, 1, fill);
+        HGDIOBJ old_brush = SelectObject(item->hDC, brush), old_pen = SelectObject(item->hDC, pen);
+        int corner = (item->rcItem.bottom - item->rcItem.top) * 3 / 4;
+        RoundRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom, corner, corner);
+        SetBkMode(item->hDC, TRANSPARENT); SetTextColor(item->hDC, RGB(31,37,53));
+        SelectObject(item->hDC, button_font);
+        DrawTextW(item->hDC, L"重新打开界面", -1, &item->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        if (item->itemState & ODS_FOCUS) { RECT focus = item->rcItem; InflateRect(&focus, -5, -5); DrawFocusRect(item->hDC, &focus); }
+        SelectObject(item->hDC, old_brush); SelectObject(item->hDC, old_pen); DeleteObject(brush); DeleteObject(pen);
+        RestoreDC(item->hDC, saved_dc);
+        return TRUE;
+    }
+    if (message == WM_CLOSE) { ShowWindow(hwnd, SW_HIDE); return 0; } /* 收起展示不等于关闭服务或中断迁移。 */
     return DefWindowProcW(hwnd, message, w, l);
 }
 
@@ -36,6 +146,7 @@ static void consume_line(const char *line) {
     DWORD written;
     int stage = 0;
     if (strcmp(line, "__JIEJIAN_RELEASE_STATUS__:validate") == 0) stage = 1;
+    else if (strcmp(line, "__JIEJIAN_RELEASE_STATUS__:identity") == 0) stage = 6;
     else if (strcmp(line, "__JIEJIAN_RELEASE_STATUS__:serve") == 0) stage = 2;
     else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:ready-browser-opened") == 0) stage = 3;
     else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:still-starting") == 0) stage = 4;
@@ -43,7 +154,8 @@ static void consume_line(const char *line) {
         wcscpy(error_text, L"服务已启动，但界面窗口未能打开。请双击界鉴.exe重新打开。");
         stage = 5;
     }
-    else if (strcmp(line, "__JIEJIAN_GUI_STATUS__:opened") == 0 || strcmp(line, "__JIEJIAN_GUI_STATUS__:open-failed") == 0) { /* 仅记录窗口恢复的有限结果。 */ }
+    else if (strcmp(line, "__JIEJIAN_GUI_STATUS__:opened") == 0) stage = 3;
+    else if (strcmp(line, "__JIEJIAN_GUI_STATUS__:open-failed") == 0) stage = 5;
     else if (strncmp(line, error, strlen(error)) == 0)
         MultiByteToWideChar(CP_UTF8, 0, line + strlen(error), -1, error_text, 255);
     else return;
@@ -79,6 +191,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     DWORD result = 1, length, port = 8765; int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     (void)previous; (void)command_line; (void)show;
+    started_at = GetTickCount64();
     output = NULL; log_file = INVALID_HANDLE_VALUE;
     for (int i = 1; i < argc; ++i) {
         if (wcscmp(argv[i], L"--no-open") == 0) no_open = 1;
@@ -107,6 +220,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     }
     reopen = CreateEventW(NULL, FALSE, FALSE, event_name);
     if (!reopen) goto cleanup;
+    reopen_event = reopen;
     swprintf(script, 32768, L"%ls\\app\\start.ps1", root);
     if (GetFileAttributesW(script) == INVALID_FILE_ATTRIBUTES) {
         wcscpy(error_text, L"缺少 app\\start.ps1。请先完整解压发布包，再运行界鉴.exe。"); goto cleanup;
@@ -131,11 +245,30 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     if (!CreateProcessW(shell, command, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, root, &startup, &process)) goto cleanup;
     if (!AssignProcessToJobObject(job, process.hProcess)) { TerminateProcess(process.hProcess, 1); goto cleanup; }
     if (!no_open) {
-        WNDCLASSW type = {0}; type.lpfnWndProc = window_proc; type.hInstance = instance; type.lpszClassName = L"JieJianStartup"; type.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); type.hCursor = LoadCursor(NULL, IDC_ARROW);
+        SetProcessDPIAware();
+        BOOL client_animation = TRUE;
+        if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &client_animation, 0)) animate = client_animation;
+        body_font = CreateFontW(-18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
+        title_font = CreateFontW(-22, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
+        art_font = CreateFontW(-20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH, L"Consolas");
+        HDC screen = GetDC(NULL); int dpi = GetDeviceCaps(screen, LOGPIXELSY); ReleaseDC(NULL, screen);
+        RECT work; SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+        int width = MulDiv(920, dpi, 96), height = MulDiv(640, dpi, 96);
+        if (width > work.right - work.left - 60) width = work.right - work.left - 60;
+        if (height > work.bottom - work.top - 80) { height = work.bottom - work.top - 80; width = height * 920 / 640; }
+        button_font = CreateFontW(-MulDiv(18, width, 920), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
+        WNDCLASSW type = {0}; type.lpfnWndProc = window_proc; type.hInstance = instance; type.lpszClassName = L"JieJianStartup"; type.hCursor = LoadCursor(NULL, IDC_ARROW);
+        type.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1));
         RegisterClassW(&type);
-        window = CreateWindowExW(WS_EX_TOOLWINDOW, type.lpszClassName, L"界鉴", WS_CAPTION | WS_OVERLAPPED, (GetSystemMetrics(SM_CXSCREEN) - 440) / 2, (GetSystemMetrics(SM_CYSCREEN) - 140) / 2, 440, 140, NULL, NULL, instance, NULL);
-        label = CreateWindowW(L"STATIC", L"正在启动界鉴…", WS_CHILD | WS_VISIBLE | SS_CENTER, 20, 38, 400, 42, window, NULL, instance, NULL);
-        SendMessageW(label, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
+        DWORD style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
+        RECT outer = {0, 0, width, height}; AdjustWindowRectEx(&outer, style, FALSE, 0);
+        width = outer.right - outer.left; height = outer.bottom - outer.top;
+        window = CreateWindowExW(0, type.lpszClassName, L"界鉴 · 启动状态", style, work.left + (work.right - work.left - width) / 2, work.top + (work.bottom - work.top - height) / 2, width, height, NULL, NULL, instance, NULL);
+        if (!window) { TerminateProcess(process.hProcess, 1); goto cleanup; }
+        reopen_button = CreateWindowW(L"BUTTON", L"重新打开界面", WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 0, 0, 0, 0, window, (HMENU)(INT_PTR)ID_REOPEN, instance, NULL);
+        RECT client; GetClientRect(window, &client);
+        SendMessageW(window, WM_SIZE, 0, MAKELPARAM(client.right, client.bottom));
+        SetTimer(window, 1, 250, NULL);
     }
     reader = CreateThread(NULL, 0, read_output, NULL, 0, NULL);
     if (!reader) { TerminateProcess(process.hProcess, 1); goto cleanup; }
@@ -143,7 +276,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     ResumeThread(process.hThread);
     if (window) ShowWindow(window, SW_SHOWNORMAL);
     while (MsgWaitForMultipleObjects(1, &process.hProcess, FALSE, INFINITE, QS_ALLINPUT) != WAIT_OBJECT_0) {
-        MSG message; while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+        MSG message; while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { if (!window || !IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); } }
     }
     GetExitCodeProcess(process.hProcess, &result);
 cleanup:
@@ -155,6 +288,10 @@ cleanup:
     if (process.hThread) CloseHandle(process.hThread);
     if (process.hProcess) CloseHandle(process.hProcess);
     if (window) DestroyWindow(window);
+    if (body_font) DeleteObject(body_font);
+    if (title_font) DeleteObject(title_font);
+    if (art_font) DeleteObject(art_font);
+    if (button_font) DeleteObject(button_font);
     if (log_file != INVALID_HANDLE_VALUE) { char code[64]; DWORD written; int n = snprintf(code, sizeof(code), "launcher_exit=%lu\r\n", result); WriteFile(log_file, code, n, &written, NULL); CloseHandle(log_file); }
     if (result && !no_open) MessageBoxW(NULL, error_text[0] ? error_text : L"界鉴未能启动。请确认发布包已完整解压且目录可写，查看 var\\logs\\launcher.log 和 README.txt。", L"界鉴启动未完成", MB_OK | MB_ICONERROR);
     if (reopen) CloseHandle(reopen);

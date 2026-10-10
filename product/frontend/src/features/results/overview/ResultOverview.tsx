@@ -5,6 +5,7 @@ import { WorkPageVisible } from '../../../shared/runtime/visibility'
 import type { ActionResultStory, ResultStory } from '../../../api/checks/currentChecks'
 import { repairLabels } from '../../../api/checks/repairs'
 import { StatusBadge, type StatusTone } from '../../../shared/ui/StatusBadge'
+import { ResultAgentHandoff } from '../ResultAgentHandoff'
 
 const judgements: Record<string, { label: string; tone: string }> = {
   '本次权限要求已得到验证': { label: '符合要求', tone: 'pass' },
@@ -44,12 +45,12 @@ export function ResultOverviewHeader({ story, onNavigate, historicalOnly, action
     ? { label: '查看修复依据', onClick: () => onNavigate(`/changes?repair_reference=${encodeURIComponent(repair.repair_fingerprint)}`) }
     : { label: story.change_context ? '返回本批交付' : '返回当前工作', onClick: () => onNavigate(story.change_context ? `/changes?change_id=${encodeURIComponent(story.change_context.change_id)}` : '/workspace') } : undefined)
   const tone = { PASS: 'pass', BLOCK: 'block', INCONCLUSIVE: 'unknown' }[story.verdict]
-  return <header className="result-overview-header">
+  return <header className={`result-overview-header${onNavigate ? ' agent-task-banner' : ''}`}><div className="agent-task-main">
     <div className="result-overview-status"><ResultBadge tone={tone}>{story.verdict === 'PASS' ? '验证通过' : story.verdict === 'BLOCK' ? '发现权限问题' : '证据不足'}</ResultBadge><span>本轮证据已发布</span></div>
     <div className="result-overview-title"><div><h1>{story.repair_verification ? repairLabels[story.repair_verification.status] : story.judgement}</h1><p>{summaries[story.verdict]}</p></div>{destination && <Button type="primary" onClick={destination.onClick}>{destination.label}</Button>}</div>
     <div className="result-overview-meta"><span><strong>{story.actions.length}</strong> 项实际检查 <span>·</span> 权限版本 {story.policy_epoch}</span><span>{story.change_context ? '已关联本批交付 · ' : ''}{story.runtime_status === 'MATCHED' ? '检查前后运行对应已核对' : story.runtime_status === 'UNCONFIRMED' ? '运行对应未确认' : '运行版本未独立核对'}</span></div>
     {story.runtime_status !== 'MATCHED' && <p className="result-applicability">{story.runtime_status === 'UNCONFIRMED' ? '运行身份未能在检查前后保持对应，不能据此认定当前交付已验收。' : '本轮结论保留其检查范围，尚不能独立证明当前运行加载了哪批代码。'}</p>}
-  </header>
+  </div>{onNavigate && <aside className="agent-task-assistance"><ResultAgentHandoff story={story} onNavigate={onNavigate}/></aside>}</header>
 }
 export function ResultScope({ story }: { story: ResultStory }) {
   const [open, setOpen] = useState(false)

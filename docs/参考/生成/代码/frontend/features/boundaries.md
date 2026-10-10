@@ -27,7 +27,7 @@
 
 - `BusinessBoundaryPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/TaskReceipt`、`./PermissionRuleRows`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/boundaries/businessBoundaries`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/PageTaskHeader`、`../../shared/ui/SearchField`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./PermissionRuleRows`、`./RuleCandidatesPanel`、`./RuleDetailsPanel`、`./boundary.css`、`./definitions/CurrentBoundaryObjects`、`./draft/BoundaryMaintenanceEditor`、`./proposals/BoundaryProposalEditor`、`./proposals/BoundaryProposalReview`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/definitions/BoundaryObjectsWorkspace.tsx`
 

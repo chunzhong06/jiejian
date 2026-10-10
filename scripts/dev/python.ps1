@@ -41,9 +41,15 @@ function Test-CondaPython([string]$Prefix) {
     if ([string]::IsNullOrWhiteSpace($Prefix)) { return $false }
     $python = Join-Path $Prefix "python.exe"
     if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { return $false }
-    # Python 基线探针不加载 site；项目依赖半同步时仍应由后续 uv sync 自动修复。
-    & $python -S -B -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 13) else 1)" 2>$null
+    # 不加载 site；先核对基线动态库，项目依赖仍由后续 frozen uv sync 核对。
+    & $python -S -B -c "import sys, ssl, sqlite3, zlib; raise SystemExit(0 if sys.implementation.name == 'cpython' and sys.version_info[:2] == (3, 13) else 1)" 2>$null
     return $LASTEXITCODE -eq 0
+}
+
+function Test-MinimalCondaDefinition {
+    # 仅允许重建当前最小基线的缓存；未来增加依赖或来源时不能仅凭 Python 版本跳过更新。
+    $lines = @(Get-Content -LiteralPath $script:EnvironmentPath -Encoding UTF8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    return ($lines -join "`n") -ceq "name: jiejian_env`nchannels:`n- defaults`ndependencies:`n- python=3.13"
 }
 
 function Ensure-Conda([ValidateSet("auto", "force", "existing")][string]$Mode) {
@@ -51,6 +57,11 @@ function Ensure-Conda([ValidateSet("auto", "force", "existing")][string]$Mode) {
     $environmentDigest = Get-FileDigest $script:EnvironmentPath
     $stateDigest = [string](Get-StateValue "environment_digest")
     $ready = Test-CondaPython $prefix
+    # var 可整体删除。缺少缓存不证明 Conda 基线发生变化，不能因此更新正在使用的 DLL。
+    if ($Mode -ne "force" -and -not $stateDigest -and $ready -and (Test-MinimalCondaDefinition)) {
+        $stateDigest = $environmentDigest
+        Write-Host "环境记录缺失，已核对现有 CPython 3.13 基线，复用并重建记录。" -ForegroundColor DarkGray
+    }
     $mustUpdate = $Mode -eq "force" -or -not $ready -or $stateDigest -ne $environmentDigest
     if ($Mode -eq "existing" -and $mustUpdate) {
         Fail-Development "conda" "environment.yml 已变化或 Python 基线探针失败" "执行 .\scripts\dev.ps1 bootstrap"

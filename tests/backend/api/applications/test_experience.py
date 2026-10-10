@@ -1,5 +1,6 @@
 # 唯一官方Node示例的同意、人的规则选择、材料门禁及准确停止API。
 from pathlib import Path
+import time
 import pytest
 from product.backend.core.lifecycle import ProjectStatus
 from tests.fixtures.secrets import InMemorySecretStore
@@ -13,7 +14,20 @@ def _app(tmp_path,*,sample_root=_SAMPLE_ROOT):
     var=tmp_path/'var';store=InMemorySecretStore()
     return create_app(var,start_worker=False,official_sample_root=sample_root,secret_store=store,environ=runtime_identity_environment(var)),store
 
-def _start(client):return client.post('/api/experience/official-sample/start',json={'schema_version':'1','consent':True})
+def _completed(client,response):
+    assert response.status_code==202,response.text
+    operation=response.json()['data']['operation_id']
+    deadline=time.monotonic()+35
+    while time.monotonic()<deadline:
+        response=client.get('/api/experience/official-sample',params={'operation_id':operation})
+        state=response.json()['data']['operation_state']
+        if state!='PENDING':
+            assert state=='SUCCEEDED',response.text
+            return response
+        time.sleep(.1)
+    raise AssertionError('原环境操作未在期限内完成')
+
+def _start(client):return _completed(client,client.post('/api/experience/official-sample/start',json={'schema_version':'1','consent':True}))
 
 def test_unavailable_installation_keeps_product_alive_and_requires_consent(tmp_path):
     app,_=_app(tmp_path,sample_root=None)
@@ -34,6 +48,7 @@ def test_start_stop_preserves_project_and_explicit_reset_archives(tmp_path):
         assert first['active'] and first['runtime_kind']=='NODE_ESM' and first['scenario_version']=='BASELINE'
         assert not first['scenario_prepared'] and _start(client).json()['data']['project_id']==first['project_id']
         response=client.post('/api/experience/official-sample/reset',json={'schema_version':'1','consent':True})
+        response=_completed(client,response)
         assert response.status_code==200,response.text
         second=response.json()['data'];assert second['project_id']!=first['project_id']
         assert source.is_dir() and core.projects.get(first['project_id']).status is ProjectStatus.ARCHIVED

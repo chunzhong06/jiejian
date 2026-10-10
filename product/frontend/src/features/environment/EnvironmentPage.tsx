@@ -1,4 +1,4 @@
-// 应用与环境展示运行方式与实例状态；示例每次从新项目开始，保存记录不增加历史入口。
+// 应用与环境展示运行事实；继续原项目和重新开始各自明确，保存记录不增加历史入口。
 import { LoadingState } from '../../shared/ui/LoadingState'
 import { Alert, Button } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
@@ -32,7 +32,8 @@ export function EnvironmentPage({ project, workspace, onChanged, onNavigate, onE
   const official = !project || belongs || showOfficial
   const lifecycle = value?.lifecycle ?? (value?.active ? 'RUNNING' : 'UNKNOWN')
   const stopped = lifecycle === 'STOPPED'
-  const title = failed ? '暂时无法核对环境状态' : !official ? '核对当前应用的运行方式' : stopped ? '示例已停止，可重新开始' : lifecycle === 'RUNNING' ? '示例正在运行' : lifecycle === 'FAILED' ? '示例启动未完成' : lifecycle === 'NOT_STARTED' ? '准备一个独立的示例环境' : '核对当前环境，再继续工作'
+  const canResume=stopped&&value?.runtime_kind==='NODE_ESM'&&value.workspace_retained&&value.recovery_state==='EXITED'
+  const title = failed ? '暂时无法核对环境状态' : !official ? '核对当前应用的运行方式' : canResume ? '示例已停止，可继续上次项目' : stopped ? '示例已停止，可重新开始' : lifecycle === 'RUNNING' ? '示例正在运行' : lifecycle === 'FAILED' ? '示例启动未完成' : lifecycle === 'NOT_STARTED' ? '准备一个独立的示例环境' : '核对当前环境，再继续工作'
   // 尚未取得归属事实时不先把示例判成普通应用，避免显示错误的操作入口。
   if (loading) return <EditorialPage label="应用与环境" width="welcome"><EditorialHeader eyebrow={project?.name || '界鉴设置'} title="应用与环境"/><div className="environment-toolbar"><Button type="link" icon={<ArrowLeftOutlined aria-hidden/>} onClick={() => onNavigate('/workspace')}>返回概览</Button></div><LoadingState>正在读取应用运行状态。</LoadingState></EditorialPage>
   return <EditorialPage label="应用与环境" width="welcome">
@@ -42,7 +43,7 @@ export function EnvironmentPage({ project, workspace, onChanged, onNavigate, onE
     {!official && !failed && project && <ApplicationRuntimeSettings key={project.project_id} projectId={project.project_id} onNavigate={onNavigate}/>}
     <div className="environment-facts"><div><i data-state="history"/><span>待测应用<strong>{project?.name || (official ? '官方示例' : '尚未选择')}</strong></span></div><div><i data-state={official && lifecycle === 'RUNNING' ? 'ready' : 'unknown'}/><span>{official ? '示例环境' : '应用连接'}<strong>{failed ? '状态未知' : official ? labels[lifecycle] : workspace?.connection.endpoint_status === 'CONFIRMED' ? '已确认地址' : '需要核对地址'}</strong></span></div><div><i data-state="history"/><span>历史事实<strong>不随当前环境状态改写</strong></span></div></div>
     <section className="environment-focus" aria-label="环境下一步">
-      <div className="environment-focus-copy"><p className="editorial-eyebrow">下一步</p><h2>{!official ? '确认应用正在运行' : lifecycle === 'RUNNING' ? '继续当前任务' : '从全新示例开始'}</h2><p className="editorial-muted">{!official ? '应用启动后，回到接入页核对访问地址。' : lifecycle === 'RUNNING' ? '回到总览，继续确认权限、准备材料与检查。' : '启动独立的新项目，再确认权限、准备账号与材料。已有记录会保留。'}</p></div>
+      <div className="environment-focus-copy"><p className="editorial-eyebrow">下一步</p><h2>{!official ? '确认应用正在运行' : lifecycle === 'RUNNING' ? '继续当前任务' : canResume?'继续上次示例':'从全新示例开始'}</h2><p className="editorial-muted">{!official ? '应用启动后，回到接入页核对访问地址。' : lifecycle === 'RUNNING' ? '回到总览，继续确认权限、准备材料与检查。' : canResume?'保留上次的项目、代码与权限，重新核对登录和受实例变化影响的材料。':'启动独立的新项目，再确认权限、准备账号与材料。已有记录会保留。'}</p></div>
       <div className="environment-focus-actions">
         {!official ? <Button type="primary" onClick={() => onNavigate('/application')}>核对应用连接</Button> : lifecycle === 'RUNNING' ? <Button type="primary" onClick={() => onNavigate('/workspace')}>返回当前任务</Button> : !failed && <OfficialSamplePanel compact value={value} onError={onError} onChanged={async next => { setValue(next); await onChanged(next) }}/>}
         {!official && <Button type="link" onClick={() => setShowOfficial(true)}>查看官方示例环境</Button>}

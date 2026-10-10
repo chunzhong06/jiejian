@@ -253,19 +253,78 @@ def _place_product(base: Path, python: Path) -> None:
         (python.parent / 'Scripts' / name).unlink(missing_ok=True)
 
 
+def _launcher_icon(base: Path, environment: dict[str, str]) -> Path:
+    """将网页现用矢量标志转为多尺寸ICO；离线生成物只进入本次构建目录。"""
+    import re
+    import struct
+    from playwright.sync_api import sync_playwright
+    header = Path(__file__).parents[2] / 'product/frontend/src/app/shell/AppHeader.tsx'
+    markup = header.read_text(encoding='utf-8')
+    mark = re.search(r'<button className="product-brand".*?(<svg\b.*?</svg>)', markup, re.S)
+    if mark is None:
+        raise RuntimeError('网页品牌标志缺失，拒绝生成替代图标')
+    browsers = [p for p in (base / 'runtime/playwright').rglob('chrome.exe') if 'chromium-' in p.as_posix()]
+    if len(browsers) != 1:
+        raise RuntimeError('构建图标需要包内唯一Chromium')
+    pictures = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=str(browsers[0]), headless=True, env=environment)
+        try:
+            page = browser.new_page(offline=True)
+            svg = mark[1].replace('strokeWidth=', 'stroke-width=').replace('strokeLinejoin=', 'stroke-linejoin=')
+            page.set_content('<style>html,body{margin:0;background:transparent}svg{width:100vw;height:100vh;color:rgb(186,196,249)}</style>' + svg)
+            for size in (16, 24, 32, 48, 64, 128, 256):
+                page.set_viewport_size({'width': size, 'height': size})
+                pictures.append((size, page.screenshot(omit_background=True)))
+        finally:
+            browser.close()
+    offset = 6 + 16 * len(pictures)
+    records = []
+    for size, picture in pictures:
+        records.append(struct.pack('<BBBBHHII', size % 256, size % 256, 0, 0, 1, 32, len(picture), offset))
+        offset += len(picture)
+    icon = base.parent / 'jiejian.ico'
+    icon.write_bytes(struct.pack('<HHH', 0, 1, len(pictures)) + b''.join(records) + b''.join(p[1] for p in pictures))
+    (base.parent / 'jiejian-icon-preview.png').write_bytes(pictures[-1][1])
+    return icon
+
+
 def _compile_launcher(base: Path, compiler: Path, toolchain: dict, environment: dict[str, str]) -> None:
     """构建一次 Win32 薄入口，运行时仅依赖 Windows 自带 DLL。"""
+    import re
     source = Path(__file__).with_name('launcher.c')
+    # 与源码启动面板共用字形和配色，生成头只留在构建目录；版本始终来自产品真源。
+    panel = source.parent.parent.joinpath('startup/panel.ps1').read_text(encoding='utf-8-sig')
+    art = re.search(r'StartupPanelArt = @\((.*?)\n\)', panel, re.S)
+    colors = re.search(r'StartupPanelArtColors = @\((.*?)\)', panel)
+    if art is None or colors is None:
+        raise RuntimeError('启动艺术字或配色定义缺失')
+    rows = re.findall(r'"([^"\n]+)"', art[1])
+    palette = re.findall(r'"(\d+);(\d+);(\d+)"', colors[1])
+    if len(rows) != 6 or len(palette) != len(rows):
+        raise RuntimeError('启动艺术字与渐变行数不一致')
+    header = base.parent / 'startup-brand.h'
+    header.write_text('/* 构建时读取现有启动面板；不得手工编辑。 */\n'
+        + 'static const wchar_t *brand_version = L' + json.dumps(RELEASE_VERSION) + ';\n'
+        + 'static const wchar_t *brand_art[] = {' + ','.join('L' + json.dumps(row) for row in rows) + '};\n'
+        + 'static const COLORREF brand_colors[] = {' + ','.join('RGB('+','.join(color)+')' for color in palette) + '};\n', encoding='utf-8')
     env = {**environment, 'PATH': os.pathsep.join((str(compiler.parent), str(Path(os.environ['SYSTEMROOT']) / 'System32')))}
     config = toolchain['launcher']
     target = _run((compiler, '-dumpmachine'), cwd=base, environment=env).strip()
     version = _run((compiler, '-dumpfullversion'), cwd=base, environment=env).strip()
     if target != config['target'] or version != config['version']:
         raise RuntimeError('启动器编译器与 toolchain.json 的版本或目标不一致')
+    icon = _launcher_icon(base, environment)
+    resource = base.parent / 'startup-icon.rc'
+    resource.write_text('#pragma code_page(65001)\n1 ICON "' + icon.as_posix() + '"\n', encoding='utf-8')
+    resource_object = base.parent / 'startup-icon.o'
+    windres = Path(_run((compiler, '-print-prog-name=windres'), cwd=base, environment=env).strip())
+    if not windres.is_absolute() or not windres.is_file():
+        raise RuntimeError('启动器工具链缺少可定位的 windres')
+    _run((windres, '--codepage=65001', '-i', resource, '-o', resource_object), cwd=base, environment=env)
     _run((compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-municode', '-mwindows',
           '-static-libgcc', '-s', '-Wl,--no-insert-timestamp', '-finput-charset=UTF-8',
-          source, '-o', base / '界鉴.exe', '-lshell32', '-luser32', '-lgdi32'), cwd=base, environment=env)
-    import re
+          '-I', base.parent, source, resource_object, '-o', base / '界鉴.exe', '-lshell32', '-luser32', '-lgdi32'), cwd=base, environment=env)
     objdump = Path(_run((compiler, '-print-prog-name=objdump'), cwd=base, environment=env).strip())
     if not objdump.is_absolute() or not objdump.is_file():
         raise RuntimeError('启动器工具链缺少可定位的 objdump')

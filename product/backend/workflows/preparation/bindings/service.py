@@ -191,7 +191,8 @@ class PreparationBindingService:
             return binding
 
     def inspect(self, action, contract, identities, *, work=None) -> ActionTechnicalPreparationView:
-        with (self._uow_factory() if work is None else nullcontext(work)) as work:
+        from product.backend.workflows.preparation.bindings.reuse import material_reuse_read
+        with (self._uow_factory() if work is None else nullcontext(work)) as work, material_reuse_read(work):
             understanding = work.application_understanding.get(action.project_id)
             repository = work.action_preparation
             execution = repository.execution(action.action_id, action.revision)

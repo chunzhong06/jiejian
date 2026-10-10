@@ -22,6 +22,15 @@ beforeEach(() => {
   }]})
 })
 afterEach(cleanup)
+it('材料和历史入口不额外编译当前检查计划',async()=>{
+  const first=render(<CurrentTestsPage {...props()} requestedMaterials/>)
+  expect(screen.getByLabelText('当前材料临时输入')).toBeInTheDocument()
+  expect(api.preview).not.toHaveBeenCalled()
+  first.unmount()
+  render(<CurrentTestsPage {...props()} requestedRunId="r1"/>)
+  await waitFor(()=>expect(api.status).toHaveBeenCalled())
+  expect(api.preview).not.toHaveBeenCalled()
+})
 it('首次读取未完成时，后台刷新不废弃原请求也不让加载状态永久持续',async()=>{
   let finish!: (value: typeof ready) => void
   const first=new Promise<typeof ready>(resolve=>{finish=resolve})
@@ -297,8 +306,8 @@ it('本页检查完成后进入同一 Run 深链不会丢失结论', async () =>
   expect(api.submit).toHaveBeenCalledOnce()
 })
 
-it('普通入口承接服务端待复验任务，完成后的工作台刷新不丢掉本轮结果', async () => {
-  const workspace: WorkspaceViewDto = { project:{project_id:'p1',name:'应用',status:'READY',target_type:'WEB'},connection:{endpoint_status:'CONFIRMED',source_analysis_status:'COMPLETED'},actors:[],actions:[],areas:[],primary_task:{task_id:'repair',task_kind:'VERIFY_REPAIR',title:'复验',why_now:'已登记',user_responsibility:'确认执行',system_will_do:'原题复验',business_action_id:null,business_actor_id:null,route:'/tests',change_id:'repair-exact',can_execute:true,stale_fingerprint:'current'} }
+it.each(['VERIFY_REPAIR','RUN_CURRENT_CHECK'] as const)('普通入口保留服务端 %s 的修改批次，完成后不丢掉本轮结果', async task_kind => {
+  const workspace: WorkspaceViewDto = { project:{project_id:'p1',name:'应用',status:'READY',target_type:'WEB'},connection:{endpoint_status:'CONFIRMED',source_analysis_status:'COMPLETED'},actors:[],actions:[],areas:[],primary_task:{task_id:'repair',task_kind,title:'复验',why_now:'已登记',user_responsibility:'确认执行',system_will_do:'原题复验',business_action_id:null,business_actor_id:null,route:'/tests',change_id:'repair-exact',can_execute:true,stale_fingerprint:'current'} }
   const p = props(); const view = render(<CurrentTestsPage {...p} workspace={workspace}/>)
   fireEvent.click(await screen.findByRole('button',{name:'开始检查'}))
   await waitFor(() => expect(api.submit).toHaveBeenCalledOnce())

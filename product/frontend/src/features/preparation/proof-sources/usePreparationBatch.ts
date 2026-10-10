@@ -31,7 +31,7 @@ export function usePreparationBatch(project:string,onChanged:()=>Promise<unknown
     accept(next)
     return Boolean(next&&['RUNNING','CANCELLING'].includes(next.state))
   },[project,key,accept])
-  const live=useLiveRead(`${project}:${value?.operation_id??'latest'}`,read,2000)
+  const live=useLiveRead(`${project}:${value?.operation_id??'latest'}`,read,value&&['RUNNING','CANCELLING'].includes(value.state)?400:2000)
   const start=async(mode:PreparationBatchPlan['mode'],reviewed?:ProofContext)=>{
     if(pending.current)return
     pending.current=true;setSending(true);setError('')

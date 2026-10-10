@@ -39,7 +39,13 @@ function Invoke-ExternalWithProgressTimeout(
     if ($Invocation.Count -lt 1) { Fail-Development $Stage "缺少外部命令" "检查开发脚本参数" }
     $executable = $Invocation[0]
     [string[]]$arguments = if ($Invocation.Count -gt 1) { @($Invocation[1..($Invocation.Count - 1)]) } else { @() }
-    $process = Start-Process -FilePath $executable -ArgumentList $arguments -NoNewWindow -PassThru
+    # Windows PowerShell 5.1 的 Start-Process 回读可能丢失退出码；直接拥有 Process 句柄直到收口。
+    $startInfo = New-Object Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $executable
+    $startInfo.Arguments = $arguments -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $process = [Diagnostics.Process]::Start($startInfo)
     $activity = Get-DownloadActivityToken $ProgressPath
     $idle = [Diagnostics.Stopwatch]::StartNew()
     try {
@@ -71,6 +77,7 @@ function Prepare-Chromium {
     $probe = "from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); x=Path(p.chromium.executable_path).resolve(); p.stop(); print(x); raise SystemExit(0 if x.is_file() else 1)"
     $path = (& $script:Python -B -c $probe 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($path)) {
+        [Console]::Out.WriteLine("__JIEJIAN_BROWSER_PHASE__:download")
         Write-Host "正在准备 Playwright Chromium……" -ForegroundColor Cyan
         $downloadRoot = Join-Path $script:DevelopmentRoot "cache\downloads\playwright"
         New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
@@ -84,7 +91,7 @@ function Prepare-Chromium {
             [Environment]::SetEnvironmentVariable($name, $downloadRoot, "Process")
         }
         try {
-            Invoke-ExternalWithProgressTimeout "playwright" @($script:Python, "-B", "-m", "playwright", "install", "chromium") $downloadRoot 60 "检查网络，或在能正常访问 Playwright CDN 的真实用户 PowerShell 中重新运行 .\scripts\dev.ps1 prepare -ForcePrepare；完成后再继续"
+            Invoke-ExternalWithProgressTimeout "browser-download" @($script:Python, "-B", "-m", "playwright", "install", "chromium") $downloadRoot 60 "检查代理和网络后重新运行 start.cmd；已完成的环境准备会继续沿用，无需强制重装全部依赖"
         } finally {
             foreach ($name in @("TEMP", "TMP")) {
                 $record = $temporaryEnvironment[$name]
@@ -92,9 +99,10 @@ function Prepare-Chromium {
                 else { [Environment]::SetEnvironmentVariable($name, $null, "Process") }
             }
         }
+        [Console]::Out.WriteLine("__JIEJIAN_BROWSER_PHASE__:verify")
         $path = (& $script:Python -B -c $probe 2>$null | Out-String).Trim()
     }
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { Fail-Development "playwright" "Chromium 可执行文件探针失败" "检查网络和 var/development/tools/playwright 后重试" }
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { Fail-Development "browser-verify" "浏览器安装命令已结束，但尚未找到所需的 Chromium 可执行文件；下载 100% 不代表安装就绪" "查看本次启动日志中的 Playwright 输出，检查安装目录访问权限后重试 start.cmd" }
     $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = [IO.Path]::GetFullPath($path)
     Write-PrepareStatus "browser" "done"
 }

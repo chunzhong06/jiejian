@@ -189,7 +189,6 @@ samp {
 
 .sample-start-copy p { margin: 0; }
 .sample-start-copy p + p { margin-top: var(--space-8); }
-.sample-start-row > .ant-btn { flex-shrink: 0; }
 
 .changes-page {
   display: grid;
@@ -760,42 +759,10 @@ samp {
   border-top: 1px solid var(--color-border);
 }
 
-.work-receipt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-12);
-  margin-bottom: var(--space-20);
-  padding: var(--space-12) var(--space-16);
-  border-radius: var(--radius-small);
-  background: var(--color-safe-light);
-  border: 1px solid transparent;
-  color: var(--color-safe);
-  font-size: var(--font-secondary);
-}
-
-.work-receipt::before {
-  content: '✓';
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--color-safe-mark);
-  color: var(--color-on-accent);
-}
-
-.work-receipt>span {
-  flex: 1;
-}
-
-@media(max-width:600px) {
-  .work-receipt {
-    align-items: flex-start;
-  }
-}
-
+/* 操作完成回执统一使用成功色；关闭文字与正文末行对齐。 */
+.work-receipt { display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:last baseline;gap:var(--space-8) var(--space-12);width:min(100%,var(--layout-summary));margin:0 auto var(--space-20);padding:var(--space-16) var(--space-20);border:1px solid var(--color-border);border-radius:var(--radius-small);background:var(--color-safe-light);color:var(--color-safe);font-size:var(--font-secondary); }
+.work-receipt::before{content:'✓';display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--color-safe-light);color:var(--color-safe)}
+.work-receipt > .ant-btn{grid-column:3;grid-row:1;justify-self:end;color:inherit}
 .identity-login-steps.task-focus {
   max-width: 960px;
 }

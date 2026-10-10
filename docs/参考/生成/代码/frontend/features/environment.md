@@ -57,6 +57,6 @@
 
 - `OfficialSamplePanel`
 
-静态import / dot-source：`../../api/applications/experience`、`../../api/http`、`../../shared/ui/StatusBadge`、`antd`、`react`
+静态import / dot-source：`../../api/applications/experience`、`../../api/http`、`../../shared/runtime/useLiveRead`、`../../shared/ui/StatusBadge`、`antd`、`react`
 
 <!-- GENERATED:END -->

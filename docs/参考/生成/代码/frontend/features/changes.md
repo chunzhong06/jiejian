@@ -68,7 +68,7 @@
 
 - `ChangeRegistration`
 
-静态import / dot-source：`../../../api/changes/development`、`../../../api/changes/sourceChanges`、`../../../api/checks/repairs`、`../../../api/http`、`../pendingOperations`、`antd`、`react`
+静态import / dot-source：`../../../api/changes/development`、`../../../api/changes/sourceChanges`、`../../../api/checks/repairs`、`../../../api/http`、`../../../shared/ui/LoadingState`、`../pendingOperations`、`antd`、`react`
 
 ### `product/frontend/src/features/changes/repair/RepairComparison.test.tsx`
 

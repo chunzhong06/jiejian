@@ -72,7 +72,7 @@ export function ProofSourcesPanel({projectId,requestedSource,onBack,onChanged,on
     {providedPreparation?.(load)}
     {!providedMaterials && !embedded && context && sources.length>0 && !sources.every(item=>item.adopted&&preflightUsable(item)) && <ProofBatchPreparation context={context} onChanged={async()=>{await load();await onChanged()}}/>}
     {context && !sources.length && !editing && <div className="proof-empty-intro"><h3>{embedded ? '还没有这项结果的证明材料' : '先整理可以核对的证明材料'}</h3><p>{embedded ? '检查文件是否真的被取得，需要一份完整测试文件作为参照，并确认它属于哪个资源。' : '需要先找到业务记录或完整测试文件，让界鉴能核对规则约定的结果是否实际发生。'}</p><p className="editorial-muted">{providedMaterials ? '先使用检查材料页的“使用已提供的测试材料”，导入示例候选；也可以请 Agent 按当前需求整理。保存后点击“读取候选”。' : '可以交给 Agent 整理代码、账号和测试资源的对应。即使文件还没有生成，也能先确定获取办法；保存后点击“读取候选”。'}</p></div>}
-    {!providedMaterials && !embedded&&<AgentAssistEntry projectId={projectId} contextKey={`proof:${actionId??source?.config.action_id??'all'}:${source?.source_id??'new'}`}
+    {!providedMaterials && !embedded&&<AgentAssistEntry aside heading={<div><h2>当前证明材料</h2><p className="editorial-muted">{source ? `正在核对：${effect?.label ?? '所选结果证明'}` : '先整理可用的文件与业务记录，再核对并采用。'}</p></div>} projectId={projectId} contextKey={`proof:${actionId??source?.config.action_id??'all'}:${source?.source_id??'new'}`}
       title="整理这项结果的证明办法" description="先核对代码、账号和测试资源的对应；文件尚未产生时，也可以先整理来源候选。" returnTo={`/tests?materials=1&project_id=${projectId}${actionId?`&action_id=${actionId}`:''}`}
       onNavigate={onNavigate??onBack} actions={<Button disabled={busy||Boolean(pending)} onClick={()=>void load()}>读取候选</Button>}
       loadContext={async()=>{const value=await proofSourcesApi.context(projectId);const current=value.sources.find(item=>item.source_id===source?.source_id)

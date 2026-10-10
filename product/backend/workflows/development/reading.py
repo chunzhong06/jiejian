@@ -81,8 +81,18 @@ class DevelopmentReader:
             if delivery is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "交付不存在或不属于当前应用")
             run_id = work.development.latest_check_run(project_id, delivery_id)
+            same_source_run_id = None
+            if run_id is None:
+                snapshot = work.source_changes.snapshot(delivery.current_snapshot_id)
+                context = work.development.context(project_id, delivery.context_id)
+                if snapshot is not None and context is not None:
+                    same_source_run_id = work.runs.completed_for_source(project_id, snapshot.source_fingerprint, context.policy_epoch, delivery.created_at_us)
         value = dict(delivery=delivery.model_dump(mode="json"), run_id=run_id, lifecycle=None,
-            verdict=None, runtime_status="UNSUPPORTED", repair_status=None)
+            verdict=None, runtime_status="UNSUPPORTED", repair_status=None, same_source_run_id=None)
+        if same_source_run_id is not None and self._results is not None:
+            status = self._results.status(same_source_run_id, project_id=project_id)
+            if status.result_integrity == 'VALID':
+                value['same_source_run_id'] = same_source_run_id
         if run_id is None or self._results is None:
             return value
         status = self._results.status(run_id, project_id=project_id)

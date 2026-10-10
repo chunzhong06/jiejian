@@ -4,7 +4,7 @@ import hashlib
 import socket
 import time
 from pathlib import Path
-from threading import RLock
+from threading import RLock, Thread
 from uuid import uuid4
 from product.backend.core.errors import ErrorCode,JiejianError
 from product.backend.infra.runtime.process.tree import kernel_tree_has_exited
@@ -24,7 +24,7 @@ class NodeOfficialSampleExperience:
         self.changes,self.reader,self.repairs=changes,reader,repairs
         self._uow,self.archive,self.cancel_check=uow_factory,archive_project,cancel_check
         self.clock=clock_us or (lambda:time.time_ns()//1000)
-        self._lock=RLock();self._operation=None
+        self._lock=RLock();self._operation=None;self._operation_thread=None
 
     def _workspace(self):
         with self._uow() as work:return work.sample_workspaces.latest()
@@ -45,7 +45,8 @@ class NodeOfficialSampleExperience:
         if job is None or job.state.value not in {'SUCCEEDED','FAILED','CANCELLED'}:return False
         return kernel_tree_has_exited({'kind':'windows-job','name':'jiejian-node-'+load.instance_id})
 
-    def status(self):
+    def status(self, *, lightweight=False):
+        running_operation=self._operation
         workspace=self._workspace();installation=self.manager.installation
         with self._uow() as work:history,_=work.environment_operations.list(1)
         operation=history[0] if history else None
@@ -56,9 +57,9 @@ class NodeOfficialSampleExperience:
             except JiejianError:pass
         active=bool(state and state['running']);exited=self._exited(workspace)
         lifecycle='RUNNING' if active else 'NOT_STARTED' if workspace is None else 'STOPPED' if exited else 'UNKNOWN'
-        if operation and operation['state']=='PENDING':lifecycle=('STOPPING' if operation['operation']=='stop' else 'STARTING') if self._operation==operation['operation_id'] else 'UNKNOWN'
+        if operation and operation['state']=='PENDING':lifecycle=('STOPPING' if operation['operation']=='stop' else 'STARTING') if running_operation==operation['operation_id'] else 'UNKNOWN'
         pending=();prepared=False
-        if active:
+        if active and not lightweight:
             materials=self.preparation.get(project);prepared=materials.preparation_complete
             pending=() if prepared else ('PREPARATION_REQUIRED',)
         return OfficialExperienceView(available=installation.available,display_name=installation.display_name,runtime_kind='NODE_ESM',
@@ -67,11 +68,14 @@ class NodeOfficialSampleExperience:
             scenario_prepared=prepared,scenario_version=None if workspace is None else OfficialScenarioVersion(workspace['scenario_version']),
             scenario_changed_at_us=None if workspace is None else workspace['created_at_us'],pending_tasks=pending,lifecycle=lifecycle,
             history_project_id=project,workspace_retained=workspace is not None,recovery_state='OWNED_RUNNING' if active else 'EXITED' if exited else 'OWNERSHIP_UNCONFIRMED',
-            operation_id=None if operation is None else operation['operation_id'],operation_state=None if operation is None else ('UNKNOWN' if operation['state']=='PENDING' and self._operation!=operation['operation_id'] else operation['state']),
+            operation_phase=None if operation is None else operation.get('progress',{}).get('phase'),
+            operation_started_at_us=None if operation is None else operation['started_at_us'],
+            operation_finished_at_us=None if operation is None else operation['finished_at_us'],
+            operation_id=None if operation is None else operation['operation_id'],operation_state=None if operation is None else ('UNKNOWN' if operation['state']=='PENDING' and running_operation!=operation['operation_id'] else operation['state']),
             last_error_code=None if operation is None else operation['error_code'],
-            vulnerable_change_id=self._change_id(project,('VULNERABLE','EXPOSE_REVOKE')) if project else None,
-            repair_change_id=self._change_id(project,('FIXED',)) if project else None,
-            current_change_id=self._change_id(project,(workspace['scenario_version'],)) if project else None)
+            vulnerable_change_id=self._change_id(project,('VULNERABLE','EXPOSE_REVOKE')) if project and not lightweight else None,
+            repair_change_id=self._change_id(project,('FIXED',)) if project and not lightweight else None,
+            current_change_id=self._change_id(project,(workspace['scenario_version'],)) if project and not lightweight else None)
 
     def _change_id(self,project,stages):
         workspace=self._workspace()
@@ -83,15 +87,16 @@ class NodeOfficialSampleExperience:
     @staticmethod
     def _key(workspace,stage):return hashlib.sha256(('gallery:'+workspace+':'+stage).encode()).hexdigest()[:32]
 
-    def start(self,*,consent,operation_id=None):
+    def start(self,*,consent,operation_id=None,wait=True):
         if consent is not True:raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,'启动示例需要明确同意')
-        return self._operate('start',operation_id,lambda:self._start(False))
+        return self._operate('start',operation_id,lambda:self._start(False),wait=wait)
 
-    def reset(self,*,consent,operation_id=None):
+    def reset(self,*,consent,operation_id=None,wait=True):
         if consent is not True:raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,'重置示例需要明确同意')
-        return self._operate('reset',operation_id,lambda:self._start(True))
+        return self._operate('reset',operation_id,lambda:self._start(True),wait=wait)
 
     def _start(self,reset):
+        self._progress(phase='CHECKING_PREVIOUS')
         old=self._workspace()
         if old and old['runtime_kind']=='NODE_ESM':
             try:
@@ -101,7 +106,8 @@ class NodeOfficialSampleExperience:
             if running:self._stop()
         if not self._exited(old):raise JiejianError(ErrorCode.STATE_PRECONDITION,'旧示例退出尚未确认，请先核对原实例')
         if old and old['project_id']:self.archive(old['project_id'])
-        workspace_id='wsp_'+uuid4().hex
+        workspace_id='wsp_'+hashlib.sha256(self._operation.encode()).hexdigest()[:32]
+        self._progress(phase='CREATING_PROJECT')
         source=self.manager.copy_node_source(workspace_id)
         connection=self.understanding.connect(source,project_name=self.manager.installation.display_name)
         project=connection.project.project_id
@@ -112,10 +118,12 @@ class NodeOfficialSampleExperience:
         self._launch(workspace,port,self._key(workspace_id,'start'))
 
     def _launch(self,workspace,port,operation):
+        self._progress(phase='LOADING_APPLICATION')
         project=workspace['project_id'];value=self.understanding.get(project)
         preview=self.runtime.preview(project,entry=self.manager.installation.entry,port=port,revision=value.revision,consent_source_read=True)
         self.runtime.start(project,entry=preview.entry,port=port,revision=preview.revision,preview_fingerprint=preview.preview_fingerprint,operation_id=operation,consent_execute=True)
         self.runtime.supervisor.start()
+        self._progress(phase='WAITING_APPLICATION')
         deadline=time.monotonic()+25
         while time.monotonic()<deadline:
             receipt=self.runtime.operation(project,operation)
@@ -129,12 +137,15 @@ class NodeOfficialSampleExperience:
         self._finish_connection(workspace,port)
 
     def _finish_connection(self,workspace,port):
+        self._progress(phase='CHECKING_CONNECTION')
         project=workspace['project_id'];value=self.understanding.get(project)
         value=self.understanding.confirm_endpoint(project,endpoint=f'http://127.0.0.1:{port}',revision=value.revision)
+        self._progress(phase='READING_SOURCE')
         self.understanding.analyze_source_for_change(project,revision=value.revision)
 
     def reconcile(self):
         with self._lock:
+            if self._operation_thread and self._operation_thread.is_alive():return self.status(lightweight=True)
             workspace=self._workspace()
             with self._uow() as work:history,_=work.environment_operations.list(1)
             operation=history[0] if history else None
@@ -142,7 +153,7 @@ class NodeOfficialSampleExperience:
                 and operation['project_id']==workspace['project_id'] and operation['state'] in {'PENDING','UNKNOWN'}):
                 state=self.runtime.state(workspace['project_id'])
                 update=None
-                if state['running'] and operation['operation'] in {'start','reset'}:
+                if state['running'] and operation['operation'] in {'start','reset','resume'}:
                     self._idle(workspace['project_id'])
                     self._finish_connection(workspace,state['configuration']['port'])
                     update=dict(state='SUCCEEDED',finished_at_us=self.clock(),error_code=None)
@@ -169,8 +180,21 @@ class NodeOfficialSampleExperience:
             prepare_gallery_materials(self,current.project_id)
             return self.status()
 
-    def _active(self):
-        value=self.status()
+    def prepare_step(self,project,progress,*,cancel=False):
+        from product.backend.workflows.examples.gallery_preparation import advance_gallery_preparation
+        if cancel:return advance_gallery_preparation(self,project,progress,cancel=True)
+        current=self.status(lightweight=True)
+        if current.project_id!=project or not current.active or current.operation_state=='PENDING':
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'示例实例已经变化，请核对当前运行')
+        if not progress:
+            self._idle(project)
+            if self.preparation.get(project).preparation_complete:
+                return dict(phase='COMPLETED',reused=True,finished_at_us=self.clock())
+        return advance_gallery_preparation(self,project,progress,cancel=cancel)
+
+    def _active(self, *, lightweight=False):
+        value=self.status(lightweight=lightweight)
+        if value.operation_state == 'PENDING':raise JiejianError(ErrorCode.STATE_PRECONDITION,'示例接入仍在准备，请等待当前操作完成')
         if not value.active:raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前没有正在运行的官方示例')
         return value
 
@@ -181,7 +205,7 @@ class NodeOfficialSampleExperience:
 
     def switch_version(self,*,version,repair_reference=None):
         with self._lock:
-            current=self._active();workspace=self._workspace();self._idle(current.project_id)
+            current=self._active(lightweight=True);workspace=self._workspace();self._idle(current.project_id)
             version=OfficialScenarioVersion(version)
             if version is OfficialScenarioVersion.EVIDENCE_LIMITED:return self.set_observation(available=False)
             saved=self.changes.receipt(current.project_id,'DELIVER',self._key(workspace['workspace_id'],version.value))
@@ -205,7 +229,7 @@ class NodeOfficialSampleExperience:
             return self.status()
 
     def development_journey(self):
-        current=self._active();workspace=self._workspace();project=current.project_id
+        current=self._active(lightweight=True);workspace=self._workspace();project=current.project_id
         fingerprint=self.understanding.inspect_source_fingerprint(project)
         with self._uow() as work:
             if workspace['scenario_version']=='BASELINE':
@@ -220,15 +244,19 @@ class NodeOfficialSampleExperience:
         state=self.repairs.evaluate(project)
         verified=bool(state.tasks) and all(item.status=='VERIFIED' for item in state.tasks)
         verdict=None;run_id=None
-        records=self.reader.list_for_project(project)
-        if current.current_change_id:
-            detail=self.changes.delivery_details(project,current.current_change_id)
+        # 已有精确交付时只读其检查，不能先遍历并校验全部历史发布包。
+        change_id=self._change_id(project,(workspace['scenario_version'],))
+        if change_id:
+            detail=self.changes.delivery_details(project,change_id)
             verification=detail['verification']
             records=[] if verification is None or verification['run_id'] is None else [self.reader.status(verification['run_id'],project_id=project)]
+        else:
+            records=self.reader.list_for_project(project)
+        policy_epoch=self.boundaries.view(project).policy_epoch
         for item in records:
             if item.result_integrity!='VALID':continue
             package=self.reader.package(item.run.run_id,project_id=project)
-            if package.request.source_fingerprint==fingerprint and package.request.policy_epoch==self.boundaries.view(project).policy_epoch:
+            if package.request.source_fingerprint==fingerprint and package.request.policy_epoch==policy_epoch:
                 run_id=item.run.run_id;verdict=item.run.verdict.value;break
         return OfficialDevelopmentJourney(project_id=project,implementation='CUSTOM' if external else workspace['scenario_version'],delivery_source='EXTERNAL_CODE' if external else 'PRESET_DEMONSTRATION',
             run_id=run_id,verdict=verdict,repair_verified=verified,can_optimize=not external and workspace['scenario_version']=='BASELINE' and verdict=='PASS',
@@ -266,6 +294,9 @@ class NodeOfficialSampleExperience:
         return True
 
     def close(self):
+        if self._operation_thread and self._operation_thread.is_alive():
+            self._operation_thread.join(timeout=30)
+            if self._operation_thread.is_alive():raise JiejianError(ErrorCode.PROCESS_TREE_FAILED,'环境操作尚未停止，不能释放数据库')
         workspace=self._workspace()
         if workspace and workspace['runtime_kind']=='NODE_ESM' and workspace['project_id']:
             with self._uow() as work:project=work.projects.get(workspace['project_id'])
@@ -274,45 +305,110 @@ class NodeOfficialSampleExperience:
                 if self._exited(workspace):self._stop()
                 else:self.stop()
 
+    def resume(self, *, consent, operation_id=None, wait=True):
+        """显式续用未归档的当前项目；不恢复未知所有权，也不覆盖用户源码。"""
+        if consent is not True:
+            raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,'继续示例需要明确同意')
+        return self._operate('resume',operation_id,self._resume,wait=wait)
+
+    def _resume(self):
+        workspace=self._workspace()
+        if not workspace or workspace['runtime_kind']!='NODE_ESM':
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'没有可继续的当前示例')
+        with self._uow() as work:
+            project=work.projects.get(workspace['project_id'])
+        if project is None or project.status.value=='ARCHIVED':
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'已归档项目不能继续示例')
+        self._progress(project_id=workspace['project_id'],experience_id='exp_'+workspace['workspace_id'][4:],phase='CHECKING_PREVIOUS')
+        if self.runtime.state(workspace['project_id'])['running']:
+            return
+        if not self._exited(workspace):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'旧示例退出尚未确认')
+        self._idle(workspace['project_id'])
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        self._launch(workspace,port,self._key(workspace['workspace_id'],self._operation))
+
     def _progress(self,**updates):
         if not self._operation:return
         with self._uow() as work:
-            value=work.environment_operations.get(self._operation);value.update(updates);work.environment_operations.save(value);work.commit()
+            work.acquire_write_lock()
+            value=work.environment_operations.get(self._operation)
+            phase=updates.pop('phase',None)
+            if phase:
+                progress=dict(value.get('progress',{}))
+                timings=list(progress.get('timings',[]))
+                if timings and 'finished_at_us' not in timings[-1]:timings[-1]['finished_at_us']=self.clock()
+                timings.append(dict(phase=phase,started_at_us=self.clock()))
+                value['progress']=dict(phase=phase,timings=timings)
+            value.update(updates);work.environment_operations.save(value);work.commit()
 
-    def _operate(self,operation,operation_id,action):
+    def _operate(self,operation,operation_id,action,*,wait=True):
+        """先保存受理回执；同步调用也只等待同一后台操作，不另走执行链。"""
         operation_id=request_uuid(operation_id or str(uuid4()))
         with self._lock:
             with self._uow() as work:
+                work.acquire_write_lock()
                 previous=work.environment_operations.get(operation_id)
                 if previous is not None:
                     if previous['operation']!=operation:raise JiejianError(ErrorCode.STATE_PRECONDITION,'原操作键用于另一项操作')
-                    # 重放只能给出原操作的所属项目；后来的新实例不能冒充旧操作成功。
-                    view=self.status()
-                    same=view.project_id==previous['project_id']
-                    return view.model_copy(update=dict(project_id=previous['project_id'],experience_id=previous['experience_id'],
-                        operation_id=previous['operation_id'],operation_state=previous['state'],active=view.active and same,
-                        origin=view.origin if same else None,scenario_prepared=view.scenario_prepared and same,
-                        scenario_version=view.scenario_version if same else None,scenario_changed_at_us=view.scenario_changed_at_us if same else None,
-                        vulnerable_change_id=view.vulnerable_change_id if same else None,repair_change_id=view.repair_change_id if same else None,current_change_id=view.current_change_id if same else None,
-                        pending_tasks=view.pending_tasks if same else (),lifecycle=view.lifecycle if same else 'STOPPED'))
-                history,_=work.environment_operations.list(1)
-                if history and history[0]['state']=='PENDING':raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先核对原环境操作')
-                workspace=work.sample_workspaces.latest();project=None if workspace is None else workspace['project_id']
-                work.environment_operations.save(dict(operation_id=operation_id,operation=operation,state='PENDING',started_at_us=self.clock(),finished_at_us=None,
-                    experience_id=None if workspace is None else 'exp_'+workspace['workspace_id'][4:],project_id=project,error_code=None,cleanup_confirmed=False));work.commit()
-            self._operation=operation_id
-            try:action()
-            except Exception as error:
-                code=error.code if isinstance(error,JiejianError) else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
-                self._progress(state='UNKNOWN',finished_at_us=self.clock(),error_code=code)
-                if isinstance(error,JiejianError):raise
-                raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED,'官方示例操作未完成，请核对原状态') from error
-            else:self._progress(state='SUCCEEDED',finished_at_us=self.clock(),cleanup_confirmed=operation=='stop')
-            finally:self._operation=None
-            return self.status()
+                else:
+                    if self._operation_thread and self._operation_thread.is_alive():raise JiejianError(ErrorCode.STATE_PRECONDITION,'请等待当前环境操作收口')
+                    history,_=work.environment_operations.list(1)
+                    if history and history[0]['state']=='PENDING':raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先核对原环境操作')
+                    workspace=work.sample_workspaces.latest()
+                    work.environment_operations.save(dict(operation_id=operation_id,operation=operation,state='PENDING',started_at_us=self.clock(),finished_at_us=None,
+                        experience_id=None if workspace is None else 'exp_'+workspace['workspace_id'][4:],project_id=None if workspace is None else workspace['project_id'],
+                        error_code=None,cleanup_confirmed=False,progress=dict(phase='ACCEPTED',timings=[])))
+                    work.commit()
+            if previous is None:
+                self._operation=operation_id
+                self._operation_thread=Thread(target=self._run_operation,args=(operation,action),name='jiejian-environment-operation',daemon=True)
+                self._operation_thread.start()
+        if wait:
+            deadline=time.monotonic()+35
+            while time.monotonic()<deadline:
+                with self._uow() as work:receipt=work.environment_operations.get(operation_id)
+                if receipt['state']!='PENDING':break
+                time.sleep(.05)
+            else:raise JiejianError(ErrorCode.STATE_PRECONDITION,'环境操作仍在进行，请查询原操作')
+            if receipt['state']!='SUCCEEDED':
+                raise JiejianError(receipt['error_code'] or ErrorCode.OFFICIAL_SAMPLE_START_FAILED,'环境操作未完成，请核对原状态')
+        return self.operation_view(operation_id,lightweight=not wait)
+
+    def operation_view(self,operation_id,*,lightweight=True):
+        operation_id=request_uuid(operation_id)
+        # 先固定本进程的责任，再读取回执，避免终态提交后清理句柄把旧快照误标成 UNKNOWN。
+        with self._lock:running_operation=self._operation
+        with self._uow() as work:receipt=work.environment_operations.get(operation_id)
+        if receipt is None:raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'未找到本次环境操作')
+        view=self.status(lightweight=lightweight)
+        same=view.project_id==receipt['project_id']
+        return view.model_copy(update=dict(operation_id=operation_id,
+            operation_state='UNKNOWN' if receipt['state']=='PENDING' and running_operation!=operation_id else receipt['state'],
+            project_id=receipt['project_id'],experience_id=receipt['experience_id'],active=view.active and same,
+            origin=view.origin if same else None,scenario_prepared=view.scenario_prepared and same,
+            scenario_version=view.scenario_version if same else None,scenario_changed_at_us=view.scenario_changed_at_us if same else None,
+            vulnerable_change_id=view.vulnerable_change_id if same else None,repair_change_id=view.repair_change_id if same else None,
+            current_change_id=view.current_change_id if same else None,history_project_id=receipt['project_id'],
+            pending_tasks=view.pending_tasks if same else (),last_error_code=receipt['error_code'],
+            recovery_state=view.recovery_state if same else 'NONE',workspace_retained=view.workspace_retained and same,
+            lifecycle=view.lifecycle if same else 'STOPPED',
+            operation_phase=receipt.get('progress',{}).get('phase'),operation_started_at_us=receipt['started_at_us'],
+            operation_finished_at_us=receipt['finished_at_us']))
+
+    def _run_operation(self,operation,action):
+        try:
+            action()
+        except Exception as error:
+            code=error.code if isinstance(error,JiejianError) else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
+            self._progress(state='UNKNOWN',finished_at_us=self.clock(),error_code=code,phase='NEEDS_REVIEW')
+        else:
+            self._progress(state='SUCCEEDED',finished_at_us=self.clock(),cleanup_confirmed=operation=='stop',phase='COMPLETED')
+        finally:
+            self._operation=None
 
     def history(self,*,limit=25):
         if not 1<=limit<=100:raise JiejianError(ErrorCode.INPUT_INVALID,'历史上限为100')
         with self._uow() as work:items,more=work.environment_operations.list(limit)
-        for item in items:item.pop('cleanup_confirmed',None)
-        return dict(items=items,has_more=more)
+        return {'items':items,'has_more':more}

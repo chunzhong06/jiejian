@@ -9,13 +9,14 @@
 .work-aside > .ant-btn { margin-top: var(--space-16); }
 
 /* 提示常在普通文流中条件挂载；网格/Space 已负责间距时不再叠加外距。 */
-[data-product=jiejian] .ant-alert { padding: var(--space-16); border-radius: var(--radius-small); margin-block: var(--space-16); }
+[data-product=jiejian] .ant-alert { padding: var(--space-16); border-radius: var(--radius-small); margin-block: var(--space-16);column-gap:var(--space-16);align-items:last baseline; }
 [data-product=jiejian] :is(.editorial-page,.work-stack,.permission-review,.proof-detail,.runtime-panel .ant-card-body,.application-setup,.application-step,.llm-settings-section,.feedback-stack,.ant-space-item,.notification-stack) > .ant-alert { margin-block: 0; }
 [data-product=jiejian] .ant-alert:first-child { margin-top: 0; }
 [data-product=jiejian] .ant-alert:last-child { margin-bottom: 0; }
 [data-product=jiejian] .ant-alert-message { line-height: var(--font-leading); }
 [data-product=jiejian] .ant-alert-description { margin-top: var(--space-8); }
-[data-product=jiejian] .ant-alert-action { margin-inline-start: var(--space-16); }
+[data-product=jiejian] .ant-alert-action { margin-inline-start:0; }
+[data-product=jiejian] .ant-alert > .ant-alert-icon { margin-inline-end:0;align-self:center; }
 [data-product=jiejian] .ant-alert .ant-btn { white-space: normal; height: auto; min-height: var(--control-normal); }
 
 /* 标签到独立段落留 12px；同行标签依赖行布局的 gap，不能给所有标签附加外距。 */
@@ -49,7 +50,7 @@
 @media(max-width: 800px) { .work-surface,.work-aside { padding: var(--space-20); } }
 @media(max-width: 600px) {
   [data-product=jiejian] .ant-alert { flex-wrap: wrap; row-gap: var(--space-12); }
-  [data-product=jiejian] .ant-alert-action { margin-inline-start: 0; flex-basis: 100%; }
+  [data-product=jiejian] .ant-alert-action { margin-inline-start: 0; flex-basis: 100%;text-align:right; }
   [data-product=jiejian] :is(.ant-modal-content,.ant-drawer-body) { padding: var(--space-20); }
 }
 

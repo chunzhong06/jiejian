@@ -42,7 +42,11 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     const selection = selectionEpoch.current
     try {
       // 等来源和运行状态一起返回后才恢复，避免旧任务先闪现并触发工作区回读。
-      const [projectRead, environmentRead] = await Promise.allSettled([projectsApi.projects(), experienceApi.status()])
+      const [projectRead, environmentRead] = await Promise.allSettled([projectsApi.projects().then(current => {
+        // 列表先供查看；自动恢复示例任务仍等待环境确认，避免显示已退出的实例。
+        if (alive.current && epoch === projectsEpoch.current) setProjects(current)
+        return current
+      }), experienceApi.status()])
       if (!alive.current || epoch !== projectsEpoch.current) return []
       if (projectRead.status === 'rejected') throw projectRead.reason
       const current = projectRead.value

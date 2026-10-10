@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import subprocess
 import threading
@@ -106,9 +107,19 @@ def open_gui_browser(url: str, var_dir: Path, *, session: GuiBrowserSession, sys
             try:
                 profile = RuntimePaths(var_dir.resolve()).gui_browser
                 profile.mkdir(parents=True, exist_ok=True)
+                # Windows Chromium 会把自动下载的词典写到程序旁；新建应用配置关闭拼写服务，既有偏好不覆盖。
+                preferences = profile / "Default" / "Preferences"
+                preferences.parent.mkdir(exist_ok=True)
+                try:
+                    with preferences.open("x", encoding="utf-8") as stream:
+                        json.dump({"browser": {"enable_spellchecking": False},
+                                   "spellcheck": {"dictionaries": [], "dictionary": "", "use_spelling_service": False}}, stream)
+                except FileExistsError:
+                    pass
                 process = spawn_managed_process(
                     [str(Path(executable).resolve()), f"--user-data-dir={profile}",
                      "--disable-extensions", "--disable-infobars", "--no-first-run", "--no-default-browser-check",
+                     "--disable-background-networking", "--disable-component-update",
                      f"--app={url}"],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,

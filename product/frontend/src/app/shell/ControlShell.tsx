@@ -230,9 +230,9 @@ function ControlShellContent() {
     return selected && <BusinessBoundaryPage requestedActionId={params.get('action_id')} key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected}
     requestedIntentId={params.get('intent_id')} requestedIntentRevision={params.has('revision') ? candidateRevision : undefined} onNavigate={navigateRecoveryTarget}
     onRuleRoute={(id,revision)=>navigate(id ? `/permissions?project_id=${selected.project_id}&intent_id=${id}&revision=${revision}` : '/permissions')}
-    requestedCandidateId={params.get('candidate')} requestedCandidateRevision={Number.isInteger(candidateRevision) && candidateRevision > 0 ? candidateRevision : undefined}
+    requestedCandidatesView={params.get('view') === 'candidates'} requestedCandidateId={params.get('candidate')} requestedCandidateRevision={Number.isInteger(candidateRevision) && candidateRevision > 0 ? candidateRevision : undefined}
     candidateRecoveryOperation={params.get('rule_operation_id')}
-    onCandidateRoute={(id, revision, operation) => { const next = new URLSearchParams(location.search); next.set('project_id', selected.project_id); if(id) {next.set('candidate', id); next.set('revision', String(revision))} else {next.delete('candidate'); next.delete('revision')} if (operation) next.set('rule_operation_id', operation); else next.delete('rule_operation_id'); navigate(`/permissions?${next.toString()}`, {replace:true}) }}
+    onCandidateRoute={(id, revision, operation) => { const next = new URLSearchParams(location.search); next.set('project_id', selected.project_id); next.set('view', 'candidates'); if(id) {next.set('candidate', id); next.set('revision', String(revision))} else {next.delete('candidate'); next.delete('revision')} if (operation) next.set('rule_operation_id', operation); else next.delete('rule_operation_id'); navigate(`/permissions?${next.toString()}`, {replace:true}) }}
     requestedProposalId={route === '/workspace' ? workspace?.primary_task?.proposal_id : new URLSearchParams(location.search).get('proposal_id')}
     onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onFeedback={rememberReceipt}
     providedDownloadChoiceRequired={experience?.runtime_kind==='NODE_ESM'} onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
@@ -251,7 +251,7 @@ function ControlShellContent() {
     if (route === '/tools') {
       const params = new URLSearchParams(location.search), target = params.get('return_to')
       const canReturn = params.get('source_project_id') === selected?.project_id && target && ['/permissions','/tests','/changes','/history'].includes(target.split('?')[0])
-      return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} onReturn={canReturn ? () => navigate(target) : undefined} />
+      return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} sourceProjectId={selected?.project_id} onReturn={canReturn ? () => navigate(target) : undefined} />
     }
     if (route === '/environment') return <EnvironmentPage onRemoveCurrent={() => setRemoveConfirmOpen(true)} project={selected} workspace={workspace} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { const started = !experience?.active || experience.project_id !== next.project_id; workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next); if (started) navigate('/workspace') } }}/>
     if (route === '/application') {
@@ -289,7 +289,7 @@ function ControlShellContent() {
       <ModuleNavigation route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} /></div>
       <Layout.Content className="content"><div className="content-frame" id="main-content" tabIndex={-1}>
         {selected&&['/tests','/history'].includes(route)&&<CheckSectionNavigation route={route} onNavigate={navigate}/>}
-        {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
+        {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>关闭</Button></div>}
         {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>
     </Layout>
     <NotificationCenter resourceNotice={<FrontendBuildNotice identity={systemStatus.frontend_identity} blocked={editing || Boolean(checkActivity.activeRunId)}/>} activity={!['/tests','/workspace'].includes(route) ? checkActivity.completed ? {

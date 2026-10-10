@@ -8,15 +8,16 @@ import { EditorialPage } from '../../shared/ui/Editorial'
 import MCPAccessCard from './MCPAccessCard'
 
 export function ToolsPage({
-  projects, onError, onStatusChange, onReturn,
+  projects, onError, onStatusChange, onReturn, sourceProjectId,
 }: {
   projects: ProjectDto[]
   onError: (error: ApiError) => void
   onStatusChange?: (view: MCPAccessView) => void
   onReturn?: () => void
+  sourceProjectId?: string
 }) {
   return <EditorialPage label="开发工具连接与授权" width="summary">
     {onReturn && <Button type="link" onClick={onReturn}>返回刚才的任务</Button>}
-    <MCPAccessCard open projects={projects} onError={onError} onStatusChange={onStatusChange} />
+    <MCPAccessCard open projects={projects} onError={onError} onStatusChange={onStatusChange} sourceProjectId={sourceProjectId} />
   </EditorialPage>
 }

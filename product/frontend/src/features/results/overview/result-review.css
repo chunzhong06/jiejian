@@ -124,6 +124,7 @@
 .result-path-unavailable h3 { margin:0 0 var(--space-12);font-size:var(--font-section); }
 .result-path-unavailable p { color:var(--color-secondary);line-height:1.8; }
 .result-agent-handoff { width:min(100%,var(--layout-summary));margin:var(--space-24) auto; }
+.result-overview-header.agent-task-banner { padding-block-end:var(--space-24); }
 [data-density="compact"] .result-investigation-body { width:min(100%,1040px);margin-inline:auto; }
 .evidence-verification > header { display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-block-end:24px; }
 .evidence-verification > header h3 { margin-block:8px 16px; }

@@ -28,6 +28,15 @@ class RuleCandidateRevisionRow(Base):
     payload: Mapped[str] = mapped_column(Text)
 
 
+class RuleCandidateVisibilityRow(Base):
+    __tablename__ = "rule_candidate_visibility"
+    __table_args__ = (CheckConstraint("version >= 1", name="version_positive"),)
+    candidate_id: Mapped[str] = mapped_column(String(36), ForeignKey("rule_candidates.candidate_id", ondelete="RESTRICT"), primary_key=True)
+    archived: Mapped[bool] = mapped_column(Boolean)
+    version: Mapped[int] = mapped_column(Integer)
+    updated_at_us: Mapped[int] = mapped_column(BigInteger)
+
+
 class RuleCandidateProposalRow(Base):
     __tablename__ = "rule_candidate_proposals"
     __table_args__ = (ForeignKeyConstraint(["candidate_id", "revision"],
@@ -92,10 +101,34 @@ class RuleCandidateRepository:
         row = self._session.get(RuleCandidateRevisionRow, (candidate_id, revision or head.revision))
         return None if row is None else read_candidate_revision(row.payload)
 
-    def list(self, project_id: str, *, offset: int = 0, limit: int = 50):
-        rows = self._session.scalars(select(RuleCandidateRow).where(RuleCandidateRow.project_id == project_id)
-            .order_by(RuleCandidateRow.created_at_us.desc(), RuleCandidateRow.candidate_id).offset(offset).limit(limit)).all()
-        return tuple(self.get(project_id, row.candidate_id, row.revision) for row in rows)
+    def list(self, project_id: str, *, offset: int = 0, limit: int = 50, archived: bool | None = None):
+        query = select(RuleCandidateRevisionRow.payload).join(RuleCandidateRow,
+            (RuleCandidateRow.candidate_id == RuleCandidateRevisionRow.candidate_id)
+            & (RuleCandidateRow.revision == RuleCandidateRevisionRow.revision)).where(RuleCandidateRow.project_id == project_id)
+        if archived is not None:
+            query = query.outerjoin(RuleCandidateVisibilityRow, RuleCandidateVisibilityRow.candidate_id == RuleCandidateRow.candidate_id)
+            query = query.where(RuleCandidateVisibilityRow.archived.is_(True) if archived else
+                (RuleCandidateVisibilityRow.archived.is_(False) | RuleCandidateVisibilityRow.candidate_id.is_(None)))
+        rows = self._session.scalars(query.order_by(RuleCandidateRow.created_at_us.desc(), RuleCandidateRow.candidate_id).offset(offset).limit(limit)).all()
+        return tuple(read_candidate_revision(payload) for payload in rows)
+
+    def visibility(self, candidate_id: str):
+        row = self._session.get(RuleCandidateVisibilityRow, candidate_id)
+        return {"archived": False, "version": 0} if row is None else {"archived": row.archived, "version": row.version}
+
+    def set_visibility(self, candidate_id: str, *, archived: bool, expected_version: int, now_us: int):
+        # 外层持有写锁；版本只属于展示状态，不推进不可变候选修订。
+        current = self.visibility(candidate_id)
+        if current["version"] != expected_version:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选归档状态已变化，请重新读取")
+        row = self._session.get(RuleCandidateVisibilityRow, candidate_id)
+        if row is None:
+            row = RuleCandidateVisibilityRow(candidate_id=candidate_id, archived=archived, version=1, updated_at_us=now_us)
+            self._session.add(row)
+        else:
+            row.archived, row.version, row.updated_at_us = archived, expected_version + 1, now_us
+        _flush(self._session)
+        return self.visibility(candidate_id)
 
     def head_references(self, project_id: str):
         rows = self._session.execute(select(RuleCandidateRow.candidate_id, RuleCandidateRow.revision)
@@ -121,6 +154,10 @@ class RuleCandidateRepository:
     def proposal_id(self, candidate_id: str, revision: int):
         row = self._session.get(RuleCandidateProposalRow, (candidate_id, revision))
         return None if row is None else row.proposal_id
+
+    def proposal_ids(self, candidate_id: str):
+        return tuple(self._session.scalars(select(RuleCandidateProposalRow.proposal_id)
+            .where(RuleCandidateProposalRow.candidate_id == candidate_id)).all())
 
     def link_proposal(self, candidate_id: str, revision: int, proposal_id: str, *, content_hash: str, decision_digest: str):
         self._session.add(RuleCandidateProposalRow(candidate_id=candidate_id, revision=revision, proposal_id=proposal_id,

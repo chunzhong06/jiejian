@@ -27,7 +27,8 @@ param(
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
     [Parameter(DontShow = $true)][long]$DisplaySpinnerStartedAt = 0,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStopEvent = "",
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii
+    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii,
+    [Parameter(DontShow = $true)][switch]$DisplaySpinnerPanel
 )
 
 $ErrorActionPreference = "Stop"
@@ -142,7 +143,7 @@ try {
     try { $supportsVirtualTerminal = [bool]$Host.UI.SupportsVirtualTerminal } catch { $supportsVirtualTerminal = $false }
     $script:DisplayUnicode = $script:DisplayInteractive -and
         [Console]::OutputEncoding.CodePage -eq 65001 -and
-        $Host.UI.RawUI.WindowSize.Width -ge 72 -and
+        $Host.UI.RawUI.WindowSize.Width -ge 44 -and
         $supportsVirtualTerminal
     $hasTerminalHint = -not [string]::IsNullOrWhiteSpace([string]$env:WT_SESSION) -or
         -not [string]::IsNullOrWhiteSpace([string]$env:COLORTERM) -or
@@ -167,7 +168,7 @@ foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.
 }
 
 if ($DisplaySpinnerProcess) {
-    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent } catch { }
+    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent ([bool]$DisplaySpinnerPanel) } catch { }
     exit 0
 }
 
@@ -212,6 +213,7 @@ try {
         Write-Stage "prepare" "确认准备完成"
         Write-Startup "准备完成: $script:VarDir"
         Write-DisplayResult "启动条件" "完成" $true ("运行目录：{0}" -f $script:VarDir)
+        Set-StartupStatus "准备完成" "环境已经准备好" "本次只准备环境，没有启动应用服务。"
         Complete-DisplayStage
         exit 0
     }
@@ -237,6 +239,7 @@ try {
         "--official-sample-root", (Join-Path $script:ProjectRoot "samples\web\digital_gallery")
     ) "serve" 50
     Write-DisplayResult "本地服务" "已停止" $true
+    Set-StartupStatus "已停止" "界鉴已停止" "本次服务已退出，保存的资料仍保留在运行目录。"
     Complete-DisplayStage
     exit 0
 } catch {
@@ -247,6 +250,7 @@ try {
 } finally {
     # --- 阶段：恢复调用者环境并精确清理本轮临时资源 ---
     Stop-WaitIndicator
+    Close-StartupPanel
     if ($script:DownloadTemp -and (Test-Path -LiteralPath $script:DownloadTemp)) {
         Remove-Item -LiteralPath $script:DownloadTemp -Recurse -Force -ErrorAction SilentlyContinue
     }

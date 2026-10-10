@@ -86,6 +86,12 @@ class RuleCandidateProposalRequest(ApiModel):
     revision: int = Field(ge=1)
 
 
+class RuleCandidateVisibilityRequest(ApiModel):
+    archived: bool
+    revision: int = Field(ge=1)
+    expected_version: int = Field(ge=0)
+
+
 class RulePreviewRequest(ApiModel):
     reference: dict[str, object]
     situation: dict[str, object] | None = None
@@ -142,8 +148,9 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         return data_response(context.rule_details.read(project_id,intent_id,revision=revision))
 
     @router.get(f"{prefix}/rule-context", response_model=ApiResponse)
-    def rule_context(project_id: str, offset: int = 0):
-        return data_response(jsonable_encoder(context.rule_candidates.context(project_id, offset=offset)))
+    def rule_context(project_id: str, offset: int = 0, archived: bool = False, include_preparation: bool = True):
+        return data_response(jsonable_encoder(context.rule_candidates.context(project_id, offset=offset,
+            archived=archived, include_preparation=include_preparation)))
 
     @router.post(f"{prefix}/rule-candidates", response_model=ApiResponse, status_code=201)
     def save_rule_candidate(project_id: str, body: RuleCandidateSaveRequest):
@@ -153,6 +160,10 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     @router.get(f"{prefix}/rule-candidates/{{candidate_id}}", response_model=ApiResponse)
     def show_rule_candidate(project_id: str, candidate_id: str, revision: int | None = None):
         return data_response(jsonable_encoder(context.rule_candidates.show(project_id, candidate_id, revision)))
+
+    @router.put(f"{prefix}/rule-candidates/{{candidate_id}}/visibility", response_model=ApiResponse)
+    def candidate_visibility(project_id: str, candidate_id: str, body: RuleCandidateVisibilityRequest):
+        return data_response(context.rule_candidates.set_visibility(project_id, candidate_id, **body.model_dump()))
 
     @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/proposals", response_model=ApiResponse, status_code=201)
     def propose_rule_candidate(project_id: str, candidate_id: str, body: RuleCandidateProposalRequest):

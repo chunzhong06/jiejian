@@ -34,7 +34,7 @@ def test_existing_facts_and_unknown_ownership_remain_unchanged(tmp_path):
         before = connection.execute("SELECT * FROM environment_operations").fetchall()
     upgrade_database(path); require_current_database(path)
     with sqlite3.connect(path) as connection:
-        assert connection.execute("SELECT * FROM environment_operations").fetchall() == before
+        assert connection.execute("SELECT operation_id,operation,state,started_at_us,finished_at_us,experience_id,project_id,error_code,cleanup_confirmed FROM environment_operations").fetchall() == before
         assert connection.execute("SELECT COUNT(*) FROM sample_instances").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM preparation_receipts").fetchone()[0] == 0
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

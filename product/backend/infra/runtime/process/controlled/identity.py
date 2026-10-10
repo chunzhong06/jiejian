@@ -55,6 +55,19 @@ def python_environment_report(
 ) -> dict[str, Any]:
     """返回可展示、可复算且足以拒绝解释器或包来源漂移的环境身份。"""
 
+    # 只在本次诊断内复用路径解析；下一次仍重新核对，避免跨调用沿用旧的来源身份。
+    resolved: dict[Path, Path] = {}
+
+    def within(path: Path, parent: Path) -> bool:
+        try:
+            for value in (path, parent):
+                if value not in resolved:
+                    resolved[value] = value.resolve()
+            resolved[path].relative_to(resolved[parent])
+        except (OSError, ValueError):
+            return False
+        return True
+
     environ = os.environ if environment is None else environment
     executable = Path(sys.executable).resolve()
     prefix = Path(sys.prefix).resolve()
@@ -82,13 +95,13 @@ def python_environment_report(
     distribution = _project_distribution()
     product_origin = package_origins.get("product")
     user_site_in_path = bool(
-        user_site and any(_is_within(path, user_site) for path in sys_paths if path)
+        user_site and any(within(path, user_site) for path in sys_paths if path)
     )
     user_packages = tuple(
         sorted(
             name
             for name, origin in package_origins.items()
-            if user_site and origin and _is_within(Path(origin), user_site)
+            if user_site and origin and within(Path(origin), user_site)
         )
     )
 
@@ -115,7 +128,7 @@ def python_environment_report(
         if not origin or name == "product":
             continue
         origin_path = Path(origin)
-        if not _is_within(origin_path, prefix):
+        if not within(origin_path, prefix):
             issues.append(f"依赖 {name} 不属于当前 Python Prefix")
 
     editable = bool(distribution.get("editable"))
@@ -133,7 +146,7 @@ def python_environment_report(
             issues.append("开发模式必须 editable 安装当前源码")
         if project_root and source_root and source_root != project_root:
             issues.append("editable 安装指向了其他源码目录")
-        if project_root and product_path and not _is_within(product_path, project_root):
+        if project_root and product_path and not within(product_path, project_root):
             issues.append("开发模式导入的 product 不属于当前仓库")
     elif runtime_mode == "portable":
         if environment_type != "uv-managed":
@@ -152,10 +165,10 @@ def python_environment_report(
                 ("product", product_path),
                 ("项目发行包", distribution_root),
             ):
-                if path is None or not _is_within(path, release_root):
+                if path is None or not within(path, release_root):
                     issues.append(f"Portable {label} 不属于发行根目录")
             for name, origin in package_origins.items():
-                if origin and not _is_within(Path(origin), release_root):
+                if origin and not within(Path(origin), release_root):
                     issues.append(f"Portable 依赖 {name} 不属于发行根目录")
             expected_browsers_path = release_root / "runtime" / "playwright"
             if playwright_browsers_path != expected_browsers_path:
@@ -163,7 +176,7 @@ def python_environment_report(
             if (
                 playwright_executable is None
                 or not playwright_executable.is_file()
-                or not _is_within(playwright_executable, expected_browsers_path)
+                or not within(playwright_executable, expected_browsers_path)
             ):
                 issues.append("Portable Chromium 不属于发行浏览器根")
 
@@ -328,14 +341,6 @@ def _resolved_path(value: str | None) -> Path | None:
         return Path(value).resolve()
     except OSError:
         return Path(value).absolute()
-
-
-def _is_within(path: Path, parent: Path) -> bool:
-    try:
-        path.resolve().relative_to(parent.resolve())
-    except (OSError, ValueError):
-        return False
-    return True
 
 
 def _string_or_none(value: object) -> str | None:

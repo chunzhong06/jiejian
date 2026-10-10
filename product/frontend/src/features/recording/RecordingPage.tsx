@@ -201,7 +201,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     const recordingId = recording?.recording_id
     if (!jobId || !recordingId) return
     setBusy(true)
-    try { await jobsApi.cancel(jobId); if (alive.current) await refresh(recordingId); if (alive.current) await syncWorkspace('取消请求已提交') }
+    try { await jobsApi.cancel(jobId); if (alive.current) await Promise.all([refresh(recordingId), syncWorkspace('取消请求已提交')]) }
     catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
@@ -210,22 +210,21 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
     setBusy(true)
     try {
       updateView(await recordingsApi.discard(recording.recording_id))
-      if (alive.current) await refresh(recording.recording_id)
-      if (alive.current) await syncWorkspace('未采用的录制已放弃')
+      if (alive.current) await Promise.all([refresh(recording.recording_id),syncWorkspace('未采用的录制已放弃')])
     } catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
   const controlCapture = async (action: 'start' | 'stop') => {
     if (!recording?.recording_id) return
     setBusy(true)
-    try { updateView(action === 'start' ? await recordingsApi.startCapture(recording.recording_id) : await recordingsApi.stopCapture(recording.recording_id)); if (alive.current) await refresh(); if (alive.current) await syncWorkspace('采集状态已更新') }
+    try { updateView(action === 'start' ? await recordingsApi.startCapture(recording.recording_id) : await recordingsApi.stopCapture(recording.recording_id)); if (alive.current) await Promise.all([refresh(), syncWorkspace('采集状态已更新')]) }
     catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
   const review = async (command: RecordingReviewCommand) => {
     if (!recording?.recording_id) return
     setBusy(true); setMessage(undefined)
-    try { updateView(await recordingsApi.reviewRecording(recording.recording_id, command)); if (alive.current) await refresh(); if (alive.current) await syncWorkspace('业务选择已保存') }
+    try { updateView(await recordingsApi.reviewRecording(recording.recording_id, command)); if (alive.current) await Promise.all([refresh(), syncWorkspace('业务选择已保存')]) }
     catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
@@ -251,9 +250,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       if (!alive.current) return
       setMessage(materialContext ? '新录制已保存为候选。返回材料详情，核对影响后再确认替换。' : recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
       setSyncError('保存已确认，正在核对下一项准备。')
-      await refresh(recording.recording_id)
-      setMessage(materialContext ? '新录制已保存为候选。返回材料详情，核对影响后再确认替换。' : recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
-      await syncWorkspace(recordingPurpose === 'TARGET' ? '业务流程已保存' : '补录事实已保存')
+      await Promise.all([refresh(recording.recording_id), syncWorkspace(recordingPurpose === 'TARGET' ? '业务流程已保存' : '补录事实已保存')])
     } catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }

@@ -215,4 +215,22 @@
 
 静态import / dot-source：`alembic`、`sqlalchemy`
 
+### `product/backend/migrations/versions/0020_environment_progress.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0020_environment_progress.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`alembic`、`sqlalchemy`
+
+### `product/backend/migrations/versions/0021_candidate_visibility.py`
+
+[打开源码](../../../../../product/backend/migrations/versions/0021_candidate_visibility.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `upgrade()`
+- `downgrade()`
+
+静态import / dot-source：`alembic`、`sqlalchemy`
+
 <!-- GENERATED:END -->

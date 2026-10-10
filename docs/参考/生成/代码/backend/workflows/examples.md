@@ -38,9 +38,19 @@
 
 [打开源码](../../../../../../product/backend/workflows/examples/gallery_materials.py) · Python AST；作用域内import不表示每次调用均执行。
 
+- `gallery_identities(service, project)`
 - `prepare_gallery_materials(service, project)`
+- `prepare_gallery_content(service, project, identities)`
 
 静态import / dot-source：`hashlib`、`json`、`product.backend.core.errors`、`product.backend.core.recording.models`、`product.backend.workflows.examples.gallery_recipe`、`product.backend.workflows.examples.materials`、`product.backend.workflows.preparation.proofs.artifact_inputs`、`product.backend.workflows.preparation.proofs.commands`、`product.backend.workflows.test_identities.service`、`product.protocols`、`product.protocols.preparation.proof_sources`、`uuid`
+
+### `product/backend/workflows/examples/gallery_preparation.py`
+
+[打开源码](../../../../../../product/backend/workflows/examples/gallery_preparation.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `advance_gallery_preparation(service, project, progress, cancel)`
+
+静态import / dot-source：`copy`、`product.backend.core.errors`、`product.backend.workflows.examples.gallery_materials`
 
 ### `product/backend/workflows/examples/gallery_recipe.py`
 
@@ -92,21 +102,24 @@
 [打开源码](../../../../../../product/backend/workflows/examples/node_environment.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `class NodeOfficialSampleExperience`
-- `NodeOfficialSampleExperience.status(self)`
-- `NodeOfficialSampleExperience.start(self, consent, operation_id)`
-- `NodeOfficialSampleExperience.reset(self, consent, operation_id)`
+- `NodeOfficialSampleExperience.status(self, lightweight)`
+- `NodeOfficialSampleExperience.start(self, consent, operation_id, wait)`
+- `NodeOfficialSampleExperience.reset(self, consent, operation_id, wait)`
 - `NodeOfficialSampleExperience.reconcile(self)`
 - `NodeOfficialSampleExperience.boundary_proposal(self, exhibition_download)`
 - `NodeOfficialSampleExperience.prepare(self)`
+- `NodeOfficialSampleExperience.prepare_step(self, project, progress, cancel)`
 - `NodeOfficialSampleExperience.switch_version(self, version, repair_reference)`
 - `NodeOfficialSampleExperience.development_journey(self)`
 - `NodeOfficialSampleExperience.set_observation(self, available)`
 - `NodeOfficialSampleExperience.stop(self, operation_id)`
 - `NodeOfficialSampleExperience.stop_project(self, project_id)`
 - `NodeOfficialSampleExperience.close(self)`
+- `NodeOfficialSampleExperience.resume(self, consent, operation_id, wait)`
+- `NodeOfficialSampleExperience.operation_view(self, operation_id, lightweight)`
 - `NodeOfficialSampleExperience.history(self, limit)`
 
-静态import / dot-source：`__future__`、`hashlib`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.tree`、`product.backend.workflows.examples.environment`、`product.backend.workflows.examples.gallery_recipe`、`product.backend.workflows.examples.journey`、`product.backend.workflows.preparation.supplemental.contract`、`socket`、`threading`、`time`、`uuid`、`作用域内：product.backend.workflows.examples.gallery_materials`、`作用域内：product.backend.workflows.examples.recovery`
+静态import / dot-source：`__future__`、`hashlib`、`pathlib`、`product.backend.core.errors`、`product.backend.infra.runtime.process.tree`、`product.backend.workflows.examples.environment`、`product.backend.workflows.examples.gallery_recipe`、`product.backend.workflows.examples.journey`、`product.backend.workflows.preparation.supplemental.contract`、`socket`、`threading`、`time`、`uuid`、`作用域内：product.backend.workflows.examples.gallery_materials`、`作用域内：product.backend.workflows.examples.gallery_preparation`、`作用域内：product.backend.workflows.examples.recovery`
 
 ### `product/backend/workflows/examples/preset_delivery.py`
 

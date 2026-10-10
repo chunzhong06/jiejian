@@ -196,6 +196,14 @@ class RunRepository:
                 and_(RunRow.created_at_us == before_created_at_us, RunRow.run_id > before_run_id)))
         return statement.order_by(RunRow.created_at_us.desc(), RunRow.run_id.asc())
 
+    def completed_for_source(self, project_id, source_fingerprint, policy_epoch, after_us):
+        """只读同项目、同源码、同权限版本的完成记录；不创建交付归属。"""
+        return self._session.scalar(select(RunRow.run_id).where(
+            RunRow.project_id == project_id, RunRow.source_fingerprint == source_fingerprint,
+            RunRow.policy_epoch == policy_epoch, RunRow.lifecycle == 'COMPLETED',
+            RunRow.created_at_us >= after_us,
+        ).order_by(RunRow.created_at_us.desc(), RunRow.run_id).limit(1))
+
     def page_for_project(self, project_id: str, *, limit: int,
                          before_created_at_us: int | None = None, before_run_id: str | None = None,
                          lifecycles: tuple[RunLifecycle, ...] | None = None) -> tuple[RunRecord, ...]:

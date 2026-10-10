@@ -84,6 +84,11 @@ def proofs(gui,project):
             gui._response(prefix+'/sources',lambda:gui.page.get_by_role('button',name='以此参照继续',exact=True).click())
             gui._mark('reference-capture-and-confirm')
         context=gui.client.call('GET',prefix);current=next(item for item in context['sources'] if item['source_id']==source['source_id'])
+        preflight=current.get('preflight')
+        if (current['adopted'] and current['read_scope_confirmed'] and preflight and preflight['current_basis']
+                and preflight['state']=='SUCCEEDED' and preflight.get('report',{}).get('assessment')=='USABLE'):
+            # 一键批次已按人的确认完成核对与采用；不为旧脚本重复执行同一预检查。
+            continue
         if not current['read_scope_confirmed']:
             gui.page.get_by_role('button',name='确认读取范围',exact=True).click()
             modal=gui.page.get_by_role('dialog',name='确认来源读取范围',exact=True)

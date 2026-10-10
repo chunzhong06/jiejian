@@ -111,3 +111,8 @@
 .provided-material-preparation p { margin:var(--space-8) 0 0;color:var(--color-secondary);line-height:1.7;max-width:72ch; }
 .provided-material-preparation > .ant-alert { grid-column:1/-1; }
 @media(max-width:700px){.provided-material-preparation{grid-template-columns:1fr}.provided-material-preparation>.ant-btn{justify-self:end}.proof-reference-note{flex-basis:100%}}
+
+/* 批次各项显示真实进展，状态列在自身栏内居中；不使用模拟百分比。 */
+.provided-material-progress{list-style:none;margin:var(--space-16) 0 0;padding:0;display:grid;gap:var(--space-8)}
+.provided-material-progress li{display:grid;grid-template-columns:minmax(0,1fr) minmax(6rem,.35fr);align-items:center;gap:var(--space-16)}
+.provided-material-progress strong{justify-self:center;font-size:var(--font-label);font-weight:var(--weight-medium);color:var(--color-secondary)}

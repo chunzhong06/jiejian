@@ -13,7 +13,7 @@ from product.backend.workflows.examples.materials import _event
 from product.backend.workflows.examples.gallery_recipe import ACTION_ROUTES
 
 
-def prepare_gallery_materials(service,project):
+def gallery_identities(service,project):
     boundary=service.boundaries.view(project)
     actors={item.display_name:item for item in boundary.actors}
     actions={item.display_name:item for item in boundary.actions}
@@ -29,11 +29,24 @@ def prepare_gallery_materials(service,project):
         if found and found[0].label != label:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色使用自定义账号，请在账号页完成登录后准备材料')
         identities.append(found[0] if found else service.identities.create(project,actor_id=actor.actor_id,actor_revision=actor.revision,label=label))
+    return identities
+
+
+def prepare_gallery_materials(service,project):
+    identities=gallery_identities(service,project)
+    state=service.runtime.state(project);origin=f"http://127.0.0.1:{state['configuration']['port']}"
     for identity,account in zip(identities,('curator','judge'),strict=True):
         service.identity_preparations.prepare_official(identity.identity_id,account=account,origin=origin)
-    identities=[service.identities.get(item.identity_id) for item in identities]
+    prepare_gallery_content(service,project,[service.identities.get(item.identity_id) for item in identities])
+
+
+def prepare_gallery_content(service,project,identities):
+    """复用身份就绪事实建立录制、资源和文件；已有当前绑定不重复创建。"""
+    boundary=service.boundaries.view(project)
+    actions={item.display_name:item for item in boundary.actions}
+    state=service.runtime.state(project);origin=f"http://127.0.0.1:{state['configuration']['port']}"
     if any(item.status is not TestIdentityStatus.PREPARED for item in identities):
-        raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'示例账号尚未准备好，请核对账号状态')
+        raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'示例账号尚未准备好')
     owner,reviewer=identities
     source=service.understanding.get(project).source_fingerprint
     views={item.action_id:item for item in service.preparation.get(project).actions}

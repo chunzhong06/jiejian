@@ -51,6 +51,7 @@ try {
         Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue
     }
     Set-Location -LiteralPath $varDir
+    Write-Output "__JIEJIAN_RELEASE_STATUS__:identity"
     $failureMessage = "包内 Python 或产品版本校验失败，请重新解压匹配版本的完整发布包。"
     $identityProbe = "import importlib.metadata,json; from product.backend import __version__; from product.backend.infra.runtime.process.controlled.identity import python_environment_report; r=python_environment_report(); assert r['ok']; print(json.dumps({'fingerprint':r['runtime_fingerprint'],'version':__version__,'package_version':importlib.metadata.version('jiejian')}))"
     $identity = (& $python -B -c $identityProbe | Out-String).Trim()

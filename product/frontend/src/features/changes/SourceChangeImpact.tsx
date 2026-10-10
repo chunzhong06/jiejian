@@ -88,7 +88,7 @@ export function SourceChangeImpact({ projectId, change, action, onNavigate, onSo
       </section>
       <aside className="change-preparation" aria-label="本批检查准备"><h2>{title}</h2>
         {state !== 'READY' && <p>{description}</p>}
-        {state === 'READY' && (preparation ? <dl>{materialGroups.map(([label, items]) => <div key={label}><dt>{label}</dt><dd>{materialLabel(items)}</dd></div>)}</dl> : preparationFailed ? <p role="status">材料状态暂时无法读取。<Button onClick={() => setAttempt(value => value + 1)}>重新读取材料</Button></p> : <Spin aria-label="正在读取本批材料"/>)}
+        {state === 'READY' && (preparation ? <dl>{materialGroups.map(([label, items]) => <div key={label}><dt>{label}</dt><dd className={materialLabel(items)==='需复核'?'material-review-required':undefined}>{materialLabel(items)}</dd></div>)}</dl> : preparationFailed ? <p role="status">材料状态暂时无法读取。<Button onClick={() => setAttempt(value => value + 1)}>重新读取材料</Button></p> : <Spin aria-label="正在读取本批材料"/>)}
         <div className="change-preparation-action">{state === 'READY' ? action : <><Button type="primary" onClick={() => state === 'POLICY_STALE' || state === 'MAPPING_REVIEW_REQUIRED' ? onNavigate('/permissions') : onSource()}>{state === 'POLICY_STALE' ? '核对当前权限' : state === 'MAPPING_REVIEW_REQUIRED' ? '复核实现对应' : '核对源码记录'}</Button>{action}</>}</div>
       </aside>
     </div>

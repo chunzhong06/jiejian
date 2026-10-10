@@ -4,13 +4,13 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { OfficialSamplePanel } from './OfficialSamplePanel'
 import type { OfficialExperienceDto } from '../../api/applications/experience'
 
-const api = vi.hoisted(() => ({ start: vi.fn(), reset: vi.fn(), reconcile: vi.fn(), prepare: vi.fn(), status: vi.fn(), boundaryProposal: vi.fn(), switchVersion: vi.fn(), project: vi.fn() }))
+const api = vi.hoisted(() => ({ start: vi.fn(), resume: vi.fn(), reset: vi.fn(), reconcile: vi.fn(), prepare: vi.fn(), status: vi.fn(), boundaryProposal: vi.fn(), switchVersion: vi.fn(), project: vi.fn() }))
 vi.mock('../../api/applications/experience', () => ({ experienceApi: api }))
 vi.mock('../../api/checks/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/checks/repairs')>('../../api/checks/repairs'), repairsApi: { project: api.project } }))
 const idle: OfficialExperienceDto = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, project_id: null, origin: null, scenario_prepared: false, scenario_version: null, vulnerable_change_id: null, repair_change_id: null }
 const active: OfficialExperienceDto = { ...idle, active: true, project_id: 'p1', experience_id: 'experience', scenario_version: 'VULNERABLE', pending_tasks: ['HUMAN_BOUNDARY_APPROVAL_REQUIRED'] }
 const props = () => ({ value: idle, onChanged: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onNavigate: vi.fn() })
-beforeEach(() => { vi.clearAllMocks(); api.start.mockResolvedValue(active); api.reset.mockResolvedValue(active); api.reconcile.mockResolvedValue(active); api.status.mockResolvedValue(active); api.prepare.mockResolvedValue(active); api.project.mockResolvedValue({ project_id: 'p1', status: null, tasks: [] }); api.boundaryProposal.mockResolvedValue({}) })
+beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear(); api.resume.mockResolvedValue(active); api.start.mockResolvedValue(active); api.reset.mockResolvedValue(active); api.reconcile.mockResolvedValue(active); api.status.mockResolvedValue(active); api.prepare.mockResolvedValue(active); api.project.mockResolvedValue({ project_id: 'p1', status: null, tasks: [] }); api.boundaryProposal.mockResolvedValue({}) })
 it('打开确认框不会启动或批准；确认后只启动一次', async () => {
   render(<OfficialSamplePanel {...props()} />)
   fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
@@ -34,25 +34,26 @@ it('旧记录缺少所有权时给出处理说明，不提供无效的循环核�
   expect(screen.queryByRole('button', { name: '重新核对环境' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '启动示例' })).toBeDisabled()
 })
-it('工作台有已退出的旧示例时保持简洁入口，归档影响在确认框说明', async () => {
-  render(<OfficialSamplePanel {...props()} value={{ ...idle, project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
+it('工作台明确继续当前项目，不把继续解释为重新开始', async () => {
+  render(<OfficialSamplePanel {...props()} value={{ ...idle, runtime_kind:'NODE_ESM', project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
   expect(screen.queryByRole('heading', { name: '从全新示例开始' })).not.toBeInTheDocument()
-  expect(screen.getByText('上次示例已退出，历史记录保留。本次启动将创建全新示例。')).toBeInTheDocument()
+  expect(screen.getByText('上次示例已退出，可以继续当前项目。登录状态需重新核对。')).toBeInTheDocument()
   expect(screen.queryByText('旧项目归档保留')).not.toBeInTheDocument()
   expect(api.start).not.toHaveBeenCalled()
   expect(screen.queryByText('从上次中断处继续')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
-  expect(screen.getByText(/旧项目将归档/)).toBeInTheDocument()
-  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '启动示例' }))
-  await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1))
+  fireEvent.click(screen.getByRole('button', { name: '继续上次示例' }))
+  expect(screen.getByText(/重新启动当前项目/)).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '继续示例' }))
+  await waitFor(() => expect(api.resume).toHaveBeenCalledTimes(1))
+  expect(api.start).not.toHaveBeenCalled()
   expect(api.prepare).not.toHaveBeenCalled(); expect(api.boundaryProposal).not.toHaveBeenCalled()
 })
 it('环境管理页保留全新示例的详细归档说明，不因读取状态自动启动', () => {
-  render(<OfficialSamplePanel {...props()} expanded value={{ ...idle, project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
-  expect(screen.getByRole('heading', { name: '从全新示例开始' })).toBeInTheDocument()
+  render(<OfficialSamplePanel {...props()} expanded value={{ ...idle, runtime_kind:'NODE_ESM', project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
+  expect(screen.getByRole('heading', { name: '继续上次示例' })).toBeInTheDocument()
   expect(screen.getByText('旧项目归档保留')).toBeInTheDocument()
   expect(screen.getByText('新项目从零开始')).toBeInTheDocument()
-  expect(screen.getAllByRole('button', { name: '启动示例' })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: '重新开始示例' })).toHaveLength(1)
   expect(api.start).not.toHaveBeenCalled()
 })
 it('重置先明确确认，确认后只调用重置接口且不写结论', async () => {

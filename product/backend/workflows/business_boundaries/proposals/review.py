@@ -29,6 +29,9 @@ def _permission_value(item, subject, owner, action, effects) -> BoundaryReviewVa
         resource_owner=owner.display_name, action=action.display_name,
         relation=item.relation.value, expectation=item.expectation.value,
         protected_effects=tuple(e.business_label for e in effects),
+        effects=tuple(BoundaryReviewEffect(business_label=e.business_label, effect_kind=e.effect_kind.value,
+            resource_concept=e.resource_concept, description=e.description,
+            expected_state=e.expected_state, protected_projection=e.protected_projection) for e in effects),
     )
 
 

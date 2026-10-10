@@ -65,6 +65,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [material, setMaterial] = useState<{ reference: MaterialReference; label: string }>()
   const [evidenceAction, setEvidenceAction] = useState<string>()
   const [focusSourceEntry, setFocusSourceEntry] = useState(false)
+  const [opening, setOpening] = useState<string>()
   const [proofSources,setProofSources] = useState(Boolean(requestedProofSources))
   useEffect(() => { setProofSources(Boolean(requestedProofSources)) },[project.project_id,requestedProofSources])
   const draftRef = useRef<PreparationDraft | undefined>(undefined)
@@ -141,14 +142,17 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const syncChild = async () => (await reload())?.workspace
   const showMaterials = async () => {
     if (requestedIdentities) onNavigate(materialReturnPath(requestedActionId))
-    try { await reload(); if (alive.current) { setMode('materials'); if (materialRecording && recordingReturn.current) setMaterial(recordingReturn.current); setMaterialRecording(undefined) } } catch (error) { if (alive.current) onError(error as ApiError) }
+    // 返回先恢复原位置；同步期间收起旧的下一步许可，但不阻挡回看材料。
+    setMode('materials'); if (materialRecording && recordingReturn.current) setMaterial(recordingReturn.current); setMaterialRecording(undefined)
+    setSyncError('正在更新材料和下一步状态…')
+    try { await reload() } catch (error) { if (alive.current) { setSyncError('材料尚未更新，请刷新后继续。'); onError(error as ApiError) } }
   }
   const refresh = async () => {
     setBusy(true)
     try { await reload() } catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
-  const providedControl = (updated:()=>Promise<unknown> = refresh) => onProvidedMaterials ? <ProvidedMaterialPreparation projectId={project.project_id} onChanged={updated} prepared={preparation?.preparation_complete} onContinue={()=>onNavigate('/tests')} open={providedOpen} onOpenChange={setProvidedOpen}/> : undefined
+  const providedControl = (updated:()=>Promise<unknown> = refresh) => onProvidedMaterials ? <ProvidedMaterialPreparation projectId={project.project_id} onChanged={updated} prepared={Boolean(preparation?.preparation_complete) && !materialSync.retrying} currentPreparation={preparation ?? undefined} outdated={materialSync.retrying} onContinue={()=>onNavigate('/tests')} open={providedOpen} onOpenChange={setProvidedOpen}/> : undefined
   const selectControl = async (control: AllowControlRequirement) => {
     const selected = control.candidate_allow_permissions.find((item) => item.intent_id === choices[control.selection_fingerprint])
     if (!selected || selecting.current || busy || syncError) return
@@ -164,7 +168,8 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     finally { selecting.current = false; if (alive.current && projectRef.current === project.project_id) setBusy(false) }
   }
   const proceed = async () => {
-    setBusy(true)
+    if (busy) return
+    setBusy(true); setOpening('正在核对下一步准备')
     try {
       const fresh = await reload()
       const task = fresh?.workspace.primary_task
@@ -179,6 +184,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         if (!slot) return
         let identityId = task.test_identity_id
         if (!identityId) {
+          setOpening('正在准备测试账号')
           const created = await testIdentitiesApi.create(project.project_id, slot.requirement.actor_id, slot.requirement.actor_revision,
             `${slot.actor_display_name}账号 ${slot.requirement.ordinal}`)
           identityId = created.identity_id
@@ -188,20 +194,22 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
           const nextTask = updated.workspace.primary_task
           if (nextTask?.task_kind !== 'PREPARE_TEST_IDENTITY' || nextTask.identity_slot_id !== task.identity_slot_id || nextTask.test_identity_id !== identityId || !nextTask.can_execute) return
         }
+        setOpening('正在打开测试登录')
         const session = await testIdentitiesApi.startPreparation(identityId)
         if (!alive.current) return
-        setLogin(session); setMode('identities')
+        setLogin(session); setMode('identities'); setOpening(undefined)
         await reload()
       } else {
         setRecordingTask(task); setMode('recording')
       }
     } catch (error) { if (alive.current) onError(error as ApiError) }
-    finally { if (alive.current) setBusy(false) }
+    finally { if (alive.current) { setBusy(false); setOpening(undefined) } }
   }
 
   const openMaterial = async (reference: MaterialReference, label: string) => {
+    if (busy) return
     setFocusSourceEntry(false)
-    setBusy(true)
+    setBusy(true); setOpening(`正在打开${label}`)
     try {
       const draft = draftRef.current ?? await preparationApi.draft(project.project_id)
       if (draft.pending_operation_id) { setMaterial({ reference: draft.material!, label: '上次处理的材料' }); return }
@@ -209,19 +217,24 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         action_revision: reference.action_revision, material: reference, candidate_recording_id: null, base_fingerprint: null, pending_operation_id: null })
       setMaterial({ reference, label })
     } catch (error) { onError(error as ApiError) }
-    finally { setBusy(false) }
+    finally { setBusy(false); setOpening(undefined) }
   }
   const closeMaterial = async () => {
     if (!material) return
+    // 返回位置先显示，草稿写回与材料同步继续进行；未确认前不放行旧的下一步。
+    setReturnMaterial(material.reference); setSelectedAction(material.reference.action_id); setMaterial(undefined)
+    setBusy(true); setSyncError('正在保存准备位置并更新材料…')
+    let positionSaved = true
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-material-key="${material.reference.kind}:${material.reference.member_id ?? ''}"]`)?.focus())
     try {
       const draft = draftRef.current ?? await preparationApi.draft(project.project_id)
       if (!draft.pending_operation_id) draftRef.current = await preparationApi.saveDraft(project.project_id, { ...draft, material: null,
         candidate_recording_id: null, base_fingerprint: null, action_id: null, action_revision: null })
-    } catch (error) { onError(error as ApiError) }
+    } catch (error) { positionSaved = false; onError(error as ApiError) }
     finally {
-      setReturnMaterial(material.reference); setSelectedAction(material.reference.action_id); setMaterial(undefined)
       try { await reload() } catch (error) { onError(error as ApiError) }
-      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-material-key="${material.reference.kind}:${material.reference.member_id ?? ''}"]`)?.focus())
+      if (!positionSaved) setSyncError('返回位置尚未保存，请刷新后继续；原操作定位仍保留。')
+      setBusy(false)
     }
   }
   const selectAction = async (id: string) => {
@@ -235,6 +248,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         material: null, candidate_recording_id: null, base_fingerprint: null, pending_operation_id: null })
     } catch (error) { onError(error as ApiError) }
   }
+  if (opening) return <EditorialPage width="summary"><EditorialHeader eyebrow={project.name || '当前应用'} title={opening}/><LoadingState>正在核对当前材料并保存准备位置，完成后会自动进入。</LoadingState><TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}}/></EditorialPage>
   if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} providedPreparation={updated=>providedControl(async()=>{await updated();await refresh()})} providedMaterials={Boolean(onProvidedMaterials)} onChanged={refresh} onNavigate={onNavigate} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(materialReturnPath(requestedActionId)) }}/>
   if (evidenceAction) return <EvidenceMaterials projectId={project.project_id} actionId={evidenceAction} onBack={() => { setFocusSourceEntry(true); setEvidenceAction(undefined) }} />
   if (material) return <MaterialEditor key={JSON.stringify(material.reference)} projectId={project.project_id} reference={material.reference}
@@ -281,7 +295,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   return <EditorialPage label="检查材料" width="summary">
     <EditorialHeader eyebrow={project.name || '当前应用'} title="检查准备"/>
     {providedControl()}
-    {!onProvidedMaterials && <AgentAssistEntry projectId={project.project_id} contextKey={`materials:${chosenActionId ?? ''}:${requestedSuggestionId ?? ''}:${requestedSuggestionRevision ?? ''}`}
+    {!onProvidedMaterials && <AgentAssistEntry aside projectId={project.project_id} contextKey={`materials:${chosenActionId ?? ''}:${requestedSuggestionId ?? ''}:${requestedSuggestionRevision ?? ''}`}
       title="整理检查需要的材料" description="让原来的 Agent 核对已有材料，并说明缺少的账号、操作、测试资源、证明或恢复方式怎样准备。"
       heading={<div className="materials-context">
         {!!preparation.actions.length && <><label htmlFor="materials-action">当前业务动作</label><Select id="materials-action" className="materials-action-picker" aria-label="选择业务动作" disabled={busy}

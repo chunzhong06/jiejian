@@ -138,7 +138,15 @@ class CurrentSourceChangeService:
     def list(self, project_id, *, limit=50):
         with self._uow_factory() as work:
             values = work.source_changes.current_changes(project_id,limit=limit)
-        return tuple(self.view(project_id,value[0].change_id) for value in values)
+        # 同一次列表读取共用当前计划；不跨请求缓存，后续提交仍独立核验现场。
+        preview = None
+        def read_plan(identity):
+            nonlocal preview
+            if preview is None:
+                preview = self._plan_reader(identity)
+            return preview
+        return tuple(self._view(project_id,value[0].change_id,
+            read_plan=read_plan if self._plan_reader is not None else None) for value in values)
 
     def latest(self, project_id):
         values = self.list(project_id,limit=1)
@@ -155,11 +163,21 @@ class CurrentSourceChangeService:
             required_intent_ids=tuple(item.intent_id for item in assessment.payload.permission_refs))
 
     def view(self, project_id, change_id):
+        return self._view(project_id,change_id,read_plan=self._plan_reader)
+
+    def _view(self, project_id, change_id, *, read_plan):
         manifest,change,assessment = self.get(project_id,change_id)
         return CurrentChangeView(manifest=manifest,change_set=change,assessment=assessment,
-            revalidation=self.inspect_revalidation(project_id,change_id))
+            revalidation=self._inspect_revalidation(project_id,change_id,read_plan=read_plan))
 
-    def inspect_revalidation(self, project_id, change_id):
+    def inspect_revalidation(self, project_id, change_id, *, preparation_preview=None):
+        """核对变化现场；冻结调用可传入本次刚形成的计划，避免递归再冻结。"""
+        if preparation_preview is not None and preparation_preview.project_id != project_id:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"准备计划所属应用不一致")
+        reader = self._plan_reader if preparation_preview is None else lambda _: preparation_preview
+        return self._inspect_revalidation(project_id,change_id,read_plan=reader)
+
+    def _inspect_revalidation(self, project_id, change_id, *, read_plan):
         _manifest,change,assessment = self.get(project_id,change_id)
         def result(status, *, gaps=(), executable=False):
             return SourceRevalidationInspection(project_id=project_id,change_id=change_id,status=status,
@@ -179,9 +197,9 @@ class CurrentSourceChangeService:
             return result("SOURCE_STALE")
         if any(item.status != "CURRENT" for item in (*boundary.actor_bindings,*boundary.action_bindings)):
             return result("MAPPING_REVIEW_REQUIRED")
-        if self._plan_reader is None:
+        if read_plan is None:
             return result("READY")
-        preview = self._plan_reader(project_id)
+        preview = read_plan(project_id)
         return result("READY",gaps=preview.gaps,executable=preview.can_execute)
 
     @staticmethod

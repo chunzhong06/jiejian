@@ -145,17 +145,27 @@ def test_gallery_preset_refreshes_sources_and_preflight_can_continue(tmp_path):
             if status.run.lifecycle.value=='COMPLETED':break
             time.sleep(.1)
         assert status.run.verdict.value=='PASS'
-        core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
+        timings={}
+        started=time.perf_counter()
+        changed=core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
+        timings['switch_version']=round(time.perf_counter()-started,4)
+        started=time.perf_counter()
+        stale=core.checks.preview(project,change_id=changed.current_change_id)
+        timings['check_conditions_after_switch']=round(time.perf_counter()-started,4)
+        assert not stale.can_execute
         core.official_experience.prepare()
         context=core.proof_preparation.context(project)
         resources={item['resource_binding_id'] for item in context['resources']}
         assert all(item['config']['resource_binding_id'] in resources for item in context['sources'])
         prepare_proof_sources(core,project)
         assert core.preparation.get(project).preparation_complete
-        timings={}
+        started=time.perf_counter()
+        ready=core.checks.preview(project,change_id=changed.current_change_id)
+        timings['check_conditions_ready']=round(time.perf_counter()-started,4)
+        assert ready.can_execute
         for label,read in [('sources',core.proof_preparation.context),('full_guidance',core.preparation_guidance.context)]:
             started=time.perf_counter();value=read(project);timings[label]=round(time.perf_counter()-started,4)
             assert value['project_id']==project
-        path=ROOT/'var/audit/preparation-feedback-20261010/timings.json';path.parent.mkdir(parents=True,exist_ok=True)
+        path=ROOT/'var/audit/ui-followup-20261010/live-timings.json';path.parent.mkdir(parents=True,exist_ok=True)
         path.write_text(json.dumps({'context_seconds':timings,'source_count':len(context['sources']),'preset_preparation':'PASSED'},indent=2),encoding='utf-8')
     finally:core.close()

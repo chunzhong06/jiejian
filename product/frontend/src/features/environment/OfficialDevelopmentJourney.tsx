@@ -75,7 +75,7 @@ export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onErr
           : <Button type="primary" onClick={() => { const change = gallery ? value.current_change_id : fixed ? value.repair_change_id : !custom ? value.vulnerable_change_id : undefined; onNavigate(change ? `/tests?change_id=${encodeURIComponent(change)}` : '/workspace') }}>继续准备与验证</Button>}
       </div>
       {tasks.length > 1 && <Select aria-label="选择待修复原题" value={reference} onChange={setReference} options={tasks.map((item, i) => ({ value: item.contract.repair_fingerprint, label: `原问题 ${i + 1}` }))}/>}
-      {feedback && <p role="status">{feedback}</p>}
+      {busy ? <p role="status"><Spin size="small"/> 正在登记源码并重新加载示例，完成后继续核对材料。</p> : feedback && <p role="status">{feedback}</p>}
       {uncertain && <Alert type="warning" message="操作回执或页面同步尚未确认" description="先核对当前实现和修改记录，不重复应用变更。" action={<Button onClick={async () => { try { const next = await experienceApi.status(); await onChanged(next); await read(); const applied = next.scenario_version === pendingTarget.current; const recorded = gallery ? next.current_change_id : pendingTarget.current === 'FIXED' ? next.repair_change_id : next.vulnerable_change_id; setCanResumeRegistration(applied && !recorded); if (applied && recorded) setUncertain(false) } catch (error) { onError(error as ApiError) } }}>核对当前状态</Button>}/>}
       {uncertain && canResumeRegistration && <Button loading={busy} onClick={() => void apply(true)}>恢复本批交付登记</Button>}
       {live.retrying && <p role="status">暂时无法同步演练事实，正在重试。</p>}

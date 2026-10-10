@@ -83,13 +83,15 @@ class LocalWorkerSupervisor:
         self._recovered_jobs = 0
         self._job_authorized = job_authorized or (lambda job: job.preflight_id is None and job.reference_capture_id is None)
         self._capture_publisher=capture_publisher
+        self._parallel_worker = None
+        self.on_progress = lambda: None
 
     def start(self) -> None:
         """幂等启动后台调度；已有存活线程时不创建第二个 Worker。"""
 
         if self._thread is not None and self._thread.is_alive():
             return
-        if self._process is not None:
+        if self._process is not None or (self._parallel_worker is not None and self._parallel_worker._process is not None):
             raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "上次 Worker 资源尚未完成关闭")
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="jiejian-worker-supervisor", daemon=True)
@@ -101,10 +103,11 @@ class LocalWorkerSupervisor:
     def active_runtime_paths(self) -> tuple[Path, ...]:
         """启动责任先于进程建立；仅保护当前 Job 的运行目录和日志。"""
         job_id = self._job_id
+        additional = self._parallel_worker.active_runtime_paths() if self._parallel_worker else ()
         if job_id is None:
-            return ()
+            return additional
         paths = RuntimePaths(self.var_dir)
-        return (paths.jobs / job_id, paths.worker_logs / f"{job_id}.log", paths.worker_runtime)
+        return (paths.jobs / job_id, paths.worker_logs / f"{job_id}.log", paths.worker_runtime) + additional
 
     @property
     def capabilities(self) -> tuple[str, ...]:
@@ -123,6 +126,8 @@ class LocalWorkerSupervisor:
             if self._thread.is_alive():
                 # 仍活跃的调度者可能持有启动责任，不能清空句柄或释放其数据库。
                 raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "Worker 调度线程未在有界时间内退出")
+        if self._parallel_worker is not None:
+            self._parallel_worker.stop(timeout)
         process = self._process
         stopping_job_id = self._job_id
         stopping_lease_owner = self._lease_owner
@@ -190,7 +195,7 @@ class LocalWorkerSupervisor:
             )
 
     def _loop(self) -> None:
-        """串行监督 Worker；已承担的等待态 Job 在 bootstrap 失败后必须收口。"""
+        """单线程拥有调度责任；最多两个独立预检查进程，其余任务保持独占执行。"""
 
         while not self._stop.is_set():
             try:
@@ -200,10 +205,30 @@ class LocalWorkerSupervisor:
                         self._request_worker_cancellation()
                 self._recover_expired_workers()
                 self._reap_finished_worker()
+                peer=self._parallel_worker
+                if peer is not None:
+                    if peer._job_id is not None:
+                        current=peer._read_job(peer._job_id)
+                        if current is not None and not self._job_authorized(current):peer._request_worker_cancellation()
+                    peer._reap_finished_worker()
                 if self._process is None and not self._stop.is_set():
                     job = self._next_job()
                     if job is not None:
                         self._start_job(job)
+                primary=self._read_job(self._job_id) if self._job_id else None
+                if primary is not None and primary.preflight_id is not None and not self._stop.is_set():
+                    if self._parallel_worker is None:
+                        # 第二槽没有调度线程，所有领取决定仍由当前唯一循环串行作出。
+                        self._parallel_worker=LocalWorkerSupervisor(self.var_dir,self._uow_factory,
+                            job_queue=self._job_queue,attempt_service=self._attempts,recovery_service=self._recovery,
+                            environment_provider=self._environment_provider,clock_us=self._clock_us,targets=self._targets,
+                            job_authorized=self._job_authorized,capture_publisher=self._capture_publisher)
+                        self._parallel_worker.on_progress=self.on_progress
+                    peer=self._parallel_worker
+                    if peer._process is None:
+                        with self._uow_factory() as work:
+                            job=work.jobs.next_pending(self._clock_us(),target_types=('PROOF_PREFLIGHT',),exclude_job_ids=(self._job_id,))
+                        if job is not None:peer._start_job(job)
             except Exception:
                 logger.exception(
                     "worker supervisor loop failed",
@@ -227,6 +252,7 @@ class LocalWorkerSupervisor:
         self._lease_owner = None
         if finished_job_id is not None:
             self._finish_worker_exit(finished_job_id, return_code, finished_lease_owner)
+            self.on_progress()
 
     def _start_job(self, job) -> None:
         """建立启动责任并完成 request、secret 与进程准备；失败时结束仍匹配的 waiting Job。"""
@@ -500,4 +526,7 @@ class LocalWorkerSupervisor:
 
     def _next_job(self):
         with self._uow_factory() as work:
+            peer=self._parallel_worker
+            if peer is not None and peer._job_id is not None:
+                return work.jobs.next_pending(self._clock_us(),target_types=('PROOF_PREFLIGHT',),exclude_job_ids=(peer._job_id,))
             return work.jobs.next_pending(self._clock_us(), target_types=self._targets.target_types)

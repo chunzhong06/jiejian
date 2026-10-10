@@ -78,16 +78,20 @@
 
 - `class RuleCandidateRow`
 - `class RuleCandidateRevisionRow`
+- `class RuleCandidateVisibilityRow`
 - `class RuleCandidateProposalRow`
 - `class RuleCandidateReceiptRow`
 - `class RuleCandidateDecisionRow`
 - `class RuleCandidateApprovalMappingRow`
 - `class RuleCandidateRepository`
 - `RuleCandidateRepository.get(self, project_id, candidate_id, revision)`
-- `RuleCandidateRepository.list(self, project_id, offset, limit)`
+- `RuleCandidateRepository.list(self, project_id, offset, limit, archived)`
+- `RuleCandidateRepository.visibility(self, candidate_id)`
+- `RuleCandidateRepository.set_visibility(self, candidate_id, archived, expected_version, now_us)`
 - `RuleCandidateRepository.head_references(self, project_id)`
 - `RuleCandidateRepository.append(self, value, expected_revision)`
 - `RuleCandidateRepository.proposal_id(self, candidate_id, revision)`
+- `RuleCandidateRepository.proposal_ids(self, candidate_id)`
 - `RuleCandidateRepository.link_proposal(self, candidate_id, revision, proposal_id, content_hash, decision_digest)`
 - `RuleCandidateRepository.proposal_source(self, proposal_id)`
 - `RuleCandidateRepository.decisions(self, project_id, candidate_id, revision)`

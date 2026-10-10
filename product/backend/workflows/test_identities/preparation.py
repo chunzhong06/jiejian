@@ -143,8 +143,8 @@ class IdentityPreparationManager:
     def start(self, identity_id: str) -> IdentityPreparationView:
         return self._start(identity_id)
 
-    def prepare_official(self, identity_id: str, *, account: str, origin: str) -> IdentityPreparationView | None:
-        """复用受监督登录进程自动准备官方虚构账号；普通登录 API 不能选择此配方。"""
+    def start_official(self, identity_id: str, *, account: str, origin: str) -> IdentityPreparationView | None:
+        """仅提交或回读受监督登录进程；调用方保存返回标识后再观察，不在批次协调器等待。"""
         with self._lock:
             identity = self._identities.get(identity_id)
             endpoint, _ = self._source(identity)
@@ -162,6 +162,17 @@ class IdentityPreparationManager:
                     self._identities.reset(identity_id)
                 view = self._start(identity_id, official_account=account)
                 active = self._active[view.preparation_id]
+            return self.status(active.request.preparation_id)
+
+    def prepare_official(self, identity_id: str, *, account: str, origin: str) -> IdentityPreparationView | None:
+        """复用受监督登录进程自动准备官方虚构账号；普通登录 API 不能选择此配方。"""
+        view = self.start_official(identity_id, account=account, origin=origin)
+        if view is None:
+            return None
+        with self._lock:
+            active = self._active.get(view.preparation_id)
+        if active is None:
+            return view
         # 已启动的同一进程由原状态回读收口；未知结果不再启动第二次登录。
         try:
             active.process.wait(timeout=40)

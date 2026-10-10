@@ -37,7 +37,7 @@
 
 - `ApplicationSetup`
 
-静态import / dot-source：`../../api/applications/onboarding`、`../../api/applications/projects`、`../../api/http`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./CandidateReview`、`./ConnectionSupport`、`./ControlledRuntimePanel`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/onboarding`、`../../api/applications/projects`、`../../api/http`、`../../api/workspace`、`../../shared/runtime/editGuard`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./CandidateReview`、`./ConnectionSupport`、`./ControlledRuntimePanel`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/features/access/CandidateReview.test.tsx`
 
@@ -81,6 +81,6 @@
 - `ApplicationRuntimeSettings`
 - `ControlledRuntimePanel`
 
-静态import / dot-source：`../../api/applications/controlledRuntime`、`../../api/applications/projects`、`../../api/http`、`../../shared/ui/StatusBadge`、`./controlled-runtime.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/controlledRuntime`、`../../api/applications/projects`、`../../api/http`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./controlled-runtime.css`、`antd`、`react`
 
 <!-- GENERATED:END -->

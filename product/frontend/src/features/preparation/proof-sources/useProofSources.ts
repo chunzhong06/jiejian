@@ -1,6 +1,7 @@
 // 管理证明来源的读取、轮询与未知写回执；只有页面的明确事件调用 write，恢复只查询原操作。
 import {useCallback,useContext,useEffect,useRef,useState} from 'react'
 import {WorkPageVisible} from '../../../shared/runtime/visibility'
+import {useLiveRead} from '../../../shared/runtime/useLiveRead'
 import {proofSourcesApi as api, type ProofContext, type ProofSource, type AdoptionPreview, type ProofOperationKind, type ProofReceipt} from '../../../api/preparation/proofSources'
 import {ApiError} from '../../../api/http'
 import {readProofOperation,saveProofOperation,clearProofOperation,type PendingProofOperation} from './proofSourceOperations'
@@ -17,13 +18,13 @@ export function useProofSources({projectId,requestedSource,onChanged,onReset,onA
   const [pending,setPending] = useState<PendingProofOperation>()
   const generation = useRef(0), sending = useRef(false)
   const reading = useRef<{epoch:number; promise:Promise<void>} | undefined>(undefined)
-  const load = useCallback(() => {
+  const load = useCallback((retry = false) => {
     const epoch = generation.current
     if (reading.current?.epoch === epoch) return reading.current.promise
     const promise = api.context(projectId,'sources').then(value => {
       if (value.project_id !== projectId) throw new Error('scope')
       if (generation.current === epoch) { setContext(value); setLoading(false) }
-    }).catch(() => { if (generation.current === epoch) { setIssue('材料暂时没有读到，可以返回后重试。'); setLoading(false) } })
+    }).catch(error => { if (generation.current === epoch) { setIssue('材料暂时没有读到，可以返回后重试。'); setLoading(false) }; if (retry) throw error })
       .finally(() => { if (reading.current?.promise === promise) reading.current=undefined })
     reading.current={epoch,promise}; return promise
   },[projectId])
@@ -37,7 +38,7 @@ export function useProofSources({projectId,requestedSource,onChanged,onReset,onA
     return () => { generation.current += 1 }
   },[load,requestedSource,projectId,onReset])
   const running = context?.sources.some(item => ['PENDING','RUNNING','RETRY_WAIT'].includes(item.preflight?.state ?? '')) || context?.reference_inputs?.some(item => item.state === 'PENDING') || context?.reference_recovery_gaps?.some(item=>item.reason==='REFERENCE_CAPTURE_IN_PROGRESS')
-  useEffect(() => { if (!running || busy || !visible) return; const timer = setInterval(() => void load(),1500); return () => clearInterval(timer) },[running,busy,load,visible])
+  useLiveRead(running && !busy && visible ? `${projectId}:${requestedSource ?? ''}` : undefined, async () => { await load(true) },1500,false)
   const clearPending = () => { setPending(undefined); clearProofOperation(projectId) }
   const accept = async (receipt: ProofReceipt, expected: PendingProofOperation) => {
     if (receipt.project_id !== projectId || receipt.operation_id !== expected.operation || receipt.operation_kind !== expected.kind) throw new Error('receipt mismatch')

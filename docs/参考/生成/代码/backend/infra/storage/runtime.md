@@ -19,7 +19,7 @@
 - `EnvironmentOperationRepository.save(self, value)`
 - `EnvironmentOperationRepository.list(self, limit)`
 
-静态import / dot-source：`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
+静态import / dot-source：`json`、`product.backend.infra.storage.base`、`sqlalchemy`、`sqlalchemy.orm`
 
 ### `product/backend/infra/storage/runtime/runtime_loads.py`
 

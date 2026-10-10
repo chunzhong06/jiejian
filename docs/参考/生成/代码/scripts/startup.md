@@ -4,6 +4,16 @@
 
 <!-- GENERATED:START -->
 
+### `scripts/startup/panel.ps1`
+
+[打开源码](../../../../../scripts/startup/panel.ps1) · PowerShell词法提取；动态dot-source未静态确定。
+
+- `function Close-StartupPanel`
+- `function Format-StartupLine`
+- `function Get-StartupPanelLines`
+- `function Set-StartupStatus`
+- `function Write-StartupPanel`
+
 ### `scripts/startup/presentation.ps1`
 
 [打开源码](../../../../../scripts/startup/presentation.ps1) · PowerShell词法提取；动态dot-source未静态确定。
@@ -24,6 +34,8 @@
 - `function Write-CliWelcome`
 - `function Write-DisplayResult`
 - `function Write-Startup`
+
+静态import / dot-source：`$PSScriptRoot/panel.ps1`
 
 ### `scripts/startup/product.ps1`
 

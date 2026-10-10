@@ -4,6 +4,7 @@ import {Alert,Button,Checkbox,Modal,Radio,Select,Upload} from 'antd'
 import {proofSourcesApi as api,type ProofContext,type ProofSource,type ProofOperationKind,type CaptureSelection,type CapturePlan,type CaptureStatus} from '../../../api/preparation/proofSources'
 import {StatusBadge} from '../../../shared/ui/StatusBadge'
 import {WorkPageVisible} from '../../../shared/runtime/visibility'
+import {useLiveRead} from '../../../shared/runtime/useLiveRead'
 
 export function ReferenceFilePreparation({projectId,context,source,busy,pending,preferredAsset,captureId,onWrite,onRefresh}: {
   projectId:string;context:ProofContext;source:ProofSource;busy:boolean;pending:boolean;preferredAsset?:string;captureId?:string
@@ -33,21 +34,22 @@ export function ReferenceFilePreparation({projectId,context,source,busy,pending,
   const chosen=available.find(item=>item.asset_id===(selected||preferredAsset||config.reference_artifact?.asset_id)) ?? (!selected && !preferredAsset && !config.reference_artifact && available.length===1 ? available[0] : undefined)
   const referenced=(assetId:string)=>context.sources.some(item=>item.config.reference_artifact?.asset_id===assetId)
   const activeCapture=captureId??inputs.find(item=>item.asset_id===preferredAsset)?.reference_capture_id??inputs.find(item=>item.state==='PENDING')?.reference_capture_id
-  useEffect(()=>{
-    if(!activeCapture||!visible)return
-    let stopped=false
-    let timer:ReturnType<typeof setInterval>|undefined
-    const epoch=scope
-    const read=async()=>{
+  const captureScope=useRef(''),notifiedCapture=useRef('')
+  captureScope.current=`${scope}:${activeCapture ?? ''}`
+  useLiveRead(activeCapture&&visible?captureScope.current:undefined,async()=>{
+    const epoch=scope,key=captureScope.current
+    if(!activeCapture)return false
       try {const value=await api.captureStatus(projectId,activeCapture)
-        if(!stopped&&live.current===epoch&&value.capture_id===activeCapture){
-          if(value.action_id!==config.action_id||value.resource_binding_id!==config.resource_binding_id){if(timer)clearInterval(timer);return}
-          setStatus(value);if(!['PENDING','RUNNING','RETRY_WAIT'].includes(value.state)){if(timer)clearInterval(timer);await onRefresh()}}}
-      catch{if(!stopped&&live.current===epoch)setIssue('取样状态暂时无法读取，请刷新；原操作不会再次发出。')}
-    }
-    void read();timer=setInterval(()=>void read(),1500)
-    return()=>{stopped=true;clearInterval(timer)}
-  },[activeCapture,projectId,scope,onRefresh,visible,config.action_id,config.resource_binding_id])
+        if(live.current!==epoch||captureScope.current!==key)return false
+        if(value.capture_id!==activeCapture||value.action_id!==config.action_id||value.resource_binding_id!==config.resource_binding_id)return false
+        setStatus(value)
+        if(!['PENDING','RUNNING','RETRY_WAIT'].includes(value.state)){
+          // 终态只同步一次，避免多个定时回调同时刷新整份材料。
+          if(notifiedCapture.current!==key){notifiedCapture.current=key;await onRefresh()}
+          return false
+        }
+      }catch(error){if(live.current===epoch&&captureScope.current===key)setIssue('取样状态暂时无法读取，请刷新；原操作不会再次发出。');throw error}
+  },1500)
   const running=status&&['PENDING','RUNNING','RETRY_WAIT'].includes(status.state)
   const disabled=busy||pending||reading||Boolean(running)
   const preview=async(restoreCapture?:string)=>{

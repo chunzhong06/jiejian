@@ -24,7 +24,7 @@
 - `RecordingCaptureCard`
 - `captureLabel`
 
-静态import / dot-source：`../../api/preparation/jobs`、`../../api/preparation/recordings`、`../../shared/presentation/execution`、`../../shared/runtime/browserState`、`../../shared/ui/StatusBadge`、`antd`、`react`
+静态import / dot-source：`../../api/preparation/jobs`、`../../api/preparation/recordings`、`../../shared/presentation/execution`、`../../shared/runtime/browserState`、`../../shared/runtime/visibility`、`../../shared/ui/StatusBadge`、`antd`、`react`
 
 ### `product/frontend/src/features/recording/RecordingPage.test.tsx`
 
@@ -39,6 +39,6 @@
 
 - `RecordingPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/preparation/jobs`、`../../api/preparation/preparation`、`../../api/preparation/recordings`、`../../api/workspace`、`../../shared/runtime/browserState`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentWorkflowEntry`、`../../shared/ui/Editorial`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./FlowDraftReview`、`./RecordingCaptureCard`、`./recording.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/preparation/jobs`、`../../api/preparation/preparation`、`../../api/preparation/recordings`、`../../api/workspace`、`../../shared/runtime/browserState`、`../../shared/runtime/editGuard`、`../../shared/runtime/useLiveRead`、`../../shared/ui/AgentWorkflowEntry`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/TaskActionBar`、`../../shared/ui/TaskReceipt`、`./FlowDraftReview`、`./RecordingCaptureCard`、`./recording.css`、`antd`、`react`
 
 <!-- GENERATED:END -->

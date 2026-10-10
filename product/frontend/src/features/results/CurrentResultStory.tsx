@@ -169,7 +169,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
         </div>
       </article> : <Empty description="本轮没有指定的检查项，请返回本轮结果选择已有记录。"/>}
     </>}
-    {!detail && <ResultAgentHandoff story={story} caseId={action?.case_id} onNavigate={onNavigate ?? (() => {})}/>}
+    {!detail && action && <ResultAgentHandoff story={story} caseId={action.case_id} onNavigate={onNavigate ?? (() => {})}/>}
     {!selectedCase && story.repair_verification && onNavigate && <div className="result-followup-actions"><Button onClick={() => onNavigate('/history?run_id=' + encodeURIComponent(story.repair_verification!.source_run_id))}>查看原检查结果</Button>{story.change_context && <Button type="primary" onClick={() => onNavigate('/changes?change_id=' + encodeURIComponent(story.change_context!.change_id))}>查看本次修改</Button>}</div>}
     <footer className="result-overall-boundary">{story.claim_boundary.map(text => <p key={text}>{text}</p>)}</footer>
   </div>

@@ -32,6 +32,10 @@
 .review-protected-results > span { color:var(--color-secondary);font-size:var(--font-label); }
 .review-protected-results ul { margin:var(--space-8) 0 0;padding-left:1.2em;font-size:var(--font-secondary); }
 .review-protected-results li + li { margin-top:var(--space-4); }
+.review-effect-meaning { margin-block:var(--space-16);font-size:var(--font-secondary);overflow-wrap:anywhere; }
+.review-effect-meaning > strong { font-weight:var(--weight-medium); }
+.review-effect-meaning > details { margin-block-start:var(--space-12); }
+.review-effect-meaning + .review-effect-meaning { border-top:1px solid var(--color-border);padding-top:var(--space-16); }
 .permission-review-compare .review-permission-value { grid-template-columns:minmax(0,1fr);gap:var(--space-12); }
 .permission-review-compare .review-protected-results { padding-left:0;border-left:0;border-top:1px solid var(--color-border);padding-top:var(--space-12); }
 @media(max-width:700px){.review-permission-value{grid-template-columns:minmax(0,1fr);gap:var(--space-12)}.review-protected-results{border-left:0;border-top:1px solid var(--color-border);padding:var(--space-12) 0 0}}

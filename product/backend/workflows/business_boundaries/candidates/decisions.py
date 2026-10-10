@@ -10,7 +10,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 
 def scenario_state(work, value, *, extra=None):
     """按候选内指纹读取最后一次人的决定；较新纠正不能复活更早的选择。"""
-    history = work.rule_candidates.decisions(value.project_id, value.candidate_id, value.revision)
+    history = work.rule_candidates.decisions(value.project_id, value.candidate_id, value.revision) if getattr(value.content, "scenarios", ()) else ()
     if extra is not None:
         history = (*history, extra)
     latest = {item.scenario_id: item for item in history}

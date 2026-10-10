@@ -61,6 +61,9 @@ class OfficialExperienceView(WireModel):
     last_error_code: str | None = None
     operation_id: str | None = None
     operation_state: Literal["PENDING", "SUCCEEDED", "FAILED", "UNKNOWN"] | None = None
+    operation_phase: str | None = None
+    operation_started_at_us: int | None = None
+    operation_finished_at_us: int | None = None
     workspace_retained: bool = False
     recovery_state: Literal["NONE", "EXITED", "OWNERSHIP_UNCONFIRMED", "OWNED_RUNNING"] = "NONE"
 

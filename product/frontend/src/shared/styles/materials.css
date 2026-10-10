@@ -115,7 +115,8 @@
 [data-product=jiejian] .task-focus { display:block; }
 .task-focus-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,.45fr); align-items:center; gap:var(--space-32); }
 .task-focus-layout > * { min-width:0; }
-[data-product=jiejian] .task-focus-layout .task-focus-actions { align-self:center; margin:0; }
+/* 独立操作栏内的短按钮组居中，按钮之间仍保留主次顺序。 */
+[data-product=jiejian] .task-focus-layout .task-focus-actions { align-self:center; justify-content:center; margin:0; }
 [data-product=jiejian] .task-focus-layout p:last-child { margin-bottom:0; }
 .check-footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--space-16) var(--space-24); padding-top:var(--space-20); border-top:1px solid var(--color-border); }
 .check-related-actions { display:flex; flex-wrap:wrap; gap:var(--space-12) var(--space-24); }

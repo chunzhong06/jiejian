@@ -54,7 +54,7 @@
 - `JobRepository.get_by_capture(self, capture_id) -> JobRecord &#124; None`
 - `JobRepository.get_by_runtime_load(self, load_id) -> JobRecord &#124; None`
 - `JobRepository.list_for_project(self, project_id) -> tuple[JobRecord, ...]`
-- `JobRepository.next_pending(self, now_us, target_types) -> JobRecord &#124; None`
+- `JobRepository.next_pending(self, now_us, target_types, exclude_job_ids) -> JobRecord &#124; None`
 - `class JobEventRepository`
 - `JobEventRepository.append(self, record) -> None`
 - `JobEventRepository.list_for_job(self, job_id) -> tuple[JobEventRecord, ...]`

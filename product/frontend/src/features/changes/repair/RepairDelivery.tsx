@@ -22,7 +22,8 @@ export function RepairDelivery({task,change,onNavigate,onBack,onViewChange,loadi
   :task.change_id?<Button type="primary" loading={loadingChange} onClick={onViewChange}>查看本批修改</Button>
   :<Button type="primary" onClick={()=>void copy()}>复制修复依据</Button>
  return <div ref={root}><EditorialPage label="修复依据">
-  <EditorialHeader eyebrow="源码改动" title="修复与复验" status={<StatusBadge kind={task.status==='VERIFIED'?'verdict':'lifecycle'} tone={task.status==='VERIFIED'?'success':task.status==='STALE'?'warning':'neutral'}>{repairLabels[task.status]}</StatusBadge>}/>
+  <Button type="link" onClick={onBack}>← 返回源码改动</Button>
+  <EditorialHeader eyebrow="源码改动 / 修复依据" title="修复与复验" status={<StatusBadge kind={task.status==='VERIFIED'?'verdict':'lifecycle'} tone={task.status==='VERIFIED'?'success':['STALE','NOT_VERIFIED','REPAIR_REQUIRED'].includes(task.status)?'danger':'neutral'}>{repairLabels[task.status]}</StatusBadge>}/>
   <section className="repair-origin"><div><h2>{deny[0]?.action_label??'已记录的权限问题'}</h2><p className="editorial-muted">原检查 · 权限版本 {task.contract.original_policy_epoch}</p></div><Button type="link" onClick={()=>onNavigate(`/history?run_id=${encodeURIComponent(task.contract.source_run_id)}&case_id=${encodeURIComponent(task.contract.source_case_id)}`)}>查看原始证据</Button></section>
   {task.status==='VERIFIED'?<section className="repair-published"><p>原题与要求保留的业务通过验证</p><RepairComparison rows={rows} sourceRunId={task.contract.source_run_id} onNavigate={onNavigate}/></section>:<div className="repair-requirement-columns">
     <section aria-label="需要消除的后果"><h3>需要消除的后果</h3>{deny.length?deny.map(row=><div className="repair-business-rule" key={row.source_case_id}><dl><div><dt>操作账号</dt><dd>{row.subject_label??'原操作账号'}</dd></div><div><dt>资源归属</dt><dd>{row.resource_owner_label??'原资源所有者'}</dd></div></dl><p><strong>不应发生：</strong>{row.effect_labels.join('、')}。</p></div>):<p>逐项说明暂未取得，请查看原始证据。</p>}</section>

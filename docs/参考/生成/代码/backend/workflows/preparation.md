@@ -24,6 +24,7 @@
 - `PreparationBatchService.show(self, project, operation)`
 - `PreparationBatchService.cancel(self, project, operation)`
 - `PreparationBatchService.advance(self)`
+- `PreparationBatchService.wait_for_work(self)`
 
 静态import / dot-source：`hashlib`、`json`、`product.backend.core.errors`、`product.backend.workflows.preparation.proofs.commands`、`product.protocols.preparation.proof_sources`、`product.protocols.runtime.runtime_identity`、`pydantic`、`threading`、`time`、`typing`
 

@@ -11,6 +11,7 @@
  *   候选不是权限结论；本组件不收集 Profile、资源 ID、恢复路径或测试凭据。
  * ============================================================================= */
 
+import { RulePreparationStages } from '../../shared/ui/RulePreparationStages'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { LoadingState } from '../../shared/ui/LoadingState'
 import { useEffect, useRef, useState } from 'react'
@@ -122,7 +123,7 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
     catch { setSyncFailed(true); return false }
   }
   useEffect(() => { setReviewOpen(false); setSyncFailed(false); setConnecting(requestConnection) }, [selected?.project_id, requestConnection])
-  useEffect(() => { if (reviewOpen) reviewSurface.current?.focus() }, [reviewOpen])
+  useEffect(() => { if (reviewOpen) reviewSurface.current?.focus({ preventScroll: true }) }, [reviewOpen])
   useTaskGuard(loading || Boolean(manualRole.trim() || manualAction.trim()) || (!understanding && Boolean(manualPath.trim())))
   useEffect(() => {
     if (!candidateEditing && !manualRole.trim() && !manualAction.trim() && (understanding || !manualPath.trim())) return
@@ -299,14 +300,13 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
       action={<Button loading={officialSampleBusy} onClick={() => { void onStartOfficialSample() }}>由界鉴启动官方示例</Button>}
     />
     : null
-  const sequence = [{step:1,label:'选择应用目录'}, ...(connecting ? [{step:2,label:'确认本地地址'}] : []), {step:3,label:'授权只读分析'}, {step:4,label:'审阅权限组和业务动作'}]
   const primaryAction = currentStep === 1
     ? { label: '选择应用文件夹', onClick: () => void chooseFolder(), loading }
     : currentStep === 2
       ? { label: '确认本地地址', onClick: () => void confirmEndpoint(), loading, disabled: !endpoint.trim() || !appRunningConfirmed || !endpointConfirmed }
       : currentStep === 3
         ? { label: understanding?.source_analysis_authorized ? '重新开始分析' : '授权并开始分析', onClick: () => void authorizeAndAnalyze(), loading, disabled: !analysisAuthorized }
-        : { label: reviewComplete ? '继续建立权限规则' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete || candidateEditing || loading || syncFailed }
+        : { label: reviewComplete ? '继续整理权限要求' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete || candidateEditing || loading || syncFailed }
 
   const candidateReview = understanding?.source_fingerprint ? <CandidateReview
     key={understanding.project_id} value={understanding} onEditingChange={setCandidateEditing} onApplied={async (value, confirmed) => { applyUnderstanding(value); const synced = await syncWorkspace(); if (confirmed && synced && value.role_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale) && value.action_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale)) onContinue() }}
@@ -325,22 +325,17 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   </section>
 
   return <div className="application-setup">
-    <ol className="access-progress" aria-label="应用接入进度">
-      {sequence.map(({label, step}, index) => {
-        const state = step < currentStep ? 'complete' : step === currentStep ? 'current' : 'upcoming'
-        return <li key={label} className={`task-sequence-step is-${state}`}><span>{step < currentStep ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{state === 'complete' ? '已完成' : state === 'current' ? '当前任务' : '随后进行'}</small></div></li>
-      })}
-    </ol>
+    <RulePreparationStages phase={0} connectionPhase={currentStep < 3 ? 0 : currentStep === 3 ? 1 : undefined} note={currentStep === 2 ? '确认本地地址' : undefined}/>
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
     {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
     {syncFailed && <Alert type="warning" showIcon message="本次操作已经保存，下一步尚未同步" description="已保存的信息会保留。重新同步只读取状态，不会重复提交。" action={<Button onClick={() => void syncWorkspace()}>重新同步下一步</Button>}/>}
     {currentStep === 4 && understanding && !reviewOpen && <section className="access-next-surface access-next-layout" aria-label="接入后的当前任务">
       <div className="access-connection-summary">
       <header><span className="access-app-icon"><AppstoreOutlined aria-hidden/></span><div><h2>{selected?.name?.trim() || '当前应用'}</h2><p className="editorial-muted">源码已分析，接下来整理业务</p></div></header>
-      <dl className="access-facts"><div><dt>应用地址</dt><dd>{endpointReady ? '已确认' : '实际操作前再连接'}</dd></div><div><dt>源码分析</dt><dd>已完成</dd></div><div><dt>业务建议</dt><dd>{reviewComplete ? '已有确认内容，可继续审阅' : '待你审阅'}</dd></div></dl>
-      <details><summary>查看接入详情</summary>{understanding.confirmed_endpoint && <p>已保存地址：{understanding.confirmed_endpoint}</p>}<p>源码分析仅产生建议，不会自动批准权限。</p></details>{!endpointReady && <Button onClick={() => void openConnection()} loading={loading}>连接已运行的应用</Button>}
+      <dl className="access-facts"><div><dt>应用地址</dt><dd>{endpointReady ? '已确认' : '运行地址尚未确认'}</dd></div><div><dt>源码分析</dt><dd>已完成</dd></div><div><dt>业务建议</dt><dd>{reviewComplete ? '已有确认内容，可继续审阅' : '待你审阅'}</dd></div></dl>
+      <details><summary>查看接入详情</summary>{understanding.confirmed_endpoint && <p>已保存地址：{understanding.confirmed_endpoint}</p>}<p>源码分析仅产生建议，不会自动批准权限。应用可以稍后启动；录制操作或开始检查前需要确认运行地址。</p></details>{!endpointReady && <Button onClick={() => void openConnection()} loading={loading}>连接已运行的应用</Button>}
       </div>
-      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} iconPosition="end" onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
+      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>核对角色与业务动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} iconPosition="end" onClick={() => setReviewOpen(true)}>核对角色与业务动作</Button><p className="access-next-note">保存角色与动作后，继续整理允许与禁止的权限要求。</p></div>
     </section>}
     {currentStep === 1 && <ConnectionSupport />}
     {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>

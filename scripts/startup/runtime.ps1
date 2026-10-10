@@ -25,6 +25,8 @@ function Get-StageDisplayName([string]$Stage) {
         "node" = "Node.js 环境"
         "pnpm" = "pnpm 环境"
         "playwright" = "浏览器环境"
+        "browser-download" = "浏览器下载与安装"
+        "browser-verify" = "浏览器可执行文件核验"
         "doctor" = "运行环境诊断"
         "migration" = "本地数据准备"
         "frontend-install" = "前端依赖"
@@ -42,28 +44,15 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     Write-Startup ("失败阶段: {0}`n诊断: {1}`n恢复命令: {2}`n日志: {3}" -f $Stage, $Diagnostic, $Recovery, $script:LogPath)
     Stop-WaitIndicator
     if ($null -ne $script:DisplayStageTimer) { Complete-DisplayStage "失败" }
-    $cross = if ($script:DisplayUnicode) { "×" } else { "FAILED" }
-    $branch = if ($script:DisplayUnicode) { "  └─" } else { "  `--" }
     $displayCode = "STARTUP_" + (($Stage -replace '[^a-zA-Z0-9]+', '_').Trim('_').ToUpperInvariant())
     $displayStage = Get-StageDisplayName $Stage
-    Write-Host ""
-    Write-Host ("{0} 启动未完成" -f $cross) -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  失败阶段" -ForegroundColor Red
-    Write-Host ("{0} {1}" -f $branch, $displayStage) -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  原因" -ForegroundColor Red
-    Write-Host ("{0} {1}" -f $branch, $Diagnostic) -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  如何解决" -ForegroundColor Yellow
-    Write-Host ("{0} {1}" -f $branch, $Recovery) -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  日志" -ForegroundColor Gray
-    Write-Host ("{0} {1}" -f $branch, ([IO.Path]::GetFullPath($script:LogPath))) -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  错误代码" -ForegroundColor Red
-    Write-Host ("{0} {1}（退出码 {2}）" -f $branch, $displayCode, $Code) -ForegroundColor Red
-    Write-Host ""
+    $script:StartupPanelKeys = ""
+    Set-StartupStatus "启动未完成" ("{0}未完成" -f $displayStage) $Diagnostic
+    Close-StartupPanel
+    # 恢复命令和日志路径不能截断，退出前留下可复制的完整文本。
+    Write-Host ("建议：{0}" -f $Recovery) -ForegroundColor Yellow
+    Write-Host ("日志：{0}" -f ([IO.Path]::GetFullPath($script:LogPath))) -ForegroundColor Gray
+    Write-Host ("错误代码：{0}（退出码 {1}）" -f $displayCode, $Code) -ForegroundColor Red
     exit $Code
 }
 
@@ -132,6 +121,7 @@ function Invoke-External(
     }
     $previousErrorActionPreference = $ErrorActionPreference
     $waitIndicatorStarted = $false
+    $prepareFailure = $null
     try {
         $ErrorActionPreference = "Continue"
         if (-not $EchoOutput) {
@@ -152,36 +142,48 @@ function Invoke-External(
                     $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
                     [IO.File]::AppendAllText($script:LogPath, $line + [Environment]::NewLine, $script:Utf8Encoding)
                     if ($Stage -eq "source-prepare") { [void](Handle-PrepareStatus $line) }
+                    if ($Stage -eq "source-prepare" -and $line.StartsWith("__JIEJIAN_PREPARE_FAILURE__:") -and $line.Length -le 4096) {
+                        try { $prepareFailure = $line.Substring("__JIEJIAN_PREPARE_FAILURE__:".Length) | ConvertFrom-Json } catch { }
+                    }
+                    if ($Stage -eq "source-prepare" -and $line -in @("__JIEJIAN_BROWSER_PHASE__:download", "__JIEJIAN_BROWSER_PHASE__:verify")) {
+                        Stop-WaitIndicator
+                        $verifying = $line.EndsWith(":verify")
+                        $script:StartupPanelTitle = if ($verifying) { "核验浏览器安装" } else { "下载并安装浏览器" }
+                        $script:StartupPanelDetail = if ($verifying) { "下载已结束，正在确认浏览器可执行文件。" } else { "首次准备需要下载；到达 100% 后还需完成安装核验。" }
+                        if ($script:StartupPanelActive) { Write-StartupPanel }
+                        Start-WaitIndicator $(if ($verifying) { "browser-verify" } else { "browser-download" })
+                    }
                     if ($line.StartsWith("__JIEJIAN_SERVE_STATUS__:")) {
                         if ($line.EndsWith("still-starting")) {
-                            Write-Host "界鉴启动时间较长，仍在准备，请稍候……" -ForegroundColor Yellow
+                            Set-StartupStatus "正在启动" "界鉴启动时间较长，仍在准备，请稍候" "尚未收到服务就绪确认；可以继续等待或退出。"
+                            Start-WaitIndicator "serve"
                         } elseif (-not $script:ServeReadyObserved -and $line.EndsWith("ready-browser-opened")) {
                             $script:ServeReadyObserved = $true
                             Stop-WaitIndicator
-                            Write-Host ""
-                            Write-Host "界鉴网页已打开。" -ForegroundColor Cyan
-                            Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
-                            Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
+                            Set-StartupStatus "已就绪" "界鉴网页已打开" ("服务运行中 · http://127.0.0.1:{0}/ · 此窗口管理后台服务。" -f $Port)
                         } elseif (-not $script:ServeReadyObserved -and $line.EndsWith("ready-browser-open-failed")) {
                             $script:ServeReadyObserved = $true
                             Stop-WaitIndicator
-                            Write-Host ""
-                            Write-Host "界鉴已经启动，但未能自动打开网页。" -ForegroundColor Yellow
-                            Write-Host ("请在浏览器访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Gray
-                            Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
-                            Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
+                            Set-StartupStatus "已就绪" "界鉴已经启动，但未能自动打开网页" ("请在浏览器访问 http://127.0.0.1:{0}/" -f $Port)
                         } elseif ($line.EndsWith("startup-failed")) {
                             $script:ServeStartupFailed = $true
                             Stop-WaitIndicator
-                            Write-Host "界鉴服务在就绪前停止。" -ForegroundColor Red
+                            Set-StartupStatus "启动未完成" "界鉴服务在就绪前停止" "请查看下方失败原因与恢复办法。"
                         }
                     }
                     if ($Stage -eq "serve" -and $script:ServeReadyObserved) {
                         switch ($line) {
-                            "__JIEJIAN_GUI_STATUS__:controls-ready" { Write-Host "[G] 重新打开 GUI    [Ctrl+C] 退出界鉴" -ForegroundColor Cyan }
-                            "__JIEJIAN_GUI_STATUS__:opened" { Write-Host "已发送 GUI 打开请求。" -ForegroundColor Cyan }
-                            "__JIEJIAN_GUI_STATUS__:open-failed" { Write-Host ("未能打开 GUI；可按 G 重试，或访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Yellow }
-                            "__JIEJIAN_GUI_STATUS__:input-unavailable" { Write-Host ("终端快捷键不可用；可访问 http://127.0.0.1:{0}/" -f $Port) -ForegroundColor Yellow }
+                            "__JIEJIAN_GUI_STATUS__:controls-ready" {
+                                $script:StartupPanelKeys = "Ctrl+C 退出    G 重新打开界面"
+                                if ($script:StartupPanelActive) { Write-StartupPanel }
+                                else { Write-Host "[G] 重新打开 GUI    [Ctrl+C] 退出界鉴" -ForegroundColor Cyan }
+                            }
+                            "__JIEJIAN_GUI_STATUS__:opened" { Set-StartupStatus "已就绪" "已发送界面打开请求" ("服务运行中 · http://127.0.0.1:{0}/" -f $Port) }
+                            "__JIEJIAN_GUI_STATUS__:open-failed" { Set-StartupStatus "已就绪" "未能打开界面" ("可重试，或访问 http://127.0.0.1:{0}/" -f $Port) }
+                            "__JIEJIAN_GUI_STATUS__:input-unavailable" {
+                                $script:StartupPanelKeys = "Ctrl+C 退出"
+                                Set-StartupStatus "已就绪" "终端快捷键不可用" ("请访问 http://127.0.0.1:{0}/" -f $Port)
+                            }
                         }
                     }
                 } |
@@ -196,6 +198,9 @@ function Invoke-External(
         $ErrorActionPreference = $previousErrorActionPreference
     }
     if ($code -ne 0) {
+        if ($Stage -eq "source-prepare" -and $null -ne $prepareFailure -and $prepareFailure.stage -match '^[a-z-]{1,64}$') {
+            Fail-Start $FailureCode ([string]$prepareFailure.stage) ([string]$prepareFailure.message) ([string]$prepareFailure.recovery)
+        }
         if ([string]::IsNullOrWhiteSpace($Recovery)) { $Recovery = Get-RecoveryCommand }
         Fail-Start $FailureCode $Stage "外部命令返回 $code" $Recovery
     }

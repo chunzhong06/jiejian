@@ -26,12 +26,14 @@ class RuleCandidateService:
         self._preparation = preparation
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
 
-    def context(self, project_id: str, *, offset: int = 0):
+    def context(self, project_id: str, *, offset: int = 0, archived: bool = False, include_preparation: bool = True):
         if type(offset) is not int or offset < 0:
             raise JiejianError(ErrorCode.INPUT_INVALID, "候选列表位置无效")
         with self._uow_factory() as work:
             draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
-            candidates = work.rule_candidates.list(project_id, offset=offset, limit=51)
+            candidates = work.rule_candidates.list(project_id, offset=offset, limit=51, archived=archived)
+            understanding = work.application_understanding.get(project_id)
+            source_items = [] if understanding is None else [*understanding.role_candidates, *understanding.action_candidates]
             # 不输出源码摘要/绝对路径；这个不透明基线仅涵盖正式业务修订。
             result = {"project_id": project_id, "basis_id": "rb_" + draft.boundary_state_fingerprint,
                 "candidate_input_schema": RuleCandidateSave.model_json_schema(),
@@ -39,12 +41,23 @@ class RuleCandidateService:
                 "supported_relations": ["OWNS", "SAME_ROLE_OTHER_ACCOUNT", "OTHER_ROLE"],
                 "supported_expectations": ["ALLOW", "DENY"],
                 "limitations": ["不支持任意时间、金额、唯一性或并发约束", "保存候选不批准权限，不表示能够执行检查"],
-                "candidates": [{"candidate_id": c.candidate_id, "revision": c.revision,
-                    "original_text": c.content.original_text, "submitted_via": c.submitted_via,
-                    "created_at_us": c.created_at_us} for c in candidates[:50]],
+                "modeling_guidance": [
+                    "正式业务边界为空时仍可保存首次CREATE候选；候选完成后由人审阅提案并批准，不需要先手工建立同一套边界。",
+                    "DATA_DISCLOSURE必须列出真实披露的protected_projection；其他效果类型不填写字段投影。",
+                    "授予、开放或撤回资源访问范围属于STATE_MUTATION，相应动作state_changing为true；读取实际凭据才属于CREDENTIAL_ACCESS。",
+                    "曾经开放后又撤回的要求不能降为只检查最终状态。当前检查窗口内、主体和资源正确关联且来源完整的独立提交可证明状态变化；任意历史范围不能据此视为支持。",
+                    "文件交付、数据披露和访问范围变化应分别列为效果。同一动作可产生多个效果，保持原始允许或禁止要求，不为保存成功删减受保护结果。",
+                ],
+                "source_summary": None if understanding is None else {
+                    "roles": sum(not c.stale and c.decision == "CONFIRMED" for c in understanding.role_candidates),
+                    "actions": sum(not c.stale and c.decision == "CONFIRMED" for c in understanding.action_candidates),
+                    "pending": sum(c.stale or c.decision in {"PROPOSED", "REVIEW_REQUIRED"} for c in source_items),
+                    "analyzed": understanding.analysis_completed_at_us is not None},
+                "formal_permission_count": len(draft.permissions),
+                "candidates": [self._view(work, c, draft=draft, summary=True) for c in candidates[:50]],
                 "next_offset": offset + 50 if len(candidates) > 50 else None}
         # 正式准备仍由原服务现场投影；读取上下文不生成绑定或执行目标。
-        result["preparation"] = None if self._preparation is None else self._preparation.get(project_id)
+        result["preparation"] = None if self._preparation is None or not include_preparation else self._preparation.get(project_id)
         return result
 
     def save(self, project_id: str, command: RuleCandidateSave, *, submitted_via: str):
@@ -62,6 +75,8 @@ class RuleCandidateService:
             content = freeze_candidate_content(command.content)
             if command.candidate_id:
                 current = self._required(work, project_id, command.candidate_id)
+                if work.rule_candidates.visibility(command.candidate_id)["archived"]:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已归档，请由用户恢复后再补充")
                 if current.revision != command.expected_revision:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已有新修订", details={"reason": "CONFLICT"})
                 check_candidate_edit(work, current, content)
@@ -95,6 +110,8 @@ class RuleCandidateService:
             draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
             self._current_basis(command.expected_basis_id, draft)
             current = self._required(work, project_id, candidate_id)
+            if work.rule_candidates.visibility(candidate_id)["archived"]:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先恢复候选再核对含义")
             if current.revision != command.expected_revision or current.basis_id != command.expected_basis_id:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已经变化，请重新核对含义", details={"reason": "CONFLICT"})
             scenario = next((item for item in getattr(current.content, "scenarios", ()) if item.scenario_id == command.scenario_id), None)
@@ -124,6 +141,21 @@ class RuleCandidateService:
         with self._uow_factory() as work:
             return self._view(work, self._required(work, project_id, candidate_id, revision))
 
+    def set_visibility(self, project_id: str, candidate_id: str, *, archived: bool, revision: int, expected_version: int):
+        """GUI显式归档或恢复；展示状态与业务修订分离，未决提案不能隐藏。"""
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            value = self._required(work, project_id, candidate_id)
+            if value.revision != revision:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已有新修订，请重新读取")
+            if archived and any(not work.business_boundaries.decision_for_proposal(proposal_id)
+                for proposal_id in work.rule_candidates.proposal_ids(candidate_id)):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "这条候选还有待决定提案，请先审阅或放弃提案")
+            result = work.rule_candidates.set_visibility(candidate_id, archived=archived,
+                expected_version=expected_version, now_us=self._clock_us())
+            work.commit()
+            return result
+
     def preview(self, project_id: str, command):
         from product.backend.workflows.business_boundaries.candidates.preview import preview_rules
         with self._uow_factory() as work:
@@ -147,6 +179,8 @@ class RuleCandidateService:
                 self._same_request(receipt, fingerprint)
                 return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
             value = self._required(work, project_id, candidate_id, revision)
+            if work.rule_candidates.visibility(candidate_id)["archived"]:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先恢复候选再生成提案")
             head = self._required(work, project_id, candidate_id)
             if head.revision != revision:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "请审阅候选最新修订", details={"reason": "CONFLICT"})
@@ -165,8 +199,8 @@ class RuleCandidateService:
             work.commit()
             return result
 
-    def _view(self, work, value):
-        draft = self._boundaries.maintenance_draft(value.project_id, work=work, allow_empty=True)
+    def _view(self, work, value, *, draft=None, summary=False):
+        draft = draft or self._boundaries.maintenance_draft(value.project_id, work=work, allow_empty=True)
         issues = []
         content = value.content
         states, _, conflicts = scenario_state(work, value)
@@ -180,6 +214,12 @@ class RuleCandidateService:
         permission_ids = {item.item_id for item in content.permissions}
         known_ids = permission_ids | {item.item_id for item in draft.permissions}
         mapped = {item.permission_item_id for item in content.examples}
+        if not content.actors and not draft.actors:
+            issues.append({"code": "ROLE_REQUIRED", "message": "还没有业务角色，请沿用已确认的源码角色或补充角色含义"})
+        if not content.actions and not draft.actions:
+            issues.append({"code": "ACTION_REQUIRED", "message": "还没有业务动作，请补充动作及需要保护的结果"})
+        if not content.permissions and not draft.permissions:
+            issues.append({"code": "PERMISSION_REQUIRED", "message": "还没有权限要求，请说明谁可以或不可以对谁的资源执行这些动作"})
         if not content.permissions or not content.examples or permission_ids - mapped:
             issues.append({"code": "NEEDS_CLARIFICATION", "message": "每条拟确认权限都需要具体情形说明"})
         for example in content.examples:
@@ -197,8 +237,18 @@ class RuleCandidateService:
             issues.append({"code": "AMBIGUOUS_REFERENCE", "message": "业务引用或当前修订不一致，请回到开发客户端中的 Agent 修订"})
         proposal_id = work.rule_candidates.proposal_id(value.candidate_id, value.revision)
         decision = None if proposal_id is None else work.business_boundaries.decision_for_proposal(proposal_id)
+        assessment = "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if unchanged else "REVIEWABLE"
+        visibility = work.rule_candidates.visibility(value.candidate_id)
+        if summary:
+            # 列表共用一份正式基线，不展开逐条材料库存和完整审阅正文。
+            return {"candidate_id": value.candidate_id, "revision": value.revision,
+                "original_text": content.original_text, "submitted_via": value.submitted_via,
+                "created_at_us": value.created_at_us, "assessment": assessment,
+                "counts": {name: len(getattr(content, name)) for name in ("actors", "actions", "permissions", "examples")},
+                "issue_count": 0 if decision else len(issues), "proposal_id": proposal_id,
+                "decision": None if decision is None else decision.decision, "visibility": visibility}
         # 已作决定的候选是历史输入；不能因自身批准推进基线而提示用户再次修改同一候选。
-        return {"candidate": value, "assessment": "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if unchanged else "REVIEWABLE",
+        return {"candidate": value, "assessment": assessment, "visibility": visibility,
             "issues": [] if decision else issues, "proposal_id": proposal_id, "decision": decision,
             "scenario_decisions": states,
             "meaning_context": {"actors": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name} for item in merged.actors],

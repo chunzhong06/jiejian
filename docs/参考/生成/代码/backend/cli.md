@@ -69,7 +69,7 @@
 - `GuiBrowserSession.close(self) -> None`
 - `open_gui_browser(url, var_dir, session, system_browser) -> bool`
 
-静态import / dot-source：`__future__`、`logging`、`os`、`pathlib`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`subprocess`、`threading`、`urllib.parse`、`webbrowser`、`作用域内：ctypes`
+静态import / dot-source：`__future__`、`json`、`logging`、`os`、`pathlib`、`product.backend.infra.runtime.paths`、`product.backend.infra.runtime.process.tree`、`subprocess`、`threading`、`urllib.parse`、`webbrowser`、`作用域内：ctypes`
 
 ### `product/backend/cli/gui_console.py`
 

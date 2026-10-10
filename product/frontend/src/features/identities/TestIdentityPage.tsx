@@ -164,7 +164,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
 
   const start = async (identityId: string) => {
     setBusy(true)
-    try { const next = await testIdentitiesApi.startPreparation(identityId); if (!alive.current) return; setPreparation(next); await load(); await syncWorkspace('登录准备已开始') }
+    try { const next = await testIdentitiesApi.startPreparation(identityId); if (!alive.current) return; setPreparation(next); await Promise.all([load(), syncWorkspace('登录准备已开始')]) }
     catch (error) { if (alive.current) onError(error as ApiError) } finally { if (alive.current) setBusy(false) }
   }
 
@@ -179,8 +179,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       setReceipt(next.status === 'PREPARED' ? '测试登录状态已保存。实际执行身份将在检查中独立核验。' : '登录保存请求已提交，正在核对结果。')
       setSyncError('正在读取账号状态与下一步。')
       if (next.status === 'PREPARED') onPrepared?.()
-      await load()
-      await syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')
+      await Promise.all([load(), syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')])
     }
     catch (error) { if (alive.current) { setSaveUncertain(true); setSyncError('保存结果需要核对。请先重新读取，不要重复提交。'); onError(error as ApiError) } } finally { confirming.current = false; if (alive.current) setBusy(false) }
   }
@@ -188,7 +187,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   const cancel = async () => {
     if (!preparation) return
     setBusy(true)
-    try { const next = await testIdentitiesApi.cancelPreparation(preparation.preparation_id); if (!alive.current) return; setPreparation(next); await load(); await syncWorkspace('登录准备已取消') }
+    try { const next = await testIdentitiesApi.cancelPreparation(preparation.preparation_id); if (!alive.current) return; setPreparation(next); await Promise.all([load(), syncWorkspace('登录准备已取消')]) }
     catch (error) { if (alive.current) onError(error as ApiError) } finally { if (alive.current) setBusy(false) }
   }
 
@@ -197,7 +196,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     content: '界鉴会精确删除该测试账号保存的登录状态；账号名称与业务主体绑定会保留。',
     okText: '清除登录状态', cancelText: '取消', okButtonProps: { danger: true },
     onOk: async () => {
-      try { await testIdentitiesApi.reset(identity.identity_id); await load(); await syncWorkspace('账号登录状态已清除') }
+      try { await testIdentitiesApi.reset(identity.identity_id); setReceipt('账号登录状态已清除'); setSyncError('正在更新账号与下一步状态…'); void Promise.all([load(), syncWorkspace('账号登录状态已清除')]).catch(error => { if(alive.current){setSyncError('操作已保存，列表尚未更新，请刷新。');onError(error as ApiError)} }) }
       catch (error) { onError(error as ApiError); throw error }
     },
   })
@@ -207,7 +206,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     content: '界鉴会先删除该账号的全部安全登录状态；如果安全存储清理失败，账号信息会保留以便重试。',
     okText: '删除测试账号', cancelText: '取消', okButtonProps: { danger: true },
     onOk: async () => {
-      try { await testIdentitiesApi.delete(identity.identity_id); await load(); await syncWorkspace('测试账号已删除') }
+      try { await testIdentitiesApi.delete(identity.identity_id); setReceipt('测试账号已删除'); setSyncError('正在更新账号与下一步状态…'); void Promise.all([load(), syncWorkspace('测试账号已删除')]).catch(error => { if(alive.current){setSyncError('操作已保存，列表尚未更新，请刷新。');onError(error as ApiError)} }) }
       catch (error) { onError(error as ApiError); throw error }
     },
   })

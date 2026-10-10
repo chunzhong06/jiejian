@@ -45,6 +45,34 @@ def test_create_replay_conflict_and_one_active_task(development):
     assert service.receipt("other", "CREATE", key) is None
 
 
+def test_same_source_history_is_visible_without_inventing_delivery_link(development):
+    from types import SimpleNamespace
+    from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+    from product.backend.infra.storage.execution.runs import RunRecord
+    harness, service = development
+    accepted = _start(harness, service)
+    (harness.source_root/'delivery.py').write_text('# 当前交付。\nvalue=1\n',encoding='utf-8')
+    receipt = service.deliver(harness.project_id,accepted.task_id,operation_id=uuid4().hex,expected_version=accepted.task_version,context_id=accepted.context_id,reason='本批修改',submitted_by='LOCAL_GUI')
+    expected = 'run_'+uuid4().hex
+    with harness.core.uow_factory() as work:
+        delivery=work.development.delivery_for_change(harness.project_id,receipt.change_id)
+        snapshot=work.source_changes.snapshot(delivery.current_snapshot_id)
+        context=work.development.context(harness.project_id,delivery.context_id)
+        for index,(run_id,fingerprint,epoch,created) in enumerate([
+            (expected,snapshot.source_fingerprint,context.policy_epoch,delivery.created_at_us+1),
+            ('run_'+uuid4().hex,'f'*64,context.policy_epoch,delivery.created_at_us+2),
+            ('run_'+uuid4().hex,snapshot.source_fingerprint,context.policy_epoch+1,delivery.created_at_us+3),
+        ]):
+            work.runs.add(RunRecord(run_id=run_id,project_id=harness.project_id,request_hash='a'*64,plan_fingerprint='b'*64,source_fingerprint=fingerprint,policy_epoch=epoch,engine_version='test',lifecycle=RunLifecycle.COMPLETED,verdict=RunVerdict.PASS,created_at_us=created,updated_at_us=created,finished_at_us=created))
+        work.commit()
+    service._reader._results=SimpleNamespace(status=lambda run_id,project_id:SimpleNamespace(result_integrity='VALID'))
+    result=service.delivery_verification(harness.project_id,receipt.delivery_id)
+    assert result['run_id'] is None and result['same_source_run_id']==expected
+    assert result['verdict'] is None
+    with harness.core.uow_factory() as work:
+        assert work.development.latest_check_run(harness.project_id,receipt.delivery_id) is None
+
+
 def test_concurrent_same_key_returns_one_persistent_task(development):
     harness, service = development
     key = uuid4().hex

@@ -62,7 +62,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [backend/infra/storage/results](代码/backend/infra/storage/results.md) | 7 |
 | [backend/infra/storage/runtime](代码/backend/infra/storage/runtime.md) | 4 |
 | [backend/infra/storage/settings](代码/backend/infra/storage/settings.md) | 2 |
-| [backend/migrations](代码/backend/migrations.md) | 20 |
+| [backend/migrations](代码/backend/migrations.md) | 22 |
 | [backend/workflows/_root](代码/backend/workflows/_root.md) | 1 |
 | [backend/workflows/agent_access](代码/backend/workflows/agent_access.md) | 3 |
 | [backend/workflows/application_understanding](代码/backend/workflows/application_understanding.md) | 9 |
@@ -71,7 +71,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [backend/workflows/checks](代码/backend/workflows/checks.md) | 17 |
 | [backend/workflows/contracts](代码/backend/workflows/contracts.md) | 1 |
 | [backend/workflows/development](代码/backend/workflows/development.md) | 4 |
-| [backend/workflows/examples](代码/backend/workflows/examples.md) | 9 |
+| [backend/workflows/examples](代码/backend/workflows/examples.md) | 10 |
 | [backend/workflows/onboarding](代码/backend/workflows/onboarding.md) | 5 |
 | [backend/workflows/preparation](代码/backend/workflows/preparation.md) | 33 |
 | [backend/workflows/projects](代码/backend/workflows/projects.md) | 4 |
@@ -111,10 +111,10 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [scripts/dev](代码/scripts/dev.md) | 7 |
 | [scripts/docs](代码/scripts/docs.md) | 3 |
 | [scripts/editor](代码/scripts/editor.md) | 3 |
-| [scripts/startup](代码/scripts/startup.md) | 4 |
+| [scripts/startup](代码/scripts/startup.md) | 5 |
 | [配置与入口](代码/配置与入口.md) | 15 |
 
-合计：769个文件、93个分片。
+合计：773个文件、93个分片。
 
 [注册与格式](注册与格式.md) · [数据库迁移](数据库迁移.md)。仅读源码文本，不import产品、打开数据库或读取var运行数据。
 

@@ -1,5 +1,5 @@
 // 规则候选按原文和具体情形审阅；未知写回执只查询，陈旧响应不得跨项目覆盖。
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button, Segmented, Spin } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ruleCandidatesApi, type MeaningChoice, type RuleCandidateContext, type RuleCandidateView } from '../../api/boundaries/ruleCandidates'
 import type { ApiError } from '../../api/http'
@@ -8,6 +8,8 @@ import { AgentAssistEntry } from '../../shared/ui/AgentAssistEntry'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { RuleMeaningReview } from './RuleMeaningReview'
+import { RulePreparationProgress } from './RulePreparationProgress'
+import { RuleCandidateList } from './RuleCandidateList'
 import './rule-candidates.css'
 
 export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision, recoveryOperation, onProposal, onSelected, onRecoveryChange, onExit, onNavigate }: {
@@ -26,23 +28,28 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   const [error, setError] = useState<string>()
   const [operation, setOperation] = useState<string>()
   const [epoch, setEpoch] = useState(0)
+  const [archived, setArchived] = useState(false)
+  const [copiedRequest, setCopiedRequest] = useState(false)
+  const [notice, setNotice] = useState<string>()
+  const [visibilityUncertain, setVisibilityUncertain] = useState(false)
   const current = useRef(0)
   const inFlight = useRef(false)
   useTaskGuard(busy || Boolean(operation))
+  useEffect(()=>{setCopiedRequest(false);setNotice(undefined);setArchived(false)},[projectId])
 
   useEffect(() => {
     const generation = ++current.current
-    setLoading(true); setBusy(false); setSelected(undefined); setError(undefined)
+    setLoading(true); setBusy(false); setSelected(undefined); setError(undefined); setNotice(undefined)
     // 仅恢复URL里的有限操作引用；刷新不丢失未知回执，也不保存候选正文到浏览器存储。
     setOperation(recoveryOperation ?? undefined)
-    void ruleCandidatesApi.context(projectId).then(async value => {
+    void ruleCandidatesApi.context(projectId, 0, archived).then(async value => {
       const item = requestedId ? await ruleCandidatesApi.show(projectId, requestedId, requestedRevision) : undefined
       if (generation !== current.current) return
-      setContext(value); setSelected(item)
+      setContext(value); setSelected(item); setVisibilityUncertain(false)
     }).catch(() => { if (generation === current.current) setError('规则候选暂时无法读取；已有正式权限没有改变。') })
       .finally(() => { if (generation === current.current) setLoading(false) })
     return () => { current.current += 1 }
-  }, [projectId, requestedId, requestedRevision, epoch])
+  }, [projectId, requestedId, requestedRevision, epoch, archived])
 
   const select = async (id: string, revision: number) => {
     if (inFlight.current) return
@@ -58,9 +65,45 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     if (context?.next_offset == null || inFlight.current) return
     inFlight.current = true; setBusy(true)
     const generation = current.current
-    try { const value = await ruleCandidatesApi.context(projectId, context.next_offset); if (generation === current.current) {setContext(value); setError(undefined)} }
+    try { const value = await ruleCandidatesApi.context(projectId, context.next_offset, archived); if (generation === current.current) {setContext(value); setError(undefined)} }
     catch { if (generation === current.current) setError('下一页候选暂时无法读取，当前列表已保留。') }
     finally { inFlight.current = false; if (generation === current.current) setBusy(false) }
+  }
+
+  const changeVisibility = async (nextArchived: boolean) => {
+    if (!selected || inFlight.current || operation || visibilityUncertain) return
+    const generation = current.current, item = selected.candidate
+    inFlight.current = true; setBusy(true); setError(undefined)
+    try {
+      const visibility = await ruleCandidatesApi.visibility(projectId, item.candidate_id, item.revision, selected.visibility?.version ?? 0, nextArchived)
+      if (generation !== current.current) return
+      setSelected({...selected, visibility}); setNotice(nextArchived ? undefined : '候选已恢复，可以继续整理或审阅。')
+    } catch (failure) {
+      // 状态写入没有回执时只读取；不能以第二次归档/恢复试探第一次结果。
+      try {
+        const latest = await ruleCandidatesApi.show(projectId, item.candidate_id)
+        if (generation === current.current) { setSelected(latest); setNotice(latest.visibility?.archived===nextArchived ? '已回读确认候选当前状态。' : (failure as ApiError).code==='STATE_PRECONDITION' ? (failure as Error).message : '本次操作结果未确认，已回读当前状态；未重复提交。') }
+      } catch { if (generation === current.current) {setVisibilityUncertain(true); setError('归档状态尚未确认，请读取候选后继续；原记录没有被删除。')} }
+    } finally { inFlight.current = false; if (generation === current.current) setBusy(false) }
+  }
+
+  const supplement = async () => {
+    if (!selected || inFlight.current) return
+    const generation = current.current
+    inFlight.current = true; setBusy(true); setError(undefined)
+    try {
+      const latest = await ruleCandidatesApi.show(projectId, selected.candidate.candidate_id)
+      if (generation !== current.current) return
+      setSelected(latest)
+      if (latest.candidate.revision !== selected.candidate.revision || latest.visibility?.archived) {setNotice('候选已有变化，请核对最新内容后继续。'); return}
+      await navigator.clipboard.writeText([`请补充界鉴项目 ${projectId} 的规则候选 ${latest.candidate.candidate_id}，修订 ${latest.candidate.revision}。`,
+        '先调用 jiejian_rule_context 和 jiejian_rule_candidate_show 读取最新内容，再读取 jiejian_application_understanding 沿用已确认的角色和动作。',
+        ...latest.issues.map(item => `需要处理：${item.message}`),
+        '用 jiejian_rule_candidate_save 更新原候选，保留完整业务要求和受保护结果。缺失的业务约定请向我提问，不要猜测或删减。',
+        '正式边界为空也可以保存首次候选；不需要我先手工建立相同边界。保存后给出界鉴审阅入口，不能替我批准。'].join('\n'))
+      if (generation === current.current) setNotice('补充请求已复制，请粘贴到原 Agent 对话中；保存后点击“读取候选”。')
+    } catch { if (generation === current.current) setError('暂时无法复制补充请求，请重新读取候选后重试。') }
+    finally {inFlight.current=false; if(generation===current.current)setBusy(false)}
   }
   const openProposal = async (value: RuleCandidateView) => {
     if (!value.proposal_id) return
@@ -129,13 +172,14 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   }
 
   // 整理和读取在同一候选区交接；已有读取按钮时，展开内容不再生成第二个读取入口。
+  const sourceOverview = context && !archived && <RulePreparationProgress context={context}/>
   const heading = (content: ReactNode) => {
-    const refresh = <Button disabled={busy || Boolean(operation)} onClick={() => setEpoch(value => value + 1)}>读取候选</Button>
-    if (!onNavigate) return <div className="rule-candidates-heading">{content}{refresh}</div>
-    return <AgentAssistEntry projectId={projectId} contextKey={`rules:${requestedId ?? ''}:${requestedRevision ?? ''}`}
-      heading={content} actions={refresh}
+    const refresh = <Button type={copiedRequest ? 'primary' : 'default'} disabled={busy || Boolean(operation)} onClick={() => setEpoch(value => value + 1)}>读取候选</Button>
+    if (!onNavigate || selected?.visibility?.archived) return <div className="rule-candidates-heading"><div>{selected ? content : sourceOverview}</div>{refresh}</div>
+    return <AgentAssistEntry aside projectId={projectId} contextKey={`rules:${requestedId ?? ''}:${requestedRevision ?? ''}`}
+      heading={selected ? content : sourceOverview || <div><h2>当前权限约定</h2><p>整理候选、核对具体要求，再由你决定是否批准。</p></div>} actions={refresh} primary={!selected && !archived && !context?.candidates.length && !copiedRequest} onCopied={() => setCopiedRequest(true)}
       title="整理这项应用的权限要求" description="把当前约定和需要澄清的问题交给原来的 Agent。整理完成后，点击“读取候选”继续审阅。"
-      returnTo={requestedId ? `/permissions?candidate=${encodeURIComponent(requestedId)}&revision=${requestedRevision ?? 1}&project_id=${encodeURIComponent(projectId)}` : '/permissions'}
+      returnTo={requestedId ? `/permissions?candidate=${encodeURIComponent(requestedId)}&revision=${requestedRevision ?? 1}&project_id=${encodeURIComponent(projectId)}` : '/permissions?view=candidates'}
       onNavigate={onNavigate} loadContext={async () => {
         const value = await ruleCandidatesApi.context(projectId)
         return { projectId:value.project_id, revisionKey:JSON.stringify([value.basis_id,value.candidates.map(item => [item.candidate_id,item.revision])]),
@@ -150,35 +194,42 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
 
   if (loading) return <section className="rule-candidates-inbox" aria-label="读取规则候选"><Spin size="small" /> 正在读取规则候选</section>
   if (!selected) return <section className="rule-candidates-inbox" aria-label="对话规则候选">
-    {heading(<div className="rule-candidates-title"><h2>规则候选{!error && !!context?.candidates.length && <span> · 本页 {context.candidates.length} 条</span>}</h2><p>{error ? '读取后核对尚未批准的约定。' : context?.candidates.length ? '以下约定尚未生效，审阅并批准后才会更新权限。' : '尚未建立规则或业务要求有变化时，先点击“Agent 协助”，将业务要求交给原开发 Agent；它保存候选后，再点击“读取候选”。最后由你核对并批准，规则才会生效。'}</p></div>)}
+
+    {heading(null)}
+    <div className="rule-candidates-list-heading"><div className="rule-candidates-title"><h2>规则候选{!error && !!context?.candidates.length && <span> · 本页 {context.candidates.length} 条</span>}</h2><p>{error ? '读取后核对尚未批准的约定。' : archived ? '已归档候选保留原文、修订和决定，可在详情中恢复。' : context?.candidates.length ? '各条候选分别显示审阅状态；批准后才会更新正式权限。' : '先点击“Agent 协助”，将业务要求交给原开发 Agent；它保存候选后，再点击“读取候选”。最后由你核对并批准，规则才会生效。'}</p></div></div>
     {error && <Alert type="warning" message={error} />}
-    {context?.candidates.map(item => <div className="rule-candidate-row" key={item.candidate_id}><p>{item.original_text}</p><Button type="link" onClick={() => void select(item.candidate_id, item.revision)}>审阅</Button></div>)}
+    <Segmented aria-label="候选归档范围" value={archived ? 'ARCHIVED' : 'ACTIVE'} options={[{label:'当前候选',value:'ACTIVE'},{label:'已归档',value:'ARCHIVED'}]} onChange={value => {setArchived(value==='ARCHIVED'); setNotice(undefined)}}/>
+    {archived && !context?.candidates.length && <p>暂无已归档候选。归档只收起候选，原始记录会保留。</p>}
+    <RuleCandidateList candidates={context?.candidates ?? []} archived={archived} onSelect={(id, revision) => void select(id, revision)}/>
     {context?.next_offset != null && <Button loading={busy} onClick={() => void nextPage()}>下一页候选</Button>}
   </section>
 
   const content = selected.candidate.content
   const confirmed = selected.assessment === 'ALREADY_CONFIRMED'
-  const leave = () => {setSelected(undefined); onExit?.()}
+  const isArchived = selected.visibility?.archived ?? false
+  const leave = () => {setSelected(undefined); setNotice(undefined); setEpoch(value=>value+1); onExit?.()}
   const permissions = new Map(content.permissions.map(item => [item.item_id, item]))
   return <section className="rule-candidates work-surface" aria-label="审阅对话规则">
-    {heading(<div className="rule-candidates-title"><h2>{selected.decision ? '查看当时的业务约定' : confirmed ? '沿用已有业务约定' : '确认这条业务约定'}</h2><StatusBadge kind="rule">{confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div>)}
+    {heading(<div className="rule-candidates-title"><h2>{isArchived ? '查看已归档候选' : selected.decision ? '查看当时的业务约定' : confirmed ? '沿用已有业务约定' : '确认这条业务约定'}</h2><StatusBadge kind="rule">{isArchived ? '已归档' : confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div>)}
     <p className="rule-candidate-original">{content.original_text}</p>
     <p className="editorial-muted">{selected.candidate.submitted_via === 'MCP' ? 'Agent 整理' : '本机整理'} · 修订 {selected.candidate.revision}。保存和准备都不代表检查通过。</p>
-    <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision)} busy={busy || Boolean(operation)} onSave={choice=>void saveMeaning(choice)}/>
+    {isArchived && <Alert type="info" message="这条候选已归档，恢复后可以继续整理。原修订与决定记录保留。"/>}
+    {notice && <p role="status" className="rule-candidate-notice">{notice}</p>}
+    <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
     <div className="rule-example-table" role="table" aria-label="具体情形与要求">
       {content.examples.map((example, index) => <div className="rule-candidate-row" role="row" key={index}><p role="cell">{example.description}</p><span role="cell">{example.uncovered_reason ?? (permissions.get(example.permission_item_id ?? '')?.expectation === 'DENY' ? '应当拒绝' : permissions.has(example.permission_item_id ?? '') ? '应当允许' : '沿用已确认规则')}</span></div>)}
     </div>
-    {selected.issues.some(item=>item.code!=='NEEDS_DECISION') && <Alert type="warning" message="以下问题仍需核对" description={<ul>{selected.issues.filter(item=>item.code!=='NEEDS_DECISION').map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>} />}
-    <p className="editorial-muted">{selected.reuse.message}</p>
+    {selected.issues.some(item=>item.code!=='NEEDS_DECISION') && (isArchived ? <details><summary>归档时仍待核对的内容</summary><ul>{selected.issues.map((issue,index)=><li key={index}>{issue.message}</li>)}</ul></details> : <Alert type="warning" message="以下问题仍需核对" description={<ul>{selected.issues.filter(item=>item.code!=='NEEDS_DECISION').map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>} />)}
+    {!isArchived && !!selected.reuse.actions?.length && <p className="editorial-muted">{selected.reuse.message}</p>}
     {!!selected.reuse.actions?.length && <div aria-label="已有材料与准备缺口">{selected.reuse.actions.map(action => <div className="rule-candidate-row" key={action.item_id}>
       <div><h3>{action.display_name}</h3><p>{action.message}</p><p className="editorial-muted">{action.materials.map(kind=>({EXECUTION:'操作演示',RESOURCE:'测试资源',PROOF:'结果证明',RECOVERY:'恢复材料'}[kind] ?? kind)).join('、') || '还没有可沿用的材料'}</p></div>
       <StatusBadge kind="preparation" tone={action.status === 'MAY_REUSE' ? 'neutral' : 'warning'}>{action.status === 'MAY_REUSE' ? '可能沿用' : action.status === 'NEEDS_REVIEW' ? '需要核对' : '需要准备'}</StatusBadge>
     </div>)}</div>}
     {error && <Alert type="warning" message={error} />}
-    <TaskActionBar back={{label:'返回规则列表', disabled:busy || Boolean(operation), onClick:leave}} primary={{
-      label:operation ? '查询原操作结果' : selected.proposal_id ? '查看已保存提案' : confirmed ? '查看当前规则' : '继续审阅完整变更',
-      disabled:busy || (!operation && !selected.proposal_id && !confirmed && selected.assessment !== 'REVIEWABLE'), loading:busy,
-      onClick:()=>{ if(operation) void recover(); else if(selected.proposal_id) void openProposal(selected).catch(()=>setError('提案暂时无法读取')); else if(confirmed) leave(); else void propose() },
+    <TaskActionBar back={{label:'返回规则列表', disabled:busy || Boolean(operation), onClick:leave}} refresh={!isArchived && !operation && !visibilityUncertain && (!selected.proposal_id || Boolean(selected.decision)) ? {label:'归档候选',disabled:busy,onClick:()=>void changeVisibility(true)} : undefined} primary={{
+      label:visibilityUncertain ? '读取归档状态' : operation ? '查询原操作结果' : isArchived ? '恢复候选' : selected.proposal_id ? '查看已保存提案' : confirmed ? '查看当前规则' : selected.assessment==='NEEDS_CHANGES' ? '复制补充请求' : '继续审阅完整变更',
+      disabled:busy, loading:busy,
+      onClick:()=>{ if(visibilityUncertain) setEpoch(value=>value+1); else if(operation) void recover(); else if(isArchived) void changeVisibility(false); else if(selected.proposal_id) void openProposal(selected).catch(()=>setError('提案暂时无法读取')); else if(confirmed) leave(); else if(selected.assessment==='NEEDS_CHANGES') void supplement(); else void propose() },
     }}/>
   </section>
 }

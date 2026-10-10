@@ -23,8 +23,8 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
   const nextButton = useRef<HTMLButtonElement | HTMLAnchorElement>(null)
   const lastReview = useRef(false)
   useEffect(() => {
-    if (review) { heading.current?.focus(); heading.current?.scrollIntoView?.({ block: 'start' }) }
-    else if (lastReview.current) nextButton.current?.focus()
+    if (review) { heading.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }) }
+    else if (lastReview.current) { nextButton.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }) }
     lastReview.current = review
   }, [review])
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
@@ -45,7 +45,10 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
   }
   const accepted = (next: ApplicationUnderstandingDto) => {
     setBase(next); setEdits({}); setReview(false); setUncertain(false); setIssue(undefined)
-    setReceipt('本次业务信息已确认，权限规则尚未改变。'); onApplied(next, true)
+    const roles = next.role_candidates.filter(item=>!item.stale && item.decision==='CONFIRMED').length
+    const actions = next.action_candidates.filter(item=>!item.stale && item.decision==='CONFIRMED').length
+    const pending = [...next.role_candidates,...next.action_candidates].filter(item=>item.stale || ['PROPOSED','REVIEW_REQUIRED'].includes(item.decision)).length
+    setReceipt(`已保存 ${roles} 个角色、${actions} 项业务动作，另有 ${pending} 项待核对。下一步沿用这些信息整理允许与禁止要求；正式权限尚未改变。`); onApplied(next, true)
   }
   const recover = async () => {
     if (sending.current) return
@@ -86,7 +89,8 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
         <Checkbox aria-label={`纳入${source.display_name}`} checked={item.decision === 'CONFIRMED'} disabled={busy || uncertain || changed} onChange={event => patch(item,{decision:event.target.checked?'CONFIRMED':'REJECTED'})}/>
         <div><Input aria-label={`${item.kind === 'ROLE' ? '权限组' : '业务动作'}名称：${source.display_name}`} value={item.display_name} maxLength={item.kind === 'ROLE' ? 128 : 256} disabled={busy || uncertain || changed} onChange={event=>patch(item,{display_name:event.target.value})}/>
           <p>{item.decision === 'PROPOSED' ? '暂不决定，继续保留待审' : item.decision === 'REJECTED' ? source.decision === 'REJECTED' ? '已排除的候选' : '将在本次审阅中明确排除' : source.decision === 'CONFIRMED' && source.display_name === item.display_name ? '已确认的业务信息' : '已选入本次审阅，确认后保存'}</p>
-          <details><summary>查看识别依据</summary>{source.evidence.map((e,index)=><p key={index}>{e.relative_path}:{e.line_start}{e.symbol ? ` · ${e.symbol}`:''}</p>)}{!source.evidence.length && <p>由你手工补充。</p>}</details>
+          {source.origin !== 'MANUAL' && <p className="candidate-source-clue">识别线索：{[...new Set(source.evidence.map(e=>e.symbol).filter(Boolean))].join('、') || source.canonical_key}{source.confidence==='LOW' && ' · 名称仍需核对，可先保留待审'}</p>}
+          <details><summary>查看源码位置与识别依据</summary>{source.evidence.map((e,index)=><p key={index}>{e.relative_path}:{e.line_start}{e.line_end!==e.line_start ? `–${e.line_end}` : ''}{e.symbol ? ` · ${e.symbol}`:''}</p>)}{!source.evidence.length && <p>{source.origin==='MANUAL' ? '由你手工补充。' : '尚无可展示的源码位置，请核对业务含义后决定是否纳入。'}</p>}{source.origin!=='MANUAL'&&<p>这些是识别到的代码线索，不能单独证明允许或禁止要求。</p>}</details>
           {source.origin !== 'MANUAL' && <Button type="link" size="small" disabled={busy || uncertain || changed} onClick={()=>patch(item,{decision:'PROPOSED'})}>保留待审</Button>}
         </div>
       </section>
@@ -94,7 +98,7 @@ export function CandidateReview({ value, onApplied, onEditingChange, manual, sta
     {staleReview}
     <details className="application-manual-section"><summary>没有找到？手工补充</summary><p className="application-manual-note">手工补充会立即保存；请先确认或放弃上方正在编辑的选择。</p><fieldset className="application-manual-fields" disabled={dirty || busy || uncertain}>{manual}</fieldset></details>
     {(changes.length > 0 || dirty || uncertain || changed) && <div className="candidate-step-footer">{changes.length > 0 && <div><strong>核对本次整理</strong><p>已纳入 {choices.filter(item=>item.kind==='ROLE' && item.decision==='CONFIRMED').length} 个权限组、{choices.filter(item=>item.kind==='ACTION' && item.decision==='CONFIRMED').length} 项业务动作</p></div>}<div className="candidate-step-actions">{editingActions}{changes.length > 0 && <Button ref={nextButton} type="primary" disabled={busy || uncertain || changed || changes.length > 256 || changes.some(item=>!item.display_name.trim())} onClick={()=>setReview(true)}>核对业务总览</Button>}</div></div>}</>}
-    {review && <section className="candidate-batch-review" aria-label="本次选择完整摘要"><div className="candidate-review-columns">{(['ROLE','ACTION'] as const).map(kind=><section key={kind}><h3>{kind==='ROLE'?'权限组':'业务动作'}</h3>{(['CONFIRMED','REJECTED','PROPOSED'] as const).map(decision=>{const items=choices.filter(item=>item.kind===kind&&item.decision===decision);return <div key={decision}><h4>{decision==='CONFIRMED'?'纳入':decision==='REJECTED'?'排除':'保留待审'} · {items.length}</h4>{items.length ? <ul>{items.map(item=><li key={item.candidate_id}>{item.display_name}</li>)}</ul> : <p className="editorial-muted">无</p>}</div>})}</section>)}</div><div className="candidate-step-footer"><Button disabled={busy} onClick={()=>setReview(false)}>返回修改</Button><div className="candidate-step-actions">{editingActions}<Button type="primary" loading={busy} disabled={uncertain || changed} onClick={()=>void submit()}>确认这些业务信息</Button></div></div></section>}
+    {review && <section className="candidate-batch-review" aria-label="本次选择完整摘要"><div className="candidate-review-columns">{(['ROLE','ACTION'] as const).map(kind=><section key={kind}><h3>{kind==='ROLE'?'权限组':'业务动作'}</h3>{(['CONFIRMED','REJECTED','PROPOSED'] as const).map(decision=>{const items=choices.filter(item=>item.kind===kind&&item.decision===decision);return <div key={decision}><h4>{decision==='CONFIRMED'?'纳入':decision==='REJECTED'?'排除':'保留待审'} · {items.length}</h4>{items.length ? <ul>{items.map(item=><li key={item.candidate_id}>{item.display_name}</li>)}</ul> : <p className="editorial-muted">无</p>}</div>})}</section>)}</div><div className="candidate-step-footer"><Button disabled={busy} onClick={()=>setReview(false)}>返回修改</Button><div className="candidate-step-actions">{editingActions}<Button type="primary" loading={busy} disabled={uncertain || changed} onClick={()=>void submit()}>保存业务信息，继续整理权限</Button></div></div></section>}
 
   </section>
 }

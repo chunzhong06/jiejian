@@ -154,3 +154,33 @@ def test_change_lookup_is_project_scoped(harness):
     value = service.submit(current.project_id, reason="登记本项目变化")
     with pytest.raises(JiejianError):
         service.get("foreign-project", value.manifest.change_id)
+
+
+def test_list_shares_only_this_reads_plan_and_change_preview_does_not_recurse(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+    from types import SimpleNamespace
+    from tests.fixtures.checks.check_service import ready_check_harness
+    current = ready_check_harness(tmp_path)
+    core, project = current.core, current.project_id
+    try:
+        # 此 fixture 的候选由手工构造，重扫不会识别；固定已确认映射，单独验证读取次数。
+        boundary = core.business_boundaries.view(project)
+        monkeypatch.setattr(core.source_changes,"_boundaries",SimpleNamespace(view=lambda *_args,**_kwargs:boundary))
+        understanding = core.application_understanding.get(project)
+        core.application_understanding.analyze_source_for_change(project,revision=understanding.revision)
+        first = core.source_changes.submit(project,reason="同一源码第一次登记")
+        core.source_changes.submit(project,reason="同一源码第二次登记")
+        reader = Mock(wraps=core.source_changes._plan_reader)
+        monkeypatch.setattr(core.source_changes,"_plan_reader",reader)
+        values = core.source_changes.list(project)
+        assert len(values) == 2 and all(item.revalidation.status == "READY" for item in values)
+        assert reader.call_count == 1
+        core.source_changes.list(project)
+        assert reader.call_count == 2
+        reader.reset_mock()
+        core.checks.preview(project,change_id=first.manifest.change_id)
+        assert reader.call_count == 0
+        (current.source_root/"new.py").write_text("# 模拟预览后的真实变化。\nvalue = 1\n",encoding="utf-8")
+        assert core.source_changes.inspect_revalidation(project,first.manifest.change_id).status == "SOURCE_STALE"
+    finally:
+        current.close()

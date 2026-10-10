@@ -97,8 +97,12 @@ class LocalMaintenanceService:
     def status(self) -> dict[str, object]:
         """按生成方归属返回候选及保留原因；兼容统计也只包含已登记的闲置文件。"""
 
+        return self._status_payload(self._inventory())
+
+    def _status_payload(self, assets: list[Asset]) -> dict[str, object]:
+        # 预览与展示复用同一次扫描；删除前仍逐项重读归属和占用，不能复用旧许可。
         state = read_record(self._state_path) or {}
-        inventory = [self._asset_payload(item) for item in self._inventory()]
+        inventory = [self._asset_payload(item) for item in assets]
 
         # CLI 的分类摘要与 GUI 明细使用同一次扫描，避免占用状态和大小出现两套结果。
         def entry(category: str, root: Path) -> dict[str, object]:
@@ -151,9 +155,10 @@ class LocalMaintenanceService:
         with self._locked():
             now_us = self._now_us()
             self._prune_plans(now_us)
+            inventory = self._inventory()
             candidates = tuple(
                 self._snapshot_candidate(operation, asset)
-                for asset in self._operation_candidates(operation)
+                for asset in self._operation_candidates(operation, inventory)
                 if safe_tree(asset.path, asset.root)
             )
             plan = MaintenancePlan(
@@ -164,7 +169,7 @@ class LocalMaintenanceService:
                 candidates=candidates,
             )
             self._plans[plan.plan_id] = plan
-            return self._plan_payload(plan)
+            return self._plan_payload(plan, self._status_payload(inventory))
 
     def execute(
         self,
@@ -287,9 +292,9 @@ class LocalMaintenanceService:
                 "protected": self._protected_summary(),
             }
 
-    def _operation_candidates(self, operation: str) -> list[Asset]:
+    def _operation_candidates(self, operation: str, inventory: list[Asset] | None = None) -> list[Asset]:
         category = {"clear-assistant-cache":"assistant", "clear-logs":"logs", "clear-temporary":"temporary"}.get(operation)
-        items = {item.path: item for item in self._inventory()
+        items = {item.path: item for item in (self._inventory() if inventory is None else inventory)
                  if item.state == "CLEANABLE" and (category is None or item.category == category)
                  and (operation != "repair-runtime" or self._runtime_path_is_damaged(item.path))}
         return [items[path] for path, _ in self._unique_candidates([(item.path, item.root) for item in items.values()])]
@@ -311,12 +316,22 @@ class LocalMaintenanceService:
         for root in self._log_roots().values():
             for path in self._log_files(root):
                 add(path,"logs","历史运行日志",known=bool(generated_file_owner(self.paths.root,path)),protected=self._is_current_session_log(path))
-        for path in children(self.paths.temp):
-            if path == self.paths.process_gates:
-                continue
+        for root in (self.paths.temp, self.paths.identity_preparations,
+                     self.paths.runtime / 'node-artifacts', self.paths.runtime / 'target-artifacts',
+                     self.paths.official_sample_runtime, self.paths.runtime / 'maintenance-results', self.paths.runtime):
+            for path in children(root):
+                item = self._temporary_asset(path)
+                if item is not None:
+                    items.append(item)
+        return items
+
+    def _temporary_asset(self, path: Path) -> Asset | None:
+        """只核对这一项的生成方和退出证明；列表和删除复查使用相同规则。"""
+
+        known, busy = False, False
+        if path.parent == self.paths.temp and path != self.paths.process_gates:
+            label = "运行临时文件"
             process = read_record(path / '.runtime-process.json') if path.is_dir() else None
-            known = False
-            busy = False
             if process and process.get('kind') == 'runtime-process' and process.get('name') == path.name and isinstance(process.get('kernel_identity'),dict):
                 from product.backend.infra.runtime.process.tree import kernel_tree_has_exited
                 try:
@@ -324,22 +339,30 @@ class LocalMaintenanceService:
                     busy = not known
                 except OSError:
                     known = False
-            add(path,"temporary","运行临时文件",known=known,protected=busy)
-        for path in children(self.paths.identity_preparations):
+        elif path.parent == self.paths.identity_preparations:
+            label = "已结束登录准备"
             marker = read_record(path / '.runtime-idle.json')
-            add(path,"temporary","已结束登录准备",known=bool(marker and marker.get('kind') == 'runtime-idle' and marker.get('producer') == 'identity-preparation' and marker.get('name') == path.name))
+            known = bool(marker and marker.get('kind') == 'runtime-idle' and marker.get('producer') == 'identity-preparation' and marker.get('name') == path.name)
         # 保留源副本和 Worker 恢复收据的读取契约；没有完整退出证明时不能猜测孤儿目录。
-        for root in (self.paths.runtime / 'node-artifacts', self.paths.runtime / 'target-artifacts', self.paths.official_sample_runtime):
-            for path in children(root):
-                add(path,"temporary","应用运行副本",known=False)
-        for path in children(self.paths.runtime / 'maintenance-results'):
+        elif path.parent in (self.paths.runtime / 'node-artifacts', self.paths.runtime / 'target-artifacts', self.paths.official_sample_runtime):
+            label = "应用运行副本"
+        elif path.parent == self.paths.runtime / 'maintenance-results':
+            label = "清理回执"
             receipt = read_record(path)
             known = bool(receipt and isinstance(receipt.get('result'),dict) and isinstance(receipt.get('plan_id'),str))
-            add(path,"temporary","清理回执",known=known,protected=not self._older_than(path, _ORPHAN_MIN_AGE_SECONDS))
-        for path in children(self.paths.runtime):
-            if self._runtime_path_is_damaged(path):
-                add(path,"temporary","运行残留",known=False)
-        return items
+            busy = not self._older_than(path, _ORPHAN_MIN_AGE_SECONDS)
+        elif path.parent == self.paths.runtime and self._runtime_path_is_damaged(path):
+            label = "运行残留"
+        else:
+            return None
+        state, reason = "CLEANABLE", "运行产生且没有活动引用"
+        if not safe_tree(path, self.paths.root):
+            state, reason = "UNKNOWN", "包含链接或无法完整读取，暂不处理"
+        elif busy or self._path_is_in_use(path):
+            state, reason = "PROTECTED", "当前运行仍在使用"
+        elif not known:
+            state, reason = "UNKNOWN", "缺少来源或退出证明，暂不处理"
+        return Asset(path, self.paths.root, "temporary", label, state, reason)
 
     def _relative_path(self, path: Path, root: Path) -> str:
         if path.is_relative_to(self.paths.root):
@@ -472,7 +495,7 @@ class LocalMaintenanceService:
             "official_sample_runtime_included": False,
         }
 
-    def _plan_payload(self, plan: MaintenancePlan) -> dict[str, object]:
+    def _plan_payload(self, plan: MaintenancePlan, status: dict[str, object] | None = None) -> dict[str, object]:
         return {
             "schema_version": "1",
             "plan_id": plan.plan_id,
@@ -505,7 +528,7 @@ class LocalMaintenanceService:
                 "FAILED": 0,
             },
             "protected": self._protected_summary(),
-            "status": self.status(),
+            "status": self.status() if status is None else status,
         }
 
     def _snapshot_candidate(
@@ -547,7 +570,7 @@ class LocalMaintenanceService:
                 "reason": "候选安全边界已变化，已跳过",
             }
         if not shared and item.category == "temporary":
-            current = next((asset for asset in self._inventory() if asset.path == item.path), None)
+            current = self._temporary_asset(item.path)
             if current is None or current.state != "CLEANABLE":
                 return {**result, "status":"SKIPPED_IN_USE", "reason":"运行引用或退出证明已变化，已跳过"}
         if (self._path_is_in_use(item.path) or shared and overlaps(item.path.resolve(), references)

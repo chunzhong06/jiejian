@@ -38,7 +38,7 @@
 - `MaterialEditor`
 - `materialName`
 
-静态import / dot-source：`../../../api/http`、`../../../api/preparation/preparation`、`../../../shared/runtime/editGuard`、`../../../shared/ui/Editorial`、`./materials.css`、`antd`、`react`
+静态import / dot-source：`../../../api/http`、`../../../api/preparation/preparation`、`../../../shared/runtime/editGuard`、`../../../shared/ui/Editorial`、`../../../shared/ui/LoadingState`、`../../../shared/ui/TaskActionBar`、`./materials.css`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/materials/MaterialOverview.tsx`
 
@@ -155,7 +155,7 @@
 
 - `ReferenceFilePreparation`
 
-静态import / dot-source：`../../../api/preparation/proofSources`、`../../../shared/runtime/visibility`、`../../../shared/ui/StatusBadge`、`antd`、`react`
+静态import / dot-source：`../../../api/preparation/proofSources`、`../../../shared/runtime/useLiveRead`、`../../../shared/runtime/visibility`、`../../../shared/ui/StatusBadge`、`antd`、`react`
 
 ### `product/frontend/src/features/preparation/proof-sources/usePreparationBatch.ts`
 
@@ -171,7 +171,7 @@
 
 - `useProofSources`
 
-静态import / dot-source：`../../../api/http`、`../../../api/preparation/proofSources`、`../../../shared/runtime/visibility`、`./proofSourceOperations`、`react`
+静态import / dot-source：`../../../api/http`、`../../../api/preparation/proofSources`、`../../../shared/runtime/useLiveRead`、`../../../shared/runtime/visibility`、`./proofSourceOperations`、`react`
 
 ### `product/frontend/src/features/preparation/supplemental/supplemental-materials.css`
 

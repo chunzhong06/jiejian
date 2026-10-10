@@ -159,7 +159,7 @@ def build_mcp_control(
         """保存用户希望长期保留的规则候选及具体例子；不能批准、采用材料或开始检查。"""
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
         return _json(_invoke(lambda: context.rule_candidates.save(project_id,
-            RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), submitted_via="MCP")))
+            RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), submitted_via="MCP"), input_model=RuleCandidateSave))
 
     @server.tool(name="jiejian_rule_candidate_show", structured_output=True)
     def rule_candidate_show(ctx: Context, project_id: str, candidate_id: str, revision: int | None = None) -> dict[str, Any]:

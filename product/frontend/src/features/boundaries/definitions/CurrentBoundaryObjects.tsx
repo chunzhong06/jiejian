@@ -21,7 +21,7 @@ export function CurrentBoundaryObjects({ boundary, kind, onEdit }: { boundary: B
     <div className="boundary-collection-toolbar"><SearchField aria-label={`搜索${subject}`} placeholder={`搜索${subject}`} allowClear value={query} onChange={event => setQuery(event.target.value)}/><Button type="primary" onClick={() => onEdit({ ...focus, createObject: true })}>新增{subject}</Button></div>
     <section className="boundary-document" aria-label={`已确认的${subject}`}>
       <nav className="action-index" aria-label={`${subject}索引`}><h3>{subject}</h3>{items.filter(item => (item.name + item.description).includes(query.trim())).map(item => <button key={item.id} aria-current={item.id === current?.id ? 'true' : undefined} onClick={() => setSelected(item.id)}>{item.name}<small>已确认 · 修订 {item.revision}</small></button>)}</nav>
-      <article className="boundary-action-document definition-document">{current ? <>
+      <article key={`${kind}:${current?.id ?? 'empty'}`} className="boundary-action-document definition-document">{current ? <>
         <div className="boundary-action-heading"><div><p className="editorial-eyebrow">{subject} · 已确认</p><h2>{current.name}</h2></div><Button onClick={() => onEdit({ ...focus, editObject: true })}>编辑{kind === 'actions' ? '动作' : '角色'}</Button></div>
         <p className="definition-description">{current.description}</p>
         {action && <section className="definition-effect-summary"><h3>需要观察的业务结果</h3>{action.effect_catalog.map(effect => <div key={effect.effect_id}><strong>{effect.business_label}</strong><p>{effect.description}</p></div>)}</section>}

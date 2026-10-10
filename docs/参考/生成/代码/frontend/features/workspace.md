@@ -22,6 +22,6 @@
 
 - `WorkbenchPage`
 
-静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/checks/currentChecks`、`../../api/http`、`../../api/preparation/preparation`、`../../api/system/system`、`../../api/workspace`、`../../shared/navigation/taskDestination`、`../../shared/runtime/useLiveRead`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`./workbench.css`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/applications/experience`、`../../api/applications/projects`、`../../api/checks/currentChecks`、`../../api/http`、`../../api/preparation/preparation`、`../../api/system/system`、`../../api/workspace`、`../../shared/navigation/taskDestination`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/styles/collections.css`、`../../shared/ui/Editorial`、`./workbench.css`、`@ant-design/icons`、`antd`、`react`
 
 <!-- GENERATED:END -->

@@ -312,9 +312,11 @@ class ApplicationCore:
         from product.backend.workflows.preparation.batches import PreparationBatchService
         self.preparation_batches = PreparationBatchService(uow_factory=factory, proofs=self.proof_preparation,
             official_prepare=self.official_experience.prepare,
-            official_project=lambda: self.official_experience.status().project_id,
+            official_step=getattr(self.official_experience,"prepare_step",None),
+            official_project=lambda: self.official_experience.status(**({'lightweight':True} if hasattr(self.official_experience,'prepare_step') else {})).project_id,
             guard_reader=lambda project: dict(boundary=self.business_boundaries.view(project).model_dump(mode='json'),
                 runtime=self.node_runtime.reference(project).model_dump(mode='json')), clock_us=clock_us)
+        self.worker.on_progress = self.preparation_batches.wake.set
         from product.backend.workflows.agent_access.workflow import AgentWorkflowContext
         self.agent_workflow = AgentWorkflowContext(projects=self.projects, rules=self.rule_candidates,
             preparation=self.preparation_guidance, batches=self.preparation_batches, recordings=self.recording_lifecycle,
@@ -330,8 +332,8 @@ class ApplicationCore:
         """先确认录制、登录进程及调度线程退出，再清空短期秘密和释放数据库。"""
 
         self.worker.stop()
-        self.runtime_worker.stop()
         self.official_experience.close()
+        self.runtime_worker.stop()
         self.identity_preparations.close()
         self.runtime_secrets.clear()
         self.secret_store.clear()

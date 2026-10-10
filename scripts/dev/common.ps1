@@ -1,6 +1,9 @@
 ﻿# 界鉴开发总控台共享失败、锁、状态、摘要与调用者环境恢复边界。
 
 function Fail-Development([string]$Stage, [string]$Message, [string]$Recovery) {
+    # 父启动面板读取固定字段，避免只剩“外部命令返回 1”而丢失准备阶段。
+    $failure = @{stage=$Stage; message=$Message; recovery=$Recovery} | ConvertTo-Json -Compress
+    [Console]::Out.WriteLine("__JIEJIAN_PREPARE_FAILURE__:" + $failure)
     Write-Host ""
     Write-Host ("开发环境失败：{0}" -f $Stage) -ForegroundColor Red
     Write-Host $Message -ForegroundColor Red

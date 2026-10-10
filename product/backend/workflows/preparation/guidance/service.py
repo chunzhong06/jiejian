@@ -61,6 +61,7 @@ def _workspace_action(project, task):
     if task.route == '/tests' and task.task_kind in PREPARATION_TASKS:
         refs['task_id'] = task.task_id
     tool, level = {'RUN_CURRENT_CHECK': ('jiejian_check_preview', 'READ'),
+                   'ESTABLISH_BUSINESS_BOUNDARY': ('jiejian_rule_context', 'READ'),
                    'REGISTER_SOURCE_CHANGE': ('jiejian_change_registration_preview', 'READ')}.get(task.task_kind, (None, None))
     return PreparationNextAction(kind=task.task_kind, title=task.title,
         reason=task.why_now, handler='EITHER' if tool else 'USER',

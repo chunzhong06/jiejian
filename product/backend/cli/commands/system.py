@@ -173,7 +173,9 @@ def serve_command(
                 official_sample_root=official_sample_root,
             )
             config = uvicorn.Config(
-                api, host=host, port=port, log_level=settings.log_level.lower()
+                api, host=host, port=port, log_level=settings.log_level.lower(),
+                # Windows 连接重置可能遗漏传输层关闭通知；只限制HTTP排空，后续应用资源仍按原顺序关闭。
+                timeout_graceful_shutdown=5,
             )
             server = uvicorn.Server(config)
             server_holder["server"] = server

@@ -35,7 +35,7 @@ it('两类选择共用下一步，进入独立总览后隐藏编辑器，返回�
   fireEvent.click(screen.getByText('权限组 · 2'))
   expect(screen.getByDisplayValue('普通成员')).toBeInTheDocument()
 })
-function begin() { fireEvent.click(screen.getByRole('button', { name: '核对业务总览' })); fireEvent.click(screen.getByRole('button', { name: '确认这些业务信息' })) }
+function begin() { fireEvent.click(screen.getByRole('button', { name: '核对业务总览' })); fireEvent.click(screen.getByRole('button', { name: '保存业务信息，继续整理权限' })) }
 
 it('新权限组默认勾入本次审阅；排除明确列入摘要且审阅之前不写入', () => {
   render(<CandidateReview value={value} onApplied={vi.fn()} manual={null} staleReview={null}/>)
@@ -53,7 +53,7 @@ it('回执不明后只回读；匹配的新 revision 恢复成功并且不再次
   render(<CandidateReview value={value} onApplied={applied} manual={null} staleReview={null}/>)
   begin()
   fireEvent.click(await screen.findByRole('button', { name: '核对保存结果' }))
-  expect(await screen.findByText('本次业务信息已确认，权限规则尚未改变。')).toBeInTheDocument()
+  expect(await screen.findByText('已保存 2 个角色、0 项业务动作，另有 0 项待核对。下一步沿用这些信息整理允许与禁止要求；正式权限尚未改变。')).toBeInTheDocument()
   expect(api.decideCandidates).toHaveBeenCalledOnce()
   expect(api.understanding).toHaveBeenCalledWith('p1')
   expect(applied).toHaveBeenCalledWith(expect.objectContaining({ revision: 4 }), true)
@@ -75,7 +75,7 @@ it('卸载后的旧提交回执不会更新新项目，连续点击只发送一�
   const applied = vi.fn()
   const view = render(<CandidateReview value={value} onApplied={applied} manual={null} staleReview={null}/>)
   fireEvent.click(screen.getByRole('button', { name: '核对业务总览' }))
-  const submit = screen.getByRole('button', { name: '确认这些业务信息' })
+  const submit = screen.getByRole('button', { name: '保存业务信息，继续整理权限' })
   fireEvent.click(submit); fireEvent.click(submit)
   expect(api.decideCandidates).toHaveBeenCalledOnce()
   view.unmount(); resolve({ ...value, revision: 4 })

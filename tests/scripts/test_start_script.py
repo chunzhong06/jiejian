@@ -31,7 +31,7 @@ def test_cmd_prefers_powershell7_with_windows_powershell_fallback() -> None:
     assert "where pwsh.exe" in text
     assert 'set "POWERSHELL_EXE=pwsh.exe"' in text
     assert 'set "POWERSHELL_EXE=%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"' in text
-    assert text.count('"%POWERSHELL_EXE%" -NoLogo') == 1
+    assert text.count('-File "%START_SCRIPT%" %*') == 1
 
 
 @pytest.mark.parametrize("prefer_core", [False, True])
@@ -358,21 +358,13 @@ def test_prepare_status_parser_accepts_only_contiguous_whitelisted_events() -> N
     assert "INDEX=12" in result.stdout
 
 
-def test_banner_keeps_six_lines_wide_j_glyphs_and_safe_fallback() -> None:
-    presentation = _text(PRESENTATION)
+def test_banner_is_compact_and_keeps_plain_terminal_fallback() -> None:
     command = "$script:DisplayUnicode=$true;$script:DisplayTrueColor=$false;" + f". {_powershell_literal(PRESENTATION)};Write-Banner"
     result = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     output = [line.rstrip() for line in result.stdout.splitlines() if line.strip()]
-    banner = output[:6]
-    assert len(output) == 7
-    assert len(banner) == 6
-    assert all(len(line) < 72 for line in banner)
-    assert banner[0].count("     ██╗") == 2
-    assert banner[3].count("██   ██║") == 2
-    assert banner[4].count("╚█████╔╝") == 2
-    assert banner[5].count("╚════╝") == 2
-    assert output[-1].strip() == "界鉴 · 安全意图一致性验证"
-    assert 'Write-Host "JIEJIAN"' in presentation
-    assert "WindowSize.Width -ge 72" in _text(START)
+    assert len(output) == 2
+    assert output[0].strip() == "界鉴  JIEJIAN"
+    assert output[-1].strip() == "让权限要求与实际行为对应起来"
+    assert "\x1b" not in result.stdout
     assert "SupportsVirtualTerminal" in _text(START)

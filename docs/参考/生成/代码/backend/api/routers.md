@@ -25,7 +25,7 @@
 - `class OfficialBoundaryChoice`
 - `class OfficialObservationRequest`
 
-静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.checks.repair`、`product.backend.workflows.examples.environment`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.checks.repair`、`product.backend.core.errors`、`product.backend.workflows.examples.environment`、`typing`
 
 ### `product/backend/api/routers/applications/onboarding.py`
 
@@ -70,6 +70,7 @@
 - `class RuleCandidateSaveRequest`
 - `RuleCandidateSaveRequest.to_command(self) -> RuleCandidateSave`
 - `class RuleCandidateProposalRequest`
+- `class RuleCandidateVisibilityRequest`
 - `class RulePreviewRequest`
 - `RulePreviewRequest.to_command(self)`
 - `class BoundaryMaintenanceCreateRequest`

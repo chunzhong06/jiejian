@@ -103,7 +103,7 @@ describe('ApplicationSetup', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /只读分析当前应用源码/ }))
     fireEvent.click(screen.getByRole('button', { name: '授权并开始分析' }))
-    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
+    fireEvent.click(await screen.findByRole('button', { name: '核对角色与业务动作' }))
     expect(await screen.findByText('整理权限组与业务动作', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText(/先调整应用里有哪些权限组/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('owner')).toBeInTheDocument()
@@ -123,8 +123,8 @@ describe('ApplicationSetup', () => {
     expect(screen.getByRole('button',{name:'授权并开始分析'})).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox',{name:/只读分析当前应用源码/}))
     fireEvent.click(screen.getByRole('button',{name:'授权并开始分析'}))
-    expect(await screen.findByRole('button',{name:'审阅业务与权限'})).toBeInTheDocument()
-    expect(screen.getByText('实际操作前再连接')).toBeInTheDocument()
+    expect(await screen.findByRole('button',{name:'核对角色与业务动作'})).toBeInTheDocument()
+    expect(screen.getByText('运行地址尚未确认')).toBeInTheDocument()
     expect(mockProjects.discoverEndpoints).not.toHaveBeenCalled()
     expect(mockProjects.confirmEndpoint).not.toHaveBeenCalled()
     expect(mockProjects.authorizeSourceAnalysis).toHaveBeenCalledWith('app-demo',0)
@@ -148,7 +148,7 @@ describe('ApplicationSetup', () => {
     mockProjects.decideCandidates.mockResolvedValue({ ...confirmed, action_candidates: [{ ...action, decision: 'CONFIRMED' }] })
     const continued = vi.fn()
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={continued} />)
-    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
+    fireEvent.click(await screen.findByRole('button', { name: '核对角色与业务动作' }))
     fireEvent.change(await screen.findByDisplayValue('owner'), { target: { value: '所有者' } })
     fireEvent.click(screen.getByText('业务动作 · 1'))
     fireEvent.click(screen.getByText('权限组 · 1'))
@@ -158,12 +158,12 @@ describe('ApplicationSetup', () => {
     const summary = screen.getByRole('region', { name: '本次选择完整摘要' })
     expect(summary).toHaveTextContent('所有者')
     expect(summary).toHaveTextContent('修改文档')
-    fireEvent.click(within(summary).getByRole('button', { name: '确认这些业务信息' }))
+    fireEvent.click(within(summary).getByRole('button', { name: '保存业务信息，继续整理权限' }))
     await waitFor(() => expect(mockProjects.decideCandidates).toHaveBeenCalledWith('app-demo', 3, [
       expect.objectContaining({ candidate_id: role.candidate_id, decision: 'CONFIRMED', display_name: '所有者' }),
       expect.objectContaining({ candidate_id: action.candidate_id, decision: 'CONFIRMED' }),
     ]))
-    expect(await screen.findByText('本次业务信息已确认，权限规则尚未改变。')).toBeInTheDocument()
+    expect(await screen.findByText('已保存 1 个角色、1 项业务动作，另有 0 项待核对。下一步沿用这些信息整理允许与禁止要求；正式权限尚未改变。')).toBeInTheDocument()
     await waitFor(() => expect(continued).toHaveBeenCalledOnce())
     expect(screen.queryByRole('button', { name: '核对业务总览' })).not.toBeInTheDocument()
   })
@@ -198,7 +198,7 @@ describe('ApplicationSetup', () => {
     mockProjects.understanding.mockResolvedValue(restored)
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={onChanged} onBack={vi.fn()} onContinue={vi.fn()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
+    fireEvent.click(await screen.findByRole('button', { name: '核对角色与业务动作' }))
     expect(await screen.findByDisplayValue('普通用户')).toBeInTheDocument()
     mockProjects.understanding.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '刷新当前状态' }))
@@ -276,7 +276,7 @@ describe('ApplicationSetup', () => {
 
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
+    fireEvent.click(await screen.findByRole('button', { name: '核对角色与业务动作' }))
     expect(await screen.findByDisplayValue('普通用户')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: '纳入普通用户' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: '纳入排除组' })).not.toBeChecked()

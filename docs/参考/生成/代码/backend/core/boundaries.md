@@ -149,7 +149,7 @@
 - `BoundaryProposalDecision.validate_text(cls, value, info) -> str`
 - `BoundaryProposalDecision.validate_decider(self) -> BoundaryProposalDecision`
 
-静态import / dot-source：`__future__`、`enum`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.semantics`、`product.backend.core.identifiers`、`pydantic`、`re`、`typing`
+静态import / dot-source：`__future__`、`enum`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.semantics`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`re`、`typing`
 
 ### `product/backend/core/boundaries/rule_candidates.py`
 

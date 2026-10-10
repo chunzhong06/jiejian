@@ -99,6 +99,32 @@ def test_python_sync_digest_tracks_editable_package_topology() -> None:
     assert "$stateTopologyDigest -ne $topologyDigest" in source
 
 
+def test_missing_cache_reuses_healthy_minimal_conda_but_not_changed_contract(tmp_path: Path) -> None:
+    # 清空 var 不应触发外部环境更新；未来增加依赖或明确 bootstrap 仍须更新。
+    definition = tmp_path / "environment.yml"
+    baseline = (ROOT / "environment.yml").read_text(encoding="utf-8")
+    for content, mode, expected_updates in ((baseline, "auto", 0), (baseline + "  - pip\n", "auto", 1), (baseline, "force", 1)):
+        definition.write_text(content, encoding="utf-8")
+        command = (
+            f". {_powershell_literal(MODULE_ROOT / 'python.ps1')};"
+            f"$script:EnvironmentPath={_powershell_literal(definition)};"
+            "$script:updates=0;"
+            f"function Resolve-CondaPrefix {{ $script:Conda='conda'; return {_powershell_literal(tmp_path / 'jiejian_env')} }};"
+            "function Test-CondaPython { return $true };"
+            "function Get-FileDigest { return 'current' };"
+            "function Get-StateValue { return $null };"
+            "function Set-StateValue { param($name,$value) };"
+            "function Invoke-External { $script:updates++ };"
+            "function Fail-Development { throw 'unexpected failure' };"
+            f"Ensure-Conda {mode};"
+            "[pscustomobject]@{updates=$script:updates}|ConvertTo-Json -Compress"
+        )
+        result = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(result.stdout.strip().splitlines()[-1])["updates"] == expected_updates
+
+
 def test_uv_partial_download_keeps_zip_extension_for_expand_archive() -> None:
     source = _text(MODULE_ROOT / "python.ps1")
     assert 'cache\\downloads\\.tmp-{0}-{1}' in source

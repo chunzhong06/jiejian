@@ -200,14 +200,15 @@
 .environment-focus .workbench-sample-entry{display:grid;justify-items:end;margin:0;}
 .environment-focus .workbench-sample-entry>.ant-alert{justify-self:stretch;}
 
-/* 全新示例的说明与启动操作成一组；主动作在当前区域右侧。 */
+/* 示例说明与操作组相邻；重新开始在左、继续在右，窄屏换行后仍保持顺序。 */
 .sample-start-row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-32); }
 .sample-start-copy { flex:1; min-width:0; }
+.sample-start-actions { display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-12);margin-inline-start:auto;max-width:100%;flex-shrink:0; }
 .sample-management-row { display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-24); }
 .sample-management-row > div:first-child { flex:1 1 340px;min-width:0; }
 .sample-management-row h3 { margin:0; }
 .sample-management-row p { margin:var(--space-8) 0 0;max-width:60ch; }
 .sample-management-actions { margin-inline-start:auto;justify-content:flex-end; }
-@media(max-width:700px) { .sample-start-row { flex-wrap:wrap; }.sample-start-row > .ant-btn { margin-left:auto; } }
+@media(max-width:700px) { .sample-start-row { flex-wrap:wrap; } }
 
 @media(max-width:700px) { .environment-facts > div { justify-content:flex-start; } }

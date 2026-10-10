@@ -82,12 +82,13 @@ def verify_environment_restart(gui, project_id):
         lambda: page.get_by_role("button", name="确认停止", exact=True).click())
     if stopped["project_id"] != project_id or stopped["recovery_state"] != "EXITED" or not stopped["workspace_retained"]:
         raise SampleTestError("SAMPLE_STOP_LOST_WORKSPACE")
-    heading = lambda: page.get_by_role("heading", name="从全新示例开始", exact=True)
+    heading = lambda: page.get_by_role("heading", name="继续上次示例", exact=True)
     heading().wait_for()
     _capture_sizes(gui, "environment-recovery", heading)
-    page.get_by_role("button", name="启动示例", exact=True).click()
+    page.get_by_role("button", name="重新开始示例", exact=True).click()
     restarted, _ = gui._response("/api/experience/official-sample/start",
         lambda: page.get_by_role("dialog", name="启动官方示例？").get_by_role("button", name="启动示例", exact=True).click())
+    restarted=gui._environment_completed(restarted)
     new_project = restarted["project_id"]
     if (new_project == project_id or restarted["experience_id"] == before["experience_id"]
             or restarted["scenario_version"] != "BASELINE" or restarted["scenario_prepared"]):

@@ -129,7 +129,9 @@ def create_app(
     app.include_router(build_results_router(context))
     app.include_router(build_source_changes_router(context))
     app.include_router(build_development_router(context))
-    app.include_router(build_mcp_access_router(context, mcp_access))
+    from product.backend.workflows.agent_access.connections import AgentConnections
+    app.state.agent_connections = AgentConnections(var_dir, mcp_access)
+    app.include_router(build_mcp_access_router(context, mcp_access, app.state.agent_connections))
     app.include_router(build_onboarding_router(context))
 
     @app.on_event("startup")
@@ -152,8 +154,11 @@ def create_app(
     async def shutdown() -> None:
         if hasattr(app.state, 'batch_coordinator'):
             app.state.batch_stop.set()
+            context.preparation_batches.wake.set()
             await app.state.batch_coordinator
         await asyncio.to_thread(context.worker.stop)
+        # 环境受理后的编排可能仍在等待 Runtime Worker；先结束编排，再关闭其依赖。
+        await asyncio.to_thread(context.official_experience.close)
         await asyncio.to_thread(context.runtime_worker.stop)
         mcp_access.close()
         mcp_lifespan = getattr(app.state, "mcp_lifespan", None)
@@ -201,10 +206,8 @@ async def _advance_preparation_batches(context, stopped):
         except Exception:
             # 短暂存储读取失败不能终止整个协调器；下一轮仍先读取持久进度，绝不重放未知写入。
             logger.warning('preparation batch coordinator read failed')
-        try:
-            await asyncio.wait_for(stopped.wait(), timeout=2)
-        except TimeoutError:
-            pass
+        if not stopped.is_set():
+            await asyncio.to_thread(context.preparation_batches.wait_for_work)
 
 
 async def _run_local_maintenance(context: ApplicationCore, app: FastAPI) -> None:

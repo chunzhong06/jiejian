@@ -1,5 +1,6 @@
 # 共享真实页面会话与回执核对，不创建第二份业务状态。
 import re
+import time
 
 
 class GuiSession:
@@ -38,3 +39,13 @@ class GuiSession:
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name):
             raise SampleTestError("GUI_CAPTURE_NAME_INVALID")
         self.page.screenshot(path=str(self.audit_dir / (name + ".png")), full_page=True)
+
+    def _environment_completed(self, receipt):
+        """受理不代表实例就绪；查询原键，不重放页面写操作。"""
+        from tests.acceptance.sample_test.harness.state import SampleTestError
+        deadline=time.monotonic()+40
+        while receipt.get('operation_state')=='PENDING' and time.monotonic()<deadline:
+            self.page.wait_for_timeout(150)
+            receipt=self.client.call('GET','/api/experience/official-sample?operation_id='+receipt['operation_id'])
+        if receipt.get('operation_state')!='SUCCEEDED':raise SampleTestError('GUI_ENVIRONMENT_NOT_COMPLETED')
+        return receipt

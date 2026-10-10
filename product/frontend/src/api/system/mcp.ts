@@ -28,6 +28,23 @@ export type MCPAccessView = {
 
 export type MCPAccessCredentialView = MCPAccessView & { access_token: string }
 
+export const agentClients = [
+  {key:'dsh',name:'DSH',description:'DeepSeek Harness'}, {key:'codex',name:'Codex',description:'OpenAI'},
+  {key:'zcode',name:'ZCode',description:'智谱'}, {key:'trae',name:'TRAE',description:'字节跳动'},
+  {key:'codebuddy',name:'CodeBuddy Code',description:'腾讯'}, {key:'qoder',name:'Qoder CLI',description:'Qoder'},
+] as const
+export type AgentClient = typeof agentClients[number]['key']
+export type AgentConnection = {
+  client: AgentClient; label: string
+  state: 'NOT_CONFIGURED'|'AWAITING_CLIENT'|'STARTED'|'TOOLS_READ'|'REQUEST_ACCEPTED'|'DISCONNECTED'|'FAILED'
+  message: string; code: string; tool_count: number; profiles: string[]; open_url: string|null; config_path?: string
+}
+export const agentConnectionsApi = {
+  connect: (client:AgentClient,profile?:string)=>request<AgentConnection>(`/api/mcp/clients/${client}/connect`,{method:'POST',body:JSON.stringify({profile:profile??null})}),
+  status: (client:AgentClient)=>request<AgentConnection>(`/api/mcp/clients/${client}`),
+  restore: (client:AgentClient)=>request<AgentConnection>(`/api/mcp/clients/${client}/restore`,{method:'POST'}),
+}
+
 export const mcpAccessApi = {
   status: () => request<MCPAccessView>('/api/mcp/access'),
   pair: () => request<MCPAccessCredentialView>('/api/mcp/access/pair', { method: 'POST' }),

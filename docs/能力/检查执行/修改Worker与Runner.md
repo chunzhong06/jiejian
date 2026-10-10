@@ -22,6 +22,8 @@ API 接受和查询请求；Worker 持有 Job 租约与 fencing，启动独立 R
 
 Worker 每次只能处理自己持有且 fencing token 仍有效的 Job。正常修改路线：
 
+本机监督器由一个调度线程选择任务，最多运行两个独立PROOF_PREFLIGHT进程；第二槽没有独立调度线程，领取时排除另一槽已持有的Job。CHECK、录制与参照取样保持独占，不与第二槽同时执行。各槽分别持有进程、lease owner和fence，授权撤回、退出、取消、发布及关闭逐槽收口。仍有未收口句柄时拒绝再次启动监督器；不复用含跨任务秘密的长期Runner。
+
 1. 从持久化仓储的状态转换和错误码开始，明确 claim、renew、complete、fail、cancel 的允许前态。
 2. 在 `worker/supervisor.py` 只编排生命周期，不把 Runner 领域逻辑搬入 Worker。
 3. 所有终态写入都携带当前 fencing 条件；失去租约后停止发布，不能覆盖新 Worker 的结果。

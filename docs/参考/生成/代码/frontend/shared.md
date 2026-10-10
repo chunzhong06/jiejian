@@ -71,7 +71,7 @@
 
 - `useLiveRead`
 
-静态import / dot-source：`../../api/http`、`react`
+静态import / dot-source：`../../api/http`、`./visibility`、`react`
 
 ### `product/frontend/src/shared/runtime/visibility.ts`
 

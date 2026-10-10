@@ -13,7 +13,7 @@ export type RuntimeActivationReceipt = { project_id: string; operation_id: strin
 export type TaskHistoryItem = { task_id: string; title: string; status: DevelopmentTask['status']; revision: number; updated_at_us: number }
 export type TaskHistoryPage = { project_id: string; items: TaskHistoryItem[]; next_task_id: string | null }
 export type DeliveryPage = { project_id: string; task_id: string; items: Array<{ delivery: DevelopmentDelivery; reason: string; submitted_by: string }>; next_ordinal: number | null }
-export type DeliveryDetails = { project_id: string; delivery: DevelopmentDelivery; context: DevelopmentContext; relative_change: SourceChangeViewDto['change_set']; cumulative_change: SourceChangeViewDto['change_set']; verification: NonNullable<DevelopmentView['latest_verification']> }
+export type DeliveryDetails = { project_id: string; delivery: DevelopmentDelivery; context: DevelopmentContext; relative_change: SourceChangeViewDto['change_set']; cumulative_change: SourceChangeViewDto['change_set']; verification: NonNullable<DevelopmentView['latest_verification']> & {same_source_run_id?:string|null} }
 const base = (project: string) => `/api/projects/${encodeURIComponent(project)}/development`
 const post = <T,>(url: string, body: object) => request<T>(url, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) })
 export const newOperationId = () => crypto.randomUUID().replaceAll('-', '')

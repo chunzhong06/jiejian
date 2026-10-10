@@ -1,4 +1,5 @@
 // 五类材料使用同一次准备投影；分组完整性由全部子项决定，不把部分可用写成全部可复用。
+import { materialStatus } from './materialStatus'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from 'antd'
 import { StatusBadge } from '../../../shared/ui/StatusBadge'
@@ -37,7 +38,7 @@ export function MaterialOverview({action,effectName,currentStage,taskTitle,taskW
   const complete = (items: Array<{ value: PreparationItem }>) => items.length > 0 && items.every(item => ['SATISFIED', 'NOT_REQUIRED'].includes(item.value.status))
   const reusable = groups.filter(group => complete(group.items) && group.items.some(item => item.value.status === 'SATISFIED')).length
   const unnecessary = groups.filter(group => group.items.length === 0 || group.items.every(item => item.value.status === 'NOT_REQUIRED')).length
-  const status = (items: Array<{ value: PreparationItem }>) => !items.length || items.every(item => item.value.status === 'NOT_REQUIRED') ? '无需准备' : complete(items) ? '可复用' : items.some(item => item.value.status === 'BLOCKED') ? '需要先确认' : items.some(item => item.value.binding_fingerprint || item.value.status === 'STALE') ? '已保存，需复核' : '需要准备'
+  const status = (items: Array<{ value: PreparationItem }>) => materialStatus(items.map(item => item.value))
   const details = (kind: string, item: {value: PreparationItem; reference?: MaterialReference}) => advice?.find(entry => entry.action_id === action.action_id && entry.action_revision === action.action_revision && entry.kind === kind && entry.status === item.value.status && entry.member_id === (kind === 'identity' ? (item.value as {test_identity_id?: string}).test_identity_id : item.reference?.member_id ?? null))
   const retained = groups.filter(group => complete(group.items) && group.items.some(item => item.value.status === 'SATISFIED')).map(group => group.title)
   return <>
@@ -49,9 +50,9 @@ export function MaterialOverview({action,effectName,currentStage,taskTitle,taskW
     <div className="material-table" role="table" aria-label="检查材料清单">
       <div className="material-table-head" role="row"><span role="columnheader">材料</span><span role="columnheader">当前情况</span><span role="columnheader">适用内容</span><span role="columnheader">操作</span></div>
       {groups.map((group, index) => <div key={group.key} className={`material-group ${currentStage === index ? 'is-current' : ''}`}>
-        <div className={`material-row${group.key==='evidence'?' material-proof-group':''}`} role="row"><span role="cell" className="material-row-title">{group.icon}{group.title}</span>
-          {group.key!=='evidence'&&<span role="cell"><StatusBadge kind="preparation" tone={(complete(group.items) || status(group.items) === '无需准备') && !outdated ? 'neutral' : 'warning'}>{outdated ? '上次：' : ''}{status(group.items)}</StatusBadge></span>}
-          <span role="cell" aria-colspan={group.key==='evidence'?2:undefined} className="material-row-summary">{group.key==='evidence' ? `${group.items.length} 项证明材料 · ${outdated?'需要重新读取':status(group.items)}` : group.items.map(item => item.label).join('、') || '当前动作没有此项要求'}</span>
+        <div className="material-row" role="row"><span role="cell" className="material-row-title">{group.icon}{group.title}</span>
+          <span role="cell"><StatusBadge kind="preparation" tone={status(group.items).includes('复核') ? 'danger' : (complete(group.items) || status(group.items) === '无需准备') && !outdated ? 'neutral' : 'warning'}>{outdated ? '上次：' : ''}{status(group.items)}</StatusBadge></span>
+          <span role="cell" className="material-row-summary">{group.key==='evidence' ? `${group.items.length} 项证明材料` : group.items.map(item => item.label).join('、') || '当前动作没有此项要求'}</span>
           <span role="cell"><Button type="link" aria-expanded={expanded === group.key} onClick={() => setExpanded(value => value === group.key ? undefined : group.key)}>{expanded === group.key ? '收起' : currentStage === index ? '处理' : '查看'}</Button></span></div>
         {expanded === group.key && <div className="material-row-detail"><MaterialSuggestionNotes entries={suggestions.filter(entry => entry.item.material.kind === group.key)} allEntries={allSuggestions}/>{group.items.filter(() => !(group.key === 'evidence' && renderFileProof)).map((item, i) => <div key={i} className="material-detail-item"><div className="material-detail-copy">{group.items.length > 1 && <strong>{item.label}</strong>}<p className="editorial-muted">{!outdated ? details(group.key, item)?.reason ?? status([item]) : `上次：${status([item])}`}</p></div>
           {group.key === 'evidence' && fileEffectIds.includes(item.reference?.member_id ?? '') ? <span className="editorial-muted">在下方核对参照与来源</span> : group.key === 'identity' ? <Button onClick={onIdentity}>管理测试账号</Button> : item.reference && item.value.status !== 'NOT_REQUIRED' ? <Button data-material-key={`${item.reference.kind}:${item.reference.member_id ?? ''}`} onClick={() => onMaterial(item.reference!, item.label)}>查看与更新</Button> : <span className="editorial-muted">{item.value.status === 'NOT_REQUIRED' ? '不需要额外材料' : '先确认所需账号'}</span>}</div>)}{group.key === 'evidence' && renderFileProof && renderFileProof(() => setExpanded(undefined))}{group.key === 'evidence' && !renderFileProof && onProofSources && group.items.some(item => !fileEffectIds.includes(item.reference?.member_id ?? '')) && <div className="material-source-entry"><p className="editorial-muted">通过独立业务记录确认结果。</p><Button onClick={onProofSources}>核对证明来源</Button></div>}</div>}

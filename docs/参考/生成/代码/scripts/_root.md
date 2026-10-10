@@ -22,6 +22,7 @@
 
 - `param $Browser`
 - `param $DisplaySpinnerAscii`
+- `param $DisplaySpinnerPanel`
 - `param $DisplaySpinnerProcess`
 - `param $DisplaySpinnerStage`
 - `param $DisplaySpinnerStartedAt`

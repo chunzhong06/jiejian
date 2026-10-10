@@ -28,14 +28,15 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const [runs, setRuns] = useState<CheckStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [submissionStage, setSubmissionStage] = useState<'checking' | 'submitting'>()
   const [readFailed, setReadFailed] = useState(false)
   const [submissionUncertain, setSubmissionUncertain] = useState(false)
   const [selected, setSelected] = useState<string>()
-  // 普通入口也承接服务端明确选定的复验任务；不按最近 PASS 或最近变化猜测修复关系。
+  // 普通检查和复验都承接工作台明确选定的改动批次；不按最近检查猜测关联。
   // 已提交后固定本轮上下文，工作台的后续任务不得切换当前运行。
   const repairContext = useRef<{ projectId: string; changeId?: string }>({ projectId: project.project_id })
   if (repairContext.current.projectId !== project.project_id) repairContext.current = { projectId: project.project_id }
-  if (!requestedRunId && !selected && !busy && !repairContext.current.changeId && props.workspace?.project.project_id === project.project_id && props.workspace.primary_task?.task_kind === 'VERIFY_REPAIR') repairContext.current.changeId = props.workspace.primary_task.change_id ?? undefined
+  if (!requestedRunId && !selected && !busy && !repairContext.current.changeId && props.workspace?.project.project_id === project.project_id && props.workspace.primary_task?.route === '/tests') repairContext.current.changeId = props.workspace.primary_task.change_id ?? undefined
   const changeId = props.changeId ?? (!requestedRunId ? repairContext.current.changeId : undefined)
   const navigateCheck = (path: string) => {
     const [route, search] = path.split('?')
@@ -97,8 +98,12 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     pending.current = undefined; setSubmissionUncertain(false); setOpenedResult(undefined); observedRunning.current.clear()
     // 本页提交后进入同一 Run 深链时 selected 不变；清空结果后仍须重新触发权威读取。
     setRefreshEpoch(value => value + 1)
-    void refresh()
   }, [refresh, requestedRunId, requestedTaskId, requestedMaterials])
+
+  useEffect(() => {
+    // 材料和历史结果拥有自己的读取；隐藏页面不并发编译用不到的检查计划。
+    if (visible && !requestedRunId && !requestedTaskId && !requestedMaterials) void refresh()
+  }, [refresh, visible, requestedRunId, requestedTaskId, requestedMaterials])
 
   useEffect(() => {
     setWorkspaceSyncFailed(false)
@@ -147,12 +152,12 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
 
   const start = async () => {
     if (submitting.current || !preview?.can_execute || readFailed) return
-    submitting.current = true; setBusy(true)
+    submitting.current = true; setBusy(true); setSubmissionStage('checking')
     const projectId = project.project_id
     const recoveringUnknown = Boolean(pending.current)
     try {
       // 未知提交回执先查运行记录，重试只复用原幂等键，不能新建请求来试探。
-      const freshRuns = await currentChecksApi.list(projectId)
+      const freshRuns = await currentChecksApi.list(projectId, true)
       if (!alive.current || currentProject.current !== projectId) return
       setRuns(freshRuns)
       const running = freshRuns.find(active)
@@ -163,12 +168,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       if (!fresh.can_execute || fresh.plan_fingerprint !== preview.plan_fingerprint) throw new ApiError('STATE_PRECONDITION', '准备条件已变化，请核对最新检查范围。')
       if (pending.current && pending.current.fingerprint !== fresh.plan_fingerprint) throw new ApiError('STATE_PRECONDITION', '上次提交尚未确认，且检查范围已变化，请先刷新检查记录。')
       pending.current ??= { fingerprint: fresh.plan_fingerprint, key: crypto.randomUUID() }
+      setSubmissionStage('submitting')
       const submitted = await currentChecksApi.submit(projectId, pending.current.fingerprint, pending.current.key, changeId)
       if (!alive.current || currentProject.current !== projectId) return
       pending.current = undefined; setSubmissionUncertain(false)
       props.onFeedback?.('检查请求已确认，可以离开此页后再查看结果。')
       setSelected(submitted.run.run_id)
-      await refresh()
+      // 回执已确定精确运行，进度页自行读取；不再让第二次计划计算挡住进入。
       void syncWorkspace(`submitted:${submitted.run.run_id}`)
     } catch (error) { if (alive.current && currentProject.current === projectId) {
       // 首次请求被写入前门禁明确拒绝，不是回执丢失；已有未知请求则继续保留原幂等键。
@@ -177,9 +183,16 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       setSubmissionUncertain(Boolean(pending.current))
       onError(error as ApiError)
     } }
-    finally { submitting.current = false; if (alive.current && currentProject.current === projectId) setBusy(false) }
+    finally { submitting.current = false; if (alive.current && currentProject.current === projectId) { setBusy(false); setSubmissionStage(undefined) } }
   }
   const showMaterials = () => { setMaterials(true); setSelected(undefined); navigateCheck('/tests?materials=1') }
+  // 点击即进入明确的提交阶段；没有运行回执时不能提前展示任务或执行进度。
+  if (submissionStage) return <EditorialPage label="正在提交检查" width="summary">
+    <EditorialHeader eyebrow={project.name || '当前应用'} title={submissionStage === 'checking' ? '正在核对本轮检查范围' : '正在创建本轮检查'}/>
+    <LoadingState>{submissionStage === 'checking' ? '正在确认准备条件与是否已有检查。核对完成后会继续提交。' : '正在等待服务端确认。收到回执后会自动显示检查进度。'}</LoadingState>
+    <p className="editorial-muted">本次操作正在处理，无需再次点击。返回后仍可在当前检查中查看。</p>
+    <TaskActionBar back={{label:'返回当前工作',onClick:()=>onNavigate('/workspace')}}/>
+  </EditorialPage>
   // 显式切换准备任务只重置页面局部模式；同一任务刷新继续保留当前输入和服务端材料。
   if (materials) return <PreparationPage key={`${project.project_id}:${requestedTaskId ?? "materials"}`} {...props} assistReturnTo={`/tests?materials=1${changeId ? `&change_id=${encodeURIComponent(changeId)}` : ''}${props.requestedActionId ? `&action_id=${encodeURIComponent(props.requestedActionId)}` : ''}${requestedTaskId ? `&task_id=${encodeURIComponent(requestedTaskId)}` : ''}`} onNavigate={(path) => {
     if (path.split('?')[0] === '/tests' && !new URLSearchParams(path.split('?')[1]).has('task_id')) {
@@ -220,7 +233,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     {selectedMode && pollPaused && <Alert className="flow-feedback" type="info" showIcon message={status?.result_integrity === 'VALID' && !story ? '检查已完成，但结果暂时无法读取，正在自动重试。不会重新执行检查。' : '暂时无法获取最新进度，正在自动重试。保留上次读取的状态。'} />}
     {selectedMode && !story && status && !active(status) && status.result_integrity === 'NOT_PUBLISHED' && <Alert className="flow-feedback" type="info" showIcon message="本次没有发布可用安全结论。执行停止或失败不代表发现权限问题。" />}
     {changeId && !selectedMode && <p className="editorial-muted">本轮对应所选修改批次，覆盖完整当前权限要求。</p>}
-    {completionPending && story && <section className="task-focus" aria-label="本轮检查完成">
+    {completionPending && story && <section className="task-focus check-completion" aria-label="本轮检查完成"><div className="agent-task-main">
       <p className="editorial-eyebrow task-focus-label" role="status">检查已完成，结果已保存。</p>
       <h2>{story.judgement}</h2>
       <p>{story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? '下一步：核对原问题与必须保留的正常业务，查看修复依据。' : '查看本轮结果与证据，了解检查结论及适用范围。'}</p>
@@ -228,8 +241,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
         <Button type={story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? 'default' : 'primary'} onClick={() => setOpenedResult(story.run_id)}>查看本轮结果</Button>
         {story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) && <Button type="primary" onClick={() => onNavigate('/changes?repair_reference=' + encodeURIComponent(story.actions.find(action => action.repair_requirement)!.repair_requirement!.repair_fingerprint))}>查看修复依据</Button>}
       </div>
-    </section>}
-    {completionPending && story && <ResultAgentHandoff story={story} onNavigate={onNavigate}/>}
+    </div><ResultAgentHandoff compact story={story} onNavigate={onNavigate}/></section>}
     {selectedMode && story && !completionPending && <>
       <nav className="result-review-views" aria-label="本轮结果视图"><button aria-current={resultView === 'result' ? 'page' : undefined} onClick={() => setResultView('result')}>检查结果 <span>{story.actions.length}</span></button><button aria-current={resultView === 'source' ? 'page' : undefined} onClick={() => setResultView('source')}>源码对应</button><ResultScope story={story}/></nav>
       {resultView === 'source' && <SourceIdentityPanel key={story.run_id} projectId={project.project_id} recordId={story.run_id} kind="runs" onIntegrityError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/>}

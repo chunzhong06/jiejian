@@ -186,7 +186,7 @@ def test_fresh_database_reaches_current_head_idempotently(tmp_path: Path) -> Non
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 79
+    assert len(Base.metadata.tables) == 81
     assert "check_publications" in tables
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
@@ -261,10 +261,13 @@ def test_repository_contains_frozen_migration_chain() -> None:
         "0016_capture_recovery.py",
         "0017_rule_history.py",
         "0018_node_sample.py",
+        "0019_preparation_batches.py",
+        "0020_environment_progress.py",
+        "0021_candidate_visibility.py",
     ]
 
 
-@pytest.mark.parametrize("starting_revision", [MAINTENANCE_REVISION, "0009_delivery_check_links"])
+@pytest.mark.parametrize("starting_revision", [MAINTENANCE_REVISION, "0009_delivery_check_links", "0020_environment_progress"])
 def test_business_data_upgrades_in_place_and_preserves_rows(tmp_path: Path, starting_revision: str) -> None:
     database = tmp_path / "upgrade-business-data.db"
     _upgrade_to_revision(database, starting_revision)

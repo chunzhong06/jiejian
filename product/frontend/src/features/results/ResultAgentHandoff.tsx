@@ -3,13 +3,13 @@ import { currentChecksApi, type ResultStory } from '../../api/checks/currentChec
 import { ApiError } from '../../api/http'
 import { AgentAssistEntry } from '../../shared/ui/AgentAssistEntry'
 
-export function ResultAgentHandoff({ story, caseId, onNavigate }: {
-  story: ResultStory; caseId?: string; onNavigate: (path: string) => void
+export function ResultAgentHandoff({ story, caseId, onNavigate, compact = false }: {
+  story: ResultStory; caseId?: string; onNavigate: (path: string) => void; compact?: boolean
 }) {
   const returnTo = `/tests?run_id=${encodeURIComponent(story.run_id)}${caseId ? `&case_id=${encodeURIComponent(caseId)}` : ''}`
-  return <section className="result-agent-handoff" aria-label="让 Agent 解释检查结果"><AgentAssistEntry
-    projectId={story.project_id} contextKey={`result:${story.run_id}:${caseId ?? 'all'}`} requiredLevel="READ"
-    heading={<div><h3>回到 Agent 解读这轮检查</h3><p className="editorial-muted">结果已保存。复制请求到原来的 Agent 对话中，它会通过 MCP 读取结果和证据；原始记录仍可在界鉴查看。</p></div>}
+  return <section className={`result-agent-handoff${compact ? ' is-compact' : ''}`} aria-label="让 Agent 解释检查结果"><AgentAssistEntry
+    projectId={story.project_id} contextKey={`result:${story.run_id}:${caseId ?? 'all'}`} requiredLevel="READ" dialog={compact}
+    heading={compact ? <p className="editorial-muted">需要进一步讨论时，可将本轮结果交给 Agent。</p> : <div><h3>{caseId ? '让 Agent 解读这项检查' : '让 Agent 解读本轮结果'}</h3><p className="editorial-muted">复制请求到原 Agent 对话，它可通过 MCP 读取{caseId ? '这项检查的' : '本轮'}结果与证据；原始记录留在界鉴供你核对。</p></div>}
     title="从实验结果继续讨论与修改" description="先解释权限要求、实际操作、业务结果和证据缺口。需要修复时，再由你决定下一步；复制请求不代表 Agent 已经收到或读取。"
     returnTo={returnTo} onNavigate={onNavigate}
     loadContext={async () => {

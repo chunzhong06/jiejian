@@ -414,7 +414,7 @@ class JobRepository:
         return tuple(self._record(row) for row in rows)
 
     def next_pending(
-        self, now_us: int | None = None, *, target_types: Sequence[str] = ("RUN", "RECORDING"),
+        self, now_us: int | None = None, *, target_types: Sequence[str] = ("RUN", "RECORDING"), exclude_job_ids: Sequence[str] = (),
     ) -> JobRecord | None:
         current = time.time_ns() // 1_000 if now_us is None else now_us
         row = _scalar(
@@ -422,6 +422,7 @@ class JobRepository:
             select(JobRow)
             .where(
                 JobRow.state.in_((JobState.PENDING.value, JobState.RETRY_WAIT.value)),
+                JobRow.job_id.not_in(exclude_job_ids),
                 JobRow.available_at_us <= current,
                 JobRow.cancel_requested_at_us.is_(None),
                 JobRow.lease_owner.is_(None),

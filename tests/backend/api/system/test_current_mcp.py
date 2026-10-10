@@ -13,6 +13,56 @@ from tests.fixtures.control_plane import create_app, TEST_CONTROL_ORIGIN
 from tests.backend.api.system._support_current_mcp import TOOLS, start_task
 
 
+def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
+    from copy import deepcopy
+    from uuid import uuid4
+    from jsonschema import Draft202012Validator
+    from tests.backend.api.boundaries._support_rule_candidates import _content
+
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    source = tmp_path / "source"
+    source.mkdir()
+    core = app.state.context
+    project = core.application_understanding.connect(str(source), project_name="投影合同核对").project.project_id
+    access = app.state.mcp_access
+    token = access.pair().access_token
+    access.set_level(project, MCPAccessLevel.PREPARE)
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=TEST_CONTROL_ORIGIN,
+                headers={"Authorization": "Bearer " + token, "Origin": TEST_CONTROL_ORIGIN}, follow_redirects=True) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + "/mcp", http_client=http, terminate_on_close=False)) as client:
+                    context = (await client.call_tool("jiejian_rule_context", {"project_id": project})).structured_content
+                    content = _content()
+                    effect = content["actions"][0]["effect_catalog"][0]
+                    effect.update(effect_kind="DATA_DISCLOSURE", expected_state=None)
+                    request = {"operation_id": uuid4().hex, "expected_basis_id": context["basis_id"], "content": content}
+                    validator = Draft202012Validator(context["candidate_input_schema"])
+                    assert not validator.is_valid(request)
+                    with pytest.raises(MCPError) as failure:
+                        await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": request})
+                    assert "actions[0].effect_catalog[0].protected_projection" in str(failure.value)
+                    assert "DATA_DISCLOSURE" in str(failure.value)
+                    # 未声明键本身也可能携带秘密，不能只净化错误中的value。
+                    invalid = deepcopy(request)
+                    invalid["secret-canary-unknown-key"] = "secret-canary-value"
+                    with pytest.raises(MCPError) as secret_failure:
+                        await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": invalid})
+                    assert "secret-canary" not in str(secret_failure.value)
+                    effect["protected_projection"] = ["title", "summary"]
+                    assert validator.is_valid(request)
+                    saved = await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": request})
+                    assert saved.structured_content["assessment"] == "REVIEWABLE"
+                    assert core.business_boundaries.view(project).policy_epoch == 0
+                    effect["effect_kind"] = "STATE_MUTATION"
+                    assert not validator.is_valid(request)
+                    with pytest.raises(MCPError) as wrong_kind:
+                        await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": request})
+                    assert "只有DATA_DISCLOSURE" in str(wrong_kind.value)
+    anyio.run(scenario)
+
+
 
 
 @pytest.mark.parametrize("fault,expected", [("token", 401), ("origin", 403), ("host", 421), ("paused", 403), ("rotated", 401), ("closed", 403)])

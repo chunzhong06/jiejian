@@ -10,14 +10,19 @@ from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
 from product.backend.workflows.examples.environment import OfficialScenarioVersion
 from product.backend.core.checks.repair import CurrentRepairReference
+from product.backend.core.errors import ErrorCode, JiejianError
 
 
 def build_experience_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/experience/official-sample", response_model=ApiResponse)
-    def official_sample_status():
-        return data_response(context.official_experience.status().model_dump(mode="json"))
+    def official_sample_status(lightweight: bool = False, operation_id: str | None = None):
+        service=context.official_experience
+        if hasattr(service,'operation_view'):
+            value=service.operation_view(operation_id,lightweight=lightweight) if operation_id else service.status(lightweight=lightweight)
+        else:value=service.status()
+        return data_response(value.model_dump(mode="json"))
 
     @router.get("/api/experience/official-sample/history", response_model=ApiResponse)
     def official_sample_history(limit: int = Query(25, ge=1, le=100)):
@@ -42,16 +47,23 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
 
     @router.post("/api/experience/official-sample/start", response_model=ApiResponse)
     def start_official_sample(body: OfficialSampleStartRequest):
-        return data_response(
-            context.official_experience.start(
-                consent=body.consent,
-                operation_id=body.operation_id,
-            ).model_dump(mode="json")
-        )
+        service=context.official_experience
+        asynchronous=hasattr(service,'prepare_step')
+        value=service.start(consent=body.consent,operation_id=body.operation_id,**({'wait':False} if asynchronous else {}))
+        return data_response(value.model_dump(mode='json'),status_code=202 if asynchronous else 200)
+
+    @router.post('/api/experience/official-sample/resume',response_model=ApiResponse)
+    def resume_official_sample(body: OfficialSampleStartRequest):
+        if not hasattr(context.official_experience,'resume'):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前示例提供方不支持继续上次实例')
+        return data_response(context.official_experience.resume(consent=body.consent,operation_id=body.operation_id,wait=False).model_dump(mode='json'),status_code=202)
 
     @router.post("/api/experience/official-sample/reset", response_model=ApiResponse)
     def reset_official_sample(body: OfficialSampleStartRequest):
-        return data_response(context.official_experience.reset(consent=body.consent, operation_id=body.operation_id).model_dump(mode="json"))
+        service=context.official_experience
+        asynchronous=hasattr(service,'prepare_step')
+        value=service.reset(consent=body.consent,operation_id=body.operation_id,**({'wait':False} if asynchronous else {}))
+        return data_response(value.model_dump(mode='json'),status_code=202 if asynchronous else 200)
 
     @router.post("/api/experience/official-sample/reconcile", response_model=ApiResponse)
     def reconcile_official_sample():

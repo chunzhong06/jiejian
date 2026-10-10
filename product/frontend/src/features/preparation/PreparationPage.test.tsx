@@ -5,8 +5,9 @@ import type { PreparationView } from '../../api/preparation/preparation'
 import type { PreparationSuggestionView, SuggestedMaterial } from '../../api/preparation/preparationSuggestions'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
-const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), guidance: vi.fn(), suggestion: vi.fn(), automate: vi.fn() }))
-vi.mock('./proof-sources/prepareProvidedProofs',()=>({prepareProvidedProofs:api.automate}))
+const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), guidance: vi.fn(), suggestion: vi.fn(), batchPreview: vi.fn(), batchStart: vi.fn(), batchLatest: vi.fn(), batchStatus: vi.fn() }))
+// 示例准备已转为后台批次；模拟真实计划与回执，不再调用旧的浏览器编排回调。
+vi.mock('../../api/preparation/batches',()=>({preparationBatchesApi:{preview:api.batchPreview,start:api.batchStart,latest:api.batchLatest,status:api.batchStatus}}))
 vi.mock('../../api/preparation/preparationSuggestions', () => ({preparationSuggestionsApi: {show: api.suggestion}}))
 vi.mock('../../api/preparation/proofSources', () => ({proofSourcesApi: {context: api.guidance}}))
 vi.mock('../../api/preparation/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence, draft: api.draft, saveDraft: api.saveDraft } }))
@@ -22,7 +23,7 @@ const material = (patch: Partial<PreparationView> = {}): PreparationView => ({ p
   execution: { status: 'SATISFIED', reason_codes: [] }, resources: [], effect_evidence: [{ effect_id: 'e1', status: 'STALE', reason_codes: [] }], recovery: { status: 'NOT_REQUIRED', reason_codes: [] }, reason_codes: [],
 }], ...patch })
 const props = (current = workspace(task())) => ({ project: { project_id: 'p1' }, workspace: current, onStateChanged: vi.fn().mockResolvedValue(current), onError: vi.fn(), onNavigate: vi.fn() })
-beforeEach(() => { vi.clearAllMocks(); api.automate.mockImplementation(async (_project,prepare)=>prepare()); api.guidance.mockResolvedValue({project_id:'p1'}); api.draft.mockResolvedValue({schema_version:"1",revision:0,action_id:null,material:null}); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
+beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear(); api.batchLatest.mockResolvedValue(null); api.batchPreview.mockResolvedValue({schema_version:'1',project_id:'p1',mode:'OFFICIAL',basis_id:'basis',runtime_origin:'http://localhost',guard:'guard',sources:[]}); api.batchStart.mockImplementation(async (_project,operation)=>({schema_version:'1',project_id:'p1',operation_id:operation,state:'SUCCEEDED',message:'示例材料已准备好',completed:4,total:4,cancel_requested:false,preflight_id:null,updated_at_us:1})); api.batchStatus.mockImplementation(async (_project,operation)=>({project_id:'p1',operation_id:operation,state:'SUCCEEDED'})); api.guidance.mockResolvedValue({project_id:'p1'}); api.draft.mockResolvedValue({schema_version:"1",revision:0,action_id:null,material:null}); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
 function selectionMaterial() {
   const value = material()
   const reference = (id: string) => ({ intent_id: id, revision: 1, intent_hash: `${id}-hash` })
@@ -118,6 +119,17 @@ describe('五类材料建议续接', () => {
   })
 })
 describe('动作准备', () => {
+  it('旧批次成功后源码已变化，汇总与当前表格都显示证明需复核', async () => {
+    api.batchLatest.mockResolvedValue({project_id:'p1',operation_id:'old',state:'SUCCEEDED',message:'示例材料已准备好',completed:4,total:4,cancel_requested:false,updated_at_us:1,identities:[{account:'curator',state:'PREPARED'}],items:[{label:'旧证明',state:'READY'}]})
+    render(<PreparationPage {...props()} onProvidedMaterials={vi.fn()}/>)
+    const summary=within(await screen.findByRole('list',{name:'当前材料准备状态'}))
+    await waitFor(()=>expect(api.batchLatest).toHaveBeenCalled())
+    expect(summary.getByText('已保存，需复核')).toBeInTheDocument()
+    expect(within(screen.getByRole('table',{name:'检查材料清单'})).getByText('已保存，需复核')).toBeInTheDocument()
+    expect(screen.queryByText('示例材料已准备好')).not.toBeInTheDocument()
+    expect(screen.queryByText('已就绪')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'前往检查'})).not.toBeInTheDocument()
+  })
   it('采用同一任务的后端建议并保留可沿用材料，不触发准备写入', async () => {
     api.guidance.mockResolvedValue({project_id:'p1',guidance:{project_id:'p1',state:'CURRENT',materials:[],sources:[],next_action:{task_id:'t1',kind:'PREPARE_TEST_IDENTITY',title:'核对当前成员账号',reason:'只有账号需要处理，其他有效材料保留。'}}})
     render(<PreparationPage {...props()}/>)
@@ -140,11 +152,11 @@ describe('动作准备', () => {
     const p=props(),provided=vi.fn().mockResolvedValue(undefined)
     render(<PreparationPage {...p} onProvidedMaterials={provided}/>)
     fireEvent.click(await screen.findByRole('button',{name:'一键准备示例材料'}))
-    expect(provided).not.toHaveBeenCalled()
+    expect(api.batchStart).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toHaveTextContent('campus')
     api.get.mockResolvedValue(material({preparation_complete:true}))
     fireEvent.click(screen.getByRole('button',{name:'确认并一键准备'}))
-    await waitFor(()=>expect(provided).toHaveBeenCalledOnce())
+    await waitFor(()=>expect(api.batchStart).toHaveBeenCalledOnce())
     await waitFor(()=>expect(p.onStateChanged).toHaveBeenCalled())
     expect(screen.queryByRole('button',{name:'Agent 协助'})).not.toBeInTheDocument()
   })
@@ -163,7 +175,7 @@ describe('动作准备', () => {
     expect(screen.queryByRole('table', { name: '检查材料清单' })).not.toBeInTheDocument()
   })
   it('自动准备失败保留重试入口和具体问题，不报告准备完成', async () => {
-    api.automate.mockRejectedValue(new Error('测试文件缺失'))
+    api.batchPreview.mockRejectedValue(new Error('测试文件缺失'))
     render(<PreparationPage {...props()} onProvidedMaterials={vi.fn()}/>)
     fireEvent.click(await screen.findByRole('button',{name:'一键准备示例材料'}))
     fireEvent.click(screen.getByRole('button',{name:'确认并一键准备'}))
@@ -174,11 +186,11 @@ describe('动作准备', () => {
   it.each(['AUTHORIZE_SOURCE','PREPARE_PROOF_SOURCE','PREPARE_REFERENCE'])('提供材料入口不遮住后端给出的证明步骤：%s', async kind => {
     const url='#/tests?materials=1&proof_sources=1&action_id=a1&source=source-one'
     api.guidance.mockResolvedValue({project_id:'p1',guidance:{project_id:'p1',state:'CURRENT',materials:[],sources:[],next_action:{task_id:'t1',kind,title:'核对证明来源',reason:'按当前来源继续准备',gui_url:url}}})
-    const p=props(workspace(task({task_kind:'COMPLETE_EFFECT_EVIDENCE',effect_id:'e1'}))),provided=vi.fn()
+    const p=props(workspace(task({task_kind:'COMPLETE_EFFECT_EVIDENCE',effect_id:'e1'})))
     render(<PreparationPage {...p} />)
     fireEvent.click(await screen.findByRole('button',{name:'核对证明来源'}))
     expect(p.onNavigate).toHaveBeenCalledWith(url.slice(1))
-    expect(provided).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
+    expect(api.batchStart).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
     expect(screen.queryByText(/录制任务/)).not.toBeInTheDocument()
   })
 

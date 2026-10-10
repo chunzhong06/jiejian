@@ -9,6 +9,14 @@ from fastapi import APIRouter
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
 from product.backend.workflows.agent_access.service import MCPAccessController, MCPAccessLevel
+from product.backend.workflows.agent_access.connections import AgentConnections
+from pydantic import Field
+
+ClientName = Literal['dsh', 'codex', 'zcode', 'trae', 'codebuddy', 'qoder']
+
+
+class ClientConnectRequest(ApiModel):
+    profile: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_.-]{1,80}$')
 
 
 class MCPProjectGrantRequest(ApiModel):
@@ -19,8 +27,21 @@ class MCPProjectGrantRequest(ApiModel):
 def build_mcp_access_router(
     context: ApplicationCore,
     access: MCPAccessController,
+    connections: AgentConnections,
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.post('/api/mcp/clients/{client}/connect', response_model=ApiResponse)
+    def connect_client(client: ClientName, body: ClientConnectRequest):
+        return data_response(connections.install(client, body.profile))
+
+    @router.get('/api/mcp/clients/{client}', response_model=ApiResponse)
+    def client_status(client: ClientName):
+        return data_response(connections.status(client))
+
+    @router.post('/api/mcp/clients/{client}/restore', response_model=ApiResponse)
+    def restore_client(client: ClientName):
+        return data_response(connections.restore(client))
 
     @router.get("/api/mcp/access", response_model=ApiResponse)
     async def get_mcp_access():

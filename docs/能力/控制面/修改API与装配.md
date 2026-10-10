@@ -42,6 +42,8 @@ MCP挂载同一个ApplicationCore，工具、会话、分级授权和恢复由[M
 
 Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。默认 Human 只给结论与下一步，只有显式 `--json` 才进入 Machine 模式；两种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](控制面与Machine输出协议.md)。
 
+退出时HTTP连接排空最多等待5秒，防止Windows连接重置造成底层关闭通知遗漏而无限等待；期限仅覆盖传输层排空，随后仍沿原应用生命周期关闭Worker、运行实例、数据库和专用浏览器，不以强杀替代资源收口。
+
 ## 不能破坏
 
 - API 与 CLI 不直接导入 Web adapter、Observer 或 Runner executor；目标流量不能在控制面进程产生。

@@ -186,7 +186,11 @@ class CheckService:
             from product.backend.core.checks.repair import repair_context
             if self._changes is None or self._repairs is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"变化复验服务未就绪")
-            inspection = self._changes.inspect_revalidation(project_id,change_id)
+            # 当前冻结已完成材料与运行核验；变化检查复用它，仅重核源码、权限和映射。
+            inspection = self._changes.inspect_revalidation(project_id,change_id,
+                preparation_preview=CheckPreview(project_id=project_id,can_execute=can_execute,
+                    gaps=tuple(gaps),plan_fingerprint=plan.plan_fingerprint,
+                    action_count=len(plan.actions),case_count=count,actions=plan.actions))
             if inspection.status != "READY" or not inspection.can_execute:
                 can_execute = False
                 gaps.extend(CheckPlanGap(action_id=action.action_id,action_revision=action.action_revision,

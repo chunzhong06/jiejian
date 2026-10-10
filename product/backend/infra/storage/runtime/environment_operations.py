@@ -1,5 +1,6 @@
 # 官方环境操作的持久回执；历史索引不恢复进程、临时秘密或执行能力。
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, String, select
+import json
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, String, Text, select
 from sqlalchemy.orm import Mapped, mapped_column
 from product.backend.infra.storage.base import Base, _flush, ensure_storage_payload_safe
 
@@ -7,7 +8,7 @@ from product.backend.infra.storage.base import Base, _flush, ensure_storage_payl
 class EnvironmentOperationRow(Base):
     __tablename__ = "environment_operations"
     __table_args__ = (
-        CheckConstraint("operation IN ('start','reset','stop')", name="operation"),
+        CheckConstraint("operation IN ('start','reset','stop','resume')", name="operation"),
         CheckConstraint("state IN ('PENDING','SUCCEEDED','FAILED','UNKNOWN')", name="state"),
         CheckConstraint("started_at_us >= 0 AND (finished_at_us IS NULL OR finished_at_us >= started_at_us)", name="time_order"),
     )
@@ -20,6 +21,7 @@ class EnvironmentOperationRow(Base):
     project_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("projects.project_id", ondelete="RESTRICT"))
     error_code: Mapped[str | None] = mapped_column(String(64))
     cleanup_confirmed: Mapped[bool] = mapped_column(Boolean)
+    progress: Mapped[str] = mapped_column(Text, default='{}', server_default='{}')
 
 
 class EnvironmentOperationRepository:
@@ -32,6 +34,9 @@ class EnvironmentOperationRepository:
 
     def save(self, value):
         ensure_storage_payload_safe(value, self._secrets)
+        value = dict(value)
+        if 'progress' in value:
+            value['progress'] = json.dumps(value['progress'], ensure_ascii=False, separators=(',', ':'))
         row = self._session.get(EnvironmentOperationRow, value["operation_id"])
         if row is None:
             self._session.add(EnvironmentOperationRow(**value))
@@ -47,4 +52,6 @@ class EnvironmentOperationRepository:
 
     @staticmethod
     def _value(row):
-        return {column.name: getattr(row, column.name) for column in EnvironmentOperationRow.__table__.columns}
+        value = {column.name: getattr(row, column.name) for column in EnvironmentOperationRow.__table__.columns}
+        value['progress'] = json.loads(value['progress'])
+        return value

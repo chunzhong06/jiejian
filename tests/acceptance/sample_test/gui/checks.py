@@ -36,6 +36,19 @@ class ChecksActions(GuiSession):
             raise SampleTestError("GUI_PREPARATION_TASK_UNAVAILABLE")
         self._goto(task["route"] + "?" + urlencode({"task_id": task["task_id"]}))
         self.capture("preparation")
+        if experience.get('runtime_kind')=='NODE_ESM':
+            from tests.acceptance.sample_test.harness.lifecycle import _wait_for
+            # 当前产品由一次GUI确认启动持久批次，不能再点击已经退出的同步准备入口。
+            self.page.get_by_role('button',name='一键准备示例材料',exact=True).click()
+            modal=self.page.get_by_role('dialog',name='准备这份官方示例的检查材料',exact=True)
+            prefix=f'/api/projects/{project}/proof-preparation/batches'
+            receipt,_=self._response(prefix,lambda:modal.get_by_role('button',name='确认并一键准备',exact=True).click())
+            result=_wait_for(lambda:self.client.call('GET',prefix+'/'+receipt['operation_id']),
+                lambda value:value['state'] not in ('RUNNING','CANCELLING'),timeout=90,label='示例材料批次')
+            if result['state']!='SUCCEEDED' or not self.client.call('GET',f'/api/projects/{project}/preparation')['preparation_complete']:
+                raise SampleTestError('GUI_PREPARATION_BATCH_NOT_READY')
+            self._mark('prepare')
+            return self.client.call('GET','/api/experience/official-sample')
         result, _ = self._response("/api/experience/official-sample/prepare",
             lambda: self.page.get_by_role("button", name="使用已提供的测试材料", exact=True).click())
         if result.get("scenario_prepared"):

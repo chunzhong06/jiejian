@@ -1,4 +1,9 @@
 /* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
+.boundary-candidate-entry{display:flex;align-items:center;justify-content:space-between;gap:var(--space-16);padding-block:var(--space-16);border-block-end:1px solid var(--color-border)}
+.boundary-candidate-entry p{margin:var(--space-4) 0 0;color:var(--color-secondary);font-size:var(--font-secondary)}
+.boundary-candidate-entry > .ant-btn{flex-shrink:0}
+.boundary-return{justify-self:start}
+@media(max-width:600px){.boundary-candidate-entry{flex-wrap:wrap}.boundary-candidate-entry > .ant-btn{margin-inline-start:auto}}
 .permission-assist-disclosure summary {
   cursor: pointer;
 }
@@ -108,6 +113,10 @@
 /* 生效版本作为页头元信息，导航与筛选共同服务紧邻的正文。 */
 .boundary-version { color:var(--color-secondary);font-size:var(--font-secondary); }
 .boundary-browser { display:grid;gap:var(--space-16);min-width:0; }
+/* hidden 必须高于本容器的 grid，才能保留列表状态而不占二级工作面的版面。 */
+.boundary-browser[hidden] { display:none; }
+@media(prefers-reduced-motion:no-preference){[data-motion=full] .definition-document{animation:boundary-content-arrive var(--motion-content,320ms) var(--ease-standard) both}}
+@keyframes boundary-content-arrive{from{opacity:.55;transform:translateY(8px)}to{opacity:1;transform:none}}
 .boundary-browser .boundary-collection-toolbar { margin:0;padding:0;border:0; }
 .boundary-browser .boundary-document { margin:0; }
 .boundary-manual-entry > .boundary-editor { margin-top:var(--space-16); }

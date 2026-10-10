@@ -100,6 +100,7 @@
 - `function Set-DevelopmentEnvironment`
 - `function Sync-Project`
 - `function Test-CondaPython`
+- `function Test-MinimalCondaDefinition`
 
 ### `scripts/dev/sample-test.ps1`
 

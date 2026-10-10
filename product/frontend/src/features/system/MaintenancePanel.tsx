@@ -15,6 +15,8 @@ export function MaintenancePanel(){
   const [error,setError]=useState(''),[preview,setPreview]=useState<MaintenanceOperationResult|null>(null)
   const [selected,setSelected]=useState<string[]>([]),[result,setResult]=useState<MaintenanceOperationResult|null>(null)
   const [pending,setPending]=useState<string|null>(null)
+  const [previewOpen,setPreviewOpen]=useState(false)
+  const previewEpoch=useRef(0)
   const alive=useRef(true),epoch=useRef(0),writing=useRef(false)
   const scan=async()=>{
     const version=++epoch.current;setReading(true)
@@ -28,13 +30,14 @@ export function MaintenancePanel(){
   }
   useEffect(()=>{alive.current=true;void scan();return()=>{alive.current=false;epoch.current++}},[])
   const accept=(next:MaintenanceOperationResult)=>{
-    setResult(next);setStatus(next.status);setPreview(null);setPending(null);setError('')
+    setResult(next);setStatus(next.status);setPreview(null);setPreviewOpen(false);setPending(null);setError('')
     try{sessionStorage.removeItem(pendingKey)}catch{/* 已回读结果，残留定位只会再次查询。 */}
   }
   const showPreview=async()=>{
-    setBusy(true);setError('')
-    try{const next=await systemApi.maintenanceOperation('clear-all',{confirmed:false,dry_run:true});if(alive.current){setPreview(next);setSelected(next.targets.map(item=>item.item_id))}}
-    catch(e){if(alive.current)setError((e as Error).message)}finally{if(alive.current)setBusy(false)}
+    const version=++previewEpoch.current
+    setPreview(null);setSelected([]);setPreviewOpen(true);setBusy(true);setError('')
+    try{const next=await systemApi.maintenanceOperation('clear-all',{confirmed:false,dry_run:true});if(alive.current&&version===previewEpoch.current){setPreview(next);setSelected(next.targets.map(item=>item.item_id))}}
+    catch(e){if(alive.current&&version===previewEpoch.current){setError((e as Error).message);setPreviewOpen(false)}}finally{if(alive.current&&version===previewEpoch.current)setBusy(false)}
   }
   const execute=async()=>{
     if(!preview||!selected.length||writing.current||pending)return
@@ -47,7 +50,7 @@ export function MaintenancePanel(){
       setPending(planId)
       const next=await systemApi.maintenanceOperation('clear-all',{confirmed:true,dry_run:false,plan_id:planId,item_ids:selected})
       if(alive.current)accept(next)
-    }catch(e){if(alive.current){setPreview(null)
+    }catch(e){if(alive.current){setPreview(null);setPreviewOpen(false)
       if(e instanceof ApiError&&(e.code==='INPUT_INVALID'||e.executionStarted===false)){
         setPending(null);try{sessionStorage.removeItem(pendingKey)}catch{/* 服务端明确未执行，当前会话可重新扫描。 */}
         setError(e.message)
@@ -82,10 +85,12 @@ export function MaintenancePanel(){
     </>}
     {result&&<Alert className="flow-feedback" type={result.counts.FAILED?'warning':'success'} showIcon message="本次清理已完成" description={`已清理 ${result.counts.DELETED} 项，跳过 ${result.counts.ALREADY_MISSING+result.counts.SKIPPED_IN_USE+result.counts.SKIPPED_CHANGED} 项，失败 ${result.counts.FAILED} 项。`}/>}
     {!!result?.results.length&&<details><summary>查看本次处理明细</summary>{result.results.map(item=><div className="maintenance-file" key={item.item_id}><span>{item.relative_path}</span><small>{item.reason}</small></div>)}</details>}
-    <Modal open={!!preview} title="确认清理范围" okText="清理所选" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled:!selected.length||!!pending}} closable={!busy} maskClosable={!busy} onCancel={()=>{if(!busy)setPreview(null)}} onOk={()=>void execute()}>
+    <Modal open={previewOpen} title="确认清理范围" okText="清理所选" cancelText="取消" confirmLoading={busy&&!!preview} okButtonProps={{disabled:busy||!preview||!selected.length||!!pending}} cancelButtonProps={{disabled:!!pending}} closable={!pending} maskClosable={!pending} onCancel={()=>{if(!pending){previewEpoch.current++;setPreviewOpen(false);setPreview(null);setBusy(false)}}} onOk={()=>void execute()}>
+      {!preview?<div role="status"><Spin size="small"/> 正在核对可清理的文件…</div>:<>
       <p>已选 {selected.length} 项，文件大小 {size(preview?.targets.filter(item=>selected.includes(item.item_id)).reduce((sum,item)=>sum+item.estimated_bytes,0))}。</p>
       <p className="editorial-muted">确认时只处理这份计划；重新被使用或发生变化的项目会跳过。</p>
       <div className="maintenance-selection">{preview?.targets.map(item=><Checkbox key={item.item_id} checked={selected.includes(item.item_id)} disabled={busy} onChange={event=>setSelected(items=>event.target.checked?[...items,item.item_id]:items.filter(id=>id!==item.item_id))}><span>{item.label} · {size(item.estimated_bytes)}</span><small>{item.relative_path}</small></Checkbox>)}</div>
+      </>}
     </Modal>
   </section>
 }

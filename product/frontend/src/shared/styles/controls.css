@@ -80,7 +80,7 @@
   font-size: var(--font-local);
   height: 1.6em;
   line-height: 1.6;
-  margin-inline-end: var(--space-12);
+  margin-inline-end: 0;
 }
 .permission-badge { flex-shrink: 0; align-self: start; }
 /* 权限选择与已确认规则共用语义颜色；文字仍明确表示允许或禁止。 */

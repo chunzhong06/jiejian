@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, EFFECT_ID_PATTERN, BoundaryModel, BusinessActionOperationKind, BusinessRevisionState, boundary_sha256
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
@@ -89,13 +90,21 @@ class BoundarySourceSnapshot(BoundaryModel):
 
 
 class ProposedEffectItem(BoundaryModel):
+    # 将既有跨字段约束公开给Agent；不改变已接受输入和持久化格式。
+    model_config = {"json_schema_extra": {"allOf": [{
+        "if": {"properties": {"effect_kind": {"const": "DATA_DISCLOSURE"}}, "required": ["effect_kind"]},
+        "then": {"required": ["protected_projection"], "properties": {"protected_projection": {"minItems": 1}}},
+        "else": {"properties": {"protected_projection": {"maxItems": 0}}},
+    }]}}
     item_id: str = Field(pattern=EFFECT_ITEM_ID_PATTERN)
     effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     business_label: str = Field(min_length=1, max_length=256)
     effect_kind: BusinessEffectKind
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
-    protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
+    protected_projection: tuple[str, ...] = Field(default=(), max_length=64,
+        description="DATA_DISCLOSURE必须填写实际受保护的业务字段；其他效果类型留空。字段来自真实数据含义，不为通过校验编造。",
+        json_schema_extra={"uniqueItems": True, "items": {"type": "string", "pattern": r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"}})
     description: str = Field(min_length=1, max_length=1024)
 
     @field_validator("business_label", "resource_concept", "expected_state", "description")
@@ -110,16 +119,16 @@ class ProposedEffectItem(BoundaryModel):
             re.fullmatch(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$", value) is None
             for value in values
         ):
-            raise ValueError("protected projection is invalid")
+            raise PydanticCustomError("projection_invalid", "protected projection is invalid")
         return tuple(sorted(values))
 
     @model_validator(mode="after")
     def validate_projection_kind(self) -> ProposedEffectItem:
         if self.effect_kind is BusinessEffectKind.DATA_DISCLOSURE:
             if not self.protected_projection:
-                raise ValueError("DATA_DISCLOSURE requires protected projection")
+                raise PydanticCustomError("disclosure_projection_required", "DATA_DISCLOSURE requires protected projection")
         elif self.protected_projection:
-            raise ValueError("protected projection only applies to DATA_DISCLOSURE")
+            raise PydanticCustomError("projection_not_applicable", "protected projection only applies to DATA_DISCLOSURE")
         return self
 
 

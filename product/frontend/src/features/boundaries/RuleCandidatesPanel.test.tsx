@@ -29,7 +29,8 @@ it('含义选项与纠正待定同级，未选择时不预选，保存后仍需�
   await screen.findByRole('heading',{name:'能否下载展示版？'})
   expect(screen.getAllByRole('radio')).toHaveLength(4)
   screen.getAllByRole('radio').forEach(radio=>expect(radio).not.toBeChecked())
-  expect(screen.getByRole('button',{name:'继续审阅完整变更'})).toBeDisabled()
+  expect(screen.queryByRole('button',{name:'继续审阅完整变更'})).not.toBeInTheDocument()
+  expect(screen.getByRole('button',{name:'复制补充请求'})).toBeEnabled()
   fireEvent.click(screen.getByRole('radio',{name:/允许下载 可以收到/}))
   expect(screen.getByText(/针对的结果：文件收到/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'保存这个含义'}))
@@ -86,7 +87,8 @@ it('有未覆盖条件时禁用提案入口，并明确解释', async () => {
   api.show.mockResolvedValue({...item,assessment:'NEEDS_CHANGES',issues:[{code:'RULE_KIND_UNSUPPORTED',message:'本版不支持并发唯一性'}]})
   render(<RuleCandidatesPanel projectId="app_a" requestedId="rcd_a" onSelected={vi.fn()} onProposal={vi.fn()}/>)
   expect(await screen.findByText('本版不支持并发唯一性')).toBeInTheDocument()
-  expect(screen.getByRole('button',{name:'继续审阅完整变更'})).toBeDisabled()
+  expect(screen.queryByRole('button',{name:'继续审阅完整变更'})).not.toBeInTheDocument()
+  expect(screen.getByRole('button',{name:'复制补充请求'})).toBeEnabled()
 })
 
 it('刷新后恢复URL中的原操作引用，只查询不重新提交', async () => {

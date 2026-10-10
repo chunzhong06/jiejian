@@ -1,5 +1,5 @@
 # 经产品设计接受的当前合同；独立列出预期，不从被测实现复制答案。
-DATABASE_HEAD = "0019_preparation_batches"
+DATABASE_HEAD = "0021_candidate_visibility"
 WORKER_CAPABILITIES = ("CHECK", "PROOF_PREFLIGHT", "RECORDING", "REFERENCE_CAPTURE")
 JOB_TARGET_FIELDS = frozenset({"run_id", "recording_id", "runtime_load_id", "preflight_id", "reference_capture_id"})
 

@@ -10,6 +10,7 @@ export type MeaningChoice = {scenario_id: string; scenario_fingerprint: string; 
 export type ScenarioDecision = {scenario_id: string; status: MeaningChoice['action']|'NEEDS_DECISION'; decision: null|{decision_id: string; option_id: string|null; correction: string|null}}
 
 export type RuleCandidateView = {
+  visibility?: {archived: boolean; version: number}
   candidate: {
     candidate_id: string; project_id: string; revision: number; basis_id: string
     submitted_via: 'MCP' | 'LOCAL_GUI'; created_at_us: number
@@ -29,12 +30,18 @@ export type RuleCandidateView = {
 }
 export type RuleCandidateContext = {
   project_id: string; basis_id: string
-  candidates: Array<{candidate_id: string; revision: number; original_text: string; submitted_via: string; created_at_us: number}>
+  source_summary?: {roles: number; actions: number; pending: number; analyzed: boolean} | null
+  formal_permission_count?: number
+  candidates: Array<{candidate_id: string; revision: number; original_text: string; submitted_via: string; created_at_us: number
+    assessment?: RuleCandidateView['assessment']; counts?: {actors: number; actions: number; permissions: number; examples: number}
+    issue_count?: number; proposal_id?: string | null; decision?: 'APPROVED' | 'REJECTED' | null
+    visibility?: {archived: boolean; version: number}}>
   next_offset: number | null
 }
 const prefix = (project: string) => `/api/projects/${encodeURIComponent(project)}/business-boundaries`
 export const ruleCandidatesApi = {
-  context: (project: string, offset = 0) => request<RuleCandidateContext>(`${prefix(project)}/rule-context?offset=${offset}`),
+  context: (project: string, offset = 0, archived = false) => request<RuleCandidateContext>(`${prefix(project)}/rule-context?offset=${offset}&archived=${archived}&include_preparation=false`),
+  visibility: (project: string, candidate: string, revision: number, expected_version: number, archived: boolean) => request<{archived: boolean; version: number}>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}/visibility`, {method:'PUT', body:JSON.stringify({revision,expected_version,archived})}),
   show: (project: string, candidate: string, revision?: number) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}${revision ? `?revision=${revision}` : ''}`),
   propose: (project: string, candidate: string, revision: number, operation: string) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}/proposals`, {method: 'POST', body: JSON.stringify({revision, operation_id: operation})}),
   decide: (project: string, candidate: string, revision: number, basis: string, operation: string, choice: MeaningChoice) => request<RuleCandidateView>(`${prefix(project)}/rule-candidates/${encodeURIComponent(candidate)}/decisions`, {method:'POST', body:JSON.stringify({...choice, expected_revision:revision, expected_basis_id:basis, operation_id:operation})}),

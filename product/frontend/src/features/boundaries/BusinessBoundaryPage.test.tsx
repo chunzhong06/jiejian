@@ -77,6 +77,11 @@ describe('业务边界页面', () => {
     expect(list.getByText('没有符合筛选条件的权限规则。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio',{name:'全部规则'}))
     expect(list.getAllByText('允许',{exact:true})).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button',{name:'整理权限候选'}))
+    await screen.findByRole('region',{name:'对话规则候选'})
+    expect(screen.queryByRole('region',{name:'当前权限清单'})).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'← 返回权限要求'}))
+    expect(screen.getByRole('textbox',{name:'搜索业务动作'})).toHaveValue('查看日常')
     expect(mockApi.createProposal).not.toHaveBeenCalled()
     expect(mockApi.approve).not.toHaveBeenCalled()
   })
@@ -91,6 +96,13 @@ describe('业务边界页面', () => {
     fireEvent.click(screen.getByRole('button',{name:'审阅提案 1'}))
     await screen.findByRole('checkbox',{name:'我已核对本次变更和沿用的业务要求'})
     expect(mockApi.proposal).toHaveBeenCalledWith('app_demo',proposal.proposal_id)
+  })
+  it('候选入口在首次权限有待审提案时仍保持候选工作面', async () => {
+    mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null}]})
+    render(<BusinessBoundaryPage project={project} requestedCandidatesView onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    await screen.findByRole('region',{name:'对话规则候选'})
+    expect(screen.queryByRole('heading',{name:'审阅权限变更'})).not.toBeInTheDocument()
+    expect(mockApi.proposal).not.toHaveBeenCalled()
   })
   it('深链只读取指定提案，不自动取最后一份', async () => {
     const other = {...proposal,proposal_id:`bpr_${'6'.repeat(32)}`}

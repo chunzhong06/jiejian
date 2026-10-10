@@ -15,24 +15,26 @@
 .material-focus-copy,.material-focus-next { width:100%;max-width:64ch;justify-self:center; }
 .material-focus h2{font-size:var(--font-section);line-height:1.35;margin:var(--space-12) 0 var(--space-8);letter-spacing:0}
 .material-focus p{margin:0 0 var(--space-16)}.material-focus-copy>p:last-child{margin-bottom:0}
-.material-focus-next{display:grid;align-content:center;gap:var(--space-20);min-width:0;border-left:1px solid var(--color-border);padding-left:var(--space-24)}
-.material-focus-actions{display:flex;justify-content:flex-end;gap:var(--space-12);flex-wrap:wrap}
+.material-focus-next{display:grid;align-content:center;gap:var(--space-20);min-width:0;border-left:1px solid var(--color-border);padding-inline:var(--space-24)}
+.material-focus-actions{display:flex;justify-content:center;gap:var(--space-12);flex-wrap:wrap}
 .material-focus-actions:has(>.ant-btn:nth-child(2)){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
 .material-focus-actions>.material-provided-note{grid-column:1/-1;margin:0;font-size:var(--font-secondary);color:var(--color-secondary)}
-.material-focus .material-count{margin:0;color:var(--color-secondary)}
+.material-focus .material-count{margin:0;text-align:center;color:var(--color-secondary)}
 .material-count strong{font-size:var(--font-local);color:var(--color-text);margin-inline:var(--space-4)}.material-count small{display:block;margin-top:var(--space-8)}
 .material-table {border:1px solid var(--color-border);border-radius:var(--radius-large);overflow:hidden;background:var(--color-surface);box-shadow:var(--shadow-focus);}
 .material-table-head,.material-row{display:grid;grid-template-columns:1.15fr 1fr 1.65fr 80px;align-items:center;gap:var(--space-20);padding:var(--space-16) var(--space-24)}
 .material-table-head{font-size:13px;color:var(--color-secondary);background:var(--color-surface-subtle)}
 /* 表头和单元格共用列中心，避免按钮内距把操作文字推离表头。 */
-.material-table-head>span:nth-child(2),.material-table-head>span:last-child{text-align:center}
+.material-table-head>span:nth-child(2),.material-table-head>span:nth-child(3),.material-table-head>span:last-child{text-align:center}
 .material-row>span:nth-child(2),.material-row>span:last-child{display:flex;justify-content:center}
 .material-group{border-top:1px solid var(--color-border)}
 /* 待办身份由标签和处理入口说明；整行底色仅反馈悬停或键盘焦点。 */
 .material-row{transition:background-color var(--motion-fast) var(--ease-standard)}
 .material-row:hover,.material-row:has(:focus-visible){background:var(--color-surface-hover)}
 .material-row-title{display:flex;align-items:center;gap:var(--space-16);font-weight:var(--weight-medium)}.material-row-title .anticon{font-size:var(--space-20);color:var(--color-secondary)}
-.material-row-summary{color:var(--color-secondary);overflow-wrap:anywhere}
+.material-row-summary{justify-self:center;max-width:100%;color:var(--color-secondary);overflow-wrap:anywhere}
+/* 窄屏时适用内容回到材料名称下方，保持同一阅读轴。 */
+@media(max-width:700px){.material-row-summary{justify-self:start}}
 .material-row-detail {padding:0 var(--space-24) var(--space-20)}
 .material-detail-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-20);padding-top:var(--space-20);border-top:1px solid var(--color-border)}
 .material-detail-item + .material-detail-item{margin-top:var(--space-16)}
@@ -69,7 +71,3 @@
 @media(max-width:700px) { .material-source-entry { flex-wrap:wrap; }.material-source-entry .ant-btn { margin-left:auto; }.material-suggestion-item{grid-template-columns:minmax(0,1fr);gap:var(--space-16)}.material-suggestion-basis{border-left:0;border-top:1px solid var(--color-border);padding:var(--space-16) 0 0} }
 @media(max-width:1000px){.agent-assist-entry:has(.materials-context) .agent-assist-heading{grid-template-columns:minmax(0,1fr)}.agent-assist-entry:has(.materials-context) .agent-assist-toggle{justify-self:end}}
 @media(max-width:520px){.material-focus-actions:has(>.ant-btn:nth-child(2)){grid-template-columns:minmax(0,1fr)}}
-
-/* 证明分组只保留标题、汇总和收起；具体状态与操作放回材料行。 */
-.material-proof-group{grid-template-columns:1.15fr 2.65fr 80px}.material-proof-group .material-row-summary{justify-self:center;text-align:center}.material-proof-group>span:last-child{justify-content:flex-end}
-@media(max-width:700px){.material-proof-group{grid-template-columns:minmax(0,1fr) auto}.material-proof-group .material-row-summary{grid-column:1;grid-row:2;justify-self:start;text-align:left}.material-proof-group>span:last-child{grid-column:2;grid-row:1 / 3}}

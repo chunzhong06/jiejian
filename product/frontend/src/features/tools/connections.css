@@ -16,6 +16,16 @@
 .connection-page p { margin: var(--space-8) 0 0; line-height: 1.7; color: var(--color-secondary); }
 .connection-status { padding: var(--space-24); border: 1px solid var(--color-border); border-left: 3px solid var(--color-primary); border-radius: var(--radius-medium); background: var(--color-surface); }
 .connection-status { box-shadow: var(--shadow-focus); }
+/* 右栏的按钮以整组说明为参照居中，不沿标题顶边排放。 */
+.connection-page .connection-status{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);align-items:center}
+.connection-status>.ant-btn{justify-self:center}
+.connection-page .connection-management-content{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-24)}
+.connection-page .connection-management-content>p{margin:0}
+[data-product=jiejian] .mcp-access-levels{gap:var(--space-12);margin-block:var(--space-20)}
+[data-product=jiejian] .mcp-access-levels .ant-radio-wrapper{align-items:center;gap:var(--space-12);min-height:44px;margin:0;line-height:1.6}
+[data-product=jiejian] .mcp-access-levels .ant-radio{align-self:center;top:0}
+[data-product=jiejian] .mcp-access-levels .ant-radio+span{padding:0;line-height:1.6}
+@media(max-width:780px){.connection-page .connection-status,.connection-page .connection-management-content{grid-template-columns:minmax(0,1fr)}.connection-status>.ant-btn{justify-self:center}.connection-management-actions{justify-content:center;margin-inline:0}}
 .connection-status.is-success { border-left-color: var(--color-safe); }
 .connection-status.is-error { border-left-color: var(--color-danger); }
 .connection-status.is-warning { border-left-color: var(--color-warning); }
@@ -23,8 +33,20 @@
 .connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); margin-inline:auto; }
 .connection-facts span { display: grid; gap: var(--space-8); overflow-wrap: anywhere; }
 .connection-facts small { color: var(--color-secondary); }
+.connection-project-context { display:grid;grid-template-columns:minmax(0,2fr) minmax(160px,1fr);align-items:center;gap:var(--space-24);padding:var(--space-24);border:1px solid var(--color-border);border-radius:var(--radius-small);margin-block:var(--space-24); }
+.connection-project-context h3 { margin:0; }
+.connection-project-context p { color:var(--color-secondary);margin-block-end:0; }
+.connection-project-context > .ant-btn { justify-self:center; }
+@media(max-width:600px){.connection-project-context{grid-template-columns:minmax(0,1fr)}.connection-project-context > .ant-btn{justify-self:end}}
 .connection-tabs { display: flex; gap: var(--space-8); padding-block: var(--space-12); border-block: 1px solid var(--color-border); }
 .connection-setup, .connection-permissions { min-width: 0; }
+.connection-page .connection-setup-heading { display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);align-items:start;gap:var(--space-32); }
+.mcp-client-selector { width:100%;max-width:360px;justify-self:end;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-4);padding:var(--space-4);background:var(--color-surface-subtle);border-radius:var(--radius-medium); }
+/* 二维选项不使用单轴滑块；每个选项独立呈现选中状态，避免滑块跨行覆盖文字。 */
+[data-product=jiejian] .mcp-client-selector .ant-radio-button-wrapper{display:flex;align-items:center;justify-content:center;height:auto;min-height:var(--control-normal);padding:var(--space-8);border:1px solid transparent;border-radius:var(--radius-small);background:transparent;color:var(--color-secondary);white-space:normal;text-align:center;}
+.mcp-client-selector .ant-radio-button-wrapper::before{display:none;}
+[data-product=jiejian] .mcp-client-selector .ant-radio-button-wrapper-checked{background:var(--color-primary-light);color:var(--color-primary-ink);border-color:var(--color-control-border);}
+@media(max-width:780px){.connection-page .connection-setup-heading{grid-template-columns:minmax(0,1fr)}.mcp-client-selector{margin-inline-start:auto}}
 .connection-guide-intro { display: flex; align-items: baseline; gap: var(--space-12); flex-wrap: wrap; margin-top: var(--space-20); font-size: var(--font-secondary); }
 .connection-guide-intro a { margin-left: auto; }
 .connection-steps { list-style: none; padding: 0; margin: var(--space-24) 0 0; }

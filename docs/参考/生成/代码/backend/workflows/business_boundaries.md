@@ -43,10 +43,11 @@
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/rule_candidates.py) · Python AST；作用域内import不表示每次调用均执行。
 
 - `class RuleCandidateService`
-- `RuleCandidateService.context(self, project_id, offset)`
+- `RuleCandidateService.context(self, project_id, offset, archived, include_preparation)`
 - `RuleCandidateService.save(self, project_id, command, submitted_via)`
 - `RuleCandidateService.decide(self, project_id, candidate_id, command)`
 - `RuleCandidateService.show(self, project_id, candidate_id, revision)`
+- `RuleCandidateService.set_visibility(self, project_id, candidate_id, archived, revision, expected_version)`
 - `RuleCandidateService.preview(self, project_id, command)`
 - `RuleCandidateService.operation(self, project_id, kind, operation_id)`
 - `RuleCandidateService.propose(self, project_id, candidate_id, revision, operation_id)`

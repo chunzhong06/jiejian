@@ -1,0 +1,33 @@
+/* 点线连续表示接入到批准的六个阶段；统计另起一组，避免与阶段产生对应错觉。 */
+.rule-preparation-stages{display:flex;align-items:start;width:min(100%,760px);list-style:none;padding:0;margin:0 auto;gap:var(--space-8);}
+.rule-preparation-stages li{--node-clearance:9px;--previous-node-clearance:9px;position:relative;flex:1;min-width:0;display:grid;justify-items:center;grid-template-rows:24px auto;gap:var(--space-12);text-align:center;}
+/* 点的两侧等距断开，当前点的留白包含呼吸光圈的最大范围。 */
+.rule-preparation-stages li[aria-current=step]{--node-clearance:20px}
+.rule-preparation-stages li[aria-current=step]+li{--previous-node-clearance:20px}
+.rule-preparation-stages li::before{content:'';position:absolute;inset-inline:calc(-50% - var(--space-8) + var(--previous-node-clearance)) calc(50% + var(--node-clearance));top:12px;height:1px;background:var(--color-primary);opacity:.35;}
+.rule-preparation-stages li:first-child::before{display:none;}
+.rule-preparation-stages li:is([data-state=complete],[aria-current=step])::before{height:2px;opacity:1}
+.rule-stage-mark{align-self:center;width:6px;height:6px;border-radius:50%;background:var(--color-primary);z-index:1;}
+.rule-stage-label{font-size:var(--font-label);font-weight:normal;color:var(--color-secondary);line-height:1.7;}
+.rule-preparation-stages li[aria-current=step] .rule-stage-label{font-size:var(--font-body);font-weight:var(--weight-strong);color:var(--color-primary-ink);}
+.rule-preparation-stages li[data-state=complete] .rule-stage-mark{animation:none!important;}
+.rule-preparation-stages li[aria-current=step] .rule-stage-mark{width:14px;height:14px;box-shadow:0 0 0 4px var(--color-primary-light);animation:rule-stage-breathe 2.4s ease-in-out infinite;}
+.rule-stage-current{display:flex;justify-content:center;align-items:baseline;flex-wrap:wrap;gap:var(--space-12);margin:var(--space-12) 0 var(--space-32);}
+.rule-stage-current strong{font-size:var(--font-section);color:var(--color-text);font-weight:var(--weight-strong);}
+.rule-stage-current span{font-size:var(--font-label);color:var(--color-secondary);}
+@keyframes rule-stage-breathe{50%{box-shadow:0 0 0 7px var(--color-primary-light)}}
+/* 阶段变化时连线推进、节点接替、说明淡入；不模拟后台任务耗时。 */
+[data-motion=full] .rule-stage-mark{transition:width .4s ease,height .4s ease,box-shadow .4s ease}
+[data-motion=full] .rule-stage-label{transition:font-size .4s ease,color .4s ease}
+[data-motion=full] .rule-preparation-stages li[aria-current=step]::before{opacity:.35}
+[data-motion=full] .rule-preparation-stages li[aria-current=step]::after{content:'';position:absolute;inset-inline:calc(-50% - var(--space-8) + var(--previous-node-clearance)) calc(50% + var(--node-clearance));top:12px;height:2px;background:var(--color-primary);transform-origin:left;animation:rule-stage-connect .55s ease-out both}
+[data-motion=full] .rule-preparation-stages li:first-child::after{display:none}
+[data-motion=full] .rule-stage-current{animation:rule-stage-caption .4s ease-out both}
+[data-motion=full] .rule-preparation-stages li[aria-current=step] .rule-stage-mark{animation:rule-stage-arrive .5s ease-out both,rule-stage-breathe 2.4s .5s ease-in-out infinite}
+@keyframes rule-stage-connect{from{transform:scaleX(0);opacity:.2}to{transform:scaleX(1);opacity:1}}
+@keyframes rule-stage-arrive{from{transform:scale(.45);opacity:.5}to{transform:scale(1);opacity:1}}
+@keyframes rule-stage-caption{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.rule-preparation-stages *,.rule-preparation-stages ::after,.rule-stage-current{animation:none!important;transition:none!important}}
+[data-motion=off] .rule-stage-mark,[data-motion=none] .rule-stage-mark{animation:none!important;}
+@media(prefers-reduced-motion:reduce){.rule-stage-mark{animation:none!important;}}
+@media(max-width:600px){.rule-preparation-stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));row-gap:var(--space-20)}.rule-preparation-stages li:nth-child(4)::before,.rule-preparation-stages li:nth-child(4)::after{display:none}}

@@ -83,11 +83,11 @@ def boundary_task(
                 "REVIEW_APPLICATION_CANDIDATES", title="审阅识别到的业务信息",
                 why_now="源码分析已完成，候选尚未由你审阅。",
                 user_responsibility="确认、排除或保留待审的权限组和业务动作。",
-                system_will_do="保存候选决定后，再由你建立正式权限规则。",
+                system_will_do="保存角色和动作后，由 Agent 协助整理权限候选，再由你审阅批准。",
                 route="/application", facts={"understanding_revision": understanding.revision},
             )
         title = (
-            "建立当前业务边界"
+            "整理并确认权限要求"
             if missing_permission is None
             else f"确认“{missing_permission.display_name}”的当前权限"
         )
@@ -97,9 +97,9 @@ def boundary_task(
                 None if missing_permission is None else missing_permission.action_id
             ),
             title=title,
-            why_now="当前还没有完整的业务动作与权限事实。",
+            why_now="当前还没有完整的权限要求；已确认的角色与动作可以沿用。",
             user_responsibility="用业务语言确认谁可以对哪些资源执行这项动作。",
-            system_will_do="界鉴会先生成不可变提案，等待你再次审阅和批准。",
+            system_will_do="Agent 可以直接保存首次规则候选；你在界鉴核对完整提案后批准，无需先手工建立相同业务信息。",
             route="/permissions",
             facts={
                 "actor_ids": [item.actor_id for item in boundary.actors],

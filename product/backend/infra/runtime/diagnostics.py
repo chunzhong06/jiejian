@@ -378,8 +378,6 @@ def _playwright_check() -> DoctorCheck:
     available = False
     try:
         package_version = version("playwright")
-        from playwright.sync_api import sync_playwright
-
         configured = os.environ.get("JIEJIAN_PLAYWRIGHT_EXECUTABLE")
         if configured:
             # 启动器已经确定受控浏览器路径；状态轮询只核对文件，避免反复启动驱动子进程。
@@ -387,6 +385,8 @@ def _playwright_check() -> DoctorCheck:
             executable = str(chromium.resolve())
             available = chromium.is_file()
         else:
+            from playwright.sync_api import sync_playwright
+
             playwright = sync_playwright().start()
             try:
                 chromium = Path(playwright.chromium.executable_path)

@@ -367,6 +367,37 @@
     },
     "ProposedEffectItem": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "protected_projection": {
+                "maxItems": 0
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "effect_kind": {
+                "const": "DATA_DISCLOSURE"
+              }
+            },
+            "required": [
+              "effect_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "protected_projection": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "protected_projection"
+            ]
+          }
+        }
+      ],
       "properties": {
         "business_label": {
           "maxLength": 256,
@@ -417,12 +448,15 @@
         },
         "protected_projection": {
           "default": [],
+          "description": "DATA_DISCLOSURE必须填写实际受保护的业务字段；其他效果类型留空。字段来自真实数据含义，不为通过校验编造。",
           "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$",
             "type": "string"
           },
           "maxItems": 64,
           "title": "Protected Projection",
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         },
         "resource_concept": {
           "maxLength": 128,

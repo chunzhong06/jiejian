@@ -8,6 +8,37 @@ from tests.fixtures.control_plane import TestClient, create_app
 from tests.backend.api.boundaries._support_rule_candidates import _content, _project, _save
 
 
+def test_archive_is_reversible_persistent_and_cannot_hide_pending_approval(tmp_path):
+    var = tmp_path / "var"
+    with TestClient(create_app(var, start_worker=False, environ={})) as client:
+        project = _project(client, tmp_path / "source")
+        other = _project(client, tmp_path / "other")
+        prefix = f"/api/projects/{project}/business-boundaries"
+        _, saved = _save(client, prefix)
+        candidate_id = saved["candidate"]["candidate_id"]
+        url = f"{prefix}/rule-candidates/{candidate_id}/visibility"
+        command = {"archived": True, "revision": 1, "expected_version": 0}
+        assert client.put(url.replace(project, other), json=command).status_code == 404
+        response = client.put(url, json=command)
+        assert response.status_code == 200, response.text
+        assert response.json()["data"] == {"archived": True, "version": 1}
+        assert client.put(url, json=command).status_code == 409
+        assert client.get(prefix + "/rule-context?include_preparation=false").json()["data"]["candidates"] == []
+        summary = client.get(prefix + "/rule-context?archived=true&include_preparation=false").json()["data"]
+        assert summary["preparation"] is None
+        assert summary["candidates"][0]["counts"] == {"actors": 1, "actions": 1, "permissions": 1, "examples": 1}
+        assert client.post(f"{prefix}/rule-candidates/{candidate_id}/proposals", json={"revision":1,"operation_id":uuid4().hex}).status_code == 409
+    with TestClient(create_app(var, start_worker=False, environ={})) as client:
+        restored = client.get(f"{prefix}/rule-candidates/{candidate_id}").json()["data"]
+        assert restored["candidate"] == saved["candidate"]
+        assert restored["visibility"] == {"archived": True, "version": 1}
+        assert client.put(url, json={"archived":False,"revision":1,"expected_version":1}).status_code == 200
+        proposal = client.post(f"{prefix}/rule-candidates/{candidate_id}/proposals", json={"revision":1,"operation_id":uuid4().hex})
+        assert proposal.status_code == 201, proposal.text
+        assert client.put(url, json={"archived":True,"revision":1,"expected_version":2}).status_code == 409
+        assert client.get(prefix).json()["data"]["policy_epoch"] == 0
+
+
 def test_candidate_receipts_and_human_approval_survive_restart(tmp_path):
     var = tmp_path / "var"
     with TestClient(create_app(var, start_worker=False, environ={})) as client:

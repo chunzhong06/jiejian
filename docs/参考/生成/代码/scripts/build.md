@@ -29,7 +29,7 @@
 - `build(arguments) -> None`
 - `main() -> None`
 
-静态import / dot-source：`__future__`、`argparse`、`collections.abc`、`hashlib`、`json`、`os`、`pathlib`、`product.backend`、`product.protocols.runtime.portable_release`、`shutil`、`subprocess`、`sys`、`zipfile`、`作用域内：re`
+静态import / dot-source：`__future__`、`argparse`、`collections.abc`、`hashlib`、`json`、`os`、`pathlib`、`product.backend`、`product.protocols.runtime.portable_release`、`shutil`、`subprocess`、`sys`、`zipfile`、`作用域内：playwright.sync_api`、`作用域内：re`、`作用域内：struct`
 
 ### `scripts/build/portable_start.ps1`
 
