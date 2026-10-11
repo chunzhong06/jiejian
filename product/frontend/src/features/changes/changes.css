@@ -39,12 +39,16 @@
 .change-preparation dl > div { display:grid;justify-self:center;min-width:0;max-width:100%;gap:var(--space-8);font-size:var(--font-secondary); }
 .change-preparation dt { color:var(--color-secondary);font-size:var(--font-label); }
 .change-preparation dd { margin:0;flex-shrink:0; }
-/* 未占满操作栏的按钮在栏内居中，各种准备状态沿用同一对齐方式。 */
-.change-preparation-action { grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:var(--space-12);align-items:center;padding-inline:var(--space-24);border-left:1px solid var(--color-border); }
+/* 同组动作横向并排且主操作在右，窄屏仅在实际空间不足时换行。 */
+.change-preparation-action { grid-column:2;grid-row:1/3;display:flex;flex-direction:row;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-12);align-items:center;padding-inline-start:var(--space-24);border-left:1px solid var(--color-border); }
+.change-preparation:has(.change-preparation-action > .ant-btn:nth-child(2)) { grid-template-columns:minmax(0,1fr) auto; }
+.change-history-navigation { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-12);flex-shrink:0; }
+.change-history-context { color:var(--color-secondary);line-height:1.8;max-width:64ch; }
+.change-history-check-label { color:var(--color-secondary);font-size:var(--font-label); }
 .change-preparation-action > p { width:100%;text-align:center;font-size:var(--font-label);color:var(--color-secondary); }
 .change-preparation-action:empty { margin:0; }
 .change-basis { line-height:1.8; }
-@media(max-width:1100px) { .change-batch { grid-template-columns:minmax(0,1fr) auto; }.change-batch-scope { grid-column:1/-1;grid-row:2; }.change-preparation { grid-template-columns:1fr; }.change-preparation-action { grid-column:1;grid-row:auto;border-left:0;border-top:1px solid var(--color-border);padding:var(--space-16) 0 0; }.change-page-heading { align-items:flex-start; } }
+@media(max-width:1100px) { .change-batch { grid-template-columns:minmax(0,1fr) auto; }.change-batch-scope { grid-column:1/-1;grid-row:2; }.change-preparation,.change-preparation:has(.change-preparation-action > .ant-btn:nth-child(2)) { grid-template-columns:1fr; }.change-preparation-action { grid-column:1;grid-row:auto;border-left:0;border-top:1px solid var(--color-border);padding:var(--space-16) 0 0; }.change-page-heading { align-items:flex-start; } }
 @media(max-width:600px) { .change-page-heading,.change-batch { flex-direction:column;align-items:stretch; }.change-batch-actions { flex-direction:row;align-items:center; }.change-rule-head { display:none; }.change-rule-row { grid-template-columns:minmax(0,1fr);gap:var(--space-16); }.change-rule-association { padding-left:var(--space-12);border-left:2px solid var(--color-border); }.change-preparation { padding:var(--space-20); } }
 .changes-empty { display:grid;justify-items:center;text-align:center;padding:var(--space-40) var(--space-24);border-block:1px solid var(--color-border);gap:var(--space-16); }
 .changes-empty h2 { margin:0;font-size:var(--font-section); }
@@ -58,6 +62,8 @@
 @media(max-width:600px) { .changes-sample-heading { flex-wrap:wrap; }.changes-sample-heading > .ant-btn { margin-left:auto; }.changes-empty { padding-inline:var(--space-16); } }
 
 .change-preparation h2 { grid-column:1;text-align:center; margin:0; }
+.change-history-comparison h2 { text-align:left; }
+@media(max-width:780px){.change-page-heading:has(.change-history-navigation){flex-wrap:wrap}.change-history-navigation{margin-inline-start:auto}}
 .change-preparation dd { font-weight:500; }
 .change-preparation dd.material-review-required{color:var(--color-danger);background:var(--color-danger-light);border-radius:var(--radius-small);padding:var(--space-4) var(--space-8);display:inline-block}
 @media(max-width:700px){.change-batch{grid-template-columns:1fr}.change-batch-scope{grid-column:auto;grid-row:auto}.change-preparation dl{grid-template-columns:1fr 1fr}}

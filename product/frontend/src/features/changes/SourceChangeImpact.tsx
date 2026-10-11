@@ -19,7 +19,7 @@ const revalidationCopy = {
   MAPPING_REVIEW_REQUIRED: ['先复核实现对应', '需要确认业务动作在当前源码中对应的实现。'],
 } as const
 
-function RuleImpactRow({ row, projectId, state, onBasis }: { row: RuleRow; projectId: string; state: SourceChangeViewDto['revalidation']['status']; onBasis: (row: RuleRow, rule: RuleDetails | null) => void }) {
+function RuleImpactRow({ row, projectId, state, historical, onBasis }: { row: RuleRow; projectId: string; state: SourceChangeViewDto['revalidation']['status']; historical: boolean; onBasis: (row: RuleRow, rule: RuleDetails | null) => void }) {
   const [rule, setRule] = useState<RuleDetails | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -34,7 +34,7 @@ function RuleImpactRow({ row, projectId, state, onBasis }: { row: RuleRow; proje
     }).catch(() => { if (current) setFailed(true) })
     return () => { current = false }
   }, [projectId, row.reference.intent_id, row.reference.revision, row.reference.intent_hash, row.impact?.action_id, row.impact?.action_revision, attempt])
-  const label = state === 'NO_BASELINE' ? '暂不能判断关联' : state === 'SOURCE_STALE' || state === 'POLICY_STALE' ? '当前关联待核对'
+  const label = state === 'NO_BASELINE' ? '暂不能判断关联' : !historical && (state === 'SOURCE_STALE' || state === 'POLICY_STALE') ? '当前关联待核对'
     : row.impact?.classification === 'DIRECTLY_AFFECTED' ? '实现来源有改动' : row.impact?.classification === 'NO_DIRECT_EVIDENCE' ? '暂未发现直接关联' : '实现对应需要复核'
   return <div className="change-rule-row" role="row">
     <div role="cell" className="change-rule-requirement">{rule ? <><StatusBadge kind="rule" tone={rule.expectation === 'ALLOW' ? 'success' : 'danger'}>{rule.expectation === 'ALLOW' ? '允许' : '禁止'}</StatusBadge><div><p>{rule.sentence}</p><small>规则修订 {rule.revision}</small></div></> : <div><p>{failed ? '暂时无法读取登记时的权限要求' : '正在读取登记时的权限要求…'}</p>{failed && <Button onClick={() => setAttempt(value => value + 1)}>重新读取规则</Button>}</div>}</div>
@@ -42,7 +42,7 @@ function RuleImpactRow({ row, projectId, state, onBasis }: { row: RuleRow; proje
   </div>
 }
 
-export function SourceChangeImpact({ projectId, change, action, onNavigate, onSource }: { projectId: string; change: SourceChangeViewDto; action: ReactNode; onNavigate: (path: string) => void; onSource: () => void }) {
+export function SourceChangeImpact({ projectId, change, action, onNavigate, onSource, historical = false }: { projectId: string; change: SourceChangeViewDto; action: ReactNode; onNavigate: (path: string) => void; onSource: () => void; historical?: boolean }) {
   const [showOther, setShowOther] = useState(false)
   const [basis, setBasis] = useState<{ row: RuleRow; rule: RuleDetails | null } | null>(null)
   const [preparation, setPreparation] = useState<PreparationView | null>(null)
@@ -55,18 +55,19 @@ export function SourceChangeImpact({ projectId, change, action, onNavigate, onSo
   useEffect(() => {
     let current = true
     setPreparation(null); setPreparationFailed(false)
-    if (state === 'READY') void preparationApi.get(projectId).then(value => {
+    // 历史详情读取保存的影响依据，不把当前材料状态填进原批次。
+    if (state === 'READY' && !historical) void preparationApi.get(projectId).then(value => {
       if (value.project_id !== projectId) throw new ApiError('STATE_PRECONDITION', '准备材料所属应用不一致。')
       if (current) setPreparation(value)
     }).catch(() => { if (current) setPreparationFailed(true) })
     return () => { current = false }
-  }, [projectId, change.manifest.change_id, state, preparationBasis, attempt])
+  }, [projectId, change.manifest.change_id, state, preparationBasis, attempt, historical])
   const payload = change.assessment.payload
   const rows = payload.permission_refs.map(reference => ({ reference, impact: payload.action_impacts.find(item => item.permission_refs.some(value => referenceKey(value) === referenceKey(reference))) }))
-  const unknown = ['NO_BASELINE', 'SOURCE_STALE', 'POLICY_STALE'].includes(state)
+  const unknown = state === 'NO_BASELINE' || !historical && ['SOURCE_STALE', 'POLICY_STALE'].includes(state)
   const attention = rows.filter(row => unknown || row.impact?.classification !== 'NO_DIRECT_EVIDENCE')
   const other = rows.filter(row => !unknown && row.impact?.classification === 'NO_DIRECT_EVIDENCE')
-  const rowElements = (items: RuleRow[]) => items.map(row => <RuleImpactRow key={referenceKey(row.reference)} row={row} projectId={projectId} state={state} onBasis={(selected, rule) => setBasis({ row: selected, rule })}/>)
+  const rowElements = (items: RuleRow[]) => items.map(row => <RuleImpactRow key={referenceKey(row.reference)} row={row} projectId={projectId} state={state} historical={historical} onBasis={(selected, rule) => setBasis({ row: selected, rule })}/>)
   const materialGroups: Array<[string, PreparationItem[]]> = preparation ? [
     ['真实账号', preparation.actions.flatMap(item => [item.identity_requirements])],
     ['动作录制', preparation.actions.map(item => item.execution)],
@@ -78,19 +79,19 @@ export function SourceChangeImpact({ projectId, change, action, onNavigate, onSo
   const [title, description] = revalidationCopy[state]
   return <>
     <div className="change-impact-layout">
-      <section className="change-rule-impact" aria-label="权限影响"><h2>可能涉及的权限</h2>
+      <section className="change-rule-impact" aria-label="权限影响"><h2>{historical ? '登记时涉及的权限' : '可能涉及的权限'}</h2>
         {rows.length ? <div role="table" aria-label="按权限规则查看影响" className="change-rule-table">
-          <div role="row" className="change-rule-head"><span role="columnheader">登记时已确认的要求</span><span role="columnheader">{unknown ? '与当前源码的关联' : '与本批改动的关联'}</span></div>
+          <div role="row" className="change-rule-head"><span role="columnheader">登记时已确认的要求</span><span role="columnheader">{historical ? '与该历史批次改动的关联' : unknown ? '与当前源码的关联' : '与本批改动的关联'}</span></div>
           {rowElements(attention)}
           {!!other.length && (attention.length===0 ? <div role="rowgroup">{rowElements(other)}</div> : <div role="rowgroup"><div className="change-other-heading"><Button type="link" aria-expanded={showOther} aria-controls="change-other-rules" onClick={() => setShowOther(value => !value)}>{showOther ? '收起' : '展开'}暂未发现直接关联的权限 · {other.length} 条</Button><span>仍纳入完整检查</span></div><div id="change-other-rules" hidden={!showOther}>{showOther && rowElements(other)}</div></div>)}
         </div> : <p className="editorial-muted">本批没有已确认的权限引用。</p>}
-        <p className="change-impact-note">{unknown ? '登记时的依据仅对应原批次。' : ''}是否符合权限要求，由正式检查判断。</p>
+        <p className="change-impact-note">{historical || unknown ? '登记时的依据仅对应原批次。' : ''}是否符合权限要求，由正式检查判断。</p>
       </section>
-      <aside className="change-preparation" aria-label="本批检查准备"><h2>{title}</h2>
+      {historical ? <aside className="change-preparation change-history-comparison" aria-label="历史批次与当前状态"><h2>与当前工作区的对应</h2><p>{state === 'SOURCE_STALE' ? '当前源码与该历史批次不同；原记录和关联检查结果保留。' : state === 'POLICY_STALE' ? '当前权限已更新；下方仍展示该批次登记时的权限要求。' : state === 'READY' ? '当前源码与权限仍符合该批次的重验条件；历史结论只对应原检查。' : description}</p><div className="change-preparation-action">{action}<Button type="primary" onClick={onSource}>比较当前源码</Button></div></aside> : <aside className="change-preparation" aria-label="本批检查准备"><h2>{title}</h2>
         {state !== 'READY' && <p>{description}</p>}
         {state === 'READY' && (preparation ? <dl>{materialGroups.map(([label, items]) => <div key={label}><dt>{label}</dt><dd className={materialLabel(items)==='需复核'?'material-review-required':undefined}>{materialLabel(items)}</dd></div>)}</dl> : preparationFailed ? <p role="status">材料状态暂时无法读取。<Button onClick={() => setAttempt(value => value + 1)}>重新读取材料</Button></p> : <Spin aria-label="正在读取本批材料"/>)}
-        <div className="change-preparation-action">{state === 'READY' ? action : <><Button type="primary" onClick={() => state === 'POLICY_STALE' || state === 'MAPPING_REVIEW_REQUIRED' ? onNavigate('/permissions') : onSource()}>{state === 'POLICY_STALE' ? '核对当前权限' : state === 'MAPPING_REVIEW_REQUIRED' ? '复核实现对应' : '核对源码记录'}</Button>{action}</>}</div>
-      </aside>
+        <div className="change-preparation-action">{state === 'READY' ? action : <>{action}<Button type="primary" onClick={() => state === 'POLICY_STALE' || state === 'MAPPING_REVIEW_REQUIRED' ? onNavigate('/permissions') : onSource()}>{state === 'POLICY_STALE' ? '核对当前权限' : state === 'MAPPING_REVIEW_REQUIRED' ? '复核实现对应' : '核对源码记录'}</Button></>}</div>
+      </aside>}
     </div>
     <Drawer title="关联依据" open={Boolean(basis)} onClose={() => setBasis(null)} width={640}>
       {basis && <div className="change-basis"><h3>{basis.rule?.action_label ?? '登记时的业务动作'}</h3>{basis.rule && <p>{basis.rule.sentence}</p>}

@@ -20,6 +20,7 @@
 - `toml_patch(text, entry) -> str`
 - `dsh_patch(text, entry) -> str`
 - `trae_link(entry) -> str`
+- `dsh_needs_startup_update(text) -> bool`
 - `connection_matches(client, text, entry) -> bool`
 
 静态import / dot-source：`__future__`、`base64`、`json`、`pathlib`、`re`、`tomllib`、`urllib.parse`、`yaml`
@@ -56,10 +57,25 @@
 
 - `MESSAGES`
 - `class ResumeRejected`
-- `relay(profile, source, destination, secret_store, http, observe, reload_profile)`
+- `class IdleInput`
+- `IdleInput.readline(self, _limit)`
+- `relay(profile, source, destination, secret_store, http, observe, reload_profile, diagnose)`
 - `main() -> int`
 
-静态import / dot-source：`__future__`、`httpx`、`json`、`mcp.shared.inbound`、`mcp_types`、`pathlib`、`product.backend.infra.secrets`、`product.backend.workflows.agent_access.connection_files`、`product.backend.workflows.agent_access.service`、`sys`、`time`
+静态import / dot-source：`__future__`、`httpx`、`json`、`mcp.shared.inbound`、`mcp_types`、`pathlib`、`product.backend.infra.secrets`、`product.backend.workflows.agent_access.connection_files`、`product.backend.workflows.agent_access.dsh_schema`、`product.backend.workflows.agent_access.service`、`queue`、`sys`、`threading`、`time`
+
+### `product/backend/workflows/agent_access/dsh_schema.py`
+
+[打开源码](../../../../../../product/backend/workflows/agent_access/dsh_schema.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class DshSchemaError`
+- `project_schema(schema) -> dict`
+- `class DshToolSchemas`
+- `DshToolSchemas.adapt(self, payload) -> dict`
+- `DshToolSchemas.validate(self, name, arguments) -> bool`
+- `DshToolSchemas.validation_issues(self, name, arguments) -> list[dict[str, str]]`
+
+静态import / dot-source：`__future__`、`copy`、`jsonschema`、`jsonschema.exceptions`
 
 ### `product/backend/workflows/agent_access/service.py`
 
@@ -98,6 +114,6 @@
 - `class AgentWorkflowContext`
 - `AgentWorkflowContext.read(self, project_id, stage, recording_id, run_id, case_id)`
 
-静态import / dot-source：`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.workflows.recording.source`、`re`、`urllib.parse`
+静态import / dot-source：`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.workflows.recording.source`、`pydantic_core`、`re`、`urllib.parse`
 
 <!-- GENERATED:END -->

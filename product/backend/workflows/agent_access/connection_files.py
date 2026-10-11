@@ -30,10 +30,13 @@ class ConnectionReceipt(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, hide_input_in_errors=True)
     schema_version: Literal['1'] = '1'
     generation: str = Field(pattern=r'^[a-f0-9]{32}$')
-    state: Literal['STARTED', 'TOOLS_READ', 'REQUEST_ACCEPTED', 'DISCONNECTED', 'FAILED']
-    code: Literal['NONE', 'SERVICE_UNAVAILABLE', 'AUTH_REJECTED', 'SESSION_EXPIRED', 'PROTOCOL_ERROR', 'CREDENTIAL_UNAVAILABLE', 'EMPTY_TOOLS'] = 'NONE'
+    state: Literal['STARTED', 'CONNECTED', 'TOOLS_READ', 'REQUEST_ACCEPTED', 'DISCONNECTED', 'FAILED']
+    code: Literal['NONE', 'SERVICE_UNAVAILABLE', 'AUTH_REJECTED', 'SESSION_EXPIRED', 'PROTOCOL_ERROR', 'CREDENTIAL_UNAVAILABLE', 'EMPTY_TOOLS',
+                  'CONNECT_TIMEOUT', 'RESPONSE_TIMEOUT', 'PIPE_CLOSED', 'CLIENT_SCHEMA_INVALID'] = 'NONE'
     tool_count: int = Field(default=0, ge=0, le=10000)
     at_us: int = Field(ge=0)
+    phase: Literal['STARTUP', 'NEGOTIATION', 'INITIALIZE', 'TOOLS_LIST', 'TOOLS_CALL', 'PROTOCOL'] = 'STARTUP'
+    elapsed_ms: int = Field(default=0, ge=0)
 
 
 class ConnectionBackup(BaseModel):

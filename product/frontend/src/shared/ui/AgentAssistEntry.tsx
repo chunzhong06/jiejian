@@ -5,6 +5,7 @@ import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { mcpAccessApi, type MCPAccessLevel, type MCPAccessView } from '../../api/system/mcp'
 import { useLiveRead } from '../runtime/useLiveRead'
 import { WorkPageVisible } from '../runtime/visibility'
+import { agentAccessChanged, canHandOff } from '../runtime/agentConnectionState'
 import './agent-assist.css'
 import { AgentConnectionDialog } from './AgentConnectionDialog'
 
@@ -13,7 +14,7 @@ export type AgentAssistContext = {
   revisionKey: string
   requestText: string
 }
-type Snapshot = { context: AgentAssistContext; access: MCPAccessView }
+type Snapshot = { context: AgentAssistContext; access: MCPAccessView; configured: boolean }
 const levels = { READ: 0, PREPARE: 1, EXECUTE: 2 }
 
 export function AgentAssistEntry({ projectId, contextKey, title, description, returnTo, loadContext, onNavigate, onRefresh, heading, actions, requiredLevel = 'PREPARE', primary = false, aside = false, dialog = false, onCopied }: {
@@ -52,10 +53,10 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
 
   const read = (): Promise<Snapshot | undefined> => {
     if (inFlight.current?.scope === scope) return inFlight.current.promise
-    const pending = Promise.all([mcpAccessApi.status(), loadContext()]).then(([access, context]) => {
+    const pending = Promise.all([mcpAccessApi.status().then(async access => ({ access, configured: await canHandOff(access) })), loadContext()]).then(([{access, configured}, context]) => {
       if (liveScope.current !== scope) return undefined
       if (context.projectId !== projectId) throw new Error('context project mismatch')
-      const value = { access, context }
+      const value = { access, context, configured }
       setSnapshot(value); setError(undefined)
       return value
     }).catch(() => {
@@ -65,12 +66,18 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
     inFlight.current = { scope, promise: pending }
     return pending
   }
-  useLiveRead(visible && open ? scope : undefined, async () => { await read() }, 20_000)
+  useLiveRead(visible && open ? scope : undefined, async () => { await read() }, 5000)
+  useEffect(() => {
+    if (!visible || !open) return
+    const refreshAccess = () => { void read() }
+    window.addEventListener(agentAccessChanged, refreshAccess)
+    return () => window.removeEventListener(agentAccessChanged, refreshAccess)
+  }, [visible, open, scope])
   const permissionProblem = (value: Snapshot) => {
     if (value.access.connection_state === 'PAUSED' || (value.access.paired && !value.access.accepting_connections)) return '开发工具连接已暂停，请先恢复连接。'
-    if (value.access.connection_state !== 'CONNECTED') return '先连接你的 Agent，再把这份请求交给它。'
+    if (!value.configured) return '尚未确认可用的客户端配置，请先查看连接状态。'
     const grant = value.access.project_grants.find(item => item.project_id === projectId)?.level ?? 'READ'
-    if (levels[grant] < levels[requiredLevel]) return '当前只允许读取。请在开发工具中允许这个应用使用“协助整理”。'
+    if (levels[grant] < levels[requiredLevel]) return `当前应用授权不足。请在开发工具中允许“${requiredLevel === 'EXECUTE' ? '执行已确认任务' : '协助整理'}”。`
     return undefined
   }
   const copy = async () => {
@@ -81,7 +88,7 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
     try {
       if (!latest || liveScope.current !== scope) return
       const problem = permissionProblem(latest)
-      if (problem) { setMessage(problem); return }
+      if (problem) return // 新快照已显示具体阻塞原因，避免再叠一份相同提示。
       // 复制前重读；上下文变化时先让用户看到新请求，不能把旧材料交给另一个任务。
       if (latest.context.revisionKey !== previous) { setMessage('当前内容已经变化，请核对更新后的请求，再复制。'); return }
       await navigator.clipboard.writeText(latest.context.requestText)
@@ -101,7 +108,8 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
   const panel = open && <div className="agent-assist-panel">{!aside && <><h3>{title}</h3><p>{description}</p></>}
       {!snapshot && !error && <p role="status">正在核对当前内容与连接…</p>}
       {error && <Alert type="warning" showIcon message={error} action={<Button onClick={() => void read()}>重新读取</Button>}/>}
-      {problem && <Alert type="info" showIcon message={problem} action={<Button onClick={() => snapshot?.access.connection_state !== 'CONNECTED' ? setConnecting(true) : onNavigate(`/tools?return_to=${encodeURIComponent(returnTo)}&source_project_id=${encodeURIComponent(projectId)}`)}>{snapshot?.access.connection_state !== 'CONNECTED' ? '连接 Agent' : '调整允许范围'}</Button>}/>}
+      {problem && <Alert type="info" showIcon message={problem} action={<Button onClick={() => !snapshot?.configured && snapshot?.access.connection_state !== 'PAUSED' ? setConnecting(true) : onNavigate(`/tools?return_to=${encodeURIComponent(returnTo)}&source_project_id=${encodeURIComponent(projectId)}`)}>{snapshot?.access.connection_state === 'PAUSED' ? '恢复连接' : !snapshot?.configured ? '连接 Agent' : '调整允许范围'}</Button>}/>}
+      {snapshot?.configured && snapshot.access.connection_state !== 'CONNECTED' && !problem && <p role="status">连接配置已核验，可继续交接任务。尚未收到本次服务的客户端请求。</p>}
       {snapshot && <details><summary>查看协助请求</summary><pre>{snapshot.context.requestText}</pre></details>}
       {message && <p className="agent-assist-message" role="status">{message}</p>}
       <div className="agent-assist-actions"><Button icon={copied?<CheckOutlined aria-hidden/>:<CopyOutlined aria-hidden/>} disabled={!snapshot || Boolean(problem)} loading={busy} onClick={() => void copy()}>复制协助请求</Button>{onRefresh && <Button disabled={!snapshot} loading={busy} onClick={() => void refresh()}>读取整理结果</Button>}</div>

@@ -32,6 +32,18 @@
 - `lifecycleLabel`
 - `lifecycleLabels`
 
+### `product/frontend/src/shared/runtime/agentConnectionState.ts`
+
+[打开源码](../../../../../product/frontend/src/shared/runtime/agentConnectionState.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `agentAccessChanged`
+- `canHandOff`
+- `configurationFailed`
+- `notifyAgentAccessChanged`
+- `reusableConnection`
+
+静态import / dot-source：`../../api/system/mcp`
+
 ### `product/frontend/src/shared/runtime/browserState.ts`
 
 [打开源码](../../../../../product/frontend/src/shared/runtime/browserState.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -154,7 +166,7 @@
 - `AgentAssistContext`
 - `AgentAssistEntry`
 
-静态import / dot-source：`../../api/system/mcp`、`../runtime/useLiveRead`、`../runtime/visibility`、`./AgentConnectionDialog`、`./agent-assist.css`、`@ant-design/icons`、`antd`、`react`
+静态import / dot-source：`../../api/system/mcp`、`../runtime/agentConnectionState`、`../runtime/useLiveRead`、`../runtime/visibility`、`./AgentConnectionDialog`、`./agent-assist.css`、`@ant-design/icons`、`antd`、`react`
 
 ### `product/frontend/src/shared/ui/AgentConnectionDialog.tsx`
 
@@ -162,7 +174,7 @@
 
 - `AgentConnectionDialog`
 
-静态import / dot-source：`../../api/system/mcp`、`./agent-connection.css`、`antd`、`react`
+静态import / dot-source：`../../api/system/mcp`、`../runtime/agentConnectionState`、`./agent-connection.css`、`antd`、`react`
 
 ### `product/frontend/src/shared/ui/AgentWorkflowEntry.tsx`
 

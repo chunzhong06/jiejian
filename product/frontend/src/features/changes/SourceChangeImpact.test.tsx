@@ -41,6 +41,15 @@ it('源码再次变化时所有规则可见，旧分类不继续表示当前影�
   expect(screen.queryByText('实现来源有改动')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /展开暂未发现/ })).not.toBeInTheDocument()
 })
+it('历史详情保留登记影响且不读取当前材料，当前源码差异独立提示', async () => {
+  render(<SourceChangeImpact {...props({...change,revalidation:{...change.revalidation,status:'SOURCE_STALE',can_execute:false}})} historical/>);
+  await screen.findByText('成员不得导出完整交付包。')
+  expect(screen.getByText('实现来源有改动')).toBeInTheDocument()
+  expect(screen.queryByText('当前关联待核对')).not.toBeInTheDocument()
+  expect(screen.getByText(/当前源码与该历史批次不同/)).toBeInTheDocument()
+  expect(api.rule).toHaveBeenCalledWith('p1','deny',2)
+  expect(api.preparation).not.toHaveBeenCalled()
+})
 it('缺少比较基线时不展示文件关联依据', async () => {
   render(<SourceChangeImpact {...props({ ...change, revalidation: { ...change.revalidation, status: 'NO_BASELINE', can_execute: false } })}/>);
   await screen.findByText('成员可以查看协作资料。')

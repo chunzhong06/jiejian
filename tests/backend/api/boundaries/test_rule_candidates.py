@@ -99,6 +99,11 @@ def test_unclear_unsupported_and_uncovered_rules_cannot_become_proposals(tmp_pat
             content[field] = value
             _, saved = _save(client, prefix, content)
             assert saved["assessment"] == "NEEDS_CHANGES"
+            if field == 'examples':
+                issue = next(item for item in saved['issues'] if item['code']=='PERMISSION_EXAMPLE_REQUIRED')
+                assert issue['permission_item_ids'] == [content['permissions'][0]['item_id']]
+                assert issue['path'] == 'candidate.content.examples'
+                assert not any(item['code']=='NEEDS_CLARIFICATION' for item in saved['issues'])
             response = client.post(f"{prefix}/rule-candidates/{saved['candidate']['candidate_id']}/proposals",
                 json={"revision": 1, "operation_id": uuid4().hex})
             assert response.status_code == 409

@@ -9,7 +9,8 @@ import { RuleCoveragePreview } from '../RuleCoveragePreview'
 
 type ReviewItem = BoundaryProposalReviewDto['items'][number]
 const changeLabels={CREATE:'新增',UPDATE:'修改',RETIRE:'停用',REFERENCE:'沿用'}
-export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturnToEdit, onReject }: {
+export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturnToEdit, onReject, onContinue }: {
+  onContinue?:()=>void
   proposalView: BoundaryProposalViewDto; busy: boolean
   onApprove: (reason: string) => void; onReturnToEdit: () => void; onReject: (reason: string) => void
 }) {
@@ -23,7 +24,7 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
   const permissions=changed.filter(item=>item.entity_kind==='PERMISSION')
   const definitions=changed.filter(item=>item.entity_kind!=='PERMISSION')
   return <section className="permission-review" aria-label="业务边界变更审阅">
-    <header className="permission-review-intro"><div><p className="editorial-eyebrow">本次需要你决定</p><h2>核对本次业务变更</h2><p>确认谁可以做什么、哪些结果必须受到保护。确认后才会改变正式权限。</p></div><StatusBadge kind="preparation" tone="warning">{decision?'已有决定':'等待你的决定'}</StatusBadge>
+    <header className="permission-review-intro"><div><p className="editorial-eyebrow">{decision?'已保存的提案决定':'本次需要你决定'}</p><h2>{decision?'回看这次业务变更':'核对本次业务变更'}</h2><p>{decision?'这里保留当时审阅的变更与决定；当前工作会按最新状态继续。':'确认谁可以做什么、哪些结果必须受到保护。确认后才会改变正式权限。'}</p></div><StatusBadge kind="lifecycle" tone={decision?.decision==='APPROVED'?'success':'warning'}>{decision?decision.decision==='APPROVED'?'已批准':'已放弃':'等待你的决定'}</StatusBadge>
       <dl className="permission-review-counts"><div><dt>权限变更</dt><dd>{unavailable?'待核对':permissions.length}<small>项</small></dd></div><div><dt>业务定义变更</dt><dd>{unavailable?'待核对':definitions.length}<small>项</small></dd></div><div><dt>继续沿用</dt><dd>{unavailable?'待核对':retained.length}<small>项</small></dd></div></dl>
     </header>
     {unavailable&&<Alert type="warning" showIcon message="无法恢复提案的原始基线" description="暂不提供批准入口。缺失的历史版本不会被当前值或空值替代。"/>}
@@ -44,9 +45,10 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
     <RuleCoveragePreview projectId={proposal.project_id} reference={{kind:'PROPOSAL',proposal_id:proposal.proposal_id}}/>
     </div>
     <aside className="permission-review-aside work-aside" aria-label="批准前核对">
-    <h3>确认这份提案</h3><p>核对正文中的权限变化与沿用要求，再决定是否批准。</p>
+    <h3>{decision?'这份提案的决定':'确认这份提案'}</h3><p>{decision?'审阅已经结束。继续当前工作，可核对运行地址和准备检查材料。':'核对正文中的权限变化与沿用要求，再决定是否批准。'}</p>
     {!!proposal.unresolved_questions?.length&&<Alert type="warning" message="仍有未解决问题" description={proposal.unresolved_questions.join('；')}/>}
     {decision?<Alert type="info" message={decision.decision==='APPROVED'?'这份提案已确认':'这份提案已放弃'} description={decision.reason}/>:<footer className="permission-review-decision"><div className="permission-review-acknowledgement"><Checkbox disabled={busy} checked={checked} onChange={e=>setChecked(e.target.checked)}>我已核对本次变更和沿用的业务要求</Checkbox><p>批准后进入材料准备，检查结果另行形成。</p></div><div className="boundary-review-actions"><Button disabled={busy} onClick={onReturnToEdit}>返回修改</Button><Button type="primary" loading={busy} disabled={busy||unavailable||review?.current_state_changed||!checked||Boolean(proposal.unresolved_questions?.length)} onClick={()=>onApprove('用户已勾选确认：已核对本次变更和沿用的业务要求')}>确认这组业务边界</Button></div><div className="permission-review-withdraw"><Button danger disabled={busy} onClick={()=>onReject('用户明确放弃这组业务边界提案')}>放弃这组提案</Button><span>仅对当前提案生效</span></div></footer>}
+    {decision&&onContinue&&<div className="boundary-review-actions"><Button type="primary" onClick={onContinue}>继续当前工作</Button></div>}
     </aside></div>
   </section>
 }

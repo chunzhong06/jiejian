@@ -18,9 +18,11 @@ const mockProjects = vi.hoisted(() => ({
   addAction: vi.fn(),
 }))
 const mockOnboarding = vi.hoisted(() => ({ selectFolder: vi.fn() }))
+const runtime=vi.hoisted(()=>({state:vi.fn()}))
 
 vi.mock('../../api/applications/projects', () => ({ projectsApi: mockProjects }))
 vi.mock('../../api/applications/onboarding', () => ({ onboardingApi: mockOnboarding }))
+vi.mock('../../api/applications/controlledRuntime',()=>({controlledRuntimeApi:runtime}))
 
 const baseUnderstanding = {
   project_id: 'app-demo',
@@ -65,6 +67,22 @@ const action = {
 }
 
 describe('ApplicationSetup', () => {
+  it('受控运行自动选择地址，访问仍需确认；改成另一地址必须重新核对',async()=>{
+    mockProjects.understanding.mockResolvedValue(baseUnderstanding)
+    runtime.state.mockResolvedValue({project_id:'app-demo',running:true,source_matches:true,operation:{state:'SUCCEEDED',receipt:{reference:{port:3000}}}})
+    render(<ApplicationSetup selected={{project_id:'app-demo',name:'demo',status:'DRAFT'}} requestConnection onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()}/>)
+    fireEvent.click(await screen.findByText('应用尚未启动？查看受支持的启动方式'))
+    await screen.findByText('界鉴已确认本应用正在此地址运行。请在下方确认访问授权。')
+    expect(screen.getByRole('textbox',{name:'手工输入本地地址'})).toHaveValue('http://127.0.0.1:3000')
+    expect(screen.getByRole('button',{name:'确认本地地址'})).toBeDisabled()
+    expect(mockProjects.confirmEndpoint).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox',{name:/确认这是我的本地应用/}))
+    expect(screen.getByRole('button',{name:'确认本地地址'})).toBeEnabled()
+    fireEvent.change(screen.getByRole('textbox',{name:'手工输入本地地址'}),{target:{value:'http://127.0.0.1:3001'}})
+    expect(screen.getByRole('checkbox',{name:/应用已经启动/})).not.toBeChecked()
+    expect(screen.getByRole('checkbox',{name:/确认这是我的本地应用/})).not.toBeChecked()
+    expect(screen.getByRole('button',{name:'确认本地地址'})).toBeDisabled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mockOnboarding.selectFolder.mockResolvedValue({ status: 'selected', path: 'D:\\apps\\demo' })

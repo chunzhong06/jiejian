@@ -81,6 +81,21 @@ def test_suggestion_basis_covers_source_heads_beyond_first_page(tmp_path):
     finally:harness.close()
 
 
+def test_source_contract_is_not_a_capability_and_does_not_mutate_requirements(tmp_path):
+    harness=ready_check_harness(tmp_path)
+    try:
+        core,project=harness.core,harness.project_id
+        before=core.business_boundaries.view(project)
+        item=_item(harness,1,{'kind':'evidence','capability':'RESOURCE_FIELDS_V1','observable_result':'核对业务结果'})
+        with pytest.raises(JiejianError) as rejected:
+            core.preparation_suggestions.save(project,_command(harness,[item]))
+        assert 'source_contract_id' in str(rejected.value)
+        assert 'MANAGED_TRANSACTION_RECORDS' in str(rejected.value)
+        assert core.business_boundaries.view(project)==before
+        assert core.preparation_suggestions.context(project)['latest'] is None
+    finally:harness.close()
+
+
 def test_stored_suggestion_payload_cannot_change_its_project_identity(tmp_path):
     harness=ready_check_harness(tmp_path)
     try:

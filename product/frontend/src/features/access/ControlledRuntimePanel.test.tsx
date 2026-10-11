@@ -1,5 +1,5 @@
 // 启动必须先预览；断线与历史回执不能触发重复执行或伪装成当前运行。
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {ControlledRuntimePanel} from './ControlledRuntimePanel'
 const api=vi.hoisted(()=>({state:vi.fn(),preview:vi.fn(),start:vi.fn(),operation:vi.fn(),stop:vi.fn(),cancel:vi.fn()}))
@@ -8,6 +8,21 @@ const preview={project_id:'app_a',entry:'app.mjs',port:3000,revision:1,preview_f
 beforeEach(()=>{vi.resetAllMocks();sessionStorage.clear();api.state.mockResolvedValue({project_id:'app_a',operation:null,running:false,source_matches:false});api.preview.mockResolvedValue(preview)})
 afterEach(cleanup)
 const props={projectId:'app_a',revision:0,sourceAuthorized:false,onChanged:vi.fn(),onEndpoint:vi.fn()}
+
+it('启动中自动回读运行事实，不需要用户刷新也不重复启动',async()=>{
+  vi.useFakeTimers()
+  try {
+    api.state.mockResolvedValueOnce({project_id:'app_a',running:false,operation:{state:'PENDING'}})
+      .mockResolvedValue({project_id:'app_a',running:true,source_matches:true,operation:{state:'SUCCEEDED',receipt:{reference:{port:3000}}}})
+    render(<ControlledRuntimePanel {...props} sourceAuthorized/>)
+    await act(async()=>{})
+    expect(screen.getByText('正在启动')).toBeVisible()
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2100)})
+    expect(screen.getByText('正在运行')).toBeVisible()
+    expect(props.onEndpoint).toHaveBeenLastCalledWith('http://127.0.0.1:3000',true)
+    expect(api.start).not.toHaveBeenCalled()
+  } finally {cleanup();vi.useRealTimers()}
+})
 
 it('授权只读和预览之后，仍需明确启动',async()=>{
   render(<ControlledRuntimePanel {...props}/>);await waitFor(()=>expect(api.state).toHaveBeenCalled())

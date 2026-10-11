@@ -1,5 +1,6 @@
 // 应用运行属于环境准备；预览、启动回执和当前进程分开，不把启动成功表示为安全通过。
 import { useEffect, useRef, useState } from 'react'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { Alert, Button, Checkbox, Input, InputNumber } from 'antd'
 import { LoadingState } from '../../shared/ui/LoadingState'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
@@ -33,7 +34,7 @@ export function ApplicationRuntimeSettings({projectId,onNavigate}:{projectId:str
 }
 
 export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, onChanged, onEndpoint }: {
-  projectId:string; revision:number; sourceAuthorized:boolean; onChanged:()=>void; onEndpoint:(endpoint:string)=>void
+  projectId:string; revision:number; sourceAuthorized:boolean; onChanged:()=>void; onEndpoint:(endpoint:string, running?:boolean)=>void
 }) {
   const [entry,setEntry]=useState('app.mjs')
   const [port,setPort]=useState<number|null>(3000)
@@ -69,7 +70,8 @@ export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, 
         restoredConfiguration.current=true
         if(result.configuration) {setEntry(result.configuration.entry);setPort(result.configuration.port)}
       }
-      if(result.running && result.operation?.receipt) onEndpoint(`http://127.0.0.1:${result.operation.receipt.reference.port}`)
+      if(result.running && result.operation?.receipt) onEndpoint(`http://127.0.0.1:${result.operation.receipt.reference.port}`,true)
+      else onEndpoint('',false)
     } catch(value) {if(isActive(project,sequence))fail(value)}
     finally {if(isActive(project,sequence))setBusy(false)}
   }
@@ -124,7 +126,7 @@ export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, 
       const result=await api.stop(project,state.operation.instance_id)
       if(!isActive(project,sequence))return
       if(result.project_id!==project)throw new Error('project mismatch')
-      setState(result);onChanged()
+      setState(result);onEndpoint('',false);onChanged()
     } catch(value){if(isActive(project,sequence))fail(value)}
     finally {if(isActive(project,sequence))setBusy(false)}
   }
@@ -141,6 +143,8 @@ export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, 
     finally {if(isActive(project,sequence))setBusy(false)}
   }
   const queued=state?.operation && ['PENDING','RUNNING','RETRY_WAIT'].includes(state.operation.state)
+  // 后台启动只查询原操作和实例，不能通过轮询重新提交启动。
+  useLiveRead(!busy&&(pending||queued)?`runtime:${projectId}`:undefined,refresh,2000,false)
   return <section className="controlled-runtime" aria-label="由界鉴启动本地应用">
     <header><div><h3>由界鉴启动本地应用</h3><p>保留一份固定源码用于核对，关闭界鉴时停止本次运行。</p></div>
       <StatusBadge kind="lifecycle" tone={state?.running?'info':queued?'warning':'neutral'}>{pending?'回执待查询':state?.running?'正在运行':queued?'正在启动':state?.operation?.state==='FAILED'?'启动失败':'尚未运行'}</StatusBadge></header>

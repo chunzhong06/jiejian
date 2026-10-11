@@ -98,7 +98,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
       if (latest.candidate.revision !== selected.candidate.revision || latest.visibility?.archived) {setNotice('候选已有变化，请核对最新内容后继续。'); return}
       await navigator.clipboard.writeText([`请补充界鉴项目 ${projectId} 的规则候选 ${latest.candidate.candidate_id}，修订 ${latest.candidate.revision}。`,
         '先调用 jiejian_rule_context 和 jiejian_rule_candidate_show 读取最新内容，再读取 jiejian_application_understanding 沿用已确认的角色和动作。',
-        ...latest.issues.map(item => `需要处理${item.path ? `（${item.path}）` : ''}：${item.message}`),
+        ...latest.issues.map(item => `需要处理${item.path ? `（${item.path}）` : ''}：${item.message}${item.permission_item_ids?.length?` 对应权限项：${item.permission_item_ids.join('、')}`:''}`),
         ...(latest.revision_guidance ?? []),
         ...latest.candidate.content.unresolved_questions.map((question,index) => `旧问题 ${index+1}（candidate.content.unresolved_questions[${index}]，转换情境时question逐字保留）：${question}`),
         ...latest.candidate.content.unsupported_constraints.map((constraint,index) => `能力限制 ${index+1}（独立核对，不能靠情境选择消除）：${constraint}`),

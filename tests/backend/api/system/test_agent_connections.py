@@ -25,7 +25,8 @@ def test_dsh_replaces_unmounted_patch_with_insert_and_preserves_js():
     updated=dsh_patch(text, ENTRY)
     assert 'key: !!js process.env.OTHER_KEY' in updated
     assert 'JIEJIAN_MCP_TOKEN' not in updated
-    assert '- insert:' in updated and 'failOnStartupError: true' in updated
+    assert '- insert:' in updated and 'failOnStartupError: false' in updated
+    assert 'maxAttempts: 10' in updated
     assert dsh_patch(updated, ENTRY)==updated
     assert len(yaml.compose(updated).value)==2
 
@@ -66,6 +67,43 @@ def test_restore_does_not_overwrite_later_client_edits(tmp_path):
     assert target.read_text()=='{"changed":true}'
 
 
+def test_old_dsh_policy_requires_explicit_update_and_reuses_credentials(tmp_path):
+    home=tmp_path/'home';target=home/'.dsh/profiles/desktop/cordis.patch.yml';target.parent.mkdir(parents=True)
+    store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
+    service=AgentConnections(tmp_path/'var',access,home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
+    service.install('dsh');token=store.read(MCP_PAIRING_SECRET_REF)
+    target.write_text(target.read_text().replace('failOnStartupError: false','failOnStartupError: true'))
+    before=target.read_bytes()
+    assert service.status('dsh')['code']=='CONFIG_UPDATE_REQUIRED'
+    assert target.read_bytes()==before
+    assert service.install('dsh')['state']=='AWAITING_CLIENT'
+    assert store.read(MCP_PAIRING_SECRET_REF)==token
+    assert service.status('dsh')['code']=='NONE'
+    assert not access.view().project_grants
+
+
+def test_zcode_compatible_protocol_update_is_explicit_and_preserves_other_settings(tmp_path):
+    home=tmp_path/'home';target=home/'.zcode/cli/config.json';target.parent.mkdir(parents=True)
+    target.write_text(json.dumps({'theme':'dark','mcp':{'servers':{'other':{'command':'other','enable':False}}}}))
+    store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
+    service=AgentConnections(tmp_path/'var',access,home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
+    service.install('zcode');token=store.read(MCP_PAIRING_SECRET_REF)
+    configured=json.loads(target.read_text())
+    assert configured['mcp']['servers']['jiejian']['protocolVersion']=='legacy'
+    configured['mcp']['servers']['jiejian']['protocolVersion']='auto'
+    target.write_text(json.dumps(configured))
+    before=target.read_bytes()
+    assert service.status('zcode')['code']=='CONFIG_UPDATE_REQUIRED'
+    assert target.read_bytes()==before
+    assert service.install('zcode')['state']=='AWAITING_CLIENT'
+    updated=json.loads(target.read_text())
+    assert updated['mcp']['servers']['jiejian']['protocolVersion']=='legacy'
+    assert updated['mcp']['servers']['other']==configured['mcp']['servers']['other']
+    assert updated['theme']=='dark'
+    assert store.read(MCP_PAIRING_SECRET_REF)==token
+    assert not access.view().project_grants
+
+
 def test_sixth_client_uses_confirmation_link_without_secret(tmp_path):
     store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
     service=AgentConnections(tmp_path/'var',access,home=tmp_path,environ={},protector=lambda x:x,unprotector=lambda x:x)
@@ -88,7 +126,8 @@ def test_stdio_relay_reads_real_server_tools_and_read_only_tool(tmp_path, protoc
     from mcp_types import PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY
     store=MemorySecretStore();app=create_app(tmp_path/'var',start_worker=False,secret_store=store,environ={})
     app.state.mcp_access.pair()
-    profile=ConnectionProfile(client='dsh',endpoint=TEST_CONTROL_ORIGIN+'/mcp',generation='a'*32)
+    # DSH 通过自动协商选择请求/响应协议；其他客户端仍保留新版显式请求转交。
+    profile=ConnectionProfile(client='dsh' if protocol=='2025-03-26' else 'codex',endpoint=TEST_CONTROL_ORIGIN+'/mcp',generation='a'*32)
     info={'name':'isolated-connector-test','version':'1'}
     if protocol=='2025-03-26':
         messages=[{'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':protocol,'capabilities':{},'clientInfo':info}}, {'jsonrpc':'2.0','method':'notifications/initialized'}, {'jsonrpc':'2.0','id':2,'method':'tools/list'}, {'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'jiejian_project_list','arguments':{}}}]
@@ -163,6 +202,49 @@ def test_existing_connector_survives_restart_without_replaying_requests(tmp_path
     assert any(row[0]=='REQUEST_ACCEPTED' for row in observed)
     assert not new.state.mcp_access.view().project_grants
     assert store.read(MCP_PAIRING_SECRET_REF) not in output.getvalue()
+
+
+def test_idle_protocol_recovers_without_business_call_and_respects_pause(tmp_path):
+    from product.backend.workflows.agent_access.service import MCPAccessLevel
+    store=MemorySecretStore()
+    old=create_app(tmp_path/'old',start_worker=False,secret_store=store,environ={})
+    old.state.mcp_access.pair();old.state.mcp_access.set_level('project',MCPAccessLevel.EXECUTE)
+    new=create_app(tmp_path/'new',start_worker=False,secret_store=store,environ={})
+    profiles=[ConnectionProfile(client='dsh',endpoint=TEST_CONTROL_ORIGIN+'/mcp',generation=x*32) for x in ['a','b']]
+    selected=0;observed=[];methods=[];step=0
+    class Source:
+        def readline(self, size):
+            nonlocal step,selected
+            step+=1
+            if step==1:return json.dumps({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-03-26','capabilities':{},'clientInfo':{'name':'idle-test','version':'1'}}})+'\n'
+            if step==2:return json.dumps({'jsonrpc':'2.0','method':'notifications/initialized'})+'\n'
+            if step==3:
+                assert old.state.mcp_access.view().connection_state.value=='CONNECTED'
+                selected=1
+                return None
+            if step==4:
+                assert new.state.mcp_access.view().connection_state.value=='CONNECTED'
+                assert observed[-1][0]=='CONNECTED'
+                assert not new.state.mcp_access.view().project_grants
+                new.state.mcp_access.pause()
+                return None
+            if step==5:
+                assert observed[-1][:2]==('FAILED','AUTH_REJECTED')
+                new.state.mcp_access.resume()
+                return None
+            assert observed[-1][0]=='CONNECTED'
+            return ''
+    with TestClient(old) as first,TestClient(new) as second:
+        class HTTP:
+            def post(self,url,*,json,headers,**kwargs):
+                methods.append(json['method'])
+                return [first,second][selected].post(url,json=json,headers=headers)
+        output=io.StringIO()
+        relay(profiles[0],Source(),output,store,HTTP(),lambda *args:observed.append(args),lambda:profiles[selected])
+    assert [item['id'] for item in map(json.loads,output.getvalue().splitlines())]==[1]
+    assert methods.count('initialize')==2
+    assert methods.count('ping')==3
+    assert 'tools/call' not in methods and 'tools/list' not in methods
 
 
 def test_connector_process_uses_protected_store_with_scrubbed_environment(tmp_path):

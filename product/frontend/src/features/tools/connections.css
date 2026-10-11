@@ -1,10 +1,10 @@
 /* 连续步骤与配置阅读区使用同一基线；状态、凭据和授权保持各自清晰的层次。 */
 .connection-page { width: 100%; max-width: var(--layout-content); margin: 0; display: grid; }
 .connection-page > * + * { margin-block-start:var(--space-24); }
-/* 保持内容挂载以衔接关闭；inert 同时退出键盘和读屏操作范围。 */
-.connection-page .connection-management { display:grid;grid-template-rows:0fr;opacity:0;padding:0;margin:0;border:0;transition:grid-template-rows var(--motion-layout) var(--ease-standard),opacity var(--motion-normal); }
-.connection-page .connection-management[data-open=true] { grid-template-rows:1fr;opacity:1;margin-block-start:var(--space-24); }
-.connection-management-content { overflow:hidden;min-height:0; }
+/* 管理区按需挂载，无高度折叠容器；给悬浮位移、阴影与键盘焦点保留绘制空间。 */
+.connection-management-content { overflow:visible;min-height:0; }
+.connection-project-heading,.connection-project-empty { display:flex;align-items:center;justify-content:space-between;gap:var(--space-16);flex-wrap:wrap; }
+.connection-project-heading>.ant-btn,.connection-project-empty>.ant-btn { margin-inline-start:auto; }
 .connection-management-row { display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-24);padding-block:var(--space-20);border-block:1px solid var(--color-border); }
 .connection-management-row > div:first-child { flex:1 1 260px;min-width:0; }
 .connection-management-actions { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-12);margin-inline-start:auto; }
@@ -16,16 +16,16 @@
 .connection-page p { margin: var(--space-8) 0 0; line-height: 1.7; color: var(--color-secondary); }
 .connection-status { padding: var(--space-24); border: 1px solid var(--color-border); border-left: 3px solid var(--color-primary); border-radius: var(--radius-medium); background: var(--color-surface); }
 .connection-status { box-shadow: var(--shadow-focus); }
-/* 右栏的按钮以整组说明为参照居中，不沿标题顶边排放。 */
-.connection-page .connection-status{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);align-items:center}
-.connection-status>.ant-btn{justify-self:center}
+/* 按钮沿卡片内容右边缘排列，垂直方向以整组说明居中。 */
+.connection-page .connection-status{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-24)}
+.connection-status>.ant-btn{justify-self:end}
 .connection-page .connection-management-content{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-24)}
 .connection-page .connection-management-content>p{margin:0}
 [data-product=jiejian] .mcp-access-levels{gap:var(--space-12);margin-block:var(--space-20)}
 [data-product=jiejian] .mcp-access-levels .ant-radio-wrapper{align-items:center;gap:var(--space-12);min-height:44px;margin:0;line-height:1.6}
 [data-product=jiejian] .mcp-access-levels .ant-radio{align-self:center;top:0}
 [data-product=jiejian] .mcp-access-levels .ant-radio+span{padding:0;line-height:1.6}
-@media(max-width:780px){.connection-page .connection-status,.connection-page .connection-management-content{grid-template-columns:minmax(0,1fr)}.connection-status>.ant-btn{justify-self:center}.connection-management-actions{justify-content:center;margin-inline:0}}
+@media(max-width:780px){.connection-page .connection-status,.connection-page .connection-management-content{grid-template-columns:minmax(0,1fr)}.connection-status>.ant-btn{justify-self:end}.connection-management-actions{justify-content:center;margin-inline:0}}
 .connection-status.is-success { border-left-color: var(--color-safe); }
 .connection-status.is-error { border-left-color: var(--color-danger); }
 .connection-status.is-warning { border-left-color: var(--color-warning); }
@@ -33,10 +33,10 @@
 .connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); margin-inline:auto; }
 .connection-facts span { display: grid; gap: var(--space-8); overflow-wrap: anywhere; }
 .connection-facts small { color: var(--color-secondary); }
-.connection-project-context { display:grid;grid-template-columns:minmax(0,2fr) minmax(160px,1fr);align-items:center;gap:var(--space-24);padding:var(--space-24);border:1px solid var(--color-border);border-radius:var(--radius-small);margin-block:var(--space-24); }
+.connection-project-context { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-24);padding:var(--space-24);border:1px solid var(--color-border);border-radius:var(--radius-small);margin-block:var(--space-24); }
 .connection-project-context h3 { margin:0; }
 .connection-project-context p { color:var(--color-secondary);margin-block-end:0; }
-.connection-project-context > .ant-btn { justify-self:center; }
+.connection-project-context > .ant-btn { justify-self:end; }
 @media(max-width:600px){.connection-project-context{grid-template-columns:minmax(0,1fr)}.connection-project-context > .ant-btn{justify-self:end}}
 .connection-tabs { display: flex; gap: var(--space-8); padding-block: var(--space-12); border-block: 1px solid var(--color-border); }
 .connection-setup, .connection-permissions { min-width: 0; }

@@ -6,7 +6,7 @@ import { story } from '../../shared/testing/results'
 
 const api = vi.hoisted(() => ({ story: vi.fn(), status: vi.fn() }))
 vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
-vi.mock('../../api/system/mcp', () => ({ mcpAccessApi: api }))
+vi.mock('../../api/system/mcp', async () => ({ ...await vi.importActual('../../api/system/mcp'), mcpAccessApi: api }))
 const copy = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks()

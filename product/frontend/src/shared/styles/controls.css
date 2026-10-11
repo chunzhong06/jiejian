@@ -45,6 +45,22 @@
 [data-product=jiejian] .ant-alert-warning { background: var(--color-warning-light); --alert-ink: var(--color-warning); }
 [data-product=jiejian] .ant-alert-error { background: var(--color-danger-light); --alert-ink: var(--color-danger); }
 [data-product=jiejian] .ant-alert :is(.ant-alert-message,.ant-alert-description,.ant-alert-icon) { color: var(--alert-ink); }
+/* 状态横幅的轻量操作沿用所在横幅色相，避免通用文字按钮悬浮底色形成突兀深块。 */
+[data-product=jiejian] .work-receipt { --alert-ink: var(--color-safe); }
+[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous) {
+  color: var(--alert-ink);
+  background: transparent;
+}
+[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):hover {
+  color: var(--alert-ink);
+  background: color-mix(in srgb,var(--alert-ink) 10%,transparent);
+}
+[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):active {
+  background: color-mix(in srgb,var(--alert-ink) 16%,transparent);
+}
+[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):focus-visible {
+  outline-color: var(--alert-ink);
+}
 [data-product=jiejian] .ant-tag { border-color: transparent; }
 .product-status {
   display: inline-flex;

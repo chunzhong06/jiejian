@@ -11,7 +11,7 @@ from threading import RLock
 from uuid import uuid4
 
 from product.backend.workflows.agent_access.client_config import (
-    CLIENTS, ConnectionProblem, connection_matches, dsh_patch, json_patch, read_config, toml_patch, trae_link,
+    CLIENTS, ConnectionProblem, connection_matches, dsh_needs_startup_update, dsh_patch, json_patch, read_config, toml_patch, trae_link,
 )
 from product.backend.workflows.agent_access.connection_files import (
     ConnectionBackup, ConnectionProfile, ConnectionReceipt, atomic_write, protect, unprotect,
@@ -139,19 +139,31 @@ class AgentConnections:
                     return self._view(client, 'FAILED', '界鉴连接已暂停或凭据已删除，请恢复或重新连接。', code='AUTH_REJECTED')
                 if client != 'trae':
                     metadata = ConnectionBackup.model_validate_json(self.unprotect((self.root/(client+'.install.bin')).read_bytes()))
-                    if not connection_matches(client, read_config(Path(metadata.target)), self._entry(client)):
+                    config_text = read_config(Path(metadata.target))
+                    if not connection_matches(client, config_text, self._entry(client)):
                         return self._view(client, 'FAILED', '客户端配置与安装回执不同，尚不能确认配置已生效。请重新连接。', code='CONFIG_CHANGED')
+                    if client == 'dsh' and dsh_needs_startup_update(config_text):
+                        return self._view(client, 'FAILED', 'DSH 的旧配置会在首次连接失败后终止插件。请更新连接配置，再在 DSH 确认重载；沿用原连接凭据和授权校验。', code='CONFIG_UPDATE_REQUIRED')
+                    if client == 'zcode' and json.loads(config_text).get('mcp', {}).get('servers', {}).get('jiejian', {}).get('protocolVersion') != 'legacy':
+                        return self._view(client, 'FAILED', 'ZCode 的自动协议协商可能导致健康检查失败并反复重连。请更新连接配置以使用兼容协议，再在 ZCode 刷新 MCP 服务器；原凭据和授权校验继续保留。', code='CONFIG_UPDATE_REQUIRED')
                 activity = self._profile(client).with_suffix('.activity.json')
                 if activity.exists() and activity.stat().st_size < 4096:
                     receipt = ConnectionReceipt.model_validate_json(activity.read_bytes())
                     if receipt.generation == saved.generation:
                         message = MESSAGES.get(receipt.code, '客户端已启动连接器，正在等待读取工具。')
-                        if receipt.state == 'TOOLS_READ':
+                        phase_label = {'STARTUP':'连接器启动','NEGOTIATION':'协议协商','INITIALIZE':'MCP 握手','TOOLS_LIST':'工具读取','TOOLS_CALL':'工具调用','PROTOCOL':'协议通信'}[receipt.phase]
+                        if receipt.state == 'STARTED':
+                            message = f'当前阶段：{phase_label}。尚未确认工具可用。'
+                        elif receipt.state == 'FAILED':
+                            message = f'{phase_label}失败（{receipt.elapsed_ms} 毫秒）。{message}'
+                        if receipt.state == 'CONNECTED':
+                            message = 'MCP 协议连接已确认，无需先让 Agent 调用业务工具。连接器会定期探测并在服务恢复后重新握手；项目操作仍按当前授权处理。'
+                        elif receipt.state == 'TOOLS_READ':
                             message = f'客户端已读取 {receipt.tool_count} 个界鉴工具。最近活动不代表客户端持续在线。'
                         elif receipt.state == 'REQUEST_ACCEPTED':
                             message = '客户端已通过原连接调用界鉴工具。连接配置可复用；具体操作仍按当前应用授权处理。'
                         elif receipt.state == 'DISCONNECTED':
-                            message = '上次连接已经结束，请在客户端重载界鉴连接。'
+                            message = '客户端已结束上次连接，配置仍可复用。继续原客户端任务；若客户端未启动连接器，请在客户端启用或重载界鉴，无需重新配置。'
                         return self._view(client, receipt.state, message, code=receipt.code, tool_count=receipt.tool_count)
                 return self._view(client, 'AWAITING_CLIENT', self._waiting_message(client), open_url=trae_link(self._entry(client)) if client == 'trae' else None)
             except Exception:

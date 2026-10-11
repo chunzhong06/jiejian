@@ -103,8 +103,16 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   const [endpoints, setEndpoints] = useState<EndpointDiscoveryDto | null>(null)
   const [manualPath, setManualPath] = useState('')
   const [endpoint, setEndpoint] = useState('')
+  const [controlledEndpoint,setControlledEndpoint]=useState('')
   const [endpointConfirmed, setEndpointConfirmed] = useState(false)
   const [appRunningConfirmed, setAppRunningConfirmed] = useState(false)
+  const selectEndpoint=(next:string)=>{setEndpoint(next);setEndpointConfirmed(false);setAppRunningConfirmed(Boolean(next&&next===controlledEndpoint))}
+  const acceptRuntimeEndpoint=(next:string,running=false)=>{
+    setControlledEndpoint(running?next:'')
+    setAppRunningConfirmed(running)
+    if(running){setEndpoint(next);setEndpointConfirmed(false)}
+  }
+  useEffect(()=>{setControlledEndpoint('');setEndpointConfirmed(false);setAppRunningConfirmed(false)},[selected?.project_id])
   const [analysisAuthorized, setAnalysisAuthorized] = useState(false)
   const [manualRole, setManualRole] = useState('')
   const [manualAction, setManualAction] = useState('')
@@ -141,7 +149,7 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
     const result = await projectsApi.discoverEndpoints(projectId)
     if (!isCurrent()) return
     setEndpoints(result)
-    setEndpoint(result.default_endpoint ?? result.candidates.find((item) => item.reachable)?.endpoint ?? '')
+    selectEndpoint(result.default_endpoint ?? result.candidates.find((item) => item.reachable)?.endpoint ?? '')
   }
 
   useEffect(() => {
@@ -352,15 +360,16 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
       <Typography.Paragraph>界鉴只探测 127.0.0.1 的少量配置候选，不扫描任意端口。自动发现不等于授权。</Typography.Paragraph>
       <Collapse ghost items={[{key:'controlled-start',label:'应用尚未启动？查看受支持的启动方式',children:<ControlledRuntimePanel
         key={understanding.project_id} projectId={understanding.project_id} revision={understanding.revision}
-        sourceAuthorized={understanding.source_analysis_authorized} onChanged={()=>void refreshUnderstanding()} onEndpoint={setEndpoint}/>}]}/>
+        sourceAuthorized={understanding.source_analysis_authorized} onChanged={()=>void refreshUnderstanding()} onEndpoint={acceptRuntimeEndpoint}/>}]}/>
       {noReachableEndpoint && officialSampleStart}
-      <Radio.Group className="endpoint-list" value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
+      <Radio.Group className="endpoint-list" value={endpoint} onChange={(event) => selectEndpoint(event.target.value)}>
         <Space direction="vertical">
           {endpoints?.candidates.map((candidate) => <Radio key={candidate.endpoint} value={candidate.endpoint} disabled={!candidate.reachable}>{candidate.endpoint} · {candidate.source} · {candidate.reachable ? '已响应' : candidate.probe_detail}</Radio>)}
         </Space>
       </Radio.Group>
-      <Input aria-label="手工输入本地地址" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="没有候选时输入 http://127.0.0.1:端口" />
-      <Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经启动，并且是本次要检查的应用</Checkbox>
+      {endpoint&&<p>当前选择：{endpoint}</p>}
+      <Input aria-label="手工输入本地地址" value={endpoint} onChange={(event) => selectEndpoint(event.target.value)} placeholder="没有候选时输入 http://127.0.0.1:端口" />
+      {controlledEndpoint===endpoint&&Boolean(endpoint)?<p>界鉴已确认本应用正在此地址运行。请在下方确认访问授权。</p>:<Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经启动，并且是本次要检查的应用</Checkbox>}
       <Checkbox checked={endpointConfirmed} onChange={(event) => setEndpointConfirmed(event.target.checked)}>确认这是我的本地应用，并允许界鉴访问这个地址</Checkbox>
     </section>}
     {understanding && currentStep === 3 && <section className="application-step"><h2>分析权限组与关键业务动作</h2>

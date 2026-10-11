@@ -12,6 +12,15 @@ const props=()=>({project:{project_id:'p1'},onNavigate:vi.fn(),onError:vi.fn(),o
 const linked={project_id:'p1',delivery:{project_id:'p1',task_id:'t',context_id:'ctx',change_id:'chg_one',ordinal:1},context:{project_id:'p1',task_id:'t',context_id:'ctx',revision:1,permission_refs:[]},relative_change:change.change_set,cumulative_change:change.change_set,verification:{run_id:'exact',verdict:'PASS',runtime_status:'MATCHED',repair_status:null}}
 beforeEach(()=>{vi.clearAllMocks();sessionStorage.clear();api.list.mockResolvedValue([change]);api.show.mockResolvedValue(change);api.current.mockResolvedValue(null);api.details.mockResolvedValue(null);api.repair.mockResolvedValue({project_id:'p1',tasks:[],primary_task_reference:null});api.preview.mockResolvedValue({project_id:'p1',fingerprint:'a'.repeat(64),policy_epoch:1,permission_count:3});api.receipt.mockResolvedValue(null);api.register.mockImplementation((_id,body)=>Promise.resolve({project_id:'p1',operation_id:body.operation_id,change_id:'chg_one',task_id:'internal'}))})
 describe('修改与验证',()=>{
+ it('历史详情明确归属并提供返回记录入口，不展示当前材料或演练',async()=>{
+  const old={...change,manifest:{...change.manifest,change_id:'old',reason:'历史导出修改'},revalidation:{...change.revalidation,status:'SOURCE_STALE',can_execute:false}}
+  api.list.mockResolvedValue([change,old]);api.details.mockResolvedValue(null)
+  const p=props();render(<ChangesPage {...p} requestedChange="old" developmentJourney={<p>当前演练</p>}/>);
+  await screen.findByRole('heading',{name:'源码改动历史详情'});expect(screen.getByText(/正在查看已保存的历史批次/)).toBeInTheDocument()
+  expect(screen.getByRole('heading',{name:'登记时涉及的权限'})).toBeInTheDocument();expect(screen.getByText(/当前源码与该历史批次不同/)).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'核对本批材料'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'继续官方示例演练'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'返回修改记录'}));expect(await screen.findByRole('dialog',{name:'修改记录'})).toBeInTheDocument()
+ })
  it('无记录时从唯一登记入口进入，示例演练独立展开',async()=>{
   api.list.mockResolvedValue([])
   render(<ChangesPage {...props()} developmentJourney={<p>示例演练步骤</p>}/>)

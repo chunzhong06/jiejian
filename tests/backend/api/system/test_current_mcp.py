@@ -1,5 +1,6 @@
 # 通过官方 MCP SDK 验证当前精确工具集、项目临时权限、真实检查提交取消与源码声明登记。
 import anyio
+from copy import deepcopy
 import httpx2
 import pytest
 from mcp import MCPError
@@ -232,6 +233,11 @@ def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_p
                 headers={"Authorization":"Bearer "+token,"Origin":TEST_CONTROL_ORIGIN},follow_redirects=True) as http:
                 async with Client(streamable_http_client(TEST_CONTROL_ORIGIN+"/mcp",http_client=http,terminate_on_close=False)) as client:
                     assert {tool.name for tool in (await client.list_tools()).tools} == TOOLS
+                    assert access.view().connection_state.value == 'CONNECTED'
+                    for stage in ('RULES','MATERIALS'):
+                        collaboration = await client.call_tool('jiejian_agent_context',{'project_id':project,'stage':stage})
+                        assert not collaboration.is_error
+                        assert collaboration.structured_content['context_id'].startswith('awc_')
                     rule = app.state.context.business_boundaries.view(project).permission_intents[0]
                     preview = await client.call_tool("jiejian_rule_preview", {"project_id": project,
                         "reference": {"kind": "APPROVED", "rules": [{"intent_id": rule.intent_id, "revision": rule.revision}]},
@@ -249,6 +255,12 @@ def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_p
                     with pytest.raises(MCPError):
                         await client.call_tool('jiejian_preparation_suggestion_save',{'project_id':project,'suggestion':advice})
                     access.set_level(project,MCPAccessLevel.PREPARE)
+                    malformed = deepcopy(advice)
+                    malformed['operation_id'] = 'invalid operation'
+                    with pytest.raises(MCPError) as rejected:
+                        await client.call_tool('jiejian_preparation_suggestion_save',{'project_id':project,'suggestion':malformed})
+                    assert 'suggestion.operation_id' in str(rejected.value)
+                    assert 'invalid operation' not in str(rejected.value)
                     saved=await client.call_tool('jiejian_preparation_suggestion_save',{'project_id':project,'suggestion':advice})
                     assert not saved.is_error
                     access.set_level(project,MCPAccessLevel.READ)

@@ -177,13 +177,20 @@
 
 静态import / dot-source：`../../api/boundaries/ruleDetails`、`../../shared/format/time`、`../../shared/styles/proof-details.css`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleCoveragePreview`、`antd`、`react`
 
+### `product/frontend/src/features/boundaries/RuleMeaningReview.test.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/RuleMeaningReview.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`./RuleMeaningReview`、`@testing-library/react`、`vitest`
+
 ### `product/frontend/src/features/boundaries/RuleMeaningReview.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/boundaries/RuleMeaningReview.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 - `RuleMeaningReview`
 
-静态import / dot-source：`../../api/boundaries/ruleCandidates`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../shared/runtime/editGuard`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/RulePreparationProgress.tsx`
 

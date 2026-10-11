@@ -5,17 +5,53 @@ import { AgentAssistEntry, type AgentAssistContext } from './AgentAssistEntry'
 import type { MCPAccessView } from '../../api/system/mcp'
 import { WorkPageVisible } from '../runtime/visibility'
 
-const api = vi.hoisted(() => ({ status: vi.fn() }))
-vi.mock('../../api/system/mcp', () => ({ mcpAccessApi: api }))
+const api = vi.hoisted(() => ({ status: vi.fn(), connection: vi.fn() }))
+vi.mock('../../api/system/mcp', async () => ({ ...await vi.importActual('../../api/system/mcp'), mcpAccessApi: api, agentConnectionsApi: { status: api.connection } }))
 const access: MCPAccessView = { schema_version:'1',paired:true,accepting_connections:true,endpoint:'http://127.0.0.1:5000/mcp',default_level:'READ',project_grants:[{project_id:'app-a',level:'PREPARE'},{project_id:'app-b',level:'PREPARE'}],client_connected:true,client_name:'开发客户端',client_version:null,last_seen_at_us:1,connection_state:'CONNECTED',last_authenticated_at_us:1,last_auth_failure_at_us:null }
 const context: AgentAssistContext = {projectId:'app-a',revisionKey:'basis-1',requestText:'请读取当前规则，再保存候选。'}
 const clipboard = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks(); api.status.mockResolvedValue(access); clipboard.mockResolvedValue(undefined)
+  api.connection.mockResolvedValue({client:'codex',state:'NOT_CONFIGURED',code:'NONE'})
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:clipboard}})
 })
 const props = () => ({projectId:'app-a',contextKey:'rules',title:'整理权限要求',description:'候选需要人批准。',returnTo:'/permissions?candidate=one',loadContext:vi.fn().mockResolvedValue(context),onNavigate:vi.fn(),onRefresh:vi.fn().mockResolvedValue(undefined)})
 const open = () => fireEvent.click(screen.getByRole('button',{name:'Agent 协助'}))
+
+it('重启后配置已核验且授权足够时可交接，不冒充客户端在线',async()=>{
+  api.status.mockResolvedValue({...access,connection_state:'CREDENTIAL_READY',client_connected:false})
+  api.connection.mockImplementation(async(client:string)=>({client,state:client==='codex'?'AWAITING_CLIENT':'NOT_CONFIGURED',code:'NONE'}))
+  render(<AgentAssistEntry {...props()}/>);open()
+  await screen.findByText(/连接配置已核验/)
+  fireEvent.click(screen.getByRole('button',{name:'复制协助请求'}))
+  await waitFor(()=>expect(clipboard).toHaveBeenCalledWith(context.requestText))
+})
+
+it.each(['PAUSED','CREDENTIAL_REJECTED'])('状态 %s 仍阻止交接',async(connection_state)=>{
+  api.status.mockResolvedValue({...access,connection_state})
+  render(<AgentAssistEntry {...props()}/>);open();await screen.findByText('查看协助请求')
+  expect(screen.getByRole('button',{name:'复制协助请求'})).toBeDisabled()
+  expect(api.connection).not.toHaveBeenCalled()
+})
+
+it('配置可复用但重启后项目授权清空时仍需确认原范围',async()=>{
+  api.status.mockResolvedValue({...access,connection_state:'CREDENTIAL_READY',project_grants:[]})
+  api.connection.mockImplementation(async(client:string)=>({client,state:client==='codex'?'AWAITING_CLIENT':'NOT_CONFIGURED',code:'NONE'}))
+  const p=props();render(<AgentAssistEntry {...p}/>);open();await screen.findByText(/当前应用授权不足/)
+  expect(screen.getByRole('button',{name:'复制协助请求'})).toBeDisabled()
+  fireEvent.click(screen.getByRole('button',{name:'调整允许范围'}))
+  expect(p.onNavigate).toHaveBeenCalledWith('/tools?return_to=%2Fpermissions%3Fcandidate%3Done&source_project_id=app-a')
+})
+
+it('复制前配置已被改动时拒绝交接',async()=>{
+  api.status.mockResolvedValue({...access,connection_state:'CREDENTIAL_READY'})
+  api.connection.mockImplementation(async(client:string)=>({client,state:'AWAITING_CLIENT',code:'NONE'}))
+  render(<AgentAssistEntry {...props()}/>);open();await screen.findByText(/连接配置已核验/)
+  api.connection.mockImplementation(async(client:string)=>({client,state:'FAILED',code:'CONFIG_CHANGED'}))
+  fireEvent.click(screen.getByRole('button',{name:'复制协助请求'}))
+  await screen.findByText(/尚未确认可用的客户端配置/)
+  expect(clipboard).not.toHaveBeenCalled()
+})
 
 it('入口展开后读取内容，复制前再次核对，只报告复制完成',async()=>{
   const p=props();render(<AgentAssistEntry {...p}/>);expect(api.status).not.toHaveBeenCalled()
@@ -27,12 +63,12 @@ it('入口展开后读取内容，复制前再次核对，只报告复制完成'
   expect(screen.queryByText(/Agent 正在工作|已派单/)).not.toBeInTheDocument()
 })
 
-it('未连接时指向开发工具，并保留当前对象返回位置',async()=>{
+it('没有核验配置时禁止复制，并打开客户端选择',async()=>{
   api.status.mockResolvedValue({...access,connection_state:'CREDENTIAL_READY',client_connected:false})
   const p=props();render(<AgentAssistEntry {...p}/>);open();await screen.findByText('查看协助请求')
   expect(screen.getByRole('button',{name:'复制协助请求'})).toBeDisabled()
-  fireEvent.click(screen.getByRole('button',{name:'打开开发工具'}))
-  expect(p.onNavigate).toHaveBeenCalledWith('/tools?return_to=%2Fpermissions%3Fcandidate%3Done&source_project_id=app-a')
+  fireEvent.click(screen.getByRole('button',{name:'连接 Agent'}))
+  expect(await screen.findByText('你正在使用哪个客户端？')).toBeInTheDocument()
   expect(clipboard).not.toHaveBeenCalled()
 })
 

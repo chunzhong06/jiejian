@@ -71,7 +71,9 @@ def json_patch(text: str, entry: dict, *, zcode: bool = False, fallback: str = '
     if not isinstance(servers, dict):
         raise ConnectionProblem('CONFIG_FORMAT', 'MCP 服务列表格式无法识别，原配置已保留。')
     _owned(servers.get('jiejian', {}), entry)
-    servers['jiejian'] = entry | ({'enable': True} if zcode else {})
+    # ZCode 的连接池仍使用 ping；其 modern SDK 会在本地拒绝该方法，造成健康连接被反复重建。
+    # 使用客户端公开支持的 legacy 协商，保留完整工具定义和服务端授权校验。
+    servers['jiejian'] = entry | ({'enable': True, 'protocolVersion': 'legacy'} if zcode else {})
     return json.dumps(value, ensure_ascii=False, indent=2) + '\n'
 
 
@@ -126,8 +128,25 @@ def dsh_patch(text: str, entry: dict) -> str:
         if len(matches) > 1:
             raise ConnectionProblem('CONFIG_CONFLICT', 'DSH 有重复的界鉴插件条目，无法确定应启用哪一项。')
         # 用户 patch 中裸 id 只能更新已有插件；必须 insert 才能真正挂载首次添加的插件。
+        # 外部服务短暂不可达不应中止整个插件启动；真实连接错误仍由回执显示。
+        # 保留用户在界鉴条目中的其余配置，仅更新本产品拥有的连接字段。
+        existing = {}
+        if matches:
+            inserted = _field(matches[0], 'insert')
+            owned = inserted.value[0] if isinstance(inserted, yaml.SequenceNode) else matches[0]
+            config = _field(owned, 'config')
+            if config is not None:
+                if not isinstance(config, yaml.MappingNode):
+                    raise ValueError()
+                local = yaml.MappingNode(config.tag, [(key, value) for key, value in config.value if key.value not in ('url', 'headers')])
+                existing = yaml.safe_load(yaml.serialize(local))
+                if not isinstance(existing, dict):
+                    raise ValueError()
+        for key in ('url', 'headers'):
+            existing.pop(key, None)  # 旧 HTTP 的授权字段不能复制进新 stdio 配置。
         payload = [{'insert': [{'id': 'mcp-jiejian', 'name': '@deepseek-ai/dsh-mcp-client', 'config': {
-            'serverName': 'jiejian', 'transport': 'stdio', **entry, 'failOnStartupError': True}}]}]
+            **existing, 'serverName': 'jiejian', 'transport': 'stdio', **entry, 'failOnStartupError': False,
+            'reconnect': existing.get('reconnect', {'enabled': True, 'initialDelayMs': 500, 'maxDelayMs': 30000, 'maxAttempts': 10})}}]}]
         replacement = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False)
         if matches:
             row = matches[0]
@@ -147,6 +166,18 @@ def dsh_patch(text: str, entry: dict) -> str:
 def trae_link(entry: dict) -> str:
     config = base64.b64encode(json.dumps(entry, ensure_ascii=False).encode()).decode()
     return 'trae-cn://trae.ai-ide/mcp-import?type=stdio&name=jiejian&config=' + quote(config, safe='')
+
+
+def dsh_needs_startup_update(text: str) -> bool:
+    """只读判断已有条目的启动策略；查看状态不能偷偷改客户端配置。"""
+    root = yaml.compose(text, Loader=yaml.SafeLoader)
+    for row in root.value:
+        inserted = _field(row, 'insert')
+        for node in inserted.value if isinstance(inserted, yaml.SequenceNode) else [row]:
+            if _field(node, 'id') is not None and _field(node, 'id').value == 'mcp-jiejian':
+                policy = _field(_field(node, 'config'), 'failOnStartupError')
+                return policy is None or policy.tag != 'tag:yaml.org,2002:bool' or policy.value.lower() not in ('false', 'no', 'off')
+    return False
 
 
 def connection_matches(client: str, text: str, entry: dict) -> bool:

@@ -81,6 +81,6 @@
 - `ApplicationRuntimeSettings`
 - `ControlledRuntimePanel`
 
-静态import / dot-source：`../../api/applications/controlledRuntime`、`../../api/applications/projects`、`../../api/http`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./controlled-runtime.css`、`antd`、`react`
+静态import / dot-source：`../../api/applications/controlledRuntime`、`../../api/applications/projects`、`../../api/http`、`../../shared/runtime/useLiveRead`、`../../shared/ui/LoadingState`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./controlled-runtime.css`、`antd`、`react`
 
 <!-- GENERATED:END -->

@@ -222,7 +222,9 @@ class RuleCandidateService:
         if not content.permissions and not draft.permissions:
             issues.append({"code": "PERMISSION_REQUIRED", "message": "还没有权限要求，请说明谁可以或不可以对谁的资源执行这些动作"})
         if not content.permissions or not content.examples or permission_ids - mapped:
-            issues.append({"code": "NEEDS_CLARIFICATION", "message": "每条拟确认权限都需要具体情形说明"})
+            missing = [item.item_id for item in content.permissions if item.item_id not in mapped]
+            issues.append({"code": "PERMISSION_EXAMPLE_REQUIRED", "message": "权限例子不完整：每条拟确认权限（包括合法对照）都须在 examples 中有对应例子。请补齐例子，无需为此新增含义选项或删除权限。",
+                "path": "candidate.content.examples", "permission_item_ids": missing})
         for example in content.examples:
             if example.permission_item_id not in known_ids:
                 issues.append({"code": "EXAMPLE_NOT_COVERED", "message": example.uncovered_reason or "例子引用的权限不存在"})

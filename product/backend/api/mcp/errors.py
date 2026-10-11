@@ -19,7 +19,7 @@ _ACCESS_ERROR_CODES = {
 def _recovery_for(code: str) -> str:
     return {
         ErrorCode.MCP_DISABLED.value: "请在界鉴的“AI 工具连接”面板中启用连接后重试。",
-        ErrorCode.MCP_AUTH_REQUIRED.value: "请从当前界鉴进程复制新的 Bearer 令牌后重试。",
+        ErrorCode.MCP_AUTH_REQUIRED.value: "请在界鉴的连接与授权页核对连接是否暂停或失效，并按所选客户端指引恢复；无需复制凭据。",
         ErrorCode.MCP_PERMISSION_REQUIRED.value: "请在界鉴中为该应用明确提升临时权限后重试。",
         ErrorCode.INPUT_INVALID.value: "读取当前工具上下文，按字段提示修正输入；不改变原业务要求或绕过人工批准。",
     }.get(code, "请回到界鉴查看当前应用状态并按页面提示恢复。")
@@ -55,7 +55,7 @@ def require_mcp_level(
     except JiejianError as exc:
         raise _as_mcp_error(exc) from None
 
-def _validation_issues(exc: ValidationError, model: type[BaseModel]) -> list[dict]:
+def _validation_issues(exc: ValidationError, model: type[BaseModel], root: str = 'candidate') -> list[dict]:
     """只返回Schema声明的字段名、有限索引与固定说明；动态键和异常正文均不透出。"""
     allowed: set[str] = set()
 
@@ -91,7 +91,7 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel]) -> list[dic
         # 子项被拒引起的列表长度错误不重复展示，避免误导Agent添加无意义条目。
         if error["type"] == "too_short" and any(len(e["loc"]) > len(location) and e["loc"][:len(location)] == location for e in errors):
             continue
-        path = "candidate"
+        path = root
         for part in location[:16]:
             path += f"[{part}]" if type(part) is int and 0 <= part < 10000 else "." + (part if isinstance(part, str) and part in allowed else "<field>")
         code = error["type"] if error["type"] in explanations else "invalid_value"
@@ -124,7 +124,7 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel]) -> list[dic
     return issues
 
 
-def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None = None) -> _T:
+def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None = None, input_root: str = 'candidate') -> _T:
     try:
         return operation()
     except JiejianError as exc:
@@ -132,8 +132,8 @@ def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None 
     except ValidationError as exc:
         # 候选中的原文和技术输入不进入SDK异常正文或日志。
         if input_model is not None:
-            issues = _validation_issues(exc, input_model)
+            issues = _validation_issues(exc, input_model, input_root)
             summary = "；".join(f"{item['path']}：{item['message']}" for item in issues[:3])
             raise _as_mcp_error(JiejianError(ErrorCode.INPUT_INVALID, "工具输入不符合公开合同：" + summary,
-                details={"issues": issues, "recovery": "读取当前规则上下文，按字段提示修正候选后重新提交；不要修改业务含义来绕过校验"})) from None
+                details={"issues": issues, "recovery": "读取当前工具上下文，按字段提示修正输入；不要修改业务含义来绕过校验"})) from None
         raise _as_mcp_error(JiejianError(ErrorCode.INPUT_INVALID, "工具输入不符合公开合同，请读取上下文中的输入格式")) from None

@@ -118,6 +118,9 @@
 /* 独立操作栏内的短按钮组居中，按钮之间仍保留主次顺序。 */
 [data-product=jiejian] .task-focus-layout .task-focus-actions { align-self:center; justify-content:center; margin:0; }
 [data-product=jiejian] .task-focus-layout p:last-child { margin-bottom:0; }
+/* 简短准备摘要的动作贴右；完整检查范围继续使用原来的主辅布局。 */
+.check-preparation-summary .task-focus-layout { grid-template-columns:minmax(0,1fr) auto; }
+[data-product=jiejian] .check-preparation-summary .task-focus-actions { justify-content:flex-end; }
 .check-footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--space-16) var(--space-24); padding-top:var(--space-20); border-top:1px solid var(--color-border); }
 .check-related-actions { display:flex; flex-wrap:wrap; gap:var(--space-12) var(--space-24); }
 .check-footer .task-action-bar { margin:0 0 0 auto; padding:0; border:0; }
@@ -130,6 +133,7 @@
 }
 @media(max-width:760px) {
   .task-focus-layout { grid-template-columns:minmax(0,1fr); }
+  .check-preparation-summary .task-focus-layout { grid-template-columns:minmax(0,1fr); }
   [data-product=jiejian] .task-focus-layout .task-focus-actions { margin-top:var(--space-16); }
 }
 

@@ -36,7 +36,7 @@ export const agentClients = [
 export type AgentClient = typeof agentClients[number]['key']
 export type AgentConnection = {
   client: AgentClient; label: string
-  state: 'NOT_CONFIGURED'|'AWAITING_CLIENT'|'STARTED'|'TOOLS_READ'|'REQUEST_ACCEPTED'|'DISCONNECTED'|'FAILED'
+  state: 'NOT_CONFIGURED'|'AWAITING_CLIENT'|'STARTED'|'CONNECTED'|'TOOLS_READ'|'REQUEST_ACCEPTED'|'DISCONNECTED'|'FAILED'
   message: string; code: string; tool_count: number; profiles: string[]; open_url: string|null; config_path?: string
 }
 export const agentConnectionsApi = {

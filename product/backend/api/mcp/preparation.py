@@ -44,7 +44,8 @@ def register_preparation_tools(server, context, access, *, require_level, invoke
         """保存五类材料的有限建议，不创建账号、执行代码、采用材料或宣称准备完成。"""
         require_level(access,ctx,MCPAccessLevel.PREPARE,project_id=project_id)
         return public_preparation(invoke(lambda:context.preparation_suggestions.save(project_id,
-            SavePreparationSuggestion.model_validate_json(json.dumps(suggestion,allow_nan=False)),submitted_via='MCP')))
+            SavePreparationSuggestion.model_validate_json(json.dumps(suggestion,allow_nan=False)),submitted_via='MCP'),
+            input_model=SavePreparationSuggestion,input_root='suggestion'))
 
     @server.tool(name='jiejian_preparation_suggestion_show',structured_output=True)
     def suggestion_show(ctx:Context,project_id:str,suggestion_id:str,revision:int|None=None)->dict[str,Any]:

@@ -32,7 +32,7 @@
 
 - `MCPAccessCard`
 
-静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/runtime/useLiveRead`、`../../shared/ui/AgentConnectionDialog`、`../../shared/ui/Editorial`、`./connections.css`、`antd`、`react`
+静态import / dot-source：`../../api/http`、`../../api/system/mcp`、`../../shared/runtime/agentConnectionState`、`../../shared/runtime/useLiveRead`、`../../shared/ui/AgentConnectionDialog`、`../../shared/ui/Editorial`、`./connections.css`、`antd`、`react`
 
 ### `product/frontend/src/features/tools/ToolsPage.test.tsx`
 
@@ -47,6 +47,6 @@
 
 - `ToolsPage`
 
-静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/ui/Editorial`、`./MCPAccessCard`、`antd`
+静态import / dot-source：`../../api/applications/projects`、`../../api/http`、`../../api/system/mcp`、`../../shared/runtime/useLiveRead`、`../../shared/ui/Editorial`、`./MCPAccessCard`、`antd`、`react`
 
 <!-- GENERATED:END -->
