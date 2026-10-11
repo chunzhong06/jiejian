@@ -79,14 +79,14 @@
 
 - `useMaterialSuggestions`
 
-静态import / dot-source：`../../../api/preparation/preparationGuidance`、`../../../api/preparation/preparationSuggestions`、`../../../api/preparation/proofSources`、`../../../shared/runtime/useLiveRead`、`react`
+静态import / dot-source：`../../../api/http`、`../../../api/preparation/preparationGuidance`、`../../../api/preparation/preparationSuggestions`、`../../../api/preparation/proofSources`、`../../../shared/runtime/useLiveRead`、`react`
 
 ### `product/frontend/src/features/preparation/PreparationPage.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/preparation/PreparationPage.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
 
-静态import / dot-source：`../../api/preparation/preparation`、`../../api/preparation/preparationSuggestions`、`../../api/workspace`、`./PreparationPage`、`@testing-library/react`、`vitest`
+静态import / dot-source：`../../api/http`、`../../api/preparation/preparation`、`../../api/preparation/preparationSuggestions`、`../../api/workspace`、`./PreparationPage`、`@testing-library/react`、`vitest`
 
 ### `product/frontend/src/features/preparation/PreparationPage.tsx`
 

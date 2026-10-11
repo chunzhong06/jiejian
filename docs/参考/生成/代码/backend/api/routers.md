@@ -70,6 +70,7 @@
 - `class RuleCandidateSaveRequest`
 - `RuleCandidateSaveRequest.to_command(self) -> RuleCandidateSave`
 - `class RuleCandidateProposalRequest`
+- `class BoundaryReviewRequest`
 - `class RuleCandidateVisibilityRequest`
 - `class RulePreviewRequest`
 - `RulePreviewRequest.to_command(self)`
@@ -77,7 +78,7 @@
 - `BoundaryMaintenanceCreateRequest.to_command(self) -> BoundaryMaintenanceCommand`
 - `build_business_boundaries_router(context) -> APIRouter`
 
-静态import / dot-source：`__future__`、`fastapi`、`fastapi.encoders`、`json`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.proposals`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.boundaries.rule_preview`、`product.backend.workflows.business_boundaries`、`pydantic`、`typing`
+静态import / dot-source：`__future__`、`fastapi`、`fastapi.encoders`、`json`、`product.backend.api.envelope`、`product.backend.composition`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.proposals`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.boundaries.rule_preview`、`product.backend.workflows.business_boundaries`、`pydantic`、`typing`
 
 ### `product/backend/api/routers/changes/__init__.py`
 

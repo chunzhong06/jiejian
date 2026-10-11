@@ -35,6 +35,6 @@ def test_legacy_reader_does_not_accept_new_fields_or_unknown_versions():
     assert read_candidate_revision(json.dumps(root)).schema_version=='1'
     root['content']['scenarios']=[]
     with pytest.raises(ValidationError):read_candidate_revision(json.dumps(root))
-    root['schema_version']='3'
+    root['schema_version']='999'
     with pytest.raises(ValidationError):read_candidate_revision(json.dumps(root))
     with pytest.raises(ValueError):read_candidate_revision(' '*1048577)

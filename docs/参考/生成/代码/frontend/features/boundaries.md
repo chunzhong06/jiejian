@@ -14,6 +14,21 @@
 [打开源码](../../../../../../product/frontend/src/features/boundaries/boundary.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
 
 
+### `product/frontend/src/features/boundaries/BoundaryReview.test.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/BoundaryReview.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`./BoundaryReview`、`@testing-library/react`、`vitest`
+
+### `product/frontend/src/features/boundaries/BoundaryReview.tsx`
+
+[打开源码](../../../../../../product/frontend/src/features/boundaries/BoundaryReview.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `BoundaryReview`
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../shared/runtime/editGuard`、`antd`、`react`
+
 ### `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx`
 
 [打开源码](../../../../../../product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
@@ -145,7 +160,7 @@
 
 - `RuleCandidatesPanel`
 
-静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentAssistEntry`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./RuleCandidateList`、`./RuleMeaningReview`、`./RulePreparationProgress`、`./rule-candidates.css`、`antd`、`react`
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`../../api/http`、`../../shared/runtime/editGuard`、`../../shared/ui/AgentAssistEntry`、`../../shared/ui/StatusBadge`、`../../shared/ui/TaskActionBar`、`./BoundaryReview`、`./RuleCandidateList`、`./RuleMeaningReview`、`./RulePreparationProgress`、`./rule-candidates.css`、`antd`、`react`
 
 ### `product/frontend/src/features/boundaries/RuleCoveragePreview.test.tsx`
 

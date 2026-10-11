@@ -97,6 +97,9 @@
 
 [打开源码](../../../../../product/frontend/src/api/boundaries/ruleCandidates.ts) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
 
+- `BoundaryChoice`
+- `BoundaryReview`
+- `BoundaryReviewGap`
 - `MeaningChoice`
 - `RuleCandidateContext`
 - `RuleCandidateView`
@@ -200,7 +203,7 @@
 - `StoryTraceEvent`
 - `currentChecksApi`
 
-静态import / dot-source：`../http`、`./repairs`
+静态import / dot-source：`../boundaries/ruleCandidates`、`../http`、`./repairs`
 
 ### `product/frontend/src/api/checks/repairs.ts`
 

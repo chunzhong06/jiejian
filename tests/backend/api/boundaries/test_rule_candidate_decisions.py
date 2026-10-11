@@ -5,42 +5,7 @@ from uuid import uuid4
 import pytest
 
 from tests.fixtures.control_plane import TestClient, create_app
-from tests.backend.api.boundaries._support_rule_candidates import _content, _project, _save
-
-
-def scenario_content():
-    content = _content()
-    content['original_text'] = '负责人可以发布自己的资料，评审的发布权限需要确认。'
-    actor = deepcopy(content['actors'][0])
-    actor.update(item_id='pactr_2222222222222222', display_name='评审')
-    content['actors'].append(actor)
-    rule = deepcopy(content['permissions'][0])
-    rule.update(item_id='pperm_2222222222222222', subject_actor_item_id=actor['item_id'], relation='OTHER_ROLE', expectation='DENY')
-    content['permissions'].append(rule)
-    content['examples'].append({'description': '评审发布负责人的资料', 'permission_item_id': rule['item_id']})
-    allowed = {**rule, 'expectation': 'ALLOW'}
-    content['scenarios'] = [{'scenario_id': 'rsc_1111111111111111', 'original_excerpt': '评审的发布权限需要确认',
-        'question': '评审能否发布负责人的资料？', 'options': [
-            {'option_id': 'rop_1111111111111111', 'label': '允许发布', 'explanation': '评审可以发布这份资料。', 'replacements': [allowed]},
-            {'option_id': 'rop_2222222222222222', 'label': '禁止发布', 'explanation': '评审不能发布这份资料。', 'replacements': [rule]}]}]
-    return content
-
-
-def decide(client, prefix, saved, action='SELECT', option='rop_2222222222222222', scenario_index=0, **extra):
-    candidate = saved['candidate']; scenario = candidate['content']['scenarios'][scenario_index]
-    command = {'operation_id': uuid4().hex, 'expected_basis_id': candidate['basis_id'], 'expected_revision': candidate['revision'],
-        'scenario_id': scenario['scenario_id'], 'scenario_fingerprint': scenario['scenario_fingerprint'], 'action': action, **extra}
-    if action == 'SELECT':
-        command['option_id'] = option
-    response = client.post(f"{prefix}/rule-candidates/{candidate['candidate_id']}/decisions", json=command)
-    assert response.status_code == 201, response.text
-    return command, response.json()['data']
-
-
-def propose(client, prefix, saved):
-    candidate = saved['candidate']
-    return client.post(f"{prefix}/rule-candidates/{candidate['candidate_id']}/proposals",
-        json={'operation_id': uuid4().hex, 'revision': candidate['revision']})
+from tests.backend.api.boundaries._support_rule_candidates import _content, _project, _save, scenario_content, decide, propose
 
 
 def test_choice_proposal_and_formal_rule_keep_exact_provenance(tmp_path):

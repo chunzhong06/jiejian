@@ -20,6 +20,21 @@
 
 静态import / dot-source：`__future__`、`enum`、`pydantic`
 
+### `product/backend/core/boundaries/candidate_reviews.py`
+
+[打开源码](../../../../../../product/backend/core/boundaries/candidate_reviews.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `RESOLVED_OUTCOMES`
+- `class BoundaryReviewCommand`
+- `BoundaryReviewCommand.require_rules(self)`
+- `BoundaryReviewCommand.nonblank(cls, value)`
+- `class BoundaryReviewRecord`
+- `BoundaryReviewRecord.successor(self)`
+- `boundary_review_items(value)`
+- `class BoundaryReviewGap`
+
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`pydantic`、`typing`
+
 ### `product/backend/core/boundaries/candidate_scenarios.py`
 
 [打开源码](../../../../../../product/backend/core/boundaries/candidate_scenarios.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -172,12 +187,14 @@
 - `class RuleCandidateRevision`
 - `RuleCandidateRevision.bounded_root(self)`
 - `freeze_candidate_content(value) -> RuleCandidateContent`
+- `class ReviewedRuleCandidateRevision`
+- `ReviewedRuleCandidateRevision.review_identity(self)`
 - `read_candidate_revision(payload)`
 - `rule_candidate_revision_schema()`
 - `class RuleCandidateSave`
 - `RuleCandidateSave.paired_revision(self) -> RuleCandidateSave`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`
 
 ### `product/backend/core/boundaries/rule_preview.py`
 

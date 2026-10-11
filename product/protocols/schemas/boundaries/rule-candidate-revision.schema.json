@@ -1,5 +1,122 @@
 {
   "$defs": {
+    "BoundaryReviewRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "decision_id": {
+          "pattern": "^brd_[0-9a-f]{32}$",
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "expected_basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Expected Basis Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "issue_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Issue Fingerprint",
+          "type": "string"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "NOT_SEPARATE_ACTION",
+            "AGENT_OVERINTERPRETATION",
+            "REPRESENTED_BY_RULES",
+            "BUSINESS_RULE",
+            "PREPARATION_DEPENDENCY",
+            "EVIDENCE_GAP",
+            "COVERAGE_GAP",
+            "DEFER"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        },
+        "permission_item_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Permission Item Ids",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "retained_requirement": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Retained Requirement",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "unresolved_questions",
+            "unsupported_constraints"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "submitted_via": {
+          "const": "LOCAL_GUI",
+          "default": "LOCAL_GUI",
+          "title": "Submitted Via",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "expected_basis_id",
+        "expected_revision",
+        "issue_id",
+        "issue_fingerprint",
+        "outcome",
+        "reason",
+        "retained_requirement",
+        "decision_id",
+        "source",
+        "text",
+        "output_revision",
+        "created_at_us"
+      ],
+      "title": "BoundaryReviewRecord",
+      "type": "object"
+    },
     "BusinessActionOperationKind": {
       "enum": [
         "READ",
@@ -560,6 +677,74 @@
       "title": "ProposedPermissionItem",
       "type": "object"
     },
+    "ReviewedRuleCandidateRevision": {
+      "additionalProperties": false,
+      "description": "只有人的边界核对升级为v3；旧候选按原版本读，Agent不能提交这些决定。",
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "boundary_reviews": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BoundaryReviewRecord"
+          },
+          "maxItems": 20,
+          "title": "Boundary Reviews",
+          "type": "array"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/RuleCandidateContent"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "ReviewedRuleCandidateRevision",
+      "type": "object"
+    },
     "RuleCandidateContent": {
       "additionalProperties": false,
       "properties": {
@@ -841,7 +1026,8 @@
   "discriminator": {
     "mapping": {
       "1": "#/$defs/LegacyRuleCandidateRevision",
-      "2": "#/$defs/RuleCandidateRevision"
+      "2": "#/$defs/RuleCandidateRevision",
+      "3": "#/$defs/ReviewedRuleCandidateRevision"
     },
     "propertyName": "schema_version"
   },
@@ -851,6 +1037,9 @@
     },
     {
       "$ref": "#/$defs/RuleCandidateRevision"
+    },
+    {
+      "$ref": "#/$defs/ReviewedRuleCandidateRevision"
     }
   ]
 }

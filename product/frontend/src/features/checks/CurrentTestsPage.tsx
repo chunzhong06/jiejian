@@ -203,11 +203,12 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   }} />
   const running = runs.find(active)
   const selectedMode = Boolean(selected)
+  const needsBoundary = Boolean(preview?.boundary_review_gaps?.length) || Boolean(props.workspace && props.workspace.actions.every(action=>action.current_permissions.length===0))
   const headline = selectedMode ? (completionPending ? '本轮检查已完成' : story?.judgement) ?? (runFailed || pollPaused && !story ? '暂时无法读取本次检查' : status?.result_integrity === 'INVALID' ? '结果完整性校验失败，不能展示安全结论' : status ? lifecycleLabel(status.run.lifecycle) : '正在读取检查记录')
-    : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : '请先补齐本次检查所需材料'
+    : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : needsBoundary ? '请先核对权限要求与未覆盖范围' : '请先补齐本次检查所需材料'
   const primaryAction = selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
     : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
-    : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
+    : needsBoundary ? { label:'核对权限要求',disabled:loading || busy,onClick:()=>onNavigate('/permissions?view=candidates') } : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
   return <EditorialPage label="权限验证工作区" width={!story ? 'summary' : undefined}>
     {selectedMode && !(story && !completionPending) && <div className="result-return"><Button type="link" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>← 返回检查记录</Button></div>}
     {selectedMode && story && !completionPending ? <>
@@ -229,6 +230,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     {selectedMode && workspaceSyncFailed && <p role="status">检查记录已读取，工作台状态暂未同步。<Button onClick={() => void syncWorkspace(`retry:${selected}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
     {!selectedMode && loading && <LoadingState>正在读取检查状态…</LoadingState>}
     {!selectedMode && readFailed && <Alert className="flow-feedback" type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
+    {!selectedMode && !!preview?.boundary_review_gaps?.length && <Alert type="warning" showIcon message="完整检查尚有未覆盖要求" description={<><p>下列问题仍需处理。本轮不会执行部分检查或生成完整通过结论。</p><ul>{preview.boundary_review_gaps.map(gap=><li key={`${gap.candidate_id}:${gap.issue_id}`}>{gap.message} <Button type="link" onClick={()=>onNavigate(gap.review_url.replace(/^#/,''))}>返回这条要求</Button></li>)}</ul></>}/>}
     {!selectedMode && submissionUncertain && <Alert className="flow-feedback" type="warning" showIcon message="检查请求已发出，但尚未收到确认。请先读取检查记录；再次确认会使用同一次请求。" />}
     {selectedMode && pollPaused && <Alert className="flow-feedback" type="info" showIcon message={status?.result_integrity === 'VALID' && !story ? '检查已完成，但结果暂时无法读取，正在自动重试。不会重新执行检查。' : '暂时无法获取最新进度，正在自动重试。保留上次读取的状态。'} />}
     {selectedMode && !story && status && !active(status) && status.result_integrity === 'NOT_PUBLISHED' && <Alert className="flow-feedback" type="info" showIcon message="本次没有发布可用安全结论。执行停止或失败不代表发现权限问题。" />}

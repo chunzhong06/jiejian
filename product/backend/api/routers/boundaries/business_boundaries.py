@@ -15,6 +15,7 @@ from product.backend.composition import ApplicationCore
 from product.backend.core.boundaries.proposals import ProposedActionItem, ProposedActorItem, ProposedPermissionItem
 from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide
+from product.backend.core.boundaries.candidate_reviews import BoundaryReviewCommand
 from product.backend.core.boundaries.rule_preview import RulePreviewCommand
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
@@ -84,6 +85,10 @@ class RuleCandidateSaveRequest(ApiModel):
 class RuleCandidateProposalRequest(ApiModel):
     operation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     revision: int = Field(ge=1)
+
+
+class BoundaryReviewRequest(BoundaryReviewCommand):
+    permission_item_ids: list[str] = Field(default_factory=list, max_length=10)
 
 
 class RuleCandidateVisibilityRequest(ApiModel):
@@ -177,6 +182,11 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     @router.get(f"{prefix}/rule-operations/{{kind}}/{{operation_id}}", response_model=ApiResponse)
     def rule_operation(project_id: str, kind: Literal["SAVE", "PROPOSE", "DECIDE"], operation_id: str):
         return data_response(jsonable_encoder(context.rule_candidates.operation(project_id, kind, operation_id)))
+
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/boundary-decisions", response_model=ApiResponse, status_code=201)
+    def decide_boundary_question(project_id: str, candidate_id: str, body: BoundaryReviewRequest):
+        command = BoundaryReviewCommand.model_validate_json(body.model_dump_json())
+        return data_response(jsonable_encoder(context.rule_candidates.review_boundary(project_id, candidate_id, command)), status_code=201)
 
     @router.get(prefix, response_model=ApiResponse)
     def get_boundary(project_id: str):

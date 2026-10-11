@@ -17,6 +17,8 @@ function Get-ProjectSyncInputs {
     return @(
         (Join-Path $script:ProjectRoot "pyproject.toml")
         (Join-Path $script:ProjectRoot "uv.lock")
+        # 版本变更也要刷新editable的dist-info，避免源码版本与安装元数据长期不同步。
+        (Join-Path $script:ProjectRoot "product\backend\__init__.py")
     )
 }
 

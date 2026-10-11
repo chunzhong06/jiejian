@@ -49,6 +49,18 @@
 .rule-candidate-notice { padding:var(--space-16);background:var(--color-primary-light);border-radius:var(--radius-small); }
 .rule-revision-next { margin-block:var(--space-24);padding-block:var(--space-16);border-block:1px solid var(--color-border);overflow-wrap:anywhere; }
 .rule-revision-next h3 { margin-block:0 var(--space-12); }
+.boundary-review { margin-block:var(--space-24); }
+.boundary-review-question { border-top:1px solid var(--color-border);padding-block:var(--space-20);overflow-wrap:anywhere; }
+.boundary-review-heading { display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-16);flex-wrap:wrap; }
+.boundary-review-heading h3 { margin:0;flex:1 1 60%; }
+.boundary-review-heading span { color:var(--color-secondary); }
+.boundary-review-decision { border-inline-start:3px solid var(--color-primary);padding-inline:var(--space-16); }
+.boundary-review-question details > label { display:block;margin-block:var(--space-16) var(--space-8); }
+/* 展开动效使用overflow:clip；为2px焦点线和3px外偏移留出绘制空间，不改变正文宽度。 */
+.boundary-review-question details::details-content { overflow-clip-margin:6px; }
+.boundary-review-question .ant-select { width:100%;min-width:0; }
+.boundary-review-question summary { cursor:pointer;color:var(--color-primary-ink); }
+.boundary-review-actions { display:flex;justify-content:flex-end;margin-block-start:var(--space-16); }
 .rule-revision-next p { margin-block:var(--space-12) 0; }
 @media(max-width:600px){.rule-candidate-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-candidates-inbox > .rule-candidate-row{grid-template-columns:minmax(0,1fr)}.rule-candidates-inbox > .rule-candidate-row > .ant-btn{justify-self:end}.rule-candidate-summary-heading{flex-wrap:wrap}}
 .rule-meaning{margin-block:var(--space-24);padding-block:var(--space-16);border-block:1px solid var(--color-border)}

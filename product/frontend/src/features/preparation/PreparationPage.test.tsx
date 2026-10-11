@@ -5,6 +5,7 @@ import type { PreparationView } from '../../api/preparation/preparation'
 import type { PreparationSuggestionView, SuggestedMaterial } from '../../api/preparation/preparationSuggestions'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
+import { ApiError } from '../../api/http'
 const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), guidance: vi.fn(), suggestion: vi.fn(), batchPreview: vi.fn(), batchStart: vi.fn(), batchLatest: vi.fn(), batchStatus: vi.fn() }))
 // 示例准备已转为后台批次；模拟真实计划与回执，不再调用旧的浏览器编排回调。
 vi.mock('../../api/preparation/batches',()=>({preparationBatchesApi:{preview:api.batchPreview,start:api.batchStart,latest:api.batchLatest,status:api.batchStatus}}))
@@ -104,6 +105,13 @@ describe('五类材料建议续接', () => {
     render(<PreparationPage {...props()} requestedMaterialKind="identity"/>)
     await screen.findByText(/材料建议暂时无法读取/)
     expect(screen.queryByText('准备能发布资料的负责人测试账号')).not.toBeInTheDocument()
+    expect(screen.getByRole('table',{name:'检查材料清单'})).toBeInTheDocument()
+  })
+  it('材料建议接口失败保留脱敏原因和记录编号，不推断为空规则导致',async()=>{
+    api.guidance.mockRejectedValue(new ApiError('SERVICE_UNAVAILABLE','服务暂不可用','trace-fixture'))
+    render(<PreparationPage {...props()} requestedMaterialKind="identity"/>)
+    expect(await screen.findByText(/原因：服务暂不可用（SERVICE_UNAVAILABLE）/)).toBeInTheDocument()
+    expect(screen.getByText(/记录编号 trace-fixture/)).toBeInTheDocument()
     expect(screen.getByRole('table',{name:'检查材料清单'})).toBeInTheDocument()
   })
   it('精确修订与准备上下文来自不同依据时隐藏当前源码定位', async () => {

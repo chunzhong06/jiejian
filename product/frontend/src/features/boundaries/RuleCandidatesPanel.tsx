@@ -1,13 +1,14 @@
 // 规则候选按原文和具体情形审阅；未知写回执只查询，陈旧响应不得跨项目覆盖。
 import { Alert, Button, Segmented, Spin } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ruleCandidatesApi, type MeaningChoice, type RuleCandidateContext, type RuleCandidateView } from '../../api/boundaries/ruleCandidates'
+import { ruleCandidatesApi, type MeaningChoice, type BoundaryChoice, type RuleCandidateContext, type RuleCandidateView } from '../../api/boundaries/ruleCandidates'
 import type { ApiError } from '../../api/http'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { AgentAssistEntry } from '../../shared/ui/AgentAssistEntry'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { RuleMeaningReview } from './RuleMeaningReview'
+import { BoundaryReview } from './BoundaryReview'
 import { RulePreparationProgress } from './RulePreparationProgress'
 import { RuleCandidateList } from './RuleCandidateList'
 import './rule-candidates.css'
@@ -155,13 +156,15 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     finally { inFlight.current = false; if (generation === current.current) setBusy(false) }
   }
 
-  const saveMeaning = async (choice: MeaningChoice) => {
+  const saveMeaning = async (choice: MeaningChoice | BoundaryChoice) => {
     if (!selected || inFlight.current || operation) return
     const generation = current.current, key = crypto.randomUUID().replaceAll('-', ''), recovery = `DECIDE:${key}`
     inFlight.current = true; setBusy(true); setError(undefined); setOperation(recovery)
     onRecoveryChange?.(selected.candidate.candidate_id, selected.candidate.revision, recovery)
     try {
-      const value = await ruleCandidatesApi.decide(projectId, selected.candidate.candidate_id, selected.candidate.revision, selected.candidate.basis_id, key, choice)
+      const value = 'issue_id' in choice
+        ? await ruleCandidatesApi.reviewBoundary(projectId, selected.candidate.candidate_id, selected.candidate.revision, selected.candidate.basis_id, key, choice)
+        : await ruleCandidatesApi.decide(projectId, selected.candidate.candidate_id, selected.candidate.revision, selected.candidate.basis_id, key, choice)
       if (generation !== current.current) return
       setSelected(value); setOperation(undefined)
       onRecoveryChange?.(value.candidate.candidate_id, value.candidate.revision, null)
@@ -207,6 +210,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     {heading(null)}
     <div className="rule-candidates-list-heading"><div className="rule-candidates-title"><h2>规则候选{!error && !!context?.candidates.length && <span> · 本页 {context.candidates.length} 条</span>}</h2><p>{error ? '读取后核对尚未批准的约定。' : archived ? '已归档候选保留原文、修订和决定，可在详情中恢复。' : context?.candidates.length ? '各条候选分别显示审阅状态；批准后才会更新正式权限。' : '先点击“Agent 协助”，将业务要求交给原开发 Agent；它保存候选后，再点击“读取候选”。最后由你核对并批准，规则才会生效。'}</p></div></div>
     {error && <Alert type="warning" message={error} />}
+    {!!context?.boundary_review_gaps?.length && <Alert type="warning" message="还有已进入人工核对的要求未处理，归档后仍会保留" description={<ul>{context.boundary_review_gaps.map(gap=><li key={`${gap.candidate_id}:${gap.issue_id}`}><button type="button" onClick={()=>void select(gap.candidate_id,gap.revision)}>{gap.message}</button></li>)}</ul>}/>}
     <Segmented aria-label="候选归档范围" value={archived ? 'ARCHIVED' : 'ACTIVE'} options={[{label:'当前候选',value:'ACTIVE'},{label:'已归档',value:'ARCHIVED'}]} onChange={value => {setArchived(value==='ARCHIVED'); setNotice(undefined)}}/>
     {archived && !context?.candidates.length && <p>暂无已归档候选。归档只收起候选，原始记录会保留。</p>}
     <RuleCandidateList candidates={context?.candidates ?? []} archived={archived} onSelect={(id, revision) => void select(id, revision)}/>
@@ -218,7 +222,8 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   const isArchived = selected.visibility?.archived ?? false
   const leave = () => {setSelected(undefined); setNotice(undefined); setEpoch(value=>value+1); onExit?.()}
   const permissions = new Map(content.permissions.map(item => [item.item_id, item]))
-  const pendingQuestions = content.unresolved_questions.filter(question => !content.scenarios?.some(scene => scene.question === question))
+  const pendingQuestions = content.unresolved_questions.filter(question => !content.scenarios?.some(scene => scene.question === question) && !selected.boundary_reviews?.some(item=>item.text===question))
+  const needsBoundary = selected.boundary_reviews?.some(item=>item.blocking)
   const needsMeaning = content.scenarios?.some(scene => !['SELECT','DISMISS','CORRECT'].includes(selected.scenario_decisions?.find(state => state.scenario_id === scene.scenario_id)?.status ?? 'NEEDS_DECISION'))
   return <section className="rule-candidates work-surface" aria-label="审阅对话规则">
     {heading(<div className="rule-candidates-title"><h2>{isArchived ? '查看已归档候选' : selected.decision ? '查看当时的业务约定' : confirmed ? '沿用已有业务约定' : '确认这条业务约定'}</h2><StatusBadge kind="rule">{isArchived ? '已归档' : confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div>)}
@@ -227,11 +232,12 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     {isArchived && <Alert type="info" message="这条候选已归档，恢复后可以继续整理。原修订与决定记录保留。"/>}
     {notice && <p role="status" className="rule-candidate-notice">{notice}</p>}
     {!isArchived && !selected.decision && selected.assessment==='NEEDS_CHANGES' && <section className="rule-revision-next" aria-label="候选修订下一步">
-      <h3>{pendingQuestions.length ? `还有 ${pendingQuestions.length} 条问题等待 Agent 整理` : needsMeaning ? '请在下方核对含义' : '请先补充候选'}</h3>
-      <p>{pendingQuestions.length ? '这些问题还没有形成可供你核对的情境。点击“复制补充请求”交给原 Agent；它保存新修订后，点击“读取候选”。' : needsMeaning ? '逐处选择、说明实际要求或标记暂不确定，并保存。需要 Agent 修改时，点击“复制补充请求”；它保存后再读取候选。' : '点击“复制补充请求”，让原 Agent 按下方问题或你的纠正补充；保存新修订后，点击“读取候选”。已经保存的选择无需重复确认。'}</p>
-      <p className="editorial-muted">情境保存后会出现“含义核对”；问题处理完成后，才能继续审阅完整变更。已有明确要求与取证缺口分别保留，保存选择不会自动补齐证据或批准权限。</p>
+      <h3>{needsBoundary ? '请先核对下方的业务边界与未覆盖要求' : pendingQuestions.length ? `还有 ${pendingQuestions.length} 条问题等待 Agent 整理` : needsMeaning ? '请在下方核对含义' : '请先补充候选'}</h3>
+      <p>{needsBoundary ? '在下方逐条说明实际情况和仍保留的要求。确需补充规则或证据时，再将补充请求交给原 Agent；它保存后读取最新候选。' : pendingQuestions.length ? '这些问题还没有形成可供你核对的情境。点击“复制补充请求”交给原 Agent；它保存新修订后，点击“读取候选”。' : needsMeaning ? '逐处选择、说明实际要求或标记暂不确定，并保存。需要 Agent 修改时，点击“复制补充请求”；它保存后再读取候选。' : '点击“复制补充请求”，让原 Agent 按下方问题或你的纠正补充；保存新修订后，点击“读取候选”。已经保存的选择无需重复确认。'}</p>
+      <p className="editorial-muted">不单独建模和 Agent 额外推断可在“业务边界核对”直接处理。真实缺口会继续阻塞；分类不会补齐证据或批准权限。</p>
     </section>}
     <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
+    <BoundaryReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
     <div className="rule-example-table" role="table" aria-label="具体情形与要求">
       {content.examples.map((example, index) => <div className="rule-candidate-row" role="row" key={index}><p role="cell">{example.description}</p><span role="cell">{example.uncovered_reason ?? (permissions.get(example.permission_item_id ?? '')?.expectation === 'DENY' ? '应当拒绝' : permissions.has(example.permission_item_id ?? '') ? '应当允许' : '沿用已确认规则')}</span></div>)}
     </div>

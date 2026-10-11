@@ -19,6 +19,8 @@ from pydantic import Field
 
 from product.backend.core.checks.plan import ActionCheckPlan, CheckPlanGap
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.boundaries.candidate_reviews import BoundaryReviewGap
+from product.backend.workflows.business_boundaries.candidates.reviews import project_review_gaps
 from product.backend.infra.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
 from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
@@ -34,6 +36,7 @@ class CheckPreview(WireModel):
     action_count: int = Field(ge=0)
     case_count: int = Field(ge=0)
     actions: tuple[ActionCheckPlan, ...]
+    boundary_review_gaps: tuple[BoundaryReviewGap, ...] = ()
 
 
 class CheckService:
@@ -171,7 +174,9 @@ class CheckService:
         if budget_reason is not None:
             gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
                 reason=budget_reason) for action in plan.actions)
-        can_execute = bundle is not None and not gaps and bool(plan.actions) and count > 0
+        boundary_gaps = project_review_gaps(work, project_id)
+        # 未纳入正式权限的真实要求没有action_id，不伪造Case；完整检查在冻结前阻塞。
+        can_execute = bundle is not None and not gaps and not boundary_gaps and bool(plan.actions) and count > 0
         request = None
         if can_execute:
             request = self._preparation.build_execution_request_v3(project_id, engine_version=self._engine_version,
@@ -189,6 +194,7 @@ class CheckService:
             # 当前冻结已完成材料与运行核验；变化检查复用它，仅重核源码、权限和映射。
             inspection = self._changes.inspect_revalidation(project_id,change_id,
                 preparation_preview=CheckPreview(project_id=project_id,can_execute=can_execute,
+                    boundary_review_gaps=boundary_gaps,
                     gaps=tuple(gaps),plan_fingerprint=plan.plan_fingerprint,
                     action_count=len(plan.actions),case_count=count,actions=plan.actions))
             if inspection.status != "READY" or not inspection.can_execute:
@@ -208,5 +214,6 @@ class CheckService:
                     values["repair_context"] = repair_context(contract).model_dump(mode="json")
                 request = type(request).model_validate_json(json.dumps(values))
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),
+            boundary_review_gaps=boundary_gaps,
             plan_fingerprint=plan.plan_fingerprint, action_count=len(plan.actions), case_count=count,
             actions=plan.actions), request, bundle

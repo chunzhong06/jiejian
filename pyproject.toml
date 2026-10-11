@@ -42,6 +42,10 @@ only-include = ["product/backend", "product/protocols"]
 [tool.hatch.version]
 path = "product/backend/__init__.py"
 
+# 动态版本文件变化后重新计算安装元数据，所有发布入口沿用同一产品版本。
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "product/backend/__init__.py" }]
+
 [tool.hatch.build.targets.wheel.force-include]
 "product/config/default.toml" = "product/config/default.toml"
 "product/config/toolchain.json" = "product/config/toolchain.json"

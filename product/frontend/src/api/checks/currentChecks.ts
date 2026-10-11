@@ -1,6 +1,7 @@
 // 当前权限实验与只读结果合同；浏览器只提交计划指纹，不创建考题或计算安全结论。
 import { ApiError, request } from '../http'
 import type { RepairContract, RepairVerification, RepairComparisonRow } from './repairs'
+import type { BoundaryReviewGap } from '../boundaries/ruleCandidates'
 
 export type CheckVerdict = 'PASS' | 'BLOCK' | 'INCONCLUSIVE'
 export type CheckProgressCase = {
@@ -16,6 +17,7 @@ export type CheckStatus = {
 export type CheckPreview = {
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
   gaps: Array<{ action_id: string; action_revision: number; reason: string }>
+  boundary_review_gaps?: BoundaryReviewGap[]
   actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string }> }>
 }
 export type CheckObservation = {

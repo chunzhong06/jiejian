@@ -70,3 +70,28 @@ def test_current_submit_enforces_fingerprint_and_local_control(check_api):
     assert client.get("/api/runs/run_" + "0" * 32).status_code == 404
     for suffix in ("checks", "check-preparation"):
         assert client.post(f"/api/projects/{harness.project_id}/{suffix}", json={}).status_code == 404
+
+
+def test_reviewed_requirement_gap_blocks_ready_plan_and_old_submit(check_api):
+    from uuid import uuid4
+    app, harness, client = check_api
+    prefix = f"/api/projects/{harness.project_id}"
+    ready = client.get(prefix + "/check-preview").json()["data"]
+    assert ready["can_execute"]
+    rules = prefix + "/business-boundaries"
+    basis = client.get(rules + "/rule-context").json()["data"]["basis_id"]
+    candidate = client.post(rules + "/rule-candidates", json={"operation_id":uuid4().hex,"expected_basis_id":basis,
+        "content":{"original_text":"现有权限必须覆盖两个下载入口。","unsupported_constraints":["第二个入口尚未取证"]}}).json()["data"]
+    item = candidate["boundary_reviews"][0]
+    result = client.post(rules + f"/rule-candidates/{candidate['candidate']['candidate_id']}/boundary-decisions", json={
+        "operation_id":uuid4().hex,"expected_revision":1,"expected_basis_id":basis,"issue_id":item["issue_id"],
+        "issue_fingerprint":item["issue_fingerprint"],"outcome":"COVERAGE_GAP","reason":"现有录制只覆盖第一个入口",
+        "retained_requirement":"两个下载入口都必须验证同样的权限要求"})
+    assert result.status_code == 201, result.text
+    blocked = client.get(prefix + "/check-preview").json()["data"]
+    assert not blocked["can_execute"]
+    assert blocked["actions"] == ready["actions"] and blocked["case_count"] == ready["case_count"]
+    assert len(blocked["boundary_review_gaps"]) == 1
+    assert client.post(prefix + "/runs", json={"schema_version":"2","expected_plan_fingerprint":ready["plan_fingerprint"],
+        "idempotency_key":"old-ready-plan"}).status_code == 409
+    assert client.get(prefix + "/runs").json()["data"] == []

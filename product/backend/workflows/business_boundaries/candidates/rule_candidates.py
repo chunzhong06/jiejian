@@ -8,7 +8,9 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from product.backend.core.boundaries.entities import boundary_sha256
-from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, RuleCandidateSave, freeze_candidate_content
+from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, ReviewedRuleCandidateRevision, RuleCandidateSave, RuleCandidateContentInput, freeze_candidate_content
+from product.backend.core.boundaries.candidate_reviews import BoundaryReviewCommand, BoundaryReviewRecord, boundary_review_items
+from product.backend.workflows.business_boundaries.candidates.reviews import protect_review_sources, project_review_gaps
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide, RuleCandidateDecision
 from product.backend.workflows.business_boundaries.candidates.decisions import (
     CANDIDATE_REVISION_GUIDANCE, check_candidate_edit, decision_digest, pending_scenario_issues, scenario_state, selected_permission_issues,
@@ -55,6 +57,7 @@ class RuleCandidateService:
                     "pending": sum(c.stale or c.decision in {"PROPOSED", "REVIEW_REQUIRED"} for c in source_items),
                     "analyzed": understanding.analysis_completed_at_us is not None},
                 "formal_permission_count": len(draft.permissions),
+                "boundary_review_gaps": project_review_gaps(work, project_id),
                 "candidates": [self._view(work, c, draft=draft, summary=True) for c in candidates[:50]],
                 "next_offset": offset + 50 if len(candidates) > 50 else None}
         # 正式准备仍由原服务现场投影；读取上下文不生成绑定或执行目标。
@@ -74,6 +77,7 @@ class RuleCandidateService:
             draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
             self._current_basis(command.expected_basis_id, draft)
             content = freeze_candidate_content(command.content)
+            current = None
             if command.candidate_id:
                 current = self._required(work, project_id, command.candidate_id)
                 if work.rule_candidates.visibility(command.candidate_id)["archived"]:
@@ -81,9 +85,11 @@ class RuleCandidateService:
                 if current.revision != command.expected_revision:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已有新修订", details={"reason": "CONFLICT"})
                 check_candidate_edit(work, current, content)
+                protect_review_sources(current, content)
             elif len(work.rule_candidates.list(project_id, limit=201)) >= 200:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选数量已达上限", details={"reason": "LIMIT_EXCEEDED"})
-            value = RuleCandidateRevision(project_id=project_id,
+            revision_type = ReviewedRuleCandidateRevision if isinstance(current, ReviewedRuleCandidateRevision) else RuleCandidateRevision
+            value = revision_type(**({"boundary_reviews": current.boundary_reviews} if isinstance(current, ReviewedRuleCandidateRevision) else {}), project_id=project_id,
                 candidate_id=command.candidate_id or f"rcd_{uuid4().hex}",
                 revision=(command.expected_revision or 0) + 1, basis_id=command.expected_basis_id,
                 content=content, submitted_via=submitted_via, created_at_us=self._clock_us())
@@ -128,11 +134,50 @@ class RuleCandidateService:
                 if not (command.action in {"SELECT", "DISMISS"} and question == scenario.question))
             content = current.content.model_copy(update={"permissions": tuple(replacements.get(item.item_id, item) for item in current.content.permissions),
                 "unresolved_questions": questions})
-            value = RuleCandidateRevision(project_id=project_id, candidate_id=candidate_id, revision=current.revision + 1,
+            revision_type = ReviewedRuleCandidateRevision if isinstance(current, ReviewedRuleCandidateRevision) else RuleCandidateRevision
+            value = revision_type(**({"boundary_reviews": current.boundary_reviews} if isinstance(current, ReviewedRuleCandidateRevision) else {}), project_id=project_id, candidate_id=candidate_id, revision=current.revision + 1,
                 basis_id=current.basis_id, content=content, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
             self._merge(value, draft)
             work.rule_candidates.append(value, expected_revision=current.revision)
             work.rule_candidates.add_decision(decision)
+            work.rule_candidates.add_receipt(project_id, "DECIDE", command.operation_id, fingerprint, value)
+            result = self._view(work, value)
+            work.commit()
+            return result
+
+    def review_boundary(self, project_id: str, candidate_id: str, command: BoundaryReviewCommand):
+        """仅GUI写入人的范围判断；不改变权限正文，不将能力或证据缺口标为已验证。"""
+        fingerprint = boundary_sha256({"kind": "BOUNDARY_REVIEW", "candidate_id": candidate_id, "command": command.model_dump(mode="json")})
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            receipt = work.rule_candidates.receipt(project_id, "DECIDE", command.operation_id)
+            if receipt:
+                self._same_request(receipt, fingerprint)
+                return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
+            current = self._required(work, project_id, candidate_id)
+            draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
+            self._current_basis(command.expected_basis_id, draft)
+            if current.revision != command.expected_revision or current.basis_id != command.expected_basis_id:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已变化，请读取最新内容后重新核对", details={"reason": "CONFLICT"})
+            if work.rule_candidates.visibility(candidate_id)["archived"]:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先恢复候选再核对业务边界")
+            issue = next((item for item in boundary_review_items(current) if item["issue_id"] == command.issue_id), None)
+            if issue is None or issue["issue_fingerprint"] != command.issue_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "问题及其业务依据已变化，请重新读取")
+            if issue["source"] == "unsupported_constraints" and command.outcome in {"NOT_SEPARATE_ACTION", "REPRESENTED_BY_RULES"}:
+                raise JiejianError(ErrorCode.INPUT_INVALID, "接口合并或不单独建模不能消除能力与覆盖缺口")
+            if not set(command.permission_item_ids) <= {item.item_id for item in current.content.permissions}:
+                raise JiejianError(ErrorCode.INPUT_INVALID, "只能引用这份候选中已经存在的权限项")
+            record = BoundaryReviewRecord(**command.model_dump(), decision_id="brd_" + uuid4().hex,
+                source=issue["source"], text=issue["text"], output_revision=current.revision + 1, created_at_us=self._clock_us())
+            records = tuple(item for item in getattr(current, "boundary_reviews", ()) if item.issue_id != command.issue_id) + (record,)
+            # v1首次进入此入口只补空情境；不制造权限选项或原话摘录。
+            content = current.content if hasattr(current.content, "scenarios") else freeze_candidate_content(
+                RuleCandidateContentInput(**current.content.model_dump()))
+            value = ReviewedRuleCandidateRevision(project_id=project_id, candidate_id=candidate_id,
+                revision=current.revision + 1, basis_id=current.basis_id, content=content,
+                boundary_reviews=records, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
+            work.rule_candidates.append(value, expected_revision=current.revision)
             work.rule_candidates.add_receipt(project_id, "DECIDE", command.operation_id, fingerprint, value)
             result = self._view(work, value)
             work.commit()
@@ -208,10 +253,15 @@ class RuleCandidateService:
         issues.extend(pending_scenario_issues(states, conflicts))
         if value.basis_id != "rb_" + draft.boundary_state_fingerprint:
             issues.append({"code": "CONTEXT_STALE", "message": "正式规则已变化，需要重新核对候选"})
+        review_items = boundary_review_items(value)
+        pending = {(item["source"], item["text"]) for item in review_items if item["blocking"]}
+        resolved = {(item["source"], item["text"]) for item in review_items if not item["blocking"]} - pending
         for index, text in enumerate(content.unsupported_constraints):
-            issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text, "path": f"candidate.content.unsupported_constraints[{index}]"})
+            if ("unsupported_constraints", text) not in resolved:
+                issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text, "path": f"candidate.content.unsupported_constraints[{index}]"})
         for index, text in enumerate(content.unresolved_questions):
-            issues.append({"code": "NEEDS_CLARIFICATION", "message": text, "path": f"candidate.content.unresolved_questions[{index}]"})
+            if ("unresolved_questions", text) not in resolved:
+                issues.append({"code": "NEEDS_CLARIFICATION", "message": text, "path": f"candidate.content.unresolved_questions[{index}]"})
         permission_ids = {item.item_id for item in content.permissions}
         known_ids = permission_ids | {item.item_id for item in draft.permissions}
         mapped = {item.permission_item_id for item in content.examples}
@@ -255,6 +305,7 @@ class RuleCandidateService:
             "revision_guidance": CANDIDATE_REVISION_GUIDANCE,
             "issues": [] if decision else issues, "proposal_id": proposal_id, "decision": decision,
             "scenario_decisions": states,
+            "boundary_reviews": review_items,
             "meaning_context": {"actors": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name} for item in merged.actors],
                 "actions": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name,
                     "effect_catalog": [{"item_id": effect.item_id, "business_label": effect.business_label} for effect in item.effects]} for item in merged.actions]},

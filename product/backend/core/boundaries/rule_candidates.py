@@ -12,6 +12,7 @@ from product.backend.core.boundaries.proposals import (
 )
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
 from product.backend.core.boundaries.candidate_scenarios import RuleScenario, RuleScenarioInput, freeze_scenario
+from product.backend.core.boundaries.candidate_reviews import BoundaryReviewRecord
 
 CANDIDATE_ID_PATTERN = r"^rcd_[0-9a-f]{32}$"
 BASIS_ID_PATTERN = r"^rb_[0-9a-f]{64}$"
@@ -120,7 +121,21 @@ def freeze_candidate_content(value: RuleCandidateContentInput) -> RuleCandidateC
         scenarios=tuple(freeze_scenario(item, value) for item in value.scenarios))
 
 
-_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision, Field(discriminator="schema_version")])
+class ReviewedRuleCandidateRevision(RuleCandidateRevision):
+    """只有人的边界核对升级为v3；旧候选按原版本读，Agent不能提交这些决定。"""
+    schema_version: Literal["3"] = "3"
+    boundary_reviews: tuple[BoundaryReviewRecord, ...] = Field(default=(), max_length=20)
+
+    @model_validator(mode="after")
+    def review_identity(self):
+        if len({item.issue_id for item in self.boundary_reviews}) != len(self.boundary_reviews):
+            raise ValueError("同一问题只保存最新决定，历史由候选修订保留")
+        if any(item.output_revision > self.revision for item in self.boundary_reviews):
+            raise ValueError("决定不能引用候选的未来修订")
+        return self
+
+
+_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision | ReviewedRuleCandidateRevision, Field(discriminator="schema_version")])
 
 
 def read_candidate_revision(payload: str):
