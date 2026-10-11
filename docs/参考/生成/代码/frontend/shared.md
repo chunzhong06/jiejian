@@ -242,6 +242,32 @@
 
 静态import / dot-source：`./Editorial`、`./StatusBadge`
 
+### `product/frontend/src/shared/ui/requirement-notice.css`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/requirement-notice.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/shared/ui/requirement-scope.css`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/requirement-scope.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。
+
+
+### `product/frontend/src/shared/ui/RequirementNotice.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/RequirementNotice.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RequirementNotice`
+
+静态import / dot-source：`../../api/boundaries/ruleCandidates`、`./requirement-notice.css`、`antd`
+
+### `product/frontend/src/shared/ui/RequirementScopeSummary.tsx`
+
+[打开源码](../../../../../product/frontend/src/shared/ui/RequirementScopeSummary.tsx) · JS/TS词法提取；re-export、条件和动态表达式需读源码确认。
+
+- `RequirementScopeSummary`
+
+静态import / dot-source：`../../api/checks/currentChecks`、`./requirement-scope.css`
+
 ### `product/frontend/src/shared/ui/rule-preparation-stages.css`
 
 [打开源码](../../../../../product/frontend/src/shared/ui/rule-preparation-stages.css) · 仅记录文件位置；配置值、样式规则和脚本执行关系不复制。

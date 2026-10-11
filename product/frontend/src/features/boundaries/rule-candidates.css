@@ -1,5 +1,5 @@
 /* 候选沿用公共正文轴与控件，只安排原约定、例子和单一决定的层次。 */
-.rule-candidates { margin-block: 0; padding: var(--space-24); }
+.rule-candidates { margin-block: 0; padding: 0; }
 .rule-candidates-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); }
 .rule-candidates-heading h2 { margin: 0; }
 .rule-candidates-heading p { margin-block: var(--space-8); }
@@ -9,7 +9,16 @@
 .rule-candidate-original { font-size: var(--font-local); line-height: 1.8; overflow-wrap: anywhere; background: var(--color-primary-light); padding: var(--space-16); border-radius: var(--radius-small); margin-block: var(--space-20); }
 .rule-candidate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-16); padding-block: var(--space-16); border-bottom: var(--line-width) solid var(--color-border); }
 .rule-candidate-row p { margin: 0; overflow-wrap: anywhere; }
-.rule-example-table { margin-block: var(--space-24); }
+.rule-example-table { max-width:760px; margin:var(--space-24) auto; }
+.rule-example-table .rule-candidate-row{grid-template-columns:minmax(0,1fr) minmax(100px,180px);align-items:center;gap:var(--space-32);}
+.rule-example-table .rule-candidate-row>span{text-align:center;overflow-wrap:anywhere;}
+/* 标题与状态同组，原文与操作说明分区，避免元信息散落在正文之间。 */
+.rule-candidate-title-line{display:flex;align-items:center;gap:var(--space-16);flex-wrap:wrap;}
+.rule-candidate-detail-title>p{font-size:var(--font-label);color:var(--color-secondary);}
+.rule-candidate-context{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);align-items:center;gap:var(--space-32);padding-block:var(--space-24);margin-top:var(--space-16);border-block:1px solid var(--color-border);}
+.rule-candidate-context .rule-candidate-original{padding:0;margin:var(--space-12) 0 0;background:transparent;}
+.rule-candidate-context>p{margin:0;padding-inline-start:var(--space-24);border-inline-start:1px solid var(--color-border);font-size:var(--font-label);line-height:1.85;}
+@media(max-width:700px){.rule-candidate-context{grid-template-columns:1fr;gap:var(--space-16);}.rule-candidate-context>p{padding:0;border:0;}.rule-example-table .rule-candidate-row{grid-template-columns:minmax(0,1fr) 100px;gap:var(--space-16);}}
 .rule-candidates .ant-alert { margin-block: var(--space-16); }
 /* 简短审阅按正文顺序放操作区，避免吸底栏遮挡最后一行缺口。 */
 .rule-candidates .task-action-bar:has(.ant-btn-primary) { position: static; margin-block-start: var(--space-16); }
@@ -53,9 +62,27 @@
 .boundary-review-question { border-top:1px solid var(--color-border);padding-block:var(--space-20);overflow-wrap:anywhere; }
 .boundary-review-heading { display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-16);flex-wrap:wrap; }
 .boundary-review-heading h3 { margin:0;flex:1 1 60%; }
-.boundary-review-heading span { color:var(--color-secondary); }
-.boundary-review-decision { border-inline-start:3px solid var(--color-primary);padding-inline:var(--space-16); }
-.boundary-review-question details > label { display:block;margin-block:var(--space-16) var(--space-8); }
+.boundary-review-heading .product-status { flex-shrink:0; }
+.boundary-review-intro { display:flex;justify-content:space-between;align-items:center;gap:var(--space-24);flex-wrap:wrap; }
+.boundary-review-intro h2 { margin:0; }
+.boundary-review-intro p { margin-block:var(--space-12);max-width:56ch; }
+.boundary-review-help { margin-block:var(--space-12) var(--space-24); }
+.boundary-review-help p { max-width:72ch; }
+.boundary-review-decision { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:var(--space-32);margin-block:var(--space-24); }
+.boundary-review-decision h4 { font-size:var(--font-local);margin:var(--space-8) 0; }
+.boundary-review-decision p { margin:var(--space-8) 0; }
+.boundary-review-retained { border-inline-start:1px solid var(--color-border);padding-inline-start:var(--space-24); }
+.boundary-review-retained > p:not(.editorial-muted) { max-width:56ch; }
+.boundary-review-next { color:var(--color-secondary);font-size:var(--font-secondary);padding-block-start:var(--space-8); }
+.boundary-review-form { width:100%;max-width:720px;margin:var(--space-16) auto 0;padding-inline:6px; }
+.boundary-review-form > label { display:block;margin-block:var(--space-16) var(--space-8); }
+.boundary-review-evidence p { max-width:72ch; }
+.boundary-review-question .boundary-review-editor > summary { justify-content:flex-end; }
+.boundary-review-question .boundary-review-editor:not(:first-child) { margin-block-start:var(--space-12); }
+/* 首次填写入口贴着居中表单，已保存记录的重新核对操作保留原位置。 */
+.boundary-review-editor--new { max-width:720px;margin-inline:auto; }
+.boundary-review-question .boundary-review-editor--new > summary { justify-content:flex-start;padding-inline:6px; }
+@media(max-width:700px){.boundary-review-decision{grid-template-columns:minmax(0,1fr);gap:var(--space-16)}.boundary-review-retained{border-inline-start:0;border-block-start:1px solid var(--color-border);padding-inline-start:0;padding-block-start:var(--space-12)}}
 /* 展开动效使用overflow:clip；为2px焦点线和3px外偏移留出绘制空间，不改变正文宽度。 */
 .boundary-review-question details::details-content { overflow-clip-margin:6px; }
 .boundary-review-question .ant-select { width:100%;min-width:0; }
@@ -81,3 +108,20 @@
 .rule-coverage-fields .ant-select{width:100%;min-width:0}
 .rule-coverage-answer{padding:var(--space-16);background:var(--color-primary-light);border-radius:var(--radius-small)}
 @media(max-width:600px){.rule-coverage-fields{grid-template-columns:minmax(0,1fr)}}
+/* 权限整理页沿用业务清单；协作设置仅在交接区按实际状态提示。 */
+.rule-candidates-inbox>.rule-source-handoff{background:transparent;border:0;padding:0;margin:0 0 var(--space-24);}
+.rule-handoff-saved{font-size:var(--font-label);color:var(--color-secondary);text-align:center;}
+.rule-intake-intro h2{font-size:var(--font-section);margin:0 0 var(--space-12);}
+.rule-intake-intro>p{font-size:var(--font-body);line-height:1.85;max-width:56ch;}
+.rule-intake-intro ol{padding:0;list-style:none;counter-reset:handoff;margin:var(--space-24) 0 0;display:grid;gap:var(--space-20);}
+.rule-intake-intro li{counter-increment:handoff;display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:var(--space-12);}
+.rule-intake-intro li::before{content:counter(handoff);grid-row:1/3;color:var(--color-primary-ink);font-size:var(--font-label);padding-top:2px;}
+.rule-intake-intro li strong{font-size:var(--font-body);font-weight:var(--weight-medium);}
+.rule-intake-intro li span{grid-column:2;color:var(--color-secondary);font-size:var(--font-label);line-height:1.8;margin-top:var(--space-8);max-width:58ch;}
+/* 整理结果以居中次级入口进入，列表筛选和分页留在结果工作面；缺口提示仍在主面可见。 */
+.rule-results-entry{display:flex;align-items:center;justify-content:center;gap:var(--space-32);max-width:680px;margin:var(--space-32) auto 0;padding-block:var(--space-24);text-align:left;}
+.rule-results-entry h2{margin:0 0 var(--space-12);}.rule-results-entry p{max-width:42ch;margin:0;color:var(--color-secondary);}.rule-results-entry>.ant-btn{flex-shrink:0;}
+@media(max-width:600px){.rule-results-entry{flex-wrap:wrap;gap:var(--space-16);}.rule-results-entry>.ant-btn{margin-left:auto;}}
+.rule-results-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-16);flex-wrap:wrap;margin-block:var(--space-20);}
+/* 二级分类复用全局导航轨迹；读取是最右侧的独立操作，不与分类混排。 */
+.rule-results-toolbar>.product-view-tabs{flex:1}.rule-other-entry{margin-top:var(--space-32);padding-block:var(--space-20);border-top:1px solid var(--color-border)}

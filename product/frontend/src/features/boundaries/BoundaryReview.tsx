@@ -1,8 +1,10 @@
 // 独立核对问题与限制；不制造权限选项，决定与原问题一起保留，未知响应沿父级回执恢复。
 import { useEffect, useState } from 'react'
 import { Button, Input, Select } from 'antd'
-import type { BoundaryChoice, BoundaryReview as ReviewItem, RuleCandidateView } from '../../api/boundaries/ruleCandidates'
+import type { BoundaryChoice, BoundaryReview as ReviewItem, RuleCandidateView, CoverageChoice } from '../../api/boundaries/ruleCandidates'
+import {CoverageReview} from './CoverageReview'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 
 const labels: Record<BoundaryChoice['outcome'], string> = {
   NOT_SEPARATE_ACTION: '不作为独立业务动作', AGENT_OVERINTERPRETATION: 'Agent 扩大或误解了原要求',
@@ -18,7 +20,7 @@ const nextSteps: Partial<Record<BoundaryChoice['outcome'],string>> = {
   DEFER:'下一步：核对原始业务约定。尚不确定时保留问题，确认实际要求后再处理。',
 }
 
-function ReviewQuestion({item, value, disabled, readOnly, onSave}: {item:ReviewItem; value:RuleCandidateView; disabled:boolean; readOnly:boolean; onSave:(choice:BoundaryChoice)=>void}) {
+function ReviewQuestion({item, value, disabled, readOnly, onSave,onCoverage}: {item:ReviewItem; value:RuleCandidateView; disabled:boolean; readOnly:boolean; onSave:(choice:BoundaryChoice)=>void;onCoverage?:(choice:CoverageChoice)=>void}) {
   const [outcome,setOutcome] = useState<BoundaryChoice['outcome']|undefined>()
   const [reason,setReason] = useState('')
   const [requirement,setRequirement] = useState('')
@@ -27,13 +29,18 @@ function ReviewQuestion({item, value, disabled, readOnly, onSave}: {item:ReviewI
   // 只清理本问题保存成功或依据失效的草稿，其他问题保存产生的新修订不丢弃当前输入。
   useEffect(()=>{setOutcome(undefined);setReason('');setRequirement('');setPermissions([])},[item.issue_fingerprint,item.decision?.output_revision])
   const id = item.issue_id
+  const planned=value.coverage_review?.some(link=>link.issue_id===id&&link.status==='PLANNED')
   const resolved = outcome && ['NOT_SEPARATE_ACTION','AGENT_OVERINTERPRETATION','REPRESENTED_BY_RULES'].includes(outcome)
   return <article className="boundary-review-question">
-    <div className="boundary-review-heading"><h3>{item.text}</h3><span>{({NEEDS_DECISION:'待核对',STALE:'依据变化，需重新确认',OPEN:'仍有缺口',RESOLVED:'边界已确认'})[item.status]}</span></div>
-    <p className="editorial-muted">{item.source==='unsupported_constraints' ? 'Agent 记录的限制' : '待核对问题'}</p>
-    {item.decision && <div className="boundary-review-decision"><p>修订 {item.decision.output_revision} 的决定：{labels[item.decision.outcome]}</p><p>判断依据：{item.decision.reason}</p><p>保留的实际要求：{item.decision.retained_requirement}</p>{!!item.decision.permission_item_ids?.length && <p>对应权限：{item.decision.permission_item_ids.join('、')}</p>}</div>}
-    {item.decision && item.blocking && nextSteps[item.decision.outcome] && <p>{nextSteps[item.decision.outcome]}</p>}
-    {!readOnly && <details><summary>{item.decision ? '重新核对这条问题' : '核对这条问题'}</summary>
+    <div className="boundary-review-heading"><h3>{item.text}</h3><StatusBadge kind="rule" tone={item.status==='RESOLVED'?'success':item.status==='STALE'?'danger':'warning'}>{planned?'已关联 · 待准备':({NEEDS_DECISION:'待核对',STALE:'需要重新确认',OPEN:'仍有缺口',RESOLVED:'边界已确认'})[item.status]}</StatusBadge></div>
+    {item.decision ? <>
+      <div className="boundary-review-decision">
+        <div><p className="editorial-muted">你的决定 · 修订 {item.decision.output_revision}</p><h4>{labels[item.decision.outcome]}</h4>{item.status==='STALE' && <p className="editorial-muted">业务依据已变化，以下保留上次决定，等待重新确认。</p>}</div>
+        <div className="boundary-review-retained"><p className="editorial-muted">仍须满足的业务要求</p><p>{item.decision.retained_requirement}</p>{item.blocking && <p className="boundary-review-next">{planned?'规则审阅完成后进入材料准备；系统将在检查前重新核验关联入口与证明。':nextSteps[item.decision.outcome]}</p>}</div>
+      </div>
+      <details className="boundary-review-evidence"><summary>查看判断依据{item.decision.permission_item_ids?.length ? '与权限引用' : ''}</summary><p>{item.decision.reason}</p>{!!item.decision.permission_item_ids?.length && <p>对应权限：{item.decision.permission_item_ids.join('、')}</p>}</details>
+    </> : <p className="editorial-muted">{item.source==='unsupported_constraints' ? '请核对 Agent 记录的限制及实际业务要求。' : '请说明这条问题的实际含义。'}</p>}
+    {!readOnly && <details className={`boundary-review-editor${item.decision ? '' : ' boundary-review-editor--new'}`}><summary>{item.decision ? '重新核对这条问题' : '填写核对意见'}</summary><div className="boundary-review-form">
       <label htmlFor={`${id}-kind`}>这条问题属于哪种情况</label>
       <Select id={`${id}-kind`} value={outcome} disabled={disabled} placeholder="请选择实际情况" onChange={setOutcome}
         options={Object.entries(labels).filter(([key])=>item.source!=='unsupported_constraints' || !['NOT_SEPARATE_ACTION','REPRESENTED_BY_RULES'].includes(key)).map(([key,label])=>({value:key,label}))}/>
@@ -44,12 +51,15 @@ function ReviewQuestion({item, value, disabled, readOnly, onSave}: {item:ReviewI
       {outcome==='REPRESENTED_BY_RULES' && <><label htmlFor={`${id}-rules`}>对应的候选权限</label><Select id={`${id}-rules`} mode="multiple" value={permissions} onChange={setPermissions} disabled={disabled} options={value.candidate.content.permissions.map(rule=>({value:rule.item_id,label: `${rule.expectation==='ALLOW'?'允许':'禁止'} · ${value.candidate.content.examples.find(example=>example.permission_item_id===rule.item_id)?.description ?? rule.item_id}`}))}/></>}
       <p className="editorial-muted">{resolved ? '只确认业务边界，不代表证据齐全或检查通过。原问题与决定会保留。' : '此分类仍会阻止完整检查；需要补齐实际能力或材料，不能靠确认消除缺口。'}</p>
       <div className="boundary-review-actions"><Button disabled={disabled || !outcome || !reason.trim() || !requirement.trim() || outcome==='REPRESENTED_BY_RULES' && !permissions.length} onClick={()=>outcome && onSave({issue_id:id,issue_fingerprint:item.issue_fingerprint,outcome,reason,retained_requirement:requirement,permission_item_ids:outcome==='REPRESENTED_BY_RULES'?permissions:[]})}>保存这条核对</Button></div>
-    </details>}
+    </div></details>}
+    {!readOnly && onCoverage && <CoverageReview item={item} value={value} disabled={disabled} onSave={onCoverage}/>}
   </article>
 }
 
-export function BoundaryReview({value,readOnly,busy,onSave}: {value:RuleCandidateView;readOnly:boolean;busy:boolean;onSave:(choice:BoundaryChoice)=>void}) {
+export function BoundaryReview({value,readOnly,busy,onSave,onCoverage}: {value:RuleCandidateView;readOnly:boolean;busy:boolean;onSave:(choice:BoundaryChoice)=>void;onCoverage?:(choice:CoverageChoice)=>void}) {
   if (!value.boundary_reviews?.length) return null
-  return <section className="boundary-review" aria-label="业务边界核对"><h2>业务边界核对</h2><p>这些问题可以直接核对。无需新增权限选项；真实的准备、证据和覆盖缺口会继续保留。</p><p className="editorial-muted">保存核对后，这份候选中的未决范围会持续阻止本项目的完整检查；归档或另建候选不会清除它们。例子补充可沿用决定，原文、角色、动作或权限变化后需要重新确认。</p>
-    {value.boundary_reviews.map(item=><ReviewQuestion key={`${value.candidate.candidate_id}:${item.issue_id}`} item={item} value={value} readOnly={readOnly} disabled={busy} onSave={onSave}/>)}</section>
+  const saved = value.boundary_reviews.filter(item=>item.decision).length
+  return <section className="boundary-review" aria-label="业务边界核对"><header className="boundary-review-intro"><div><h2>{saved ? '业务边界核对记录' : '业务边界核对'}</h2><p>{saved ? '这里记录你对业务要求的判断，以及目前还需要处理的事项。' : '逐条确认问题的实际含义，保存判断依据和仍需满足的要求。'}</p></div><span className="editorial-muted">{value.boundary_reviews.filter(item=>item.status==='RESOLVED').length} 项已确认 · {value.boundary_reviews.filter(item=>item.blocking).length} 项待处理</span></header>
+    <details className="boundary-review-help"><summary>这些决定如何影响后续检查</summary><p>业务含义不清时先确认含义。已明确的准备、证据或覆盖缺口可关联具体权限与入口，再审阅规则；关联不代表就绪，系统在检查前重新核验。任意历史能力限制仍阻塞。原文或权限变化时重新确认，历史记录保留。</p></details>
+    {value.boundary_reviews.map(item=><ReviewQuestion key={`${value.candidate.candidate_id}:${item.issue_id}`} item={item} value={value} readOnly={readOnly} disabled={busy} onSave={onSave} onCoverage={onCoverage}/>)}</section>
 }

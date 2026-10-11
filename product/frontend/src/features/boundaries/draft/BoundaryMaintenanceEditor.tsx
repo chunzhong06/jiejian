@@ -13,18 +13,18 @@ import type {
 } from '../../../api/boundaries/businessBoundaries'
 import { PermissionRuleForm } from '../rules/PermissionRuleForm'
 import { useTaskGuard } from '../../../shared/runtime/editGuard'
-import { AgentWorkflowEntry } from '../../../shared/ui/AgentWorkflowEntry'
 
 import type { BoundaryEditFocus } from '../definitions/CurrentBoundaryObjects'
 import { BoundaryObjectsWorkspace, type DraftAction, type ObjectDrafts } from '../definitions/BoundaryObjectsWorkspace'
 
-export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmit, onCancel, focus }: {
+export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmit, onCancel, onAgent, focus }: {
   focus?: BoundaryEditFocus
   draft: BoundaryMaintenanceDraftDto
   initialCommand?: BoundaryMaintenanceCommandDto
   busy: boolean
   onSubmit: (command: BoundaryMaintenanceCommandDto) => void
   onCancel?: () => void
+  onAgent?: () => void
 }) {
   const initial = useMemo(() => initialCommand ?? commandFromDraft(draft), [draft, initialCommand])
   const [actors, setActors] = useState<BoundaryMaintenanceActorDto[]>(initial.actors)
@@ -32,6 +32,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   const [permissions, setPermissions] = useState<BoundaryMaintenancePermissionDto[]>(initial.permissions)
   const [objectDrafts, setObjectDrafts] = useState<ObjectDrafts>({})
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [discardToAgent, setDiscardToAgent] = useState(false)
   const [ruleDirty, setRuleDirty] = useState(false)
   // 进入编辑产生的原样副本不算修改；退出时只对实际改变的内容确认丢弃。
   const dirty = JSON.stringify([actors, actions, permissions]) !== JSON.stringify([initial.actors, initial.actions, initial.permissions])
@@ -95,22 +96,22 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     return `${subject}对${rule.relation === 'OWNS' ? '自己' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${owner}账号` : owner}拥有的资源，${rule.expectation === 'ALLOW' ? '可以' : '不得'}${selectedAction?.display_name || '执行这项动作'}。`
   }
   return <section className="boundary-draft" aria-label="权限规则草稿">
-    <div className="boundary-draft-toolbar"><div><h1 id="boundary-maintenance-title">{editingRule ? '编辑权限规则' : '权限要求'}</h1>{changedCount > 0 && <StatusBadge kind="preparation">草稿 · {changedCount} 项修改</StatusBadge>}<p className="editorial-muted">{editingDraft ? '先将单项编辑保存到草稿，再统一核对并确认修改。' : '修改角色、动作或权限后统一确认；源码变化时，可单独核对代码关联。'}</p></div>
+    <div className="boundary-draft-toolbar"><div><h1 id="boundary-maintenance-title">{editingRule ? '编辑权限规则' : '手动维护规则'}</h1>{changedCount > 0 && <StatusBadge kind="preparation">草稿 · {changedCount} 项修改</StatusBadge>}<p className="editorial-muted">{editingDraft ? '先将单项编辑保存到草稿，再统一核对并确认修改。' : '新增、修改或停用先保存到草稿，再审阅批准。原规则及检查历史保留。'}</p></div>
       {!editingRule && Object.keys(objectDrafts).length === 0 && <div className="boundary-draft-main-actions">{onCancel && <Button disabled={busy} onClick={() => dirty ? setConfirmDiscard(true) : onCancel()}>取消修改</Button>}<Button type={editingDraft ? 'primary' : 'default'} loading={busy} onClick={submit}>{editingDraft ? '核对修改' : '核对代码关联'}</Button></div>}
     </div>
     {!editingRule && <nav className="boundary-view-tabs" aria-label="权限要求视图">{([['rules','权限规则'],['actions','业务动作'],['actors','业务角色']] as const).map(([key,label])=><button key={key} type="button" aria-current={mode===key?'page':undefined} onClick={()=>setMode(key)}>{label}</button>)}</nav>}
-    {editingRule && editedAction ? <PermissionRuleForm key={editingRule.item_id} initial={editingRule} actors={actors} action={editedAction} actions={actions.filter(item=>item.effective_state==='ACTIVE')} busy={busy} onSave={saveRule} onDirtyChange={setRuleDirty} onCancel={() => setEditingRule(undefined)}/> : mode !== 'rules' ? <BoundaryObjectsWorkspace kind={mode} createOnOpen={focus?.createObject} editOnOpen={focus?.editObject} initialId={mode === 'actors' ? actors.find(item => item.actor_id === focus?.actorId)?.item_id : selectedActionId} actors={actors} actions={actions} permissions={permissions} draft={draft} copies={objectDrafts} setCopies={setObjectDrafts} setActors={setActors} setActions={setActions} setPermissions={setPermissions} busy={busy}/> : <><div className="boundary-collection-toolbar"><SearchField aria-label="搜索草稿动作" placeholder="搜索动作、角色或规则" allowClear value={query} onChange={event => setQuery(event.target.value)}/><Button type="primary" disabled={busy} onClick={addPermission}>新增权限规则</Button></div><section className="boundary-document">
+    {editingRule && editedAction ? <PermissionRuleForm key={editingRule.item_id} initial={editingRule} actors={actors} action={editedAction} actions={actions.filter(item=>item.effective_state==='ACTIVE')} busy={busy} onSave={saveRule} onDirtyChange={setRuleDirty} onCancel={() => setEditingRule(undefined)}/> : mode !== 'rules' ? <BoundaryObjectsWorkspace kind={mode} createOnOpen={focus?.createObject} editOnOpen={focus?.editObject} initialId={mode === 'actors' ? actors.find(item => item.actor_id === focus?.actorId)?.item_id : selectedActionId} actors={actors} actions={actions} permissions={permissions} draft={draft} copies={objectDrafts} setCopies={setObjectDrafts} setActors={setActors} setActions={setActions} setPermissions={setPermissions} busy={busy}/> : <><div className="boundary-collection-toolbar"><SearchField aria-label="搜索草稿动作" placeholder="搜索动作、角色或规则" allowClear value={query} onChange={event => setQuery(event.target.value)}/><Button type="primary" disabled={busy} onClick={addPermission}>手动新增规则</Button></div><section className="boundary-document">
       <nav className="action-index" aria-label="编辑业务动作索引"><h3>业务动作</h3>{actions.filter(matchesAction).map(item => <button key={item.item_id} aria-current={item.item_id === selectedAction?.item_id ? 'true' : undefined} onClick={() => setSelectedActionId(item.item_id)}>{item.display_name || '尚未命名的动作'}<small>{permissions.filter(rule => rule.business_action_item_id === item.item_id && rule.effective_state === 'ACTIVE').length} 条启用规则</small></button>)}{!actions.some(matchesAction) && <p>没有匹配的动作</p>}</nav>
       <article className="boundary-action-document"><div className="boundary-action-heading"><div><h2>{selectedAction?.display_name || '尚无业务动作'}</h2><p className="editorial-muted">{selectedAction?.description}</p></div></div>
-        {permissions.filter(item => item.business_action_item_id === selectedAction?.item_id).map(permission => <section className="permission-summary-row" key={permission.item_id}><StatusBadge kind="rule" className="permission-badge" tone={permission.effective_state === 'RETIRED' ? 'neutral' : permission.expectation === 'ALLOW' ? 'success' : 'danger'}>{permission.effective_state === 'RETIRED' ? '停用' : permission.expectation === 'ALLOW' ? '允许' : '禁止'}</StatusBadge><div><h3>{sentence(permission)}</h3><p>保护结果：{permission.protected_effect_item_ids.map(id => selectedAction?.effects.find(effect => effect.item_id === id)?.business_label || '已确认结果').join('、')}</p></div><Button type="link" disabled={busy} aria-label={`编辑规则：${sentence(permission)}`} onClick={() => setEditingRule({...permission})}>编辑</Button>{!permission.intent_id && <Button danger disabled={busy} onClick={() => setPermissions(items => items.filter(item => item.item_id !== permission.item_id))}>移除草稿规则</Button>}</section>)}
+        {permissions.filter(item => item.business_action_item_id === selectedAction?.item_id).map(permission => <section className="permission-summary-row" key={permission.item_id}><StatusBadge kind="rule" className="permission-badge" tone={permission.effective_state === 'RETIRED' ? 'neutral' : permission.expectation === 'ALLOW' ? 'success' : 'danger'}>{permission.effective_state === 'RETIRED' ? '停用' : permission.expectation === 'ALLOW' ? '允许' : '禁止'}</StatusBadge><div><h3>{sentence(permission)}</h3><p>保护结果：{permission.protected_effect_item_ids.map(id => selectedAction?.effects.find(effect => effect.item_id === id)?.business_label || '已确认结果').join('、')}</p></div><Button type="link" disabled={busy} aria-label={`编辑规则：${sentence(permission)}`} onClick={() => setEditingRule({...permission})}>编辑</Button>{permission.intent_id && <Button type="link" danger={permission.effective_state!=='RETIRED'} disabled={busy} onClick={()=>setPermissions(items=>items.map(item=>item.item_id===permission.item_id?{...item,effective_state:item.effective_state==='RETIRED'?'ACTIVE':'RETIRED'}:item))}>{permission.effective_state==='RETIRED'?'恢复启用':'停用这条规则'}</Button>}{!permission.intent_id && <Button danger disabled={busy} onClick={() => setPermissions(items => items.filter(item => item.item_id !== permission.item_id))}>移除草稿规则</Button>}</section>)}
         {!permissions.some(item => item.business_action_item_id === selectedAction?.item_id) && <p className="boundary-empty-rules">这项动作还没有权限规则。点击“新增权限规则”开始填写。</p>}
         <section className="boundary-effect-overview"><h3>受保护的业务结果</h3>{selectedAction?.effects.map(effect => <p key={effect.item_id}>{effect.business_label} · {effect.resource_concept}</p>)}</section>
       </article>
     </section></>}
-    {!editingRule && mode === 'rules' && !editingDraft && <AgentWorkflowEntry projectId={draft.project_id} stage="RULES"/>}
+    {!editingRule&&onAgent&&<section className="boundary-candidate-entry"><div><strong>让原 Agent 整理新增或调整</strong><p>{dirty?'切换前需要决定是否放弃本页草稿。':'在原对话中提出要求，Agent 保存后，到整理入口读取候选。'}</p></div><Button disabled={busy} onClick={()=>{if(dirty){setDiscardToAgent(true);setConfirmDiscard(true)}else onAgent()}}>Agent 整理与读取候选</Button></section>}
     {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error}/>}
-    {(changedCount > 0 || Object.keys(objectDrafts).length > 0) && <div className="boundary-draft-footer"><span>{changedCount ? `已有 ${changedCount} 项草稿修改` : '单项编辑尚未保存到草稿'}<small>修改仅保留在当前项目页面会话中，确认后才会生效。</small></span></div>}
-    <Modal open={confirmDiscard} title="放弃当前草稿修改？" okText="放弃修改" cancelText="继续编辑" okButtonProps={{danger:true,disabled:busy}} onCancel={() => setConfirmDiscard(false)} onOk={() => { setConfirmDiscard(false); onCancel?.() }}><p>本页尚未确认的修改会被丢弃，已生效的权限保持原样。</p></Modal>
+    {(changedCount > 0 || Object.keys(objectDrafts).length > 0) && <div className="boundary-draft-footer"><span>{changedCount ? `已有 ${changedCount} 项草稿修改` : '单项编辑尚未保存到草稿'}<small>草稿尚未生效。点击“核对修改”审阅新增、变更和停用；批准后才更新正式规则。</small></span></div>}
+    <Modal open={confirmDiscard} title="放弃当前草稿修改？" okText={discardToAgent?'放弃草稿并进入 Agent 整理':'放弃修改'} cancelText="继续编辑" okButtonProps={{danger:true,disabled:busy}} onCancel={() => {setConfirmDiscard(false);setDiscardToAgent(false)}} onOk={() => { setConfirmDiscard(false); if(discardToAgent)onAgent?.();else onCancel?.() }}><p>本页尚未确认的修改会被丢弃，已生效的权限保持原样。</p></Modal>
   </section>
 }
 

@@ -149,6 +149,10 @@
 - `class PersistedExecutionRequestV3`
 - `PersistedExecutionRequestV3.validate_project(self)`
 - `class PersistedExecutionRequestV4`
+- `class FrozenRequirement`
+- `class FrozenRequirementScope`
+- `class PersistedExecutionRequestV5`
+- `PersistedExecutionRequestV5.requirements_match_cases(self)`
 - `class ExecutionV3Error`
 - `canonical_execution_request_v3_bytes(request) -> bytes`
 - `canonical_execution_request_bytes(request)`

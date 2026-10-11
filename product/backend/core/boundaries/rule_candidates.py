@@ -13,6 +13,7 @@ from product.backend.core.boundaries.proposals import (
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
 from product.backend.core.boundaries.candidate_scenarios import RuleScenario, RuleScenarioInput, freeze_scenario
 from product.backend.core.boundaries.candidate_reviews import BoundaryReviewRecord
+from product.backend.core.boundaries.candidate_scope import RequirementSource, ScopeDecision, ScopeReference, CoverageLink, CoverageSuggestion
 
 CANDIDATE_ID_PATTERN = r"^rcd_[0-9a-f]{32}$"
 BASIS_ID_PATTERN = r"^rb_[0-9a-f]{64}$"
@@ -135,7 +136,81 @@ class ReviewedRuleCandidateRevision(RuleCandidateRevision):
         return self
 
 
-_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision | ReviewedRuleCandidateRevision, Field(discriminator="schema_version")])
+class ScopedCandidateContentInput(RuleCandidateContentInput):
+    actions: tuple[ProposedActionItem, ...] = Field(default=(), max_length=100)
+    permissions: tuple[ProposedPermissionItem, ...] = Field(default=(), max_length=200)
+    examples: tuple[RuleExample, ...] = Field(default=(), max_length=400)
+    requirement_sources: tuple[RequirementSource, ...] = Field(default=(), max_length=100)
+    coverage_suggestions: tuple[CoverageSuggestion, ...] = Field(default=(), max_length=20)
+
+    @model_validator(mode="after")
+    def distinct_sources(self):
+        if len({item.requirement_id for item in self.requirement_sources}) != len(self.requirement_sources):
+            raise ValueError("要求标识不能重复")
+        if len({item.issue_id for item in self.coverage_suggestions}) != len(self.coverage_suggestions):
+            raise ValueError("同一缺口的检查建议不能重复")
+        return self
+
+
+class ScopedCandidateContent(ScopedCandidateContentInput):
+    scenarios: tuple[RuleScenario, ...] = Field(default=(), max_length=10)
+
+    @model_validator(mode="after")
+    def verified_scenarios(self):
+        if any(freeze_scenario(item, self) != item for item in self.scenarios):
+            raise ValueError("情境指纹与内容不一致")
+        ids = {item.item_id for item in self.permissions}
+        if any(not set(item.permission_item_ids) <= ids for item in self.requirement_sources):
+            raise ValueError("要求只能关联这份候选已有的权限项")
+        if any(not {target.permission_item_id for target in item.targets} <= ids for item in self.coverage_suggestions):
+            raise ValueError("检查建议只能关联这份候选已有的权限项")
+        return self
+
+
+class ScopedRuleCandidateRevision(ReviewedRuleCandidateRevision):
+    schema_version: Literal["4"] = "4"
+    content: ScopedCandidateContent
+    scope_decisions: tuple[ScopeDecision, ...] = Field(default=(), max_length=100)
+    coverage_links: tuple[CoverageLink, ...] = Field(default=(), max_length=20)
+
+    @model_validator(mode="after")
+    def scoped_identity(self):
+        for records, key in ((self.scope_decisions, "requirement_id"), (self.coverage_links, "issue_id")):
+            if len({getattr(item, key) for item in records}) != len(records) or any(item.output_revision > self.revision for item in records):
+                raise ValueError("范围决定和覆盖关联必须属于当前或历史修订且不重复")
+        return self
+
+
+class GroupedRuleCandidateRevision(ScopedRuleCandidateRevision):
+    # 格式5只增加人确认的补充依据关联；旧格式及原有决定保持原样可读。
+    schema_version: Literal['5'] = '5'
+    scope_references: tuple[ScopeReference, ...] = Field(default=(), max_length=100)
+
+    @model_validator(mode='after')
+    def distinct_references(self):
+        ids = {item.requirement_id for item in self.scope_references}
+        if len(ids) != len(self.scope_references) or ids & {item.requirement_id for item in self.scope_decisions} or any(item.output_revision > self.revision for item in self.scope_references):
+            raise ValueError('补充依据不得重复、覆盖另一决定或引用未来修订')
+        return self
+
+
+def scoped_content(value):
+    data = value.model_dump(exclude={"scenarios"})
+    return ScopedCandidateContent(**data, scenarios=tuple(freeze_scenario(item, value) for item in getattr(value, "scenarios", ())))
+
+
+def revised_candidate(current, **changes):
+    # 旧格式只在显式写入时升级；历史reader仍严格按各自版本读取。
+    values = current.model_dump(exclude={"schema_version", "content"})
+    values["content"] = scoped_content(current.content)
+    values.update(changes)
+    if current.schema_version not in {'4', '5'} and not changes.get('coverage_links') and not values['content'].requirement_sources:
+        values['content'] = RuleCandidateContent(**values['content'].model_dump(exclude={'requirement_sources', 'coverage_suggestions'}))
+        return ReviewedRuleCandidateRevision(**values)
+    return GroupedRuleCandidateRevision(**values) if current.schema_version == '5' or 'scope_references' in changes else ScopedRuleCandidateRevision(**values)
+
+
+_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision | ReviewedRuleCandidateRevision | ScopedRuleCandidateRevision | GroupedRuleCandidateRevision, Field(discriminator="schema_version")])
 
 
 def read_candidate_revision(payload: str):
@@ -153,7 +228,8 @@ class RuleCandidateSave(BoundaryModel):
     expected_basis_id: str = Field(pattern=BASIS_ID_PATTERN)
     candidate_id: str | None = Field(default=None, pattern=CANDIDATE_ID_PATTERN)
     expected_revision: int | None = Field(default=None, ge=1)
-    content: RuleCandidateContentInput
+    content: ScopedCandidateContentInput
+    merge: bool = False
 
     @model_validator(mode="after")
     def paired_revision(self) -> RuleCandidateSave:

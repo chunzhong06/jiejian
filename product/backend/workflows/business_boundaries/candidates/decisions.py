@@ -7,9 +7,14 @@ from product.backend.core.boundaries.rule_candidates import RuleCandidateRevisio
 from product.backend.core.boundaries.candidate_scenarios import CandidateApprovalEntities, CandidateActorReference, CandidateActionReference, CandidateEffectReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.candidate_reviews import boundary_review_items
+from product.backend.core.boundaries.candidate_scope import scope_issues
+from product.backend.workflows.business_boundaries.candidates.coverage import coverage_items
 
 
 CANDIDATE_REVISION_GUIDANCE = [
+    "优先按next_tasks处理：USER由人核对，AGENT修订规则，CAPABILITY说明能力边界。不要把材料问题一律转为情境。",
+    "先保存requirement_sources，再由人确认本轮范围；补充权限引用已确认要求，源码接口只作为线索。可用merge=true分批补充同一候选，未提交项不会删除。",
+    "已关联具体权限、入口和时间范围的准备缺口可进入规则审阅；检查前仍核验实际计划与材料。PLANNED不是已覆盖或PASS。任意历史范围仍阻塞。",
     "不单独建模、基础接口归属及Agent额外推断可由用户在候选详情的“业务边界核对”直接确认；无需编造权限选项或原文摘录。",
     "原问题和unsupported_constraints原文持续保留。人工分类及保留的实际要求从boundary_reviews读取；准备前提、证据及覆盖缺口仍阻塞，不能用分类代替检查。",
     "修订前调用jiejian_rule_context，再用jiejian_rule_candidate_show不指定revision读取最新候选；保存携带最新expected_basis_id和expected_revision。",
@@ -143,7 +148,8 @@ def validate_approval_source(work, proposal, current_basis):
     states, replacements, conflicts = scenario_state(work, value)
     if pending_scenario_issues(states, conflicts):
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "含义核对尚未完成，不能批准这份提案")
-    if any(item["blocking"] for item in boundary_review_items(value)):
+    planned = {item['issue_id'] for item in coverage_items(value) if item['status'] == 'PLANNED'}
+    if scope_issues(value) or any(item["blocking"] and item['issue_id'] not in planned for item in boundary_review_items(value)):
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "业务边界仍有未决问题或未覆盖要求，不能批准这份提案")
     if content_hash is not None or isinstance(value, RuleCandidateRevision):
         if content_hash != boundary_sha256(value.content.model_dump(mode="json")) or digest != decision_digest(states):

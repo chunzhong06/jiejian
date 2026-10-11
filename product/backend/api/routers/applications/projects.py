@@ -46,8 +46,14 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
         result = context.application_understanding.connect(
             body.source_root,
             project_name=body.project_name,
+            mode=body.mode, existing_project_id=body.existing_project_id,
+            expected_snapshot=body.expected_snapshot, operation_id=body.operation_id,
         )
         return data_response(result.model_dump(mode="json"), status_code=201)
+
+    @router.post('/api/applications/connection-preview', response_model=ApiResponse)
+    def preview_application_connection(body: ApplicationConnectionPreviewRequest):
+        return data_response(context.application_understanding.connection_preview(body.source_root))
 
     @router.get("/api/projects", response_model=ApiResponse)
     async def list_projects(include_archived: bool = False):
@@ -225,6 +231,14 @@ class ApplicationConnectRequest(ApiModel):
     schema_version: Literal["1"]
     source_root: str = Field(min_length=1, max_length=32_768)
     project_name: str | None = Field(default=None, min_length=1, max_length=128)
+    mode: Literal['AUTO', 'RESUME', 'NEW'] = 'AUTO'
+    existing_project_id: str | None = Field(default=None, min_length=1, max_length=64)
+    expected_snapshot: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
+    operation_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+
+
+class ApplicationConnectionPreviewRequest(ApiModel):
+    source_root: str = Field(min_length=1, max_length=32_768)
 
 
 class EndpointConfirmationRequest(ApiModel):

@@ -21,6 +21,7 @@ import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/applications/onboarding'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
+import { ApplicationReentry } from './ApplicationReentry'
 import { ConnectionSupport } from './ConnectionSupport'
 import { ControlledRuntimePanel } from './ControlledRuntimePanel'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
@@ -31,6 +32,7 @@ import {
   type EndpointDiscoveryDto,
   type ProjectDto,
   type RoleCandidateDto,
+  type ConnectionPreview, type ConnectionChoice,
 } from '../../api/applications/projects'
 import type { WorkspaceConnectionDto } from '../../api/workspace'
 
@@ -99,6 +101,10 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
 }) {
   const [understanding, setUnderstanding] = useState<ApplicationUnderstandingDto | null>(null)
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null)
+  const [reentry,setReentry]=useState<ConnectionPreview>()
+  const [connectionAttempt,setConnectionAttempt]=useState<ConnectionChoice>()
+  // 同步阻止连点产生不同的新建操作键；未知结果只允许查询原项目。
+  const connectionInFlight=useRef(false)
   const [connecting, setConnecting] = useState(requestConnection)
   const [endpoints, setEndpoints] = useState<EndpointDiscoveryDto | null>(null)
   const [manualPath, setManualPath] = useState('')
@@ -132,7 +138,7 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   }
   useEffect(() => { setReviewOpen(false); setSyncFailed(false); setConnecting(requestConnection) }, [selected?.project_id, requestConnection])
   useEffect(() => { if (reviewOpen) reviewSurface.current?.focus({ preventScroll: true }) }, [reviewOpen])
-  useTaskGuard(loading || Boolean(manualRole.trim() || manualAction.trim()) || (!understanding && Boolean(manualPath.trim())))
+  useTaskGuard(loading || Boolean(connectionAttempt) || Boolean(manualRole.trim() || manualAction.trim()) || (!understanding && Boolean(manualPath.trim())))
   useEffect(() => {
     if (!candidateEditing && !manualRole.trim() && !manualAction.trim() && (understanding || !manualPath.trim())) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
@@ -181,17 +187,50 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   }, [selected?.project_id, endpointStatus, restoreAttempt, requestConnection])
 
   const connectPath = async (sourcePath: string) => {
-    if (!sourcePath.trim()) return
+    if (!sourcePath.trim()||connectionInFlight.current||connectionAttempt) return
+    connectionInFlight.current=true
     setLoading(true); setError(null); setMessage('')
     try {
-      const connected = await projectsApi.connectApplication(sourcePath.trim())
+      const preview=await projectsApi.connectionPreview(sourcePath.trim())
+      if(preview.projects.length){setReentry(preview);return}
+      // 即使预览时没有旧项目，也固定创建快照和操作键，避免并发接入被静默变成复用。
+      const choice:ConnectionChoice={mode:'NEW',expected_snapshot:preview.snapshot,operation_id:crypto.randomUUID().replaceAll('-','')}
+      setReentry(preview);setConnectionAttempt(choice)
+      const connected = await projectsApi.connectApplication(preview.source_root,undefined,choice)
+      setReentry(undefined);setConnectionAttempt(undefined)
       applyUnderstanding(connected.understanding)
       setDiscovery(connected.discovery)
       onConnected(connected.project)
       setMessage('应用目录已连接。可以先整理业务与权限，应用还不用启动。')
     } catch (connectError) {
       setError(setupError(connectError, '连接应用目录失败，请确认路径存在且可读取。'))
-    } finally { setLoading(false) }
+      if(connectError instanceof ApiError&&['STATE_PRECONDITION','INPUT_INVALID','ONBOARDING_INPUT_INVALID'].includes(connectError.code)){setConnectionAttempt(undefined);setReentry(undefined)}
+    } finally { connectionInFlight.current=false;setLoading(false) }
+  }
+
+  const chooseReentry=async(choice:ConnectionChoice,name?:string)=>{
+    if(!reentry||loading||connectionAttempt||connectionInFlight.current)return
+    connectionInFlight.current=true
+    setLoading(true);setError(null);setConnectionAttempt(choice)
+    try{
+      const connected=await projectsApi.connectApplication(reentry.source_root,name,choice)
+      setReentry(undefined);setConnectionAttempt(undefined);applyUnderstanding(connected.understanding);setDiscovery(connected.discovery);onConnected(connected.project)
+      setMessage(choice.mode==='NEW'?'已建立独立的新项目，尚无原权限和源码授权。':'已恢复原项目，继续保留原权限、候选和历史。')
+    }catch(failure){
+      if(failure instanceof ApiError&&['STATE_PRECONDITION','INPUT_INVALID','ONBOARDING_INPUT_INVALID'].includes(failure.code)){
+        setConnectionAttempt(undefined);setError(setupError(failure,'接入条件已变化，请重新选择目录。'))
+      }else setError({message:'本次接入结果尚未确认。请查询结果，不要再次新建。'})
+    }finally{connectionInFlight.current=false;setLoading(false)}
+  }
+  const readReentry=async()=>{
+    if(!connectionAttempt||!reentry||loading)return
+    setLoading(true)
+    try{
+      const id=connectionAttempt.mode==='NEW'?`app_${connectionAttempt.operation_id}`:connectionAttempt.existing_project_id!
+      const [project,current]=await Promise.all([projectsApi.project(id),projectsApi.understanding(id)])
+      if(project.status==='ARCHIVED'||current.source_root!==reentry.source_root){setError({message:'尚未读到本次接入完成的事实，请稍后继续查询。'});return}
+      setReentry(undefined);setConnectionAttempt(undefined);setError(null);applyUnderstanding(current);onConnected(project)
+    }catch{setError({message:'尚未确认本次接入结果，未重复创建项目。请稍后继续查询。'})}finally{setLoading(false)}
   }
 
   const chooseFolder = async () => {
@@ -294,6 +333,10 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   // 地址是否仍可信由后端 Readiness 实时裁决；历史上保存过地址不能跳过重新确认。
   const endpointReady = endpointStatus === undefined ? Boolean(understanding?.confirmed_endpoint) : endpointStatus === 'CONFIRMED'
   const currentStep = !understanding ? 1 : connecting && !endpointReady ? 2 : !understanding.source_fingerprint ? 3 : 4
+  // 首次分析后直接呈现待核对内容；已保存的业务仍保留概览和重新进入入口。
+  useEffect(() => {
+    if (currentStep === 4 && understanding && [...understanding.role_candidates, ...understanding.action_candidates].some(item => !item.stale && item.decision === 'PROPOSED')) setReviewOpen(true)
+  }, [currentStep, understanding?.project_id, understanding?.source_fingerprint])
   useEffect(() => { onStageChanged?.(currentStep) }, [currentStep, onStageChanged])
   const reviewComplete = Boolean(understanding?.role_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale)
     && understanding.action_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale))
@@ -333,7 +376,7 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
   </section>
 
   return <div className="application-setup">
-    <RulePreparationStages phase={0} connectionPhase={currentStep < 3 ? 0 : currentStep === 3 ? 1 : undefined} note={currentStep === 2 ? '确认本地地址' : undefined}/>
+    {currentStep === 2 ? <p className="editorial-eyebrow">检查准备 · 确认运行地址</p> : <RulePreparationStages phase={0} connectionPhase={currentStep === 1 ? 0 : currentStep === 3 ? 1 : undefined}/>}
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
     {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
     {syncFailed && <Alert type="warning" showIcon message="本次操作已经保存，下一步尚未同步" description="已保存的信息会保留。重新同步只读取状态，不会重复提交。" action={<Button onClick={() => void syncWorkspace()}>重新同步下一步</Button>}/>}
@@ -345,12 +388,13 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
       </div>
       <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>核对角色与业务动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} iconPosition="end" onClick={() => setReviewOpen(true)}>核对角色与业务动作</Button><p className="access-next-note">保存角色与动作后，继续整理允许与禁止的权限要求。</p></div>
     </section>}
-    {currentStep === 1 && <ConnectionSupport />}
-    {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
-      <Typography.Paragraph>选择项目的源码文件夹。接下来确认读取范围，整理应用中的角色与业务动作；实际演示操作时再连接运行中的应用。</Typography.Paragraph>
+    {!understanding&&reentry&&<ApplicationReentry key={reentry.snapshot} preview={reentry} busy={loading} uncertain={Boolean(connectionAttempt)} onChoose={(choice,name)=>void chooseReentry(choice,name)} onRead={()=>void readReentry()} onCancel={()=>{setReentry(undefined);setError(null)}}/>}
+    {!understanding && !reentry && <section className="application-step"><h2>选择应用文件夹</h2>
+      <Typography.Paragraph>选中你的 Web 项目源码目录。选好后，会先请你确认源码读取授权，再开始分析。</Typography.Paragraph>
       {officialSampleStart}
       <Collapse ghost items={[{ key: 'manual-path', label: '目录选择器不可用？', children: <Space.Compact className="application-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button loading={loading} onClick={() => void connectPath(manualPath)}>连接这个目录</Button></Space.Compact> }]} />
     </section>}
+    {currentStep === 1 && <details className="access-support-details"><summary>接入后怎样完成权限检查？查看支持条件</summary><ConnectionSupport /></details>}
     {understanding && connecting && !endpointReady && <section className="application-step"><h2>确认本地访问地址</h2><Button type="link" disabled={loading} onClick={() => setConnecting(false)}>先整理规则与材料</Button>
       {discovery && <div className="application-discovery">
         <Typography.Text strong>识别结果</Typography.Text>
@@ -372,13 +416,14 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
       {controlledEndpoint===endpoint&&Boolean(endpoint)?<p>界鉴已确认本应用正在此地址运行。请在下方确认访问授权。</p>:<Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经启动，并且是本次要检查的应用</Checkbox>}
       <Checkbox checked={endpointConfirmed} onChange={(event) => setEndpointConfirmed(event.target.checked)}>确认这是我的本地应用，并允许界鉴访问这个地址</Checkbox>
     </section>}
-    {understanding && currentStep === 3 && <section className="application-step"><h2>分析权限组与关键业务动作</h2>
-      {endpointReady ? <Typography.Paragraph>已确认地址：<StatusBadge kind="lifecycle" tone="info">{understanding.confirmed_endpoint}</StatusBadge></Typography.Paragraph> : <Typography.Paragraph>这一步只读取源码，应用可以稍后再启动。<Button type="link" loading={loading} onClick={() => void openConnection()}>连接已运行的应用</Button></Typography.Paragraph>}
+    {understanding && currentStep === 3 && <section className="application-step"><div className="access-analysis-intro"><div className="access-analysis-copy"><p className="editorial-eyebrow">目录已选好 · 下一步读取源码</p><h2>允许界鉴分析这个应用吗？</h2>
+      {endpointReady ? <Typography.Paragraph>已确认地址：<StatusBadge kind="lifecycle" tone="info">{understanding.confirmed_endpoint}</StatusBadge></Typography.Paragraph> : <><Typography.Paragraph>这一步只读取源码，应用可以稍后再启动。</Typography.Paragraph><Button type="link" loading={loading} onClick={() => void openConnection()}>连接已运行的应用</Button></>}
+      </div><aside className="access-analysis-folder" aria-label="本次分析的应用目录"><span>已选择的应用目录</span><strong>{understanding.source_root.replaceAll('\\','/').split('/').filter(Boolean).at(-1) || understanding.source_root}</strong><p className="access-source-root">{understanding.source_root}</p></aside></div>
       <Alert type="warning" showIcon message="需要你单独授权只读源码分析" description="界鉴不会执行或导入源码，不会运行 npm/python 命令，不会联网，不读取 .env、私钥、凭据和生成目录，也不会把源码正文写入报告、日志或发送给模型。" />
       <Checkbox checked={analysisAuthorized} onChange={(event) => setAnalysisAuthorized(event.target.checked)}>我允许界鉴只读分析当前应用源码，用于寻找权限组与关键业务动作</Checkbox>
     </section>}
     {candidateReview && <div ref={reviewSurface} tabIndex={-1} hidden={!reviewOpen} className="access-review-surface">{reviewOpen && <Button type="link" disabled={candidateEditing || loading} onClick={() => setReviewOpen(false)}>返回接入概览</Button>}{candidateReview}</div>}
-    <TaskActionBar
+    {!(currentStep === 4 && reviewOpen && !reviewComplete) && <TaskActionBar
       back={{ label: '返回工作台', onClick: onBack }}
       refresh={understanding ? { label: '刷新当前状态', onClick: () => void refreshUnderstanding(), loading } : undefined}
       restart={currentStep === 4 ? {
@@ -393,6 +438,6 @@ export function ApplicationSetup({ selected, endpointStatus, requestConnection =
         },
       } : undefined}
       primary={currentStep === 4 ? reviewOpen && reviewComplete && !candidateEditing ? primaryAction : undefined : primaryAction}
-    />
+    />}
   </div>
 }

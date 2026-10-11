@@ -97,7 +97,8 @@ def build_mcp_control(
         description="界鉴本地权限检查与代码变化协作入口；权限规则只能由本机GUI批准。",
         instructions=(
             "READ读取批准权限和既有事实；PREPARE可在原客户端完成修改后登记源码变化。"
-            "用户要求保留权限约定时，先 rule_context 获取当前基线、支持范围和 candidate_input_schema，再 rule_candidate_save 保存有界原文、结构化建议和具体例子。"
+            "用户要求保留权限约定时，先 rule_context 获取当前基线、支持范围和 candidate_input_schema。可批量同时保存权限候选、必要合法对照和requirement_sources，区分用户原话、源码线索和Agent推断；不要求先保存空权限。按独立业务目标组织来源，角色说明与源码线索作为对应要求的依据，不重复拆成业务要求。用户可在GUI集中确认明确要求，或把已有线索关联为补充依据；Agent不能代做。用户确认含义和本轮范围后才可转提案，已有IN_SCOPE决定必须沿用。"
+            "不要把发现的每个接口都新增为业务权限；登录、造数据、恢复可能只是准备步骤。不能将本次过程扩大成任意历史。按next_tasks分工处理；merge=true可分批补充同一候选，不能为数量上限合并不同目标入口。"
             "候选不等于正式规则；通过返回的 GUI 链接由用户审阅批准，随后 rule_candidate_show 回读。保存响应不明确时仅 rule_operation 查询原操作键，不换键重试。不得上传凭据或整个会话。"
             "权限确认后读取 preparation_context 的guidance、复用材料与source_input_schema；next_step指向当前精确任务。按handler区分人的确认、Agent配置与系统等待；建议不是执行授权，写入前重新读取依据。proof_source_save只保存来源候选。"
             "读取范围必须由用户在GUI确认，EXECUTE才可 proof_preflight_start；通过 status 读取具体缺口，修正配置形成新修订。"
@@ -156,7 +157,7 @@ def build_mcp_control(
 
     @server.tool(name="jiejian_rule_candidate_save", structured_output=True)
     def rule_candidate_save(ctx: Context, project_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-        """保存待审候选，不能批准或开始检查。修订前读取context/show的revision_guidance；旧问题保留原文，或以逐字相同的question转成情境。先保存情境，再请用户按review_url核对；失败按details.issues定位，不删减业务要求。"""
+        """批量保存权限及要求来源，或在信息不足时先保存范围。读取context/show的next_tasks与scope_review；可merge=true分批保存同一候选。保留原要求与正常对照，不把材料缺口改成业务选项；不能确认范围、批准或开始检查。"""
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
         return _json(_invoke(lambda: context.rule_candidates.save(project_id,
             RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), submitted_via="MCP"), input_model=RuleCandidateSave))

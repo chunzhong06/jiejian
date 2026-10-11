@@ -1,6 +1,7 @@
 // 结果总览只压缩服务端已发布文案；未知文案原样显示，不根据 HTTP 或效果推算单项结论。
 import { Button, Modal } from 'antd'
 import { useContext, useEffect, useState, type ReactNode } from 'react'
+import {RequirementScopeSummary} from '../../../shared/ui/RequirementScopeSummary'
 import { WorkPageVisible } from '../../../shared/runtime/visibility'
 import type { ActionResultStory, ResultStory } from '../../../api/checks/currentChecks'
 import { repairLabels } from '../../../api/checks/repairs'
@@ -57,9 +58,10 @@ export function ResultScope({ story }: { story: ResultStory }) {
   const visible = useContext(WorkPageVisible)
   useEffect(() => { if (!visible) setOpen(false) }, [visible])
   useEffect(() => setOpen(false), [story.run_id])
-  return <><Button type="link" className="result-scope-button" onClick={() => setOpen(true)}>查看本轮范围</Button><Modal title="本轮检查范围" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden>
-    <dl className="result-scope-record"><dt>权限版本</dt><dd>{story.policy_epoch}</dd><dt>检查范围</dt><dd>{story.actions.length} 项实际检查；每项的计划账号、资源与要求见对应结果。</dd><dt>记录属性</dt><dd>已发布快照，不随当前源码和配置改变。</dd></dl>
-    {[...new Set([...story.claim_boundary, ...story.actions.flatMap(item => item.claim_boundary)])].map(text => <p key={text}>{text}</p>)}
+  return <><Button type="link" className="result-scope-button" onClick={() => setOpen(true)}>查看本轮范围</Button><Modal title="本轮结果的适用范围" width={1000} open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden>
+    <div className="result-scope-intro"><p>这是检查时保存的范围，后续修改不会改写它。</p><span>{story.actions.length} 项实际检查 · 权限版本 {story.policy_epoch}</span></div>
+    <RequirementScopeSummary scopes={story.requirement_scope??[]} historical/>
+    <section aria-label="解读结果时的限制"><h3>解读结果时还需注意</h3>{[...new Set([...story.claim_boundary, ...story.actions.flatMap(item => item.claim_boundary)])].map(text => <p key={text}>{text}</p>)}<p className="editorial-muted">每项的计划账号、资源与实际结论，请查看对应检查结果。</p></section>
     <details><summary>核对精确记录引用</summary><p className="result-technical-id">Run：{story.run_id}</p>{story.change_context && <p className="result-technical-id">交付：{story.change_context.change_id}</p>}</details>
   </Modal></>
 }

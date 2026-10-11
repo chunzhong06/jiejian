@@ -5,17 +5,17 @@ import { RulePreparationStages } from '../../shared/ui/RulePreparationStages'
 export function RulePreparationProgress({ context }: { context: RuleCandidateContext }) {
   const source = context.source_summary
   if (!source) return null
+  if((context.formal_permission_count??0)>0)return <p className="rule-handoff-saved">沿用当前 {context.formal_permission_count} 条正式规则。本次只核对新增或调整，批准前现有规则保持生效。</p>
   const pending = context.candidates.filter(item => !item.decision && item.assessment !== 'ALREADY_CONFIRMED')
   const needsChanges = pending.some(item => item.assessment === 'NEEDS_CHANGES')
   const complete = (context.formal_permission_count ?? 0) > 0 && !pending.length && context.next_offset == null && source.pending === 0
   const businessKnown = source.roles > 0 && source.actions > 0 && source.pending === 0
-  const phase = complete ? 4 : !businessKnown ? 0 : needsChanges || !pending.length ? 1 : 2
+  // 候选可读不等于已经打开正式提案；整理页始终留在权限整理，提案页负责推进批准阶段。
+  const phase = complete ? 3 : !businessKnown ? 0 : 1
   const attention = phase === 0 && source.pending > 0 || phase === 1 && needsChanges
   const currentPhase = complete ? 3 : phase
   return <section className="rule-source-handoff" aria-label="业务信息与权限进度">
     <RulePreparationStages phase={currentPhase} complete={complete} attention={attention}/>
-    <p className="rule-facts-heading">已保存的业务信息</p>
-    <dl className="rule-candidate-counts"><div><dt>已确认角色</dt><dd>{source.roles} 个</dd></div><div><dt>已确认动作</dt><dd>{source.actions} 项</dd></div><div><dt>仍待核对</dt><dd>{source.pending} 项</dd></div><div><dt>正式权限</dt><dd>{context.formal_permission_count == null ? '尚未读取' : `${context.formal_permission_count} 条`}</dd></div></dl>
-    <p>{complete ? '已保存的权限可以作为检查依据；新约定仍需重新整理、审阅并批准。' : '已有角色与动作会继续用于整理。候选尚未生效，批准后才会更新正式权限。'}</p>
+    <p className="rule-handoff-saved">沿用已保存的业务清单：{source.roles} 个角色 · {source.actions} 项动作{source.pending > 0 ? ` · ${source.pending} 项仍待核对` : ''}。{complete ? '新要求仍需重新审阅批准。' : '接下来确认谁可以对谁的资源做什么。'}</p>
   </section>
 }

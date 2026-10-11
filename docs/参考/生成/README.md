@@ -28,7 +28,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [backend/composition](代码/backend/composition.md) | 3 |
 | [backend/core/_root](代码/backend/core/_root.md) | 7 |
 | [backend/core/applications](代码/backend/core/applications.md) | 2 |
-| [backend/core/boundaries](代码/backend/core/boundaries.md) | 10 |
+| [backend/core/boundaries](代码/backend/core/boundaries.md) | 11 |
 | [backend/core/changes](代码/backend/core/changes.md) | 2 |
 | [backend/core/checks](代码/backend/core/checks.md) | 3 |
 | [backend/core/contracts](代码/backend/core/contracts.md) | 3 |
@@ -66,7 +66,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [backend/workflows/_root](代码/backend/workflows/_root.md) | 1 |
 | [backend/workflows/agent_access](代码/backend/workflows/agent_access.md) | 8 |
 | [backend/workflows/application_understanding](代码/backend/workflows/application_understanding.md) | 9 |
-| [backend/workflows/business_boundaries](代码/backend/workflows/business_boundaries.md) | 21 |
+| [backend/workflows/business_boundaries](代码/backend/workflows/business_boundaries.md) | 23 |
 | [backend/workflows/changes](代码/backend/workflows/changes.md) | 4 |
 | [backend/workflows/checks](代码/backend/workflows/checks.md) | 17 |
 | [backend/workflows/contracts](代码/backend/workflows/contracts.md) | 1 |
@@ -84,7 +84,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [frontend/api](代码/frontend/api.md) | 28 |
 | [frontend/app](代码/frontend/app.md) | 28 |
 | [frontend/features/access](代码/frontend/features/access.md) | 11 |
-| [frontend/features/boundaries](代码/frontend/features/boundaries.md) | 29 |
+| [frontend/features/boundaries](代码/frontend/features/boundaries.md) | 32 |
 | [frontend/features/changes](代码/frontend/features/changes.md) | 19 |
 | [frontend/features/checks](代码/frontend/features/checks.md) | 5 |
 | [frontend/features/environment](代码/frontend/features/environment.md) | 8 |
@@ -97,7 +97,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [frontend/features/system](代码/frontend/features/system.md) | 5 |
 | [frontend/features/tools](代码/frontend/features/tools.md) | 6 |
 | [frontend/features/workspace](代码/frontend/features/workspace.md) | 3 |
-| [frontend/shared](代码/frontend/shared.md) | 46 |
+| [frontend/shared](代码/frontend/shared.md) | 50 |
 | [protocols/_root](代码/protocols/_root.md) | 3 |
 | [protocols/checks](代码/protocols/checks.md) | 7 |
 | [protocols/observer](代码/protocols/observer.md) | 5 |
@@ -114,7 +114,7 @@ Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录
 | [scripts/startup](代码/scripts/startup.md) | 5 |
 | [配置与入口](代码/配置与入口.md) | 15 |
 
-合计：792个文件、93个分片。
+合计：802个文件、93个分片。
 
 [注册与格式](注册与格式.md) · [数据库迁移](数据库迁移.md)。仅读源码文本，不import产品、打开数据库或读取var运行数据。
 

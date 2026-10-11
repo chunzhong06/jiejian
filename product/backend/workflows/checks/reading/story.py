@@ -14,7 +14,7 @@ from product.backend.workflows.checks.repairs.repair_presentation import RepairC
 from product.backend.workflows.checks.reading.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
 from product.backend.workflows.checks.reading.observation_reading import ObservationReading, observation_reading
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
-from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, WireModel
+from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, WireModel
 
 
 class StoryIdentity(WireModel):
@@ -127,6 +127,7 @@ class ResultStory(WireModel):
     repair_verification: CurrentRepairVerification | None = None
     runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
     runtime_instance_id: str | None = None
+    requirement_scope: tuple[FrozenRequirementScope, ...] = ()
 
 
 class CheckStoryBuilder:
@@ -262,6 +263,7 @@ class CheckStoryBuilder:
         correspondence = getattr(package.result, "runtime_correspondence", None)
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+            requirement_scope=getattr(package.request, 'requirement_scope', ()),
             runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.reference.instance_id,
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),

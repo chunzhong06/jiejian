@@ -37,6 +37,6 @@
 
 - `CurrentTestsPage`
 
-静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/presentation/execution`、`../../shared/runtime/editGuard`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/TaskActionBar`、`../changes/delivery/SourceIdentityPanel`、`../preparation/PreparationPage`、`../results/CurrentResultStory`、`../results/ResultAgentHandoff`、`../results/overview/ResultOverview`、`./CheckProgressPanel`、`antd`、`react`
+静态import / dot-source：`../../api/checks/currentChecks`、`../../api/http`、`../../shared/presentation/execution`、`../../shared/runtime/editGuard`、`../../shared/runtime/useLiveRead`、`../../shared/runtime/visibility`、`../../shared/ui/Editorial`、`../../shared/ui/LoadingState`、`../../shared/ui/RequirementNotice`、`../../shared/ui/RequirementScopeSummary`、`../../shared/ui/TaskActionBar`、`../changes/delivery/SourceIdentityPanel`、`../preparation/PreparationPage`、`../results/CurrentResultStory`、`../results/ResultAgentHandoff`、`../results/overview/ResultOverview`、`./CheckProgressPanel`、`antd`、`react`
 
 <!-- GENERATED:END -->

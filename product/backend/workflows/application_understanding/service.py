@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import time
@@ -75,81 +76,73 @@ class ApplicationUnderstandingService:
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._reserved_control_origin = reserved_control_origin
 
-    def connect(
-        self,
-        source_root: str | Path,
-        *,
-        project_name: str | None = None,
-    ) -> ApplicationConnectionView:
-        """受限识别目录并幂等建立不依赖 Profile 的项目连接。"""
+    def connection_preview(self, source_root: str | Path):
+        """只读取同源项目；预览不恢复项目、不复制权限或扩大授权。"""
+        source = canonical_folder(source_root)
+        discover_folder(source)
+        with self._uow_factory() as work:
+            records = work.application_understanding.list_by_source_root(str(source))
+            projects = [work.projects.get(item.project_id) for item in records]
+            projects = [item for item in projects if item is not None]
+            snapshot = self._connection_snapshot(str(source), projects)
+            return {'source_root':str(source), 'snapshot':snapshot,
+                'projects':[item.model_dump(mode='json') for item in projects]}
 
+    @staticmethod
+    def _connection_snapshot(source, projects):
+        return hashlib.sha256(json.dumps([source, sorted((item.project_id, item.status.value, item.updated_at_us) for item in projects)],
+            ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
+
+    def connect(self, source_root: str | Path, *, project_name: str | None = None,
+                mode: Literal['AUTO', 'RESUME', 'NEW'] = 'AUTO', existing_project_id: str | None = None,
+                expected_snapshot: str | None = None, operation_id: str | None = None) -> ApplicationConnectionView:
+        """显式选择恢复或新建；全新接入只建空项目，同键回读不会重复创建。"""
         source = canonical_folder(source_root)
         discovery = discover_folder(source)
         source_text = str(source)
+        if mode == 'NEW' and (operation_id is None or re.fullmatch(r'[0-9a-f]{32}', operation_id) is None):
+            raise JiejianError(ErrorCode.INPUT_INVALID, '全新接入需要固定的操作标识')
         with self._uow_factory() as work:
-            existing = work.application_understanding.get_by_source_root(source_text)
-            if existing is not None:
+            work.acquire_write_lock()
+            records = work.application_understanding.list_by_source_root(source_text)
+            projects = [work.projects.get(item.project_id) for item in records]
+            if any(item is None for item in projects):
+                raise JiejianError(ErrorCode.STORAGE_FAILURE, '应用理解记录引用的项目不存在')
+            fresh_id = f'app_{operation_id}' if mode == 'NEW' else None
+            if fresh_id and (saved := work.application_understanding.get(fresh_id)) is not None:
+                project = work.projects.get(fresh_id)
+                if saved.source_root != source_text or project is None or project_name and project.name != project_name.strip():
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '这个接入操作标识已经用于不同内容')
+                return ApplicationConnectionView(project=project, understanding=saved, discovery=discovery)
+            if mode != 'AUTO' and expected_snapshot != self._connection_snapshot(source_text, projects):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '同目录的项目记录已有变化，请重新读取后选择')
+            existing = next((item for item in records if item.project_id == existing_project_id), None) if mode == 'RESUME' else next((item for item in records if work.projects.get(item.project_id).status is not ProjectStatus.ARCHIVED), None)
+            if mode == 'RESUME' and existing is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '所选原项目不属于这个源码目录，请重新选择')
+            if mode == 'AUTO' and records and existing is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '该目录有已移除的项目，请明确选择恢复原项目或全新接入', details={'reason':'APPLICATION_REENTRY_REQUIRED'})
+            if existing is not None and mode != 'NEW':
                 project = work.projects.get(existing.project_id)
-                if project is None:
-                    raise JiejianError(
-                        ErrorCode.STORAGE_FAILURE,
-                        "应用理解记录引用的项目不存在",
-                    )
                 if project.status is ProjectStatus.ARCHIVED:
-                    now_us = self._clock_us()
-                    project = ProjectRecord(
-                        **(
-                            project.model_dump()
-                            | {
-                                "name": (project_name or project.name).strip(),
-                                "status": ProjectStatus.DRAFT,
-                                "updated_at_us": max(now_us, project.updated_at_us),
-                            }
-                        )
-                    )
+                    project = ProjectRecord(**(project.model_dump() | {'status':ProjectStatus.DRAFT,
+                        'updated_at_us':max(self._clock_us(), project.updated_at_us)}))
                     work.projects.replace(project)
                     work.commit()
-                return ApplicationConnectionView(
-                    project=project,
-                    understanding=existing,
-                    discovery=discovery,
-                )
-
-            project_id = self._project_id(source)
+                return ApplicationConnectionView(project=project, understanding=existing, discovery=discovery)
+            project_id = fresh_id or self._project_id(source)
             if work.projects.get(project_id) is not None:
-                raise JiejianError(
-                    ErrorCode.STORAGE_CONSTRAINT,
-                    "应用目录身份与已有项目冲突",
-                )
+                raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, '应用目录身份与已有项目冲突')
             now_us = self._clock_us()
-            name = (project_name or source.name or "本地应用").strip()
+            name = (project_name or source.name or '本地应用').strip()
             if not name or len(name) > 128:
-                raise JiejianError(
-                    ErrorCode.ONBOARDING_INPUT_INVALID,
-                    "应用名称长度必须在 1 到 128 个字符之间",
-                )
-            project = ProjectRecord(
-                project_id=project_id,
-                name=name,
-                status=ProjectStatus.DRAFT,
-                target_type=TargetType.WEB,
-                created_at_us=now_us,
-                updated_at_us=now_us,
-            )
-            understanding = ApplicationUnderstanding(
-                project_id=project_id,
-                source_root=source_text,
-                created_at_us=now_us,
-                updated_at_us=now_us,
-            )
+                raise JiejianError(ErrorCode.ONBOARDING_INPUT_INVALID, '应用名称长度必须在 1 到 128 个字符之间')
+            project = ProjectRecord(project_id=project_id, name=name, status=ProjectStatus.DRAFT,
+                target_type=TargetType.WEB, created_at_us=now_us, updated_at_us=now_us)
+            understanding = ApplicationUnderstanding(project_id=project_id, source_root=source_text, created_at_us=now_us, updated_at_us=now_us)
             work.projects.add(project)
             work.application_understanding.add(understanding)
             work.commit()
-        return ApplicationConnectionView(
-            project=project,
-            understanding=understanding,
-            discovery=discovery,
-        )
+        return ApplicationConnectionView(project=project, understanding=understanding, discovery=discovery)
 
     def get(self, project_id: str) -> ApplicationUnderstanding:
         with self._uow_factory() as work:

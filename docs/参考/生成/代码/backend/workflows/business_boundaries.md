@@ -16,6 +16,17 @@
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/__init__.py) · Python AST；作用域内import不表示每次调用均执行。
 
 
+### `product/backend/workflows/business_boundaries/candidates/coverage.py`
+
+[打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/coverage.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `coverage_items(value)`
+- `path_shape(path)`
+- `coverage_ready(work, value, issue_id, plan, bundle)`
+- `frozen_requirement_scope(work, project_id)`
+
+静态import / dot-source：`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scope`、`re`、`作用域内：product.protocols.checks.execution_request`
+
 ### `product/backend/workflows/business_boundaries/candidates/decisions.py`
 
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/decisions.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -29,7 +40,7 @@
 - `validate_approval_source(work, proposal, current_basis)`
 - `save_approval_mappings(work, source, proposal_id, boundary_decision_id, permission_plans, action_plans)`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.candidate_scope`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.permissions`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.coverage`
 
 ### `product/backend/workflows/business_boundaries/candidates/preview.py`
 
@@ -43,10 +54,10 @@
 
 [打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/reviews.py) · Python AST；作用域内import不表示每次调用均执行。
 
-- `project_review_gaps(work, project_id)`
+- `project_review_gaps(work, project_id, plan, bundle)`
 - `protect_review_sources(current, incoming)`
 
-静态import / dot-source：`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.decisions`
+静态import / dot-source：`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scope`、`product.backend.core.boundaries.entities`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.coverage`、`product.backend.workflows.business_boundaries.candidates.decisions`
 
 ### `product/backend/workflows/business_boundaries/candidates/rule_candidates.py`
 
@@ -58,12 +69,25 @@
 - `RuleCandidateService.decide(self, project_id, candidate_id, command)`
 - `RuleCandidateService.review_boundary(self, project_id, candidate_id, command)`
 - `RuleCandidateService.show(self, project_id, candidate_id, revision)`
+- `RuleCandidateService.decide_scope(self, project_id, candidate_id, command)`
+- `RuleCandidateService.link_coverage(self, project_id, candidate_id, command)`
 - `RuleCandidateService.set_visibility(self, project_id, candidate_id, archived, revision, expected_version)`
 - `RuleCandidateService.preview(self, project_id, command)`
 - `RuleCandidateService.operation(self, project_id, kind, operation_id)`
 - `RuleCandidateService.propose(self, project_id, candidate_id, revision, operation_id)`
 
-静态import / dot-source：`__future__`、`json`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.decisions`、`product.backend.workflows.business_boundaries.candidates.reviews`、`product.backend.workflows.business_boundaries.models`、`pydantic`、`time`、`uuid`、`作用域内：product.backend.workflows.business_boundaries.candidates.preview`
+静态import / dot-source：`__future__`、`json`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.candidate_scope`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`、`product.backend.workflows.business_boundaries.candidates.coverage`、`product.backend.workflows.business_boundaries.candidates.decisions`、`product.backend.workflows.business_boundaries.candidates.reviews`、`product.backend.workflows.business_boundaries.candidates.scope`、`product.backend.workflows.business_boundaries.models`、`pydantic`、`time`、`uuid`、`作用域内：product.backend.workflows.business_boundaries.candidates.preview`
+
+### `product/backend/workflows/business_boundaries/candidates/scope.py`
+
+[打开源码](../../../../../../product/backend/workflows/business_boundaries/candidates/scope.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `merge_content(current, incoming)`
+- `decide_scope(service, project_id, candidate_id, command, coverage)`
+- `protect_scope(current, content)`
+- `issue_tasks(issues, reviews)`
+
+静态import / dot-source：`json`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scope`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.rule_candidates`、`product.backend.core.errors`
 
 ### `product/backend/workflows/business_boundaries/fingerprints.py`
 

@@ -19,7 +19,7 @@ it('独立边界决定响应未知时保留原DECIDE键，只查询回执',async
   api.show.mockResolvedValue({...item,candidate:{...item.candidate,basis_id:'rb_current'},assessment:'NEEDS_CHANGES',boundary_reviews:[{issue_id:'q1',issue_fingerprint:'fp1',text:'是否单独建模登录？',source:'unresolved_questions',status:'NEEDS_DECISION',blocking:true,decision:null}]})
   api.reviewBoundary.mockRejectedValue(new ApiError('API_ERROR','连接中断'));api.receipt.mockResolvedValue({status:'UNKNOWN'})
   render(<RuleCandidatesPanel projectId="app_a" requestedId="rcd_a" onSelected={vi.fn()} onProposal={vi.fn()}/>)
-  fireEvent.click(await screen.findByText('核对这条问题'))
+  fireEvent.click(await screen.findByText('填写核对意见'))
   fireEvent.mouseDown(screen.getByRole('combobox'));fireEvent.click(await screen.findByText('不作为独立业务动作'))
   fireEvent.change(screen.getByRole('textbox',{name:'判断依据'}),{target:{value:'基础入口'}})
   fireEvent.change(screen.getByRole('textbox',{name:'仍然需要满足的实际业务要求'}),{target:{value:'内部包受保护'}})

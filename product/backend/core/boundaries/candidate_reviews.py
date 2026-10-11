@@ -88,3 +88,5 @@ class BoundaryReviewGap(BoundaryModel):
     message: str
     status: str
     review_url: str
+    next_url: str | None = None
+    next_label: str | None = None

@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, ReviewedRuleCandidateRevision, RuleCandidateSave, RuleCandidateContentInput, freeze_candidate_content
+from product.backend.core.boundaries.rule_candidates import ScopedRuleCandidateRevision, GroupedRuleCandidateRevision, scoped_content, revised_candidate
+from product.backend.core.boundaries.candidate_scope import scope_items, scope_issues, only_auxiliary_scope
+from product.backend.workflows.business_boundaries.candidates.scope import decide_scope, decide_scope_batch, merge_content, protect_scope, issue_tasks
+from product.backend.workflows.business_boundaries.candidates.coverage import coverage_items
 from product.backend.core.boundaries.candidate_reviews import BoundaryReviewCommand, BoundaryReviewRecord, boundary_review_items
 from product.backend.workflows.business_boundaries.candidates.reviews import protect_review_sources, project_review_gaps
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide, RuleCandidateDecision
@@ -45,6 +49,14 @@ class RuleCandidateService:
                 "supported_expectations": ["ALLOW", "DENY"],
                 "limitations": ["不支持任意时间、金额、唯一性或并发约束", "保存候选不批准权限，不表示能够执行检查"],
                 "modeling_guidance": [
+                    "可一次保存权限候选与requirement_sources清单，不强制先提交空权限。区分USER原话、SOURCE源码线索、AGENT推断，由用户确认含义和本轮范围后审阅最终提案。发现接口不等于必须新增权限。",
+                    "按可独立决定的业务目标组织来源，不按每个角色定义、接口或证据重复拆项。补充源码线索优先写入对应要求的解释；已保存的重复或辅助来源由用户在核对清单关联为补充依据，不静默删除。USER/SOURCE/AGENT只是来源标记，不等于已获用户确认。",
+                    "界鉴支持集中勾选明确要求并一次保存；歧义单独核对。补充依据必须由用户关联到已确认业务要求，不为消除阻塞强迫源码线索选择IN_SCOPE。MCP不能代用户确认或提交scope-batch。",
+                    "IN_SCOPE决定中的requirement才是已确认的含义；PREPARATION只用于登录/造数据/恢复，OUT_OF_SCOPE不新增本轮权限。必要合法对照关联同一业务要求，不能遗漏。",
+                    "requirement_sources.permission_item_ids关联本候选权限；新增来源或修改原话解释需要重新确认。不能把检查窗口扩大成任意历史。",
+                    "材料或覆盖问题可在coverage_suggestions中提供已核对的目标接口、权限和证明类型建议，供GUI中的人确认；无需让用户从零填写技术字段，建议不构成人的决定。",
+                    "可分批保存同一候选：merge=true按稳定item_id合并，未提交的项保留；最终统一审阅，不因数量上限合并不同检查入口。单候选最多100动作、200权限、1MiB。",
+                    "维护已有规则时先读取当前actors/actions/permissions，沿用item_id、稳定ID与expected_current_revision。新增、修改和停用均可提交候选；停用设effective_state=RETIRED，不通过漏传规则删除，其他规则与历史保留，仍需人批准。",
                     "正式业务边界为空时仍可保存首次CREATE候选；候选完成后由人审阅提案并批准，不需要先手工建立同一套边界。",
                     "DATA_DISCLOSURE必须列出真实披露的protected_projection；其他效果类型不填写字段投影。",
                     "授予、开放或撤回资源访问范围属于STATE_MUTATION，相应动作state_changing为true；读取实际凭据才属于CREDENTIAL_ACCESS。",
@@ -76,7 +88,6 @@ class RuleCandidateService:
                 return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
             draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
             self._current_basis(command.expected_basis_id, draft)
-            content = freeze_candidate_content(command.content)
             current = None
             if command.candidate_id:
                 current = self._required(work, project_id, command.candidate_id)
@@ -84,12 +95,18 @@ class RuleCandidateService:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已归档，请由用户恢复后再补充")
                 if current.revision != command.expected_revision:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已有新修订", details={"reason": "CONFLICT"})
-                check_candidate_edit(work, current, content)
-                protect_review_sources(current, content)
             elif len(work.rule_candidates.list(project_id, limit=201)) >= 200:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选数量已达上限", details={"reason": "LIMIT_EXCEEDED"})
-            revision_type = ReviewedRuleCandidateRevision if isinstance(current, ReviewedRuleCandidateRevision) else RuleCandidateRevision
-            value = revision_type(**({"boundary_reviews": current.boundary_reviews} if isinstance(current, ReviewedRuleCandidateRevision) else {}), project_id=project_id,
+            content = scoped_content(merge_content(current, command.content) if command.merge else command.content)
+            if current:
+                check_candidate_edit(work, current, content)
+                protect_review_sources(current, content)
+                protect_scope(current, content)
+            carried = {name: getattr(current, name, ()) for name in ('boundary_reviews', 'scope_decisions', 'coverage_links')}
+            revision_model = GroupedRuleCandidateRevision if current is not None and current.schema_version == '5' else ScopedRuleCandidateRevision
+            if revision_model is GroupedRuleCandidateRevision:
+                carried['scope_references'] = current.scope_references
+            value = revision_model(**carried, project_id=project_id,
                 candidate_id=command.candidate_id or f"rcd_{uuid4().hex}",
                 revision=(command.expected_revision or 0) + 1, basis_id=command.expected_basis_id,
                 content=content, submitted_via=submitted_via, created_at_us=self._clock_us())
@@ -134,9 +151,8 @@ class RuleCandidateService:
                 if not (command.action in {"SELECT", "DISMISS"} and question == scenario.question))
             content = current.content.model_copy(update={"permissions": tuple(replacements.get(item.item_id, item) for item in current.content.permissions),
                 "unresolved_questions": questions})
-            revision_type = ReviewedRuleCandidateRevision if isinstance(current, ReviewedRuleCandidateRevision) else RuleCandidateRevision
-            value = revision_type(**({"boundary_reviews": current.boundary_reviews} if isinstance(current, ReviewedRuleCandidateRevision) else {}), project_id=project_id, candidate_id=candidate_id, revision=current.revision + 1,
-                basis_id=current.basis_id, content=content, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
+            value = revised_candidate(current, revision=current.revision + 1,
+                content=scoped_content(content), submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
             self._merge(value, draft)
             work.rule_candidates.append(value, expected_revision=current.revision)
             work.rule_candidates.add_decision(decision)
@@ -174,8 +190,8 @@ class RuleCandidateService:
             # v1首次进入此入口只补空情境；不制造权限选项或原话摘录。
             content = current.content if hasattr(current.content, "scenarios") else freeze_candidate_content(
                 RuleCandidateContentInput(**current.content.model_dump()))
-            value = ReviewedRuleCandidateRevision(project_id=project_id, candidate_id=candidate_id,
-                revision=current.revision + 1, basis_id=current.basis_id, content=content,
+            value = revised_candidate(current,
+                revision=current.revision + 1, content=scoped_content(content),
                 boundary_reviews=records, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
             work.rule_candidates.append(value, expected_revision=current.revision)
             work.rule_candidates.add_receipt(project_id, "DECIDE", command.operation_id, fingerprint, value)
@@ -186,6 +202,15 @@ class RuleCandidateService:
     def show(self, project_id: str, candidate_id: str, revision: int | None = None):
         with self._uow_factory() as work:
             return self._view(work, self._required(work, project_id, candidate_id, revision))
+
+    def decide_scope(self, project_id, candidate_id, command):
+        return decide_scope(self, project_id, candidate_id, command)
+
+    def decide_scope_batch(self, project_id, candidate_id, command):
+        return decide_scope_batch(self, project_id, candidate_id, command)
+
+    def link_coverage(self, project_id, candidate_id, command):
+        return decide_scope(self, project_id, candidate_id, command, coverage=True)
 
     def set_visibility(self, project_id: str, candidate_id: str, *, archived: bool, revision: int, expected_version: int):
         """GUI显式归档或恢复；展示状态与业务修订分离，未决提案不能隐藏。"""
@@ -251,11 +276,15 @@ class RuleCandidateService:
         content = value.content
         states, _, conflicts = scenario_state(work, value)
         issues.extend(pending_scenario_issues(states, conflicts))
+        issues.extend(scope_issues(value))
         if value.basis_id != "rb_" + draft.boundary_state_fingerprint:
             issues.append({"code": "CONTEXT_STALE", "message": "正式规则已变化，需要重新核对候选"})
         review_items = boundary_review_items(value)
+        coverage = coverage_items(value)
+        planned = {item['issue_id'] for item in coverage if item['status'] == 'PLANNED'}
         pending = {(item["source"], item["text"]) for item in review_items if item["blocking"]}
-        resolved = {(item["source"], item["text"]) for item in review_items if not item["blocking"]} - pending
+        resolved = {(item["source"], item["text"]) for item in review_items if not item["blocking"] or item['issue_id'] in planned}
+        resolved -= {(item['source'], item['text']) for item in review_items if item['blocking'] and item['issue_id'] not in planned}
         for index, text in enumerate(content.unsupported_constraints):
             if ("unsupported_constraints", text) not in resolved:
                 issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text, "path": f"candidate.content.unsupported_constraints[{index}]"})
@@ -282,15 +311,20 @@ class RuleCandidateService:
         merged = None
         try:
             merged = self._merge(value, draft)
-            if getattr(content, "scenarios", ()):
-                issues.extend(selected_permission_issues(merged.permissions))
+            issues.extend(selected_permission_issues(merged.permissions))
             unchanged = all({item.item_id: item for item in getattr(merged, name)}
                 == {item.item_id: item for item in getattr(draft, name)} for name in ("actors", "actions", "permissions"))
         except (JiejianError, ValidationError):
             issues.append({"code": "AMBIGUOUS_REFERENCE", "message": "业务引用或当前修订不一致，请回到开发客户端中的 Agent 修订"})
         proposal_id = work.rule_candidates.proposal_id(value.candidate_id, value.revision)
         decision = None if proposal_id is None else work.business_boundaries.decision_for_proposal(proposal_id)
-        assessment = "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if unchanged else "REVIEWABLE"
+        scope_only = only_auxiliary_scope(value)
+        if value.schema_version in {'4', '5'} and not content.permissions and (not scope_items(value) or any(item['status'] != 'CONFIRMED' for item in scope_items(value))):
+            issues = [issue for issue in issues if issue['code'] not in {'ROLE_REQUIRED', 'ACTION_REQUIRED', 'PERMISSION_REQUIRED', 'PERMISSION_EXAMPLE_REQUIRED', 'REQUIREMENT_RULE_REQUIRED'}]
+        if scope_only:
+            issues = [issue for issue in issues if issue['code'] not in {'ROLE_REQUIRED', 'ACTION_REQUIRED', 'PERMISSION_REQUIRED', 'PERMISSION_EXAMPLE_REQUIRED'}]
+        # 范围/覆盖确认也需要一次精确提案来源，即使权限正文沿用；否则无法冻结新范围。
+        assessment = "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if scope_only or unchanged and value.schema_version not in {'4', '5'} else "REVIEWABLE"
         visibility = work.rule_candidates.visibility(value.candidate_id)
         if summary:
             # 列表共用一份正式基线，不展开逐条材料库存和完整审阅正文。
@@ -302,10 +336,14 @@ class RuleCandidateService:
                 "decision": None if decision is None else decision.decision, "visibility": visibility}
         # 已作决定的候选是历史输入；不能因自身批准推进基线而提示用户再次修改同一候选。
         return {"candidate": value, "assessment": assessment, "visibility": visibility,
+            "scope_only": scope_only,
             "revision_guidance": CANDIDATE_REVISION_GUIDANCE,
             "issues": [] if decision else issues, "proposal_id": proposal_id, "decision": decision,
             "scenario_decisions": states,
             "boundary_reviews": review_items,
+            "scope_review": scope_items(value),
+            "coverage_review": coverage,
+            "next_tasks": [] if decision else issue_tasks(issues, review_items),
             "meaning_context": {"actors": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name} for item in merged.actors],
                 "actions": [] if merged is None else [{"item_id": item.item_id, "display_name": item.display_name,
                     "effect_catalog": [{"item_id": effect.item_id, "business_label": effect.business_label} for effect in item.effects]} for item in merged.actions]},

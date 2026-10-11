@@ -93,6 +93,7 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("runner/evidence.schema.json", "product.protocols.runner.evidence:Evidence"),
     SchemaEntry("runner/persisted-execution-request-v3.schema.json", "product.protocols.checks.execution_request:PersistedExecutionRequestV3"),
     SchemaEntry("runner/persisted-execution-request-v4.schema.json", "product.protocols.checks.execution_request:PersistedExecutionRequestV4"),
+    SchemaEntry("runner/persisted-execution-request-v5.schema.json", "product.protocols.checks.execution_request:PersistedExecutionRequestV5"),
     SchemaEntry("runner/persisted-execution-request.schema.json", "product.protocols.runner.execution_request:PersistedExecutionRequest"),
     SchemaEntry("runner/runner-input.schema.json", "product.protocols.runner.input:RunnerInput"),
     SchemaEntry("runner/runner-result.schema.json", "product.protocols.runner.result:RunnerResult"),

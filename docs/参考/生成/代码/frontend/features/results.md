@@ -141,7 +141,7 @@
 - `caseJudgement`
 - `resourceOwner`
 
-静态import / dot-source：`../../../api/checks/currentChecks`、`../../../api/checks/repairs`、`../../../shared/runtime/visibility`、`../../../shared/ui/StatusBadge`、`../ResultAgentHandoff`、`antd`、`react`
+静态import / dot-source：`../../../api/checks/currentChecks`、`../../../api/checks/repairs`、`../../../shared/runtime/visibility`、`../../../shared/ui/RequirementScopeSummary`、`../../../shared/ui/StatusBadge`、`../ResultAgentHandoff`、`antd`、`react`
 
 ### `product/frontend/src/features/results/ResultAgentHandoff.test.tsx`
 

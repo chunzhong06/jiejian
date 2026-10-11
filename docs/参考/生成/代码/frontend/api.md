@@ -100,11 +100,16 @@
 - `BoundaryChoice`
 - `BoundaryReview`
 - `BoundaryReviewGap`
+- `CandidateTask`
+- `CoverageChoice`
 - `MeaningChoice`
+- `RequirementSource`
 - `RuleCandidateContext`
 - `RuleCandidateView`
 - `RuleScenario`
 - `ScenarioDecision`
+- `ScopeChoice`
+- `ScopeReview`
 - `ruleCandidatesApi`
 
 静态import / dot-source：`../http`、`./businessBoundaries`
@@ -193,6 +198,7 @@
 - `HistoryCoverage`
 - `HistoryMaintenanceReceipt`
 - `ObservationReading`
+- `RequirementScope`
 - `ResultStory`
 - `RuleHistoryItem`
 - `RuleHistoryPage`

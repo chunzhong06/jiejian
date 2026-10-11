@@ -258,7 +258,7 @@ function ControlShellContent() {
       const fresh=new URLSearchParams(location.search).get('new')==='1'
       if(fresh && ['CHECKING','STOPPING'].includes(newApplication.state))return <LoadingState page>{newApplication.state==='STOPPING'?'正在停止官方示例，随后接入新应用…':'正在核对接入环境…'}</LoadingState>
       if(fresh && newApplication.state==='UNCONFIRMED')return <Result status="info" title="先确认官方示例已停止" subTitle="停止结果尚未确认，或仍有任务需要处理。历史检查与证据保留。" extra={<><Button type="primary" onClick={()=>void newApplication.reread()}>重新读取停止状态</Button><Button onClick={()=>navigate('/environment')}>查看官方环境</Button></>}/>
-      return <AccessPage key={fresh?'new-application':selected?.project_id??'unselected'} selected={fresh?null:selected} requestConnection={!fresh && new URLSearchParams(location.search).get('step')==='connection'} endpointStatus={fresh?undefined:workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={!fresh && experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
+      return <AccessPage key={fresh?'new-application':selected?.project_id??'unselected'} selected={fresh?null:selected} requestConnection={!fresh && new URLSearchParams(location.search).get('step')==='connection'} endpointStatus={fresh?undefined:workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={!fresh && experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions?view=candidates')} />
     }
     if (route === '/settings/system') return <RuntimePage status={systemStatus} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
@@ -301,7 +301,7 @@ function ControlShellContent() {
       onView:()=>navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`),
     } : null : null} items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
     <Modal open={removeConfirmOpen} title="移除当前应用？" okText="确认移除" cancelText="取消" okButtonProps={{ danger: true, loading: removeBusy }} onCancel={() => setRemoveConfirmOpen(false)} onOk={() => { void removeCurrentProject() }}>
-      界鉴会从应用列表中移除当前应用，并清理当前测试账号的安全凭据。属于该应用的官方示例实例会一并停止，无需再次操作；应用源码和历史事实保留。普通应用的外部进程不会被停止。
+      界鉴会从应用列表中移除当前应用，并清理当前测试账号的安全凭据。属于该应用的官方示例实例会一并停止，无需再次操作；应用源码、已批准权限、候选和历史记录保留。再次接入同一目录时可选择恢复原项目或全新接入；移除不等于清空权限。普通应用的外部进程不会被停止。
     </Modal>
     <Modal open={shutdownConfirmOpen} title="退出界鉴？" okText="安全退出" cancelText="继续使用" cancelButtonProps={{ id: 'shutdown-cancel-button' }} afterOpenChange={(open) => { if (open) document.getElementById('shutdown-cancel-button')?.focus() }} onCancel={() => setShutdownConfirmOpen(false)} focusTriggerAfterClose onOk={async () => {
       try {

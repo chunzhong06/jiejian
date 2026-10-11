@@ -16,6 +16,7 @@ from product.backend.core.boundaries.proposals import ProposedActionItem, Propos
 from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide
 from product.backend.core.boundaries.candidate_reviews import BoundaryReviewCommand
+from product.backend.core.boundaries.candidate_scope import ScopeDecisionCommand, ScopeBatchCommand, ScopeBatchChoice, CoverageLinkCommand, CoverageTarget
 from product.backend.core.boundaries.rule_preview import RulePreviewCommand
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
@@ -77,6 +78,7 @@ class RuleCandidateSaveRequest(ApiModel):
     candidate_id: str | None = Field(default=None, pattern=r"^rcd_[0-9a-f]{32}$")
     expected_revision: int | None = Field(default=None, ge=1)
     content: dict[str, object]
+    merge: bool = False
 
     def to_command(self) -> RuleCandidateSave:
         return RuleCandidateSave.model_validate_json(self.model_dump_json())
@@ -89,6 +91,18 @@ class RuleCandidateProposalRequest(ApiModel):
 
 class BoundaryReviewRequest(BoundaryReviewCommand):
     permission_item_ids: list[str] = Field(default_factory=list, max_length=10)
+
+
+class ScopeBatchChoiceRequest(ScopeBatchChoice):
+    related_requirement_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ScopeBatchRequest(ScopeBatchCommand):
+    choices: list[ScopeBatchChoiceRequest] = Field(min_length=1, max_length=100)
+
+
+class CoverageLinkRequest(CoverageLinkCommand):
+    targets: list[CoverageTarget] = Field(min_length=1, max_length=100)
 
 
 class RuleCandidateVisibilityRequest(ApiModel):
@@ -187,6 +201,20 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     def decide_boundary_question(project_id: str, candidate_id: str, body: BoundaryReviewRequest):
         command = BoundaryReviewCommand.model_validate_json(body.model_dump_json())
         return data_response(jsonable_encoder(context.rule_candidates.review_boundary(project_id, candidate_id, command)), status_code=201)
+
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/scope-decisions", response_model=ApiResponse, status_code=201)
+    def decide_candidate_scope(project_id: str, candidate_id: str, body: ScopeDecisionCommand):
+        return data_response(jsonable_encoder(context.rule_candidates.decide_scope(project_id, candidate_id, body)), status_code=201)
+
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/scope-batch", response_model=ApiResponse, status_code=201)
+    def decide_candidate_scope_batch(project_id: str, candidate_id: str, body: ScopeBatchRequest):
+        command = ScopeBatchCommand.model_validate_json(body.model_dump_json())
+        return data_response(jsonable_encoder(context.rule_candidates.decide_scope_batch(project_id, candidate_id, command)), status_code=201)
+
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/coverage-links", response_model=ApiResponse, status_code=201)
+    def link_candidate_coverage(project_id: str, candidate_id: str, body: CoverageLinkRequest):
+        command = CoverageLinkCommand.model_validate_json(body.model_dump_json())
+        return data_response(jsonable_encoder(context.rule_candidates.link_coverage(project_id, candidate_id, command)), status_code=201)
 
     @router.get(prefix, response_model=ApiResponse)
     def get_boundary(project_id: str):

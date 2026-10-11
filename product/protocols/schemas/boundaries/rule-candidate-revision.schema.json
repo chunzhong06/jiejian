@@ -150,6 +150,279 @@
       "title": "BusinessRevisionState",
       "type": "string"
     },
+    "CoverageLink": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "default": false,
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "expected_basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Expected Basis Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "issue_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Issue Fingerprint",
+          "type": "string"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "review_revision": {
+          "minimum": 2,
+          "title": "Review Revision",
+          "type": "integer"
+        },
+        "submitted_via": {
+          "const": "LOCAL_GUI",
+          "default": "LOCAL_GUI",
+          "title": "Submitted Via",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/CoverageTarget"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "time_scope": {
+          "enum": [
+            "CHECK_WINDOW",
+            "HISTORY"
+          ],
+          "title": "Time Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "expected_basis_id",
+        "expected_revision",
+        "issue_id",
+        "issue_fingerprint",
+        "review_revision",
+        "time_scope",
+        "targets",
+        "reason",
+        "output_revision",
+        "created_at_us"
+      ],
+      "title": "CoverageLink",
+      "type": "object"
+    },
+    "CoverageSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "explanation": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/CoverageTarget"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "time_scope": {
+          "enum": [
+            "CHECK_WINDOW",
+            "HISTORY"
+          ],
+          "title": "Time Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_id",
+        "targets",
+        "time_scope",
+        "explanation"
+      ],
+      "title": "CoverageSuggestion",
+      "type": "object"
+    },
+    "CoverageTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^/[A-Za-z0-9_./{}-]{1,255}$",
+          "title": "Path",
+          "type": "string"
+        },
+        "permission_item_id": {
+          "pattern": "^pperm_[0-9a-f]{16}$",
+          "title": "Permission Item Id",
+          "type": "string"
+        },
+        "proof": {
+          "enum": [
+            "EFFECT",
+            "PROCESS_RECORD"
+          ],
+          "title": "Proof",
+          "type": "string"
+        }
+      },
+      "required": [
+        "permission_item_id",
+        "method",
+        "path",
+        "proof"
+      ],
+      "title": "CoverageTarget",
+      "type": "object"
+    },
+    "GroupedRuleCandidateRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "boundary_reviews": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BoundaryReviewRecord"
+          },
+          "maxItems": 20,
+          "title": "Boundary Reviews",
+          "type": "array"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/ScopedCandidateContent"
+        },
+        "coverage_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageLink"
+          },
+          "maxItems": 20,
+          "title": "Coverage Links",
+          "type": "array"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "5",
+          "default": "5",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_decisions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ScopeDecision"
+          },
+          "maxItems": 100,
+          "title": "Scope Decisions",
+          "type": "array"
+        },
+        "scope_references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ScopeReference"
+          },
+          "maxItems": 100,
+          "title": "Scope References",
+          "type": "array"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "GroupedRuleCandidateRevision",
+      "type": "object"
+    },
     "LegacyRuleCandidateContent": {
       "additionalProperties": false,
       "properties": {
@@ -677,6 +950,61 @@
       "title": "ProposedPermissionItem",
       "type": "object"
     },
+    "RequirementSource": {
+      "additionalProperties": false,
+      "properties": {
+        "interpretation": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Interpretation",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "USER",
+            "SOURCE",
+            "AGENT"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "permission_item_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Permission Item Ids",
+          "type": "array"
+        },
+        "requirement_id": {
+          "pattern": "^req_[0-9a-f]{16}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "source_excerpt": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Source Excerpt",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "title",
+        "origin",
+        "source_excerpt",
+        "interpretation"
+      ],
+      "title": "RequirementSource",
+      "type": "object"
+    },
     "ReviewedRuleCandidateRevision": {
       "additionalProperties": false,
       "description": "只有人的边界核对升级为v3；旧候选按原版本读，Agent不能提交这些决定。",
@@ -1021,13 +1349,397 @@
       ],
       "title": "RuleScenarioOption",
       "type": "object"
+    },
+    "ScopeDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "disposition": {
+          "enum": [
+            "IN_SCOPE",
+            "PREPARATION",
+            "OUT_OF_SCOPE",
+            "DEFER"
+          ],
+          "title": "Disposition",
+          "type": "string"
+        },
+        "expected_basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Expected Basis Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "operation_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "requirement": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Requirement",
+          "type": "string"
+        },
+        "requirement_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requirement Fingerprint",
+          "type": "string"
+        },
+        "requirement_id": {
+          "pattern": "^req_[0-9a-f]{16}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "submitted_via": {
+          "const": "LOCAL_GUI",
+          "default": "LOCAL_GUI",
+          "title": "Submitted Via",
+          "type": "string"
+        },
+        "time_scope": {
+          "enum": [
+            "CHECK_WINDOW",
+            "HISTORY",
+            "NOT_APPLICABLE"
+          ],
+          "title": "Time Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "expected_basis_id",
+        "expected_revision",
+        "requirement_id",
+        "requirement_fingerprint",
+        "disposition",
+        "requirement",
+        "reason",
+        "time_scope",
+        "output_revision",
+        "created_at_us"
+      ],
+      "title": "ScopeDecision",
+      "type": "object"
+    },
+    "ScopeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "disposition": {
+          "const": "SUPPORTING",
+          "default": "SUPPORTING",
+          "title": "Disposition",
+          "type": "string"
+        },
+        "expected_basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Expected Basis Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "operation_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "related_decision_fingerprints": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Related Decision Fingerprints",
+          "type": "array"
+        },
+        "related_requirement_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^req_[0-9a-f]{16}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Related Requirement Ids",
+          "type": "array"
+        },
+        "requirement": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Requirement",
+          "type": "string"
+        },
+        "requirement_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requirement Fingerprint",
+          "type": "string"
+        },
+        "requirement_id": {
+          "pattern": "^req_[0-9a-f]{16}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "submitted_via": {
+          "const": "LOCAL_GUI",
+          "default": "LOCAL_GUI",
+          "title": "Submitted Via",
+          "type": "string"
+        },
+        "time_scope": {
+          "enum": [
+            "CHECK_WINDOW",
+            "HISTORY",
+            "NOT_APPLICABLE"
+          ],
+          "title": "Time Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "requirement_fingerprint",
+        "requirement",
+        "reason",
+        "time_scope",
+        "operation_id",
+        "expected_basis_id",
+        "expected_revision",
+        "related_decision_fingerprints",
+        "output_revision",
+        "created_at_us"
+      ],
+      "title": "ScopeReference",
+      "type": "object"
+    },
+    "ScopedCandidateContent": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActionItem"
+          },
+          "maxItems": 100,
+          "title": "Actions",
+          "type": "array"
+        },
+        "actors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActorItem"
+          },
+          "maxItems": 20,
+          "title": "Actors",
+          "type": "array"
+        },
+        "coverage_suggestions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageSuggestion"
+          },
+          "maxItems": 20,
+          "title": "Coverage Suggestions",
+          "type": "array"
+        },
+        "examples": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleExample"
+          },
+          "maxItems": 400,
+          "title": "Examples",
+          "type": "array"
+        },
+        "original_text": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Original Text",
+          "type": "string"
+        },
+        "permissions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedPermissionItem"
+          },
+          "maxItems": 200,
+          "title": "Permissions",
+          "type": "array"
+        },
+        "requirement_sources": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RequirementSource"
+          },
+          "maxItems": 100,
+          "title": "Requirement Sources",
+          "type": "array"
+        },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleScenario"
+          },
+          "maxItems": 10,
+          "title": "Scenarios",
+          "type": "array"
+        },
+        "unresolved_questions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unresolved Questions",
+          "type": "array"
+        },
+        "unsupported_constraints": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unsupported Constraints",
+          "type": "array"
+        }
+      },
+      "required": [
+        "original_text"
+      ],
+      "title": "ScopedCandidateContent",
+      "type": "object"
+    },
+    "ScopedRuleCandidateRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "boundary_reviews": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BoundaryReviewRecord"
+          },
+          "maxItems": 20,
+          "title": "Boundary Reviews",
+          "type": "array"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/ScopedCandidateContent"
+        },
+        "coverage_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageLink"
+          },
+          "maxItems": 20,
+          "title": "Coverage Links",
+          "type": "array"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "4",
+          "default": "4",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_decisions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ScopeDecision"
+          },
+          "maxItems": 100,
+          "title": "Scope Decisions",
+          "type": "array"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "ScopedRuleCandidateRevision",
+      "type": "object"
     }
   },
   "discriminator": {
     "mapping": {
       "1": "#/$defs/LegacyRuleCandidateRevision",
       "2": "#/$defs/RuleCandidateRevision",
-      "3": "#/$defs/ReviewedRuleCandidateRevision"
+      "3": "#/$defs/ReviewedRuleCandidateRevision",
+      "4": "#/$defs/ScopedRuleCandidateRevision",
+      "5": "#/$defs/GroupedRuleCandidateRevision"
     },
     "propertyName": "schema_version"
   },
@@ -1040,6 +1752,12 @@
     },
     {
       "$ref": "#/$defs/ReviewedRuleCandidateRevision"
+    },
+    {
+      "$ref": "#/$defs/ScopedRuleCandidateRevision"
+    },
+    {
+      "$ref": "#/$defs/GroupedRuleCandidateRevision"
     }
   ]
 }

@@ -52,6 +52,6 @@ export function EnvironmentPage({ project, workspace, onChanged, onNavigate, onE
     {official && lifecycle === 'RUNNING' && <section className="environment-details environment-controls" aria-label="管理当前示例环境"><OfficialSamplePanel expanded value={value} onError={onError} onChanged={async next => { setValue(next); await onChanged(next) }}/></section>}
     <details className="environment-details"><summary>查看运行详情与当前限制</summary><p>{value?.last_error_code ? `最近一次环境操作未完成（${value.last_error_code}）。请先核对当前状态。` : official ? '环境操作只管理界鉴创建的实例；状态不明确时不能据此重复启动。' : '仅停止界鉴本次拥有的运行实例；外部应用进程与数据不会被清理。'}</p>{value?.origin && belongs && <p>最近一次示例地址：{value.origin}</p>}<p>本地环境是否可用，与某轮检查是否通过是不同事实。</p></details>
 
-    {project && onRemoveCurrent && <section className="application-management"><div><h2>移除应用</h2><p>{belongs ? '移除时会一并停止属于本应用的官方实例；源码与历史检查保留。' : '移除时停止界鉴拥有的运行实例，保留源码与检查事实；外部应用进程不受影响。'}</p></div><Button danger onClick={onRemoveCurrent}>{belongs ? '停止并移除当前应用' : '移除当前应用'}</Button></section>}
+    {project && onRemoveCurrent && <section className="application-management"><div><h2>移除应用</h2><p>{belongs ? '移除时会一并停止属于本应用的官方实例；源码、权限规则、候选与检查历史保留；再次接入时可选择恢复或全新接入。' : '移除时停止界鉴拥有的运行实例，保留源码、权限规则、候选与检查历史；再次接入时可选择恢复或全新接入。外部应用进程不受影响。'}</p></div><Button danger onClick={onRemoveCurrent}>{belongs ? '停止并移除当前应用' : '移除当前应用'}</Button></section>}
   </EditorialPage>
 }

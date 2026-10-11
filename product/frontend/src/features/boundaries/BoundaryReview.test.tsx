@@ -12,7 +12,7 @@ const value = (source='unresolved_questions') => ({candidate:{revision:6,content
 it('无需权限选项也能保存人的范围决定，必须保留依据及实际要求',async()=>{
   const onSave=vi.fn()
   render(<BoundaryReview value={value()} readOnly={false} busy={false} onSave={onSave}/>)
-  fireEvent.click(screen.getByText('核对这条问题'))
+  fireEvent.click(screen.getByText('填写核对意见'))
   expect(screen.getByRole('button',{name:'保存这条核对'})).toBeDisabled()
   fireEvent.mouseDown(screen.getByRole('combobox'))
   fireEvent.click(await screen.findByText('不作为独立业务动作'))
@@ -25,13 +25,13 @@ it('无需权限选项也能保存人的范围决定，必须保留依据及实�
 
 it('能力限制没有不建模或已由权限表达的跳过选项，历史保留决定且不可编辑',async()=>{
   const page=render(<BoundaryReview value={value('unsupported_constraints')} readOnly={false} busy={false} onSave={vi.fn()}/>)
-  fireEvent.click(screen.getByText('核对这条问题'));fireEvent.mouseDown(screen.getByRole('combobox'))
+  fireEvent.click(screen.getByText('填写核对意见'));fireEvent.mouseDown(screen.getByRole('combobox'))
   expect(await screen.findByText('真实要求，缺少证明')).toBeInTheDocument()
   expect(screen.queryByText('不作为独立业务动作')).not.toBeInTheDocument()
   expect(screen.queryByText('实际要求已由下列权限表达')).not.toBeInTheDocument()
   const history=value('unsupported_constraints');history.boundary_reviews![0].decision={issue_id:'issue1',issue_fingerprint:'fp1',outcome:'EVIDENCE_GAP',reason:'缺少过程记录',retained_requirement:'先开放再撤回仍违规',output_revision:7}
   history.boundary_reviews![0].status='OPEN'
   page.rerender(<BoundaryReview value={history} readOnly busy={false} onSave={vi.fn()}/>)
-  expect(screen.getByText('保留的实际要求：先开放再撤回仍违规')).toBeInTheDocument()
+  expect(screen.getByText('先开放再撤回仍违规')).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'保存这条核对'})).not.toBeInTheDocument()
 })

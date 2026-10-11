@@ -59,6 +59,27 @@
 
 静态import / dot-source：`__future__`、`hashlib`、`json`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`、`unicodedata`
 
+### `product/backend/core/boundaries/candidate_scope.py`
+
+[打开源码](../../../../../../product/backend/core/boundaries/candidate_scope.py) · Python AST；作用域内import不表示每次调用均执行。
+
+- `class RequirementSource`
+- `RequirementSource.meaningful(self)`
+- `class ScopeDecisionCommand`
+- `ScopeDecisionCommand.meaningful(self)`
+- `class ScopeDecision`
+- `scope_items(value)`
+- `scope_issues(value)`
+- `only_auxiliary_scope(value)`
+- `class CoverageTarget`
+- `CoverageTarget.safe_path(self)`
+- `class CoverageLinkCommand`
+- `CoverageLinkCommand.meaningful(self)`
+- `class CoverageLink`
+- `class CoverageSuggestion`
+
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.entities`、`pydantic`、`typing`、`作用域内：re`
+
 ### `product/backend/core/boundaries/entities.py`
 
 [打开源码](../../../../../../product/backend/core/boundaries/entities.py) · Python AST；作用域内import不表示每次调用均执行。
@@ -189,12 +210,20 @@
 - `freeze_candidate_content(value) -> RuleCandidateContent`
 - `class ReviewedRuleCandidateRevision`
 - `ReviewedRuleCandidateRevision.review_identity(self)`
+- `class ScopedCandidateContentInput`
+- `ScopedCandidateContentInput.distinct_sources(self)`
+- `class ScopedCandidateContent`
+- `ScopedCandidateContent.verified_scenarios(self)`
+- `class ScopedRuleCandidateRevision`
+- `ScopedRuleCandidateRevision.scoped_identity(self)`
+- `scoped_content(value)`
+- `revised_candidate(current, **changes)`
 - `read_candidate_revision(payload)`
 - `rule_candidate_revision_schema()`
 - `class RuleCandidateSave`
 - `RuleCandidateSave.paired_revision(self) -> RuleCandidateSave`
 
-静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`
+静态import / dot-source：`__future__`、`product.backend.core.boundaries.candidate_reviews`、`product.backend.core.boundaries.candidate_scenarios`、`product.backend.core.boundaries.candidate_scope`、`product.backend.core.boundaries.entities`、`product.backend.core.boundaries.proposals`、`product.backend.core.identifiers`、`pydantic`、`pydantic_core`、`typing`
 
 ### `product/backend/core/boundaries/rule_preview.py`
 

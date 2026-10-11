@@ -19,7 +19,7 @@ export function PermissionRuleRows({ boundary, action, rules, onRule, onEdit }: 
         <p>保护结果：{rule.protected_effect_ids.map(id => action.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果').join('、')}</p></div>
       <div className="light-permission-actions">
         {onRule && <Button type="link" disabled={!rule.intent_id || !rule.revision} onClick={() => onRule(rule.intent_id!, rule.revision!)}>详情</Button>}
-        {onEdit && <Button type="link" aria-label={`编辑${rule.expectation === 'ALLOW' ? '允许' : '禁止'}规则 ${index + 1}`} onClick={() => onEdit(rule.intent_id ?? undefined)}>编辑</Button>}
+        {onEdit && <Button type="link" aria-label={`编辑${rule.expectation === 'ALLOW' ? '允许' : '禁止'}规则 ${index + 1}`} onClick={() => onEdit(rule.intent_id ?? undefined)}>编辑或停用</Button>}
       </div>
     </section>) : <p className="editorial-muted">这项动作尚无当前权限规则。</p>}
   </>

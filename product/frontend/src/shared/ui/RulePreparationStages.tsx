@@ -2,15 +2,16 @@
 import { useContext, useEffect } from 'react'
 import { WorkPageVisible } from '../runtime/visibility'
 import './rule-preparation-stages.css'
-export function RulePreparationStages({ phase, complete = false, attention = false, note, connectionPhase }: {
+export function RulePreparationStages({ phase, complete = false, attention = false, connectionPhase }: {
   phase: number; complete?: boolean; attention?: boolean; note?: string; connectionPhase?: 0 | 1
 }) {
-  const labels = ['接入应用', '授权分析', '核对业务', '整理候选', '审阅提案', '批准生效']
-  const current = connectionPhase ?? phase + 2
+  // 接入中的目录选择和只读授权共用一个阶段；批准仍由独立提案决定，不因阶段合并自动放行。
+  const labels = ['接入应用', '核对业务', '整理权限要求', '审阅并批准']
+  const current = connectionPhase !== undefined ? 0 : Math.min(phase + 1, 3)
   const visible = useContext(WorkPageVisible)
   useEffect(() => {
     if (!visible) return
-    // 六步共用页首落点；等保留页恢复位置后再定位，不让下方表单焦点拉走视口。
+    // 四阶段共用页首落点；等保留页恢复位置后再定位，不让下方表单焦点拉走视口。
     const frame = requestAnimationFrame(() => {
       document.getElementById('main-content')?.focus({ preventScroll: true })
       window.scrollTo({ top: 0, behavior: 'instant' })
@@ -26,6 +27,5 @@ export function RulePreparationStages({ phase, complete = false, attention = fal
         <span className="rule-stage-label">{index + 1} · {label}</span>
       </li>
     })}</ol>
-    <p key={`${current}:${complete}:${attention}`} className="rule-stage-current"><span>第 {current + 1} / 6 阶段 · {note ?? (complete ? '本轮整理已完成' : attention ? '需要补充后继续' : '当前阶段')}</span></p>
   </div>
 }

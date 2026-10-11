@@ -9,6 +9,8 @@ import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory
 import { lifecycleLabel } from '../../shared/presentation/execution'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
+import { RequirementNotice } from '../../shared/ui/RequirementNotice'
+import {RequirementScopeSummary} from '../../shared/ui/RequirementScopeSummary'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from '../results/CurrentResultStory'
@@ -230,7 +232,8 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     {selectedMode && workspaceSyncFailed && <p role="status">检查记录已读取，工作台状态暂未同步。<Button onClick={() => void syncWorkspace(`retry:${selected}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
     {!selectedMode && loading && <LoadingState>正在读取检查状态…</LoadingState>}
     {!selectedMode && readFailed && <Alert className="flow-feedback" type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
-    {!selectedMode && !!preview?.boundary_review_gaps?.length && <Alert type="warning" showIcon message="完整检查尚有未覆盖要求" description={<><p>下列问题仍需处理。本轮不会执行部分检查或生成完整通过结论。</p><ul>{preview.boundary_review_gaps.map(gap=><li key={`${gap.candidate_id}:${gap.issue_id}`}>{gap.message} <Button type="link" onClick={()=>onNavigate(gap.review_url.replace(/^#/,''))}>返回这条要求</Button></li>)}</ul></>}/>}
+    {!selectedMode && <RequirementNotice gaps={preview?.boundary_review_gaps ?? []} purpose="check" onOpen={gap=>onNavigate((gap.next_url??gap.review_url).replace(/^#/,''))}/>}
+    {!selectedMode && <RequirementScopeSummary scopes={preview?.requirement_scope??[]}/>}
     {!selectedMode && submissionUncertain && <Alert className="flow-feedback" type="warning" showIcon message="检查请求已发出，但尚未收到确认。请先读取检查记录；再次确认会使用同一次请求。" />}
     {selectedMode && pollPaused && <Alert className="flow-feedback" type="info" showIcon message={status?.result_integrity === 'VALID' && !story ? '检查已完成，但结果暂时无法读取，正在自动重试。不会重新执行检查。' : '暂时无法获取最新进度，正在自动重试。保留上次读取的状态。'} />}
     {selectedMode && !story && status && !active(status) && status.result_integrity === 'NOT_PUBLISHED' && <Alert className="flow-feedback" type="info" showIcon message="本次没有发布可用安全结论。执行停止或失败不代表发现权限问题。" />}
@@ -252,7 +255,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       <div className="result-record-actions">{resultView === 'source' && <Button onClick={() => onNavigate('/changes')}>查看当前代码变化</Button>}<Button loading={runLoading} onClick={() => setRefreshEpoch(value => value + 1)}>刷新检查结果</Button></div>
     </>}
     {!selectedMode && <>
-      {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
+      {preview && !preview.can_execute && !needsBoundary && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
     </>}
     {!(selectedMode && story && !completionPending) && <div className="check-footer">{!selectedMode && <nav className="check-related-actions" aria-label="检查相关内容">{(running || preview?.can_execute) && <Button type="link" onClick={showMaterials} disabled={busy}>管理准备材料</Button>}</nav>}<TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
       refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: (selectedMode ? runLoading : loading) || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}

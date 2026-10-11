@@ -5,7 +5,7 @@
 #   ApplicationUnderstanding 核心事实与 SQLite 一对一项目记录之间的持久化适配器
 #
 # 职责
-#   映射连接与授权字段｜规范化候选 JSON｜维护项目级唯一 source root
+#   映射连接与授权字段｜规范化候选 JSON｜同源目录的独立接入按项目隔离
 #
 # 边界
 #   不提交事务、不读取源码正文、不推断候选或权限；损坏 JSON 以稳定存储错误失败关闭。
@@ -28,7 +28,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     select,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -83,10 +82,7 @@ class ApplicationUnderstandingRow(Base):
             "created_at_us >= 0 AND updated_at_us >= created_at_us",
             name="time_order",
         ),
-        UniqueConstraint(
-            "source_root",
-            name="uq_application_understanding_source_root",
-        ),
+        Index('ix_application_understanding_source_root', 'source_root'),
         Index("ix_application_understanding_updated", "updated_at_us"),
     )
 
@@ -137,9 +133,14 @@ class ApplicationUnderstandingRepository:
             self._session,
             select(ApplicationUnderstandingRow).where(
                 ApplicationUnderstandingRow.source_root == source_root
-            ),
+            ).order_by(ApplicationUnderstandingRow.created_at_us.desc(), ApplicationUnderstandingRow.project_id.desc()).limit(1),
         )
         return None if row is None else self._record(row)
+
+    def list_by_source_root(self, source_root: str) -> tuple[ApplicationUnderstanding, ...]:
+        rows = self._session.scalars(select(ApplicationUnderstandingRow).where(ApplicationUnderstandingRow.source_root == source_root)
+            .order_by(ApplicationUnderstandingRow.created_at_us.desc(), ApplicationUnderstandingRow.project_id.desc())).all()
+        return tuple(self._record(row) for row in rows)
 
     def replace(self, record: ApplicationUnderstanding) -> None:
         values = self._row_values(record)

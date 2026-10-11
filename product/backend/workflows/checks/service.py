@@ -21,11 +21,12 @@ from product.backend.core.checks.plan import ActionCheckPlan, CheckPlanGap
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.candidate_reviews import BoundaryReviewGap
 from product.backend.workflows.business_boundaries.candidates.reviews import project_review_gaps
+from product.backend.workflows.business_boundaries.candidates.coverage import frozen_requirement_scope
 from product.backend.infra.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
 from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
 from product.protocols.checks.check_runtime import check_runtime_fingerprint
-from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, canonical_execution_request_bytes, content_hash
+from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, FrozenRequirementScope, canonical_execution_request_bytes, content_hash
 
 
 class CheckPreview(WireModel):
@@ -37,6 +38,7 @@ class CheckPreview(WireModel):
     case_count: int = Field(ge=0)
     actions: tuple[ActionCheckPlan, ...]
     boundary_review_gaps: tuple[BoundaryReviewGap, ...] = ()
+    requirement_scope: tuple[FrozenRequirementScope, ...] = ()
 
 
 class CheckService:
@@ -115,7 +117,7 @@ class CheckService:
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
             current, current_request, current_bundle = self._freeze(project_id, work=work,change_id=change_id)
-            if not current.can_execute or current_request is None or canonical_execution_request_bytes(current_request) != raw:
+            if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             validate_check_inputs(current_request, current_bundle)
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
@@ -174,7 +176,18 @@ class CheckService:
         if budget_reason is not None:
             gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
                 reason=budget_reason) for action in plan.actions)
-        boundary_gaps = project_review_gaps(work, project_id)
+        boundary_gaps = project_review_gaps(work, project_id, plan=plan, bundle=bundle)
+        requirement_scope = frozen_requirement_scope(work, project_id)
+        case_rules = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash) for action in plan.actions for case in action.cases}
+        for scope in requirement_scope:
+            if any(item.disposition == 'IN_SCOPE' and (not item.permissions or not {(v.intent_id, v.revision, v.intent_hash) for v in item.permissions} <= case_rules) for item in scope.requirements):
+                boundary_gaps += (BoundaryReviewGap(candidate_id=scope.candidate_id, revision=scope.revision,
+                    issue_id='bri_'+content_hash('ScopePlanGap', scope.model_dump(mode='json')),
+                    message='这份已确认要求尚未完整进入当前检查计划；请补齐材料，规则修订变化时重新关联。', status='PLAN_NOT_COVERED',
+                    review_url=f'#/permissions?project_id={project_id}&candidate={scope.candidate_id}&revision={scope.revision}',
+                    next_url=f'#/tests?materials=1&project_id={project_id}', next_label='核对检查材料'),)
+        scope_payload = tuple(item.model_dump(mode='json') for item in requirement_scope)
+        preview_fingerprint = content_hash('ScopedCheckPreview', {'plan': plan.plan_fingerprint, 'scope': scope_payload}) if scope_payload else plan.plan_fingerprint
         # 未纳入正式权限的真实要求没有action_id，不伪造Case；完整检查在冻结前阻塞。
         can_execute = bundle is not None and not gaps and not boundary_gaps and bool(plan.actions) and count > 0
         request = None
@@ -184,6 +197,10 @@ class CheckService:
             if bundle.schema_version=='6':
                 from product.protocols.checks.execution_request import PersistedExecutionRequestV4
                 request=PersistedExecutionRequestV4(**request.model_dump(exclude={'schema_version'}))
+            if requirement_scope:
+                from product.protocols.checks.execution_request import PersistedExecutionRequestV5
+                request = PersistedExecutionRequestV5(**request.model_dump(exclude={'schema_version', 'evidence_schema_version'}),
+                    evidence_schema_version='2' if bundle.schema_version == '6' else '1', requirement_scope=requirement_scope)
             validate_check_inputs(request, bundle)
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
@@ -215,5 +232,6 @@ class CheckService:
                 request = type(request).model_validate_json(json.dumps(values))
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),
             boundary_review_gaps=boundary_gaps,
-            plan_fingerprint=plan.plan_fingerprint, action_count=len(plan.actions), case_count=count,
+            requirement_scope=requirement_scope,
+            plan_fingerprint=preview_fingerprint, action_count=len(plan.actions), case_count=count,
             actions=plan.actions), request, bundle

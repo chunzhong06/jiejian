@@ -93,6 +93,8 @@ export type ApplicationConnectionDto = {
   understanding: ApplicationUnderstandingDto
   discovery: DiscoveryResult
 }
+export type ConnectionPreview = {source_root:string;snapshot:string;projects:ProjectDto[]}
+export type ConnectionChoice = {mode:'RESUME'|'NEW';existing_project_id?:string;expected_snapshot:string;operation_id?:string}
 
 export type CandidateSelection = { kind: 'ROLE' | 'ACTION'; candidate_id: string; decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED'; display_name: string }
 
@@ -103,10 +105,11 @@ export const projectsApi = {
     }),
   projects: () => request<ProjectDto[]>('/api/projects'),
   archivedProjects: () => request<ProjectDto[]>('/api/projects?include_archived=true'),
-  connectApplication: (sourceRoot: string, projectName?: string) =>
+  connectionPreview: (sourceRoot:string) => request<ConnectionPreview>('/api/applications/connection-preview',{method:'POST',body:JSON.stringify({source_root:sourceRoot})}),
+  connectApplication: (sourceRoot: string, projectName?: string, choice?:ConnectionChoice) =>
     request<ApplicationConnectionDto>('/api/applications/connect', {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', source_root: sourceRoot, project_name: projectName }),
+      body: JSON.stringify({ schema_version: '1', source_root: sourceRoot, project_name: projectName, ...choice }),
     }),
   project: (id: string) => request<ProjectDto>(`/api/projects/${id}`),
   remove: (id: string) => request<ProjectDto>(`/api/projects/${id}`, { method: 'DELETE' }),

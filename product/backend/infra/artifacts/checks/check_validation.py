@@ -33,7 +33,7 @@ def validate_check_inputs(request: PersistedExecutionRequestV3, bundle: CheckRun
                           runner_input: CheckRunnerInput | None = None) -> None:
     """在任何目标 I/O 前检查全计划关联；不从数据库或当前配置补齐缺少的事实。"""
     try:
-        if (bundle.schema_version=='6')!=(request.schema_version=='4'):
+        if (bundle.schema_version=='6')!=(getattr(request, 'evidence_schema_version', '1')=='2'):
             raise ValueError('request proof standard differs from runtime')
         config_hash = check_runtime_fingerprint(bundle)
         request_hash = hashlib.sha256(canonical_execution_request_bytes(request)).hexdigest()

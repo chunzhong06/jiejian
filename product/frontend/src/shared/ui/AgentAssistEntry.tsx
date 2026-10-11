@@ -17,7 +17,7 @@ export type AgentAssistContext = {
 type Snapshot = { context: AgentAssistContext; access: MCPAccessView; configured: boolean }
 const levels = { READ: 0, PREPARE: 1, EXECUTE: 2 }
 
-export function AgentAssistEntry({ projectId, contextKey, title, description, returnTo, loadContext, onNavigate, onRefresh, heading, actions, requiredLevel = 'PREPARE', primary = false, aside = false, dialog = false, onCopied }: {
+export function AgentAssistEntry({ projectId, contextKey, title, description, returnTo, loadContext, onNavigate, onRefresh, heading, actions, requiredLevel = 'PREPARE', primary = false, aside = false, dialog = false, initialOpen = false, buttonLabel = 'Agent 协助', onCopied }: {
   projectId: string; contextKey: string; title: string; description: string; returnTo: string
   loadContext: () => Promise<AgentAssistContext>
   onNavigate: (path: string) => void
@@ -28,10 +28,12 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
   primary?: boolean
   aside?: boolean
   dialog?: boolean
+  initialOpen?: boolean
+  buttonLabel?: string
   onCopied?: () => void
 }) {
   const visible = useContext(WorkPageVisible)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen)
   const [connecting, setConnecting] = useState(false)
   const [snapshot, setSnapshot] = useState<Snapshot>()
   const [busy, setBusy] = useState(false)
@@ -42,7 +44,7 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
   const liveScope = useRef<string | undefined>(undefined)
   liveScope.current = visible && open ? scope : undefined
   const inFlight = useRef<{ scope: string; promise: Promise<Snapshot | undefined> } | undefined>(undefined)
-  useEffect(() => { setOpen(false); setConnecting(false); setSnapshot(undefined); setError(undefined); setMessage(undefined); setBusy(false) }, [scope])
+  useEffect(() => { setOpen(initialOpen); setConnecting(false); setSnapshot(undefined); setError(undefined); setMessage(undefined); setBusy(false) }, [scope, initialOpen])
   useEffect(() => () => { liveScope.current = undefined }, [])
   useEffect(() => { setCopied(false) }, [scope])
   useEffect(() => {
@@ -104,7 +106,8 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
     finally { if (liveScope.current === scope) setBusy(false) }
   }
   const problem = snapshot ? permissionProblem(snapshot) : undefined
-  const toggle = <div className="agent-assist-toggle">{primary && actions}<Button type={primary ? 'primary' : 'default'} icon={<RobotOutlined aria-hidden />} aria-expanded={open} onClick={() => { setOpen(value => !value); setBusy(false) }}>Agent 协助</Button>{!primary && actions}</div>
+  // 初次交接直接展示请求与复制入口，避免让用户先展开一个已经展开的协作区。
+  const toggle = initialOpen && open ? null : <div className="agent-assist-toggle">{primary && actions}<Button type={primary ? 'primary' : 'default'} icon={<RobotOutlined aria-hidden />} aria-expanded={open} onClick={() => { setOpen(value => !value); setBusy(false) }}>{buttonLabel}</Button>{!primary && actions}</div>
   const panel = open && <div className="agent-assist-panel">{!aside && <><h3>{title}</h3><p>{description}</p></>}
       {!snapshot && !error && <p role="status">正在核对当前内容与连接…</p>}
       {error && <Alert type="warning" showIcon message={error} action={<Button onClick={() => void read()}>重新读取</Button>}/>}
@@ -112,7 +115,7 @@ export function AgentAssistEntry({ projectId, contextKey, title, description, re
       {snapshot?.configured && snapshot.access.connection_state !== 'CONNECTED' && !problem && <p role="status">连接配置已核验，可继续交接任务。尚未收到本次服务的客户端请求。</p>}
       {snapshot && <details><summary>查看协助请求</summary><pre>{snapshot.context.requestText}</pre></details>}
       {message && <p className="agent-assist-message" role="status">{message}</p>}
-      <div className="agent-assist-actions"><Button icon={copied?<CheckOutlined aria-hidden/>:<CopyOutlined aria-hidden/>} disabled={!snapshot || Boolean(problem)} loading={busy} onClick={() => void copy()}>复制协助请求</Button>{onRefresh && <Button disabled={!snapshot} loading={busy} onClick={() => void refresh()}>读取整理结果</Button>}</div>
+      <div className="agent-assist-actions">{initialOpen && primary && actions}<Button type={initialOpen && primary ? 'primary' : 'default'} icon={copied?<CheckOutlined aria-hidden/>:<CopyOutlined aria-hidden/>} disabled={!snapshot || Boolean(problem)} loading={busy} onClick={() => void copy()}>复制协助请求</Button>{initialOpen && !primary && actions}{onRefresh && <Button disabled={!snapshot} loading={busy} onClick={() => void refresh()}>读取整理结果</Button>}</div>
     </div>
   return <section className={`agent-assist-entry${heading ? ' agent-assist-entry-with-heading' : ''}${aside ? ' agent-task-banner agent-task-surface' : ''}`} aria-label="Agent 协助">
     <AgentConnectionDialog open={connecting} onClose={()=>{setConnecting(false);void read()}} onConnected={()=>void read()}/>

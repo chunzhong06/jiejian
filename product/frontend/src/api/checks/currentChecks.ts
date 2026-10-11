@@ -18,8 +18,10 @@ export type CheckPreview = {
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
   gaps: Array<{ action_id: string; action_revision: number; reason: string }>
   boundary_review_gaps?: BoundaryReviewGap[]
+  requirement_scope?: RequirementScope[]
   actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string }> }>
 }
+export type RequirementScope={candidate_id:string;revision:number;requirements:Array<{requirement_id:string;requirement:string;disposition:'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE';time_scope:'CHECK_WINDOW'|'HISTORY'|'NOT_APPLICABLE';permissions:Array<{intent_id:string;revision:number;intent_hash:string}>}>}
 export type CheckObservation = {
   effect_id: string; proof_fingerprint: string; observer_id: string
   level: 'VERDICT_REQUIRED' | 'DIAGNOSIS_REQUIRED' | 'SUPPORTING'
@@ -73,7 +75,7 @@ export type ActionResultStory = {
   execution_path?: StoryExecutionPath | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null }
+export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
   schema_version: '1' | '2'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]

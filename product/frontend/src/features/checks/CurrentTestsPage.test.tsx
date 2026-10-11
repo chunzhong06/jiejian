@@ -25,7 +25,7 @@ afterEach(cleanup)
 it('未覆盖业务要求有明确返回入口，不能开始部分检查',async()=>{
   api.preview.mockResolvedValue({...ready,can_execute:false,boundary_review_gaps:[{candidate_id:'rcd1',revision:6,issue_id:'q1',message:'第二个下载入口未取证',status:'OPEN',review_url:'#/permissions?candidate=rcd1&revision=6'}]})
   const p=props();render(<CurrentTestsPage {...p}/>)
-  expect(await screen.findByText('完整检查尚有未覆盖要求')).toBeInTheDocument()
+  expect(await screen.findByText('检查前还需处理业务要求')).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'开始检查'})).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'返回这条要求'}))
   expect(p.onNavigate).toHaveBeenCalledWith('/permissions?candidate=rcd1&revision=6')

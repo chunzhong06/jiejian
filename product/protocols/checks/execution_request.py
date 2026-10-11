@@ -328,6 +328,39 @@ class PersistedExecutionRequestV4(PersistedExecutionRequestV3):
     evidence_schema_version:Literal['2']='2'
 
 
+class FrozenRequirement(WireModel):
+    requirement_id: str = Field(pattern=r'^req_[0-9a-f]{16}$')
+    requirement: str = Field(min_length=1, max_length=1024)
+    disposition: Literal['IN_SCOPE', 'PREPARATION', 'OUT_OF_SCOPE']
+    time_scope: Literal['CHECK_WINDOW', 'HISTORY', 'NOT_APPLICABLE']
+    permissions: tuple[PermissionReference, ...] = Field(max_length=200)
+
+
+class FrozenRequirementScope(WireModel):
+    candidate_id: str = Field(pattern=r'^rcd_[0-9a-f]{32}$')
+    revision: int = Field(ge=1)
+    requirements: tuple[FrozenRequirement, ...] = Field(min_length=1, max_length=100)
+
+
+class PersistedExecutionRequestV5(PersistedExecutionRequestV3):
+    # 保存本轮实际范围；历史结果只读当时快照，不用当前候选解释旧PASS。
+    schema_version: Literal['5'] = '5'
+    evidence_schema_version: Literal['1', '2']
+    requirement_scope: tuple[FrozenRequirementScope, ...] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode='after')
+    def requirements_match_cases(self):
+        facts = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash) for action in self.actions for case in action.cases}
+        for scope in self.requirement_scope:
+            for item in scope.requirements:
+                linked = {(ref.intent_id, ref.revision, ref.intent_hash) for ref in item.permissions}
+                if item.disposition == 'IN_SCOPE' and (not linked or not linked <= facts or item.time_scope == 'HISTORY'):
+                    raise ValueError('frozen requirement is not covered by current cases')
+                if item.disposition != 'IN_SCOPE' and linked:
+                    raise ValueError('outside requirement must not claim checked rules')
+        return self
+
+
 class ExecutionV3Error(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
@@ -337,7 +370,7 @@ def canonical_execution_request_v3_bytes(request: PersistedExecutionRequestV3) -
 
 
 def canonical_execution_request_bytes(request):
-    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4}.get(request.schema_version)
+    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5}.get(request.schema_version)
     if model is None:raise ExecutionV3Error('执行快照格式无效')
     return _canonical_execution_request(request,model)
 
@@ -383,7 +416,7 @@ def _parse_execution_request(raw,model):
             raise ValueError("execution bytes")
         payload=json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
                    parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4}.get(payload.get('schema_version'))
+        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5}.get(payload.get('schema_version'))
         if model is None:raise ValueError('unsupported execution version')
         request=model.model_validate_json(raw,strict=True)
         if _canonical_execution_request(request,model)!=raw:

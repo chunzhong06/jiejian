@@ -8,7 +8,7 @@
 #   拒绝活动任务｜清理当前测试身份秘密｜将 Project 置为 ARCHIVED。
 #
 # 边界
-#   不删除源码、Project、Run、Evidence、Finding、Report 或历史准备元数据；恢复由同源目录再次接入完成。
+#   不删除源码、Project、Run、Evidence、Finding、Report 或历史准备元数据；再次接入同源目录时须明确选择恢复；也可建立独立空项目。
 #
 # 调用链
 #   GUI / CLI / API → ProjectLifecycleService → UoW + TestIdentityService
