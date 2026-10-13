@@ -66,21 +66,30 @@ def read_record_source(var_dir, runtime_reference, config, resource_id, *, reque
     try:
         identity.bootstrap(lambda *_a, **_k:None)
         if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
-        path = ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe='')
+        creation = config.source_kind == 'CREATED_OBJECT_RECORDS' and not trace
+        path = ('/creation/read/'+quote(config.collection,safe='')) if creation else (
+            ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe=''))
         if request_nonce is not None:
             path += '/'+quote(request_nonce,safe='')
         _, response = adapter.execute_detailed(HttpRequestTemplate(method='GET',path=path),
             case_id='record-read',action_id='record-proof',identity_runtime=identity)
         if response.status_code != 200:
+            if creation:
+                payload = strict_json(response.body, config.max_response_bytes)
+                if payload.get('error') in {'CREATION_COLLECTION_LIMIT','CREATION_COLLECTION_UNKNOWN','RECORD_STORE_UNAVAILABLE'}:
+                    raise SourceReadError(payload['error'])
             raise SourceReadError('RECORD_SOURCE_UNAVAILABLE')
         body = strict_json(response.body, config.max_response_bytes)
         try:
             from product.protocols.runtime.record_trace import RecordTraceLog
-            value = (RecordTraceLog if trace else RecordProofView).model_validate_json(json.dumps(body.get('data'),allow_nan=False))
+            from product.protocols.runtime.creation_records import CreationView
+            value = (CreationView if creation else RecordTraceLog if trace else RecordProofView).model_validate_json(json.dumps(body.get('data'),allow_nan=False))
         except (ValueError, TypeError):
             raise SourceReadError('RECORD_SOURCE_INVALID') from None
-        selected=value if trace else value.snapshot
-        if selected.collection != config.collection or selected.resource_id != resource_id or trace and value.request_nonce!=request_nonce:
+        selected=value if trace or creation else value.snapshot
+        if (selected.collection != config.collection or not creation and selected.resource_id != resource_id
+                or trace and value.request_nonce!=request_nonce
+                or creation and value.scope is not None and value.scope.request_nonce!=request_nonce):
             raise SourceReadError('OPERATION_CORRELATION_INVALID')
         if record_provider(var_dir,runtime_reference) != provider or cancelled():
             raise SourceReadError('RECORD_PROVIDER_UNAVAILABLE')

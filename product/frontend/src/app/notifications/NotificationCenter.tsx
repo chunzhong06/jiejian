@@ -140,19 +140,24 @@ function NotificationCard({
 }) {
   const diagnosis = item.diagnosis
   const persistent = item.expiresAt === null
+  const recovery = ({
+    APPLICATION_ENDPOINT_INVALID: {title:'先确认应用访问地址',text:'请到应用页确认正在运行的本地地址，再打开登录浏览器。启动应用不会代替这次确认。',route:'/application?step=connection'},
+    MCP_PERMISSION_REQUIRED: {title:'本项目尚未允许 Agent 保存准备内容',text:'保存候选和材料建议需要本项目 PREPARE 授权。请在连接与授权中由你明确提升；正式规则仍需另行批准。',route:'/tools'},
+  } as Record<string,{title:string;text:string;route:string}>)[item.code]
   return <Alert
     className="notification-card"
     type="error"
     showIcon
     onClose={() => onDismiss(item.key)}
     closable={{ closeIcon: <span aria-label={`关闭通知 ${diagnosis?.headline ?? item.code}`}>×</span> }}
-    message={<span>{diagnosis?.headline ?? '当前请求没有完成'}{item.count > 1 && <Typography.Text type="secondary"> · 已发生 {item.count} 次</Typography.Text>}</span>}
+    message={<span>{recovery?.title ?? diagnosis?.headline ?? '当前请求没有完成'}{item.count > 1 && <Typography.Text type="secondary"> · 已发生 {item.count} 次</Typography.Text>}</span>}
     description={<Space direction="vertical" size={8} className="full-width">
-      <Typography.Text>{diagnosis?.short_message ?? '请刷新状态后重试；仍失败时检查运行环境。'}</Typography.Text>
+      <Typography.Text>{recovery?.text ?? diagnosis?.short_message ?? '请刷新状态后重试；仍失败时检查运行环境。'}</Typography.Text>
       {diagnosis?.cleanup_warnings.map((warning) => <Typography.Text type="warning" key={warning}>附加提示：{warning}</Typography.Text>)}
       <div className="notification-actions">
         <Button type="link" size="small" onClick={() => onDismiss(item.key)}>{persistent ? '我知道了' : '关闭'}</Button>
-        {diagnosis?.route && <Button type="link" size="small" onClick={() => onNavigate(diagnosis.route, item.key)}>前往处理页面</Button>}
+        {recovery && <Button type="link" size="small" onClick={()=>onNavigate(recovery.route,item.key)}>前往处理</Button>}
+        {!recovery && diagnosis?.route && <Button type="link" size="small" onClick={() => onNavigate(diagnosis.route, item.key)}>前往处理页面</Button>}
       </div>
     </Space>}
   />

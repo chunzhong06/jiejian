@@ -20,7 +20,7 @@ def _recovery_for(code: str) -> str:
     return {
         ErrorCode.MCP_DISABLED.value: "请在界鉴的“AI 工具连接”面板中启用连接后重试。",
         ErrorCode.MCP_AUTH_REQUIRED.value: "请在界鉴的连接与授权页核对连接是否暂停或失效，并按所选客户端指引恢复；无需复制凭据。",
-        ErrorCode.MCP_PERMISSION_REQUIRED.value: "请在界鉴中为该应用明确提升临时权限后重试。",
+        ErrorCode.MCP_PERMISSION_REQUIRED.value: "请打开界鉴“连接与授权”，选择本应用并调整允许范围。所需级别见 required_level；保存候选和建议需要 PREPARE。不得代替用户授权。",
         ErrorCode.INPUT_INVALID.value: "读取当前工具上下文，按字段提示修正输入；不改变原业务要求或绕过人工批准。",
     }.get(code, "请回到界鉴查看当前应用状态并按页面提示恢复。")
 
@@ -70,6 +70,9 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel], root: str =
 
     collect(model.model_json_schema())
     explanations = {
+        'requirement_permission_outside': 'permission_item_ids只能引用本候选content.permissions中存在的item_id；请补齐实际权限或纠正关联，不能删除原始要求',
+        'coverage_permission_outside': 'targets中的permission_item_id必须引用本候选实际权限项',
+
         "disclosure_projection_required": "DATA_DISCLOSURE必须填写非空的protected_projection，字段须对应真实业务数据",
         "projection_not_applicable": "只有DATA_DISCLOSURE可以填写protected_projection，其他类型应留空",
         "projection_invalid": "字段清单不得重复，字段名须以英文字母开头且只包含字母、数字、下划线、点或连字符",
@@ -80,7 +83,7 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel], root: str =
         "scenario_option_duplicate": "同一情境内option_id不能重复",
         "scenario_id_duplicate": "同一候选内scenario_id不能重复",
         "missing": "缺少必填字段", "extra_forbidden": "包含未声明字段，请对照当前输入格式删除",
-        "enum": "值不在允许的枚举中", "string_pattern_mismatch": "字段格式不符合公开约束",
+        "enum": "值不在允许的枚举中", "string_pattern_mismatch": "字段格式不符合公开约束，请按当前 input_schema 中该路径的 pattern 填写；operation_id 为32位小写十六进制，不含连字符",
         "too_short": "条目数量不足", "too_long": "条目数量超过上限",
         "string_type": "需要文本", "bool_type": "需要布尔值", "int_type": "需要整数",
     }
@@ -95,7 +98,13 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel], root: str =
         for part in location[:16]:
             path += f"[{part}]" if type(part) is int and 0 <= part < 10000 else "." + (part if isinstance(part, str) and part in allowed else "<field>")
         code = error["type"] if error["type"] in explanations else "invalid_value"
-        if code in {"disclosure_projection_required", "projection_not_applicable"}:
+        if code in {'requirement_permission_outside','coverage_permission_outside'}:
+            index = error.get('ctx', {}).get('source_index')
+            path += '.requirement_sources' if code == 'requirement_permission_outside' else '.coverage_suggestions'
+            if type(index) is int and 0 <= index < 100:
+                path += f'[{index}]'
+            path += '.permission_item_ids' if code == 'requirement_permission_outside' else '.targets'
+        elif code in {"disclosure_projection_required", "projection_not_applicable"}:
             path += ".protected_projection"
         elif code in {"scenario_excerpt_mismatch", "scenario_replacement_outside"}:
             # 只消费自有校验器产生的两个整数索引，不回显任意ctx或异常对象。

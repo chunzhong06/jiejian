@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 from product.backend.core.boundaries.entities import BoundaryModel
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
 
@@ -152,6 +152,26 @@ class PreparationSuggestionRevision(BoundaryModel):
         if len(self.model_dump_json().encode('utf-8')) > 256 * 1024:
             raise ValueError('材料建议根不得超过256KiB')
         return self
+
+
+class SuggestionItemBasis(BoundaryModel):
+    item_id: str = Field(pattern=SUGGESTION_ITEM_PATTERN)
+    fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+class PreparationSuggestionRevisionV2(PreparationSuggestionRevision):
+    schema_version: Literal['2'] = '2'
+    item_bases: tuple[SuggestionItemBasis, ...] = Field(max_length=50)
+
+    @model_validator(mode='after')
+    def complete_bases(self):
+        if len({item.item_id for item in self.item_bases}) != len(self.item_bases) or {item.item_id for item in self.item_bases} != {item.item_id for item in self.content.items}:
+            raise ValueError('每条建议必须有唯一的依赖依据')
+        return self
+
+
+preparation_suggestion_reader = TypeAdapter(Annotated[
+    PreparationSuggestionRevision | PreparationSuggestionRevisionV2, Field(discriminator='schema_version')])
 
 
 class SavePreparationSuggestion(BoundaryModel):

@@ -25,6 +25,7 @@ class CheckWebRuntime:
         self._identities = {item.identity_id: item for item in bundle.identities}
         self._executed: set[str] = set()
         self._actual_identities: dict[str, str] = {}
+        self._target_receipts = {}
         self.adapter = HttpExecutionAdapter(bundle.target,
             cleanup_reserve=bundle.budget.recovery_reserve_requests,
             known_secrets=tuple(environ[name] for name in check_secret_names(bundle) if environ.get(name)),
@@ -46,6 +47,9 @@ class CheckWebRuntime:
 
     def target_attempted(self, case_id: str) -> bool:
         return case_id in self._executed
+
+    def target_request(self, case_id):
+        return self._target_receipts.get(case_id)
 
     def actual_identity_status(self, case_id: str) -> str:
         return self._actual_identities.get(case_id, "UNKNOWN")
@@ -88,10 +92,10 @@ class CheckWebRuntime:
             return "UNKNOWN"
 
     def request(self, template: HttpRequestTemplate, *, case: ExecutionCase, action_id: str,
-                identity_id: str, cleanup=False) -> HttpResponse:
+                identity_id: str, cleanup=False, resource_id=None) -> HttpResponse:
         with self.identity_session(identity_id) as runtime:
             _, response = self.adapter.execute_detailed(template, case_id=case.case_id, action_id=action_id,
-                slot_values=self._values(template, case, {}), identity_runtime=runtime, cleanup_request=cleanup)
+                slot_values=self._values(template, case, {}, resource_id=resource_id), identity_runtime=runtime, cleanup_request=cleanup)
             return response
 
     def execute_flow(self, action: CheckActionConfig, case: ExecutionCase, *, verify_identity=False,entity_policy=None,before_target=None):
@@ -111,10 +115,17 @@ class CheckWebRuntime:
                 if target_policy is None and any(proof.effect_kind=='FILE_CONTENT_DELIVERY' for proof in action.proofs):
                     from product.backend.infra.execution.web.file_entity import FileEntityPolicy
                     target_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes)
-                execution, response = self.adapter.execute_detailed(step.request, case_id=case.case_id,
-                    action_id=action.action_id, classifier=step.classifier,
-                    slot_values=self._values(step.request, case, responses),identity_runtime=runtime,
-                    entity_policy=target_policy if step.purpose=='TARGET' else None)
+                # 先清除SETUP回执；TARGET在网络前失败时也不能借用前一请求。
+                if step.purpose=='TARGET':
+                    getattr(self.adapter,'request_receipts',{}).pop((case.case_id,action.action_id),None)
+                try:
+                    execution, response = self.adapter.execute_detailed(step.request, case_id=case.case_id,
+                        action_id=action.action_id, classifier=step.classifier,
+                        slot_values=self._values(step.request, case, responses),identity_runtime=runtime,
+                        entity_policy=target_policy if step.purpose=='TARGET' else None)
+                finally:
+                    if step.purpose=='TARGET':
+                        self._target_receipts[case.case_id]=getattr(self.adapter,'request_receipts',{}).get((case.case_id,action.action_id))
                 responses[step.step_id] = response
                 if step.purpose == "TARGET":
                     if not hasattr(self, "_target_responses"):
@@ -126,11 +137,11 @@ class CheckWebRuntime:
         raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "执行快照格式无效")
 
     def _values(self, template: HttpRequestTemplate, case: ExecutionCase,
-                responses: Mapping[str, HttpResponse]) -> dict[str, object]:
+                responses: Mapping[str, HttpResponse], *, resource_id=None) -> dict[str, object]:
         values: dict[str, object] = {}
         for slot in template.input_slots:
             if slot.source is ValueSlotSource.CASE_RESOURCE_ID:
-                value = case.resource_id
+                value = case.resource_id if resource_id is None else resource_id
             elif slot.source is ValueSlotSource.CASE_SUBJECT_ID:
                 value = case.subject_test_identity_id
             elif slot.source is ValueSlotSource.FIXED_LITERAL:

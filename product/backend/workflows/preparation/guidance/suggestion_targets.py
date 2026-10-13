@@ -6,6 +6,20 @@ def _invalid(message):
     raise JiejianError(ErrorCode.STATE_PRECONDITION, message)
 
 
+def _candidate_material_meaning(candidate, target):
+    content = candidate.content
+    permissions = [item for item in content.permissions if item.business_action_item_id == target.action_item_id]
+    actor_ids = {target.actor_item_id}
+    actor_ids.update(item.subject_actor_item_id for item in permissions)
+    actor_ids.update(item.resource_owner_actor_item_id for item in permissions)
+    return {
+        'basis': candidate.basis_id, 'original_text': content.original_text,
+        'actions': [item.model_dump(mode='json') for item in content.actions if item.item_id == target.action_item_id],
+        'actors': sorted((item.model_dump(mode='json') for item in content.actors if item.item_id in actor_ids), key=lambda item:item['item_id']),
+        'permissions': sorted((item.model_dump(mode='json') for item in permissions), key=lambda item:item['item_id']),
+    }
+
+
 def approved_target(work, project_id, action_id, revision, actor_id=None, actor_revision=None, effect_id=None):
     action = work.business_boundaries.action_revision(action_id, revision)
     if action is None or action.project_id != project_id:
@@ -39,8 +53,12 @@ def resolve_target(work, project_id, target, candidates, boundaries):
     decision = None if proposal_id is None else work.business_boundaries.decision_for_proposal(proposal_id)
     common = {'candidate_id':target.candidate_id, 'candidate_revision':target.revision}
     if decision is not None and decision.decision.value == 'APPROVED':
-        references = [item['entity_references'] for item in work.rule_candidates.approval_mappings(proposal_id=proposal_id)
+        mappings = [item for item in work.rule_candidates.approval_mappings(proposal_id=proposal_id)
             if item['entity_references'] is not None and item['entity_references']['action']['item_id'] == target.action_item_id]
+        current_rules = {(rule.intent_id, rule.revision, rule.intent_hash) for rule in boundaries.view(project_id, work=work).permission_intents}
+        if any((item['intent_id'], item['revision'], item['intent_hash']) not in current_rules for item in mappings):
+            _invalid('建议对应的已批准权限已经改变，请核对当前规则含义')
+        references = [item['entity_references'] for item in mappings]
         actions = {(item['action']['action_id'], item['action']['revision']) for item in references}
         actors = {(actor['actor_id'], actor['revision']) for item in references for actor in item['actors'] if actor['item_id'] == target.actor_item_id}
         effects = {effect['effect_id'] for item in references for effect in item['effects'] if effect['item_id'] == target.effect_item_id}
@@ -53,8 +71,14 @@ def resolve_target(work, project_id, target, candidates, boundaries):
         effect_id = next(iter(effects)) if target.effect_item_id else None
         return {**approved_target(work, project_id, action_id, revision, actor_id, actor_revision, effect_id), **common}
     head = work.rule_candidates.get(project_id,target.candidate_id)
-    if head is None or head.revision != target.revision:
-        _invalid('尚未批准的规则候选已有新修订，请按最新含义重新整理')
+    if head is None or work.rule_candidates.visibility(target.candidate_id)['archived']:
+        _invalid('对应规则候选不可继续处理，请先核对当前候选')
+    if head.revision != target.revision:
+        # 人保存范围或补其他动作不应废掉本项建立办法；只沿同一候选且业务含义未变的头续接。
+        # 已拒绝的提案不能通过续接恢复；批准仍必须有精确实体映射。
+        if decision is not None or _candidate_material_meaning(candidate, target) != _candidate_material_meaning(head, target):
+            _invalid('对应角色、动作或权限含义已有变化，请重新核对这项建议')
+        return resolve_target(work, project_id, target.model_copy(update={'revision':head.revision}), candidates, boundaries)
     draft = boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
     if candidate.basis_id != 'rb_' + draft.boundary_state_fingerprint or (decision and decision.decision.value != 'APPROVED'):
         _invalid('对应规则候选需要重新整理，不能作为当前材料建议的依据')

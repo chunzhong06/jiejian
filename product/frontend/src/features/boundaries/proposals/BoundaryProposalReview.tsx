@@ -9,8 +9,9 @@ import { RuleCoveragePreview } from '../RuleCoveragePreview'
 
 type ReviewItem = BoundaryProposalReviewDto['items'][number]
 const changeLabels={CREATE:'新增',UPDATE:'修改',RETIRE:'停用',REFERENCE:'沿用'}
-export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturnToEdit, onReject, onContinue }: {
+export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturnToEdit, onReject, onContinue, onRules }: {
   onContinue?:()=>void
+  onRules?:()=>void
   proposalView: BoundaryProposalViewDto; busy: boolean
   onApprove: (reason: string) => void; onReturnToEdit: () => void; onReject: (reason: string) => void
 }) {
@@ -48,7 +49,7 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
     <h3>{decision?'这份提案的决定':'确认这份提案'}</h3><p>{decision?'审阅已经结束。继续当前工作，可核对运行地址和准备检查材料。':'核对正文中的权限变化与沿用要求，再决定是否批准。'}</p>
     {!!proposal.unresolved_questions?.length&&<Alert type="warning" message="仍有未解决问题" description={proposal.unresolved_questions.join('；')}/>}
     {decision?<Alert type="info" message={decision.decision==='APPROVED'?'这份提案已确认':'这份提案已放弃'} description={decision.reason}/>:<footer className="permission-review-decision"><div className="permission-review-acknowledgement"><Checkbox disabled={busy} checked={checked} onChange={e=>setChecked(e.target.checked)}>我已核对本次变更和沿用的业务要求</Checkbox><p>批准后进入材料准备，检查结果另行形成。</p></div><div className="boundary-review-actions"><Button disabled={busy} onClick={onReturnToEdit}>返回修改</Button><Button type="primary" loading={busy} disabled={busy||unavailable||review?.current_state_changed||!checked||Boolean(proposal.unresolved_questions?.length)} onClick={()=>onApprove('用户已勾选确认：已核对本次变更和沿用的业务要求')}>确认这组业务边界</Button></div><div className="permission-review-withdraw"><Button danger disabled={busy} onClick={()=>onReject('用户明确放弃这组业务边界提案')}>放弃这组提案</Button><span>仅对当前提案生效</span></div></footer>}
-    {decision&&onContinue&&<div className="boundary-review-actions"><Button type="primary" onClick={onContinue}>继续当前工作</Button></div>}
+    {decision&&<div className="boundary-review-actions">{onContinue&&<Button onClick={onContinue}>继续当前工作</Button>}{onRules&&<Button type="primary" onClick={onRules}>返回当前规则列表</Button>}</div>}
     </aside></div>
   </section>
 }

@@ -109,7 +109,17 @@ class FileReceiptFact(WireModel):
         return self
 
 
-FactData=Annotated[CommittedStateFact|IdentityCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact,Field(discriminator='kind')]
+class ObjectCreationFact(WireModel):
+    kind:Literal['OBJECT_CREATION']='OBJECT_CREATION'
+    generation:RecordId
+    sequence:int=Field(ge=1)
+    resource_id:str=Field(min_length=1,max_length=256)
+    incarnation:RecordId
+    subject_identity_id:IdentityId
+    owner_identity_id:IdentityId
+
+
+FactData=Annotated[CommittedStateFact|IdentityCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact|ObjectCreationFact,Field(discriminator='kind')]
 
 
 def fact_content_id(payload):
@@ -138,7 +148,7 @@ class BusinessFact(WireModel):
         if len(self.model_dump_json().encode('utf-8'))>2048:raise ValueError('business fact exceeds 2KiB')
         if isinstance(self.data,CommittedStateFact) and {item.proof_fingerprint for item in self.data.changes}!=set(keys):
             raise ValueError('committed projection must cover exact proof references')
-        collector={'COMMITTED_STATE':'CONTROLLED_RECORDS','IDENTITY_CHECK':'IDENTITY_READER',
+        collector={'OBJECT_CREATION':'CONTROLLED_RECORDS','COMMITTED_STATE':'CONTROLLED_RECORDS','IDENTITY_CHECK':'IDENTITY_READER',
             'FIELD_DISCLOSURE':'HTTP_ENTITY','FILE_RECEIPT':'HTTP_ENTITY','REFERENCE_ARTIFACT':'REFERENCE_STORE'}
         if self.collector_kind!=collector[self.data.kind]:raise ValueError('business fact collector mismatch')
         return self
@@ -208,4 +218,38 @@ class ObservationFactReference(WireModel):
             raise ValueError('disclosure window does not match observation method')
         if (self.method in {'FILE_SNAPSHOT','FILE_DELIVERY'})!=(self.file_window is not None):
             raise ValueError('file window does not match observation method')
+        return self
+
+
+class CreationObservationWindow(WireModel):
+    generation:RecordId
+    baseline_watermark:int=Field(ge=0)
+    current_watermark:int=Field(ge=0)
+    baseline_digest:Hash
+    current_digest:Hash
+    scope_state:Literal['OPEN','COMPLETE','INCOMPLETE','MISSING']
+    request_matched:bool
+    source_complete:bool
+    created_count:int=Field(ge=0,le=32)
+    response_resource_id:str|None=Field(default=None,max_length=256)
+    response_matched:bool=False
+
+
+class CreationFactReference(WireModel):
+    proof_fingerprint:ProofId
+    observer_id:Annotated[str,Field(pattern=r'^[a-z][a-z0-9_-]{0,63}$')]
+    phase:Literal['BASELINE','BEFORE','AFTER','EVENTUAL','RECOVERY']
+    fact_ids:tuple[FactId,...]=Field(default=(),max_length=64)
+    source:FactProofReference
+    method:Literal['CREATION_SNAPSHOT','OBJECT_CREATION']
+    creation_window:CreationObservationWindow
+    complete:bool
+    reason_codes:tuple[Annotated[str,Field(pattern=r'^[A-Z][A-Z0-9_]{0,127}$')],...]=Field(default=(),max_length=8)
+
+    @model_validator(mode='after')
+    def matching_source(self):
+        if self.source.proof_fingerprint!=self.proof_fingerprint or len(set(self.fact_ids))!=len(self.fact_ids):
+            raise ValueError('creation fact source mismatch')
+        if (self.phase in {'BASELINE','BEFORE','RECOVERY'})!=(self.method=='CREATION_SNAPSHOT'):
+            raise ValueError('creation observation phase mismatch')
         return self

@@ -17,7 +17,7 @@ from product.backend.workflows.preparation.models import (
     ActionTechnicalPreparationView, EffectEvidencePreparationView, PreparationItemView,
     PreparationStatus, ResourcePreparationView,
 )
-from product.backend.workflows.preparation.bindings.recording_candidates import choose_supplement_candidate, flow_resource_injection, request_event, resource_value, supplement_candidates
+from product.backend.workflows.preparation.bindings.recording_candidates import choose_supplement_candidate, flow_resource_injection, request_event, recorded_resource_value, supplement_candidates
 from product.backend.workflows.recording.source import require_persisted_recording_source
 from product.backend.workflows.test_identities.service import TestIdentityStatus
 from product.backend.core.checks.plan import RegisteredEffectProofCapability
@@ -132,11 +132,15 @@ class PreparationBindingService:
                                                          if item.candidate_id == draft.resource_candidate_id), None)
             if candidate is None:
                 raise JiejianError(ErrorCode.RECORD_DRAFT_UNCONFIRMED, "请确认业务动作和具体资源")
+            if str(candidate.consumer).startswith("RESPONSE_") and not (
+                action.state_changing and any(effect.effect_kind.value == "OBJECT_CREATION" for effect in action.effect_catalog)
+            ):
+                raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "响应对象必须对应已确认的对象形成业务结果")
             injection = flow_resource_injection(flow, candidate)
             flow_facts = {"flow_id": flow.id, "flow_sha256": _flow_sha256(flow), "resource_injection": injection}
             resource = seal_binding(
                 ActionResourceBinding, **common, **source, **flow_facts,
-                actual_resource_id=resource_value(request_event(recording, target), candidate),
+                actual_resource_id=recorded_resource_value(recording, target, candidate),
             )
             execution = seal_binding(ActionExecutionBinding, **common, **source, **flow_facts)
             return (execution, resource)

@@ -15,7 +15,7 @@ from product.backend.workflows.recording.source import identity_source_fingerpri
 from product.backend.infra.observers.records.source_contracts import audit_source_contract
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.protocols.runtime.node_runtime import NodeRuntimeReference
-from product.protocols.preparation.proof_sources import ProofSourceRevision,SourceReadScope,ProofPreflightInput,proof_fingerprint,AtomicProofSourceConfig,FileProofSourceConfig,source_identity_paths
+from product.protocols.preparation.proof_sources import ProofSourceRevision,SourceReadScope,ProofPreflightInput,proof_fingerprint,AtomicProofSourceConfig,FileProofSourceConfig,CreationProofSourceConfig,source_read_paths
 from product.protocols.checks.check_runtime import CheckIdentity, CheckIdentityVerification
 from product.protocols.web.target import WebTargetScope
 from product.protocols.web.request import HttpRequestTemplate
@@ -109,8 +109,8 @@ class ProofPreparationService:
                     owner_identity_id=item.resource_owner_test_identity_id) for item in resources],
                 sources=[self._source_view(work, item, basis, runtime) for item in work.proof_sources.list(project_id)],
                 read_scopes=[item.model_dump(mode='json') for item in work.proof_sources.scopes(project_id)],
-                supported_source_kinds=['MANAGED_TRANSACTION_RECORDS','REFERENCE_FILE'],max_response_bytes=262144,max_path_depth=8,
-                source_contracts=['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1'],
+                supported_source_kinds=['MANAGED_TRANSACTION_RECORDS','REFERENCE_FILE','CREATED_OBJECT_RECORDS'],max_response_bytes=262144,max_path_depth=8,
+                source_contracts=['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1'],
                 reference_inputs=[item.model_dump(mode='json') for item in work.proof_artifacts.inputs(project_id)],
                 reference_recovery_gaps=self._capture_gaps(work,project_id),
                 allow_permissions=[dict(intent_id=item.intent_id,action_id=item.business_action_id,
@@ -120,6 +120,11 @@ class ProofPreparationService:
                 reference_preparation=dict(candidate_without_file=True,execute_from='LOCAL_GUI',
                     note='没有参照时，可先保存REFERENCE_FILE来源候选，reference_artifact和reference_origin为空；文件取得后再更新候选，执行正常取样只能由人在界面确认。'),
                 source_requirements=['受保护资源通过通用事务记录组件读写','身份接口、角色字段与被保护字段由当前应用配置','普通自报JSON不作为完整历史依据'],
+                creation_preparation=dict(source_kind='CREATED_OBJECT_RECORDS',source_contract_id='OBJECT_CREATION_V1',
+                    write='业务对象实际使用 jiejian:records 的 seed 创建；请求关联由宿主注入。不能另存一份旁路日志冒充业务对象。',
+                    recovery='沿已确认恢复接口使用本次对象编号；受控集合提供 remove(resource_id, expected_version)，仍须由应用执行原有授权校验。',
+                    read_scope='用户明确确认读取整个所选集合的标识、归属、版本、摘要和本次创建记录；最多256个对象，不截断。',
+                    note='样本编号仅是材料引用。动态创建的正式检查独立发现本次对象；原规则、合法对照、恢复及授权校验全部保留。'),
                 gui_url=f'#/tests?materials=1&proof_sources=1&project_id={project_id}')
 
     def _capture_gaps(self,work,project_id):
@@ -201,7 +206,7 @@ class ProofPreparationService:
         if (effect is None or resource is None or config.observation_identity_id != resource.resource_owner_test_identity_id
                 or not {item.identity_id for item in config.identity_claims} <= set(known)):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, '来源未对应当前动作、效果和已确认的资源所有者')
-        expected_kind='FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else 'STATE_MUTATION' if config.source_contract_id=='TRANSACTION_HISTORY_V2' else 'DATA_DISCLOSURE'
+        expected_kind='OBJECT_CREATION' if isinstance(config,CreationProofSourceConfig) else 'FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else 'STATE_MUTATION' if config.source_contract_id=='TRANSACTION_HISTORY_V2' else 'DATA_DISCLOSURE'
         if effect.effect_kind.value != expected_kind or set(config.protected_projection) != set(effect.protected_projection):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'来源类型或受保护字段与已确认的业务要求不一致')
         if isinstance(config,FileProofSourceConfig) and (config.reference_resource_id,config.reference_owner_identity_id)!=(resource.actual_resource_id,resource.resource_owner_test_identity_id):
@@ -226,7 +231,7 @@ class ProofPreparationService:
             if (command.source_id is None) != (command.expected_revision is None) or (command.source_id is not None
                     and (old is None or old.revision != command.expected_revision)):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '来源候选已有更新，请读取后再保存')
-            value = ProofSourceRevision(project_id=project_id, source_id=command.source_id or 'psr_' + uuid4().hex,
+            value = ProofSourceRevision(schema_version='4' if isinstance(command.config,CreationProofSourceConfig) else '3', project_id=project_id, source_id=command.source_id or 'psr_' + uuid4().hex,
                 revision=1 if old is None else old.revision + 1, config=command.config,
                 basis_id=command.basis_id, fingerprint=proof_fingerprint(command.config), submitted_via=submitted_via,
                 client_name=client_name, created_at_us=self._clock())
@@ -246,7 +251,7 @@ class ProofPreparationService:
     def _scope_matches(scope, config, runtime):
         return (isinstance(config,AtomicProofSourceConfig) and scope.schema_version == '3' and scope.origin == f'http://127.0.0.1:{runtime.port}'
             and config.read_scope_id in (None,scope.scope_id)
-            and {*source_identity_paths(config),config.relative_path_template} <= set(scope.path_templates)
+            and set(source_read_paths(config)) <= set(scope.path_templates)
             and {item.identity_id for item in config.identity_claims} <= set(scope.identity_ids)
             and config.resource_binding_id in scope.resource_binding_ids
             and config.max_response_bytes <= scope.max_response_bytes and config.timeout_us <= scope.timeout_us)
@@ -268,7 +273,7 @@ class ProofPreparationService:
                         details={'reason':'PROOF_READ_SCOPE_STALE'})
                 return dict(scope_id=current.scope_id,state='GRANTED')
             scope = SourceReadScope(scope_id='prs_' + uuid4().hex, project_id=project_id,
-                origin=f'http://127.0.0.1:{runtime.port}', path_templates=(*source_identity_paths(config),config.relative_path_template),
+                origin=f'http://127.0.0.1:{runtime.port}', path_templates=source_read_paths(config),
                 identity_ids=tuple(item.identity_id for item in config.identity_claims),
                 resource_binding_ids=(config.resource_binding_id,), max_response_bytes=config.max_response_bytes,
                 timeout_us=config.timeout_us, created_at_us=self._clock())
@@ -296,7 +301,7 @@ class ProofPreparationService:
                 contract = None
             claims = {item.identity_id:item.application_subject_id for item in config.identity_claims}
             origin = f'http://127.0.0.1:{runtime.port}'
-            request = ProofPreflightInput(preflight_id='ppf_' + uuid4().hex, project_id=project_id,
+            request = ProofPreflightInput(schema_version='4' if isinstance(config,CreationProofSourceConfig) else '3', preflight_id='ppf_' + uuid4().hex, project_id=project_id,
                 source_id=source.source_id, source_revision=source.revision, source_fingerprint=source.fingerprint,
                 config=config, scope=scopes[0], basis_id=command.basis_id, control_session_id=self.control_session_id,
                 authority_id=authority_id, target=WebTargetScope(base_url=origin, allowed_origins=(origin,),
@@ -341,7 +346,7 @@ class ProofPreparationService:
 
     def _adoptable(self, work, project_id, source, preflight_id, facts):
         request, job, report = self.jobs.read(work,project_id,preflight_id)
-        if (request.schema_version != '3' or (report is not None and report.schema_version != '2')
+        if (request.schema_version not in {'3','4'} or (report is not None and report.schema_version != '2')
                 or request.source_id != source.source_id or request.source_revision != source.revision
                 or request.source_fingerprint != source.fingerprint or request.basis_id != facts.basis_id
                 or report is None or report.assessment != 'USABLE' or request.contract is None
@@ -364,7 +369,7 @@ class ProofPreparationService:
             return dict(project_id=project_id,basis_id=facts.basis_id,source_id=source_id,revision=source.revision,
                 preflight_id=preflight_id,action_label=action.display_name,effect_label=effect.business_label,
                 replaces_existing=previous is not None,identity_claims=[item.model_dump(mode='json') for item in source.config.identity_claims],
-                source_path=source.config.relative_path_template,resource_id=resource.actual_resource_id,
+                source_path=source.config.relative_path_template,read_paths=source_read_paths(source.config),resource_id=resource.actual_resource_id,
                 collection=source.config.collection,mappings={key:'.'.join(path) for key,path in source.config.mappings.items()},
                 expected_state=effect.expected_state,protected_projection=source.config.protected_projection,
                 retained=['权限规则','操作材料','测试账号','恢复材料'],recheck=['结果证明','恢复后的结果核对'],
@@ -430,7 +435,7 @@ class ProofPreparationService:
             return True
         with self._uow() as work:
             request = work.proof_sources.preflight(job.project_id,job.preflight_id)
-            return (request is not None and request.schema_version == '3' and request.control_session_id == self.control_session_id
+            return (request is not None and request.schema_version in {'3','4'} and request.control_session_id == self.control_session_id
                 and self.authority_active(job.project_id,request.authority_id)
                 and work.proof_sources.scope(job.project_id,request.scope.scope_id) == request.scope)
 

@@ -4,7 +4,7 @@ const preparationKinds = new Set(['SELECT_ALLOW_CONTROL','REVIEW_RECORDING','PRE
 export function taskDestination(task: PrimaryTaskDto) {
   const query = new URLSearchParams()
   if (task.task_kind === 'CONFIRM_APPLICATION_ENDPOINT' && task.route === '/application') query.set('step', 'connection')
-  if (task.proposal_id && task.route === '/permissions') query.set('proposal_id', task.proposal_id)
+  if (task.task_kind === 'REVIEW_BOUNDARY_PROPOSAL' && task.proposal_id && task.route === '/permissions') query.set('proposal_id', task.proposal_id)
   if (task.repair_fingerprint && task.route === '/changes') query.set('repair_reference', task.repair_fingerprint)
   else if (task.run_id) query.set('run_id', task.run_id)
   else if (task.change_id && ['/tests', '/changes'].includes(task.route)) query.set('change_id', task.change_id)

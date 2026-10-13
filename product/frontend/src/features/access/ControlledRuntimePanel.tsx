@@ -149,7 +149,7 @@ export function ControlledRuntimePanel({ projectId, revision, sourceAuthorized, 
     <header><div><h3>由界鉴启动本地应用</h3><p>保留一份固定源码用于核对，关闭界鉴时停止本次运行。</p></div>
       <StatusBadge kind="lifecycle" tone={state?.running?'info':queued?'warning':'neutral'}>{pending?'回执待查询':state?.running?'正在运行':queued?'正在启动':state?.operation?.state==='FAILED'?'启动失败':'尚未运行'}</StatusBadge></header>
     {error && <Alert type="warning" showIcon message={error}/>}
-    <p className="controlled-runtime-scope">支持无外部依赖的 Node ESM 应用。入口使用 .mjs，只加载静态相对模块；其他项目可继续使用已启动的本地地址。</p>
+    <p className="controlled-runtime-scope">支持无外部依赖的 Node ESM 应用。入口相对已接入目录填写，例如 source/app.mjs；只加载 .mjs 静态相对模块。其他项目可继续使用已启动的本地地址。</p>
     <div className="controlled-runtime-fields"><label>入口文件<Input value={entry} disabled={busy||Boolean(queued)||Boolean(pending)} onChange={event=>{setEntry(event.target.value);setPreview(null)}} placeholder="app.mjs"/></label>
       <label>本地端口<InputNumber min={1024} max={65535} value={port} disabled={busy||Boolean(queued)||Boolean(pending)} onChange={value=>{setPort(value);setPreview(null)}}/></label></div>
     {!sourceAuthorized && <Checkbox checked={consent} disabled={busy} onChange={event=>setConsent(event.target.checked)}>允许只读当前源码，生成启动预览</Checkbox>}

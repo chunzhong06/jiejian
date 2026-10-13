@@ -130,6 +130,8 @@ class RecordingBrowserSession:
         if self._capture_started:
             return True
         while not self._start_requested():
+            if self._collector.safety_error is not None:
+                return False
             if self._cancellation_requested():
                 return False
             if self._capture_deadline is not None and self._monotonic() >= self._capture_deadline:
@@ -145,7 +147,7 @@ class RecordingBrowserSession:
         return True
 
     def stop_requested(self) -> bool:
-        return self._stop_requested()
+        return self._stop_requested() or self._collector.safety_error is not None
 
 
 Interaction = Callable[[RecordingBrowserSession], None]
@@ -272,7 +274,7 @@ class BrowserRecordingAdapter:
                     capture_deadline=capture_deadline,
                 )
                 interaction(session)
-                if capture_controlled and not session.capture_started and not cancellation_requested():
+                if capture_controlled and not session.capture_started and not cancellation_requested() and collector.safety_error is None:
                     raise JiejianError(
                         ErrorCode.RECORD_INTERACTION_FAILED,
                         "录制未收到开始采集动作",
@@ -309,7 +311,7 @@ class BrowserRecordingAdapter:
                 reason = RecordingReasonCode.BROWSER_INTERACTION_FAILED
                 error_code = ErrorCode.RECORD_INTERACTION_FAILED.value
         except JiejianError as exc:
-            if exc.code in {
+            if collector.safety_error is not None or exc.code in {
                 ErrorCode.RECORD_SCOPE_BLOCKED.value,
                 ErrorCode.RECORD_EVENT_BUDGET.value,
             }:
@@ -327,6 +329,11 @@ class BrowserRecordingAdapter:
             error_code = ErrorCode.RECORD_INTERACTION_FAILED.value
             retryable = False
 
+        detail_reason = None
+        if collector.safety_error is not None:
+            response_reasons = [e.reason_code for e in collector.events if e.kind.value == 'SAFETY_BLOCKED' and e.reason_code]
+            if response_reasons and collector.safety_reason is RecordingReasonCode.UNSUPPORTED_RESPONSE:
+                detail_reason = response_reasons[-1]
         pending = None if result_type is RecordingRunnerResultType.CAPTURED else terminal
         recording = transition_recording_state(
             recording,
@@ -364,7 +371,7 @@ class BrowserRecordingAdapter:
                 RecordingState(terminal.value),
                 operator="RECORDING_RUNNER",
                 occurred_at_us=clock(),
-                reason_code=reason,
+                reason_code=detail_reason or reason,
             )
             cleanup_status = RecordingCleanupStatus.SUCCEEDED
 

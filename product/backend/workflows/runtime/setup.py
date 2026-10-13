@@ -61,6 +61,9 @@ class NodeRuntimeSetup:
         try:
             files=inspect_runtime_files(Path(before.source_root),
                 ((item.relative_path, item.content_sha256) for item in analysis.files))
+            if entry not in {item.relative_path for item in files}:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,
+                    '入口文件不在当前目录的已授权文件清单中。入口应相对接入目录填写；例如文件位于 source 子目录时，填写 source/app.mjs。')
             # 与正式源码身份使用同一份受控扫描范围，不能运行扫描范围外的模块。
             manifest=NodeRuntimeManifest(instance_id='rti_'+'0'*32,project_id=project_id,entry=entry,port=port,
                 files=files,source_fingerprint=runtime_source_fingerprint(files),

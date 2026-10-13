@@ -2,6 +2,33 @@
 from product.protocols.checks.business_facts import CommittedStateFact,IdentityCheckFact,FieldDisclosureFact,ReferenceArtifactFact,FileReceiptFact
 
 
+def reduce_creation_facts(reference,facts,*,case):
+    """肯定事实保留历史创建；未创建必须有独立完整请求窗，响应编号本身不能证明业务结果。"""
+    from product.protocols.checks.business_facts import ObjectCreationFact
+    window=reference.creation_window
+    selected=[fact for fact in facts if fact.fact_id in reference.fact_ids]
+    if not reference.complete or not window.request_matched or len(selected)!=len(reference.fact_ids):
+        return 'UNKNOWN','OPEN',False
+    identities={fact.data.identity_id for fact in selected if isinstance(fact.data,IdentityCheckFact)
+        and fact.complete and fact.data.subject_match==fact.data.role_match=='MATCH'}
+    if not {case.subject_test_identity_id,case.resource_owner_test_identity_id}<=identities:
+        return 'UNKNOWN','OPEN',False
+    if reference.method=='CREATION_SNAPSHOT':
+        return ('ABSENT','CLOSED',True) if window.source_complete else ('UNKNOWN','OPEN',False)
+    created=[fact for fact in selected if isinstance(fact.data,ObjectCreationFact)]
+    for fact in created:
+        data=fact.data
+        if (not fact.complete or data.generation!=window.generation
+            or not window.baseline_watermark<data.sequence<=window.current_watermark
+            or (data.subject_identity_id,data.owner_identity_id)!=(case.subject_test_identity_id,case.resource_owner_test_identity_id)):
+            return 'UNKNOWN','OPEN',False
+    if created:
+        return 'CONFIRMED','CLOSED',True
+    if window.source_complete and window.scope_state=='COMPLETE' and window.created_count==0:
+        return 'ABSENT','CLOSED',True
+    return 'UNKNOWN','OPEN',False
+
+
 def reduce_record_facts(reference,facts,*,case,expected_state):
     """只有完整关联事实能证明发生；未发生另需完整请求窗及连续版本。"""
     window=reference.record_window

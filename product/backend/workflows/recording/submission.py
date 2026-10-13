@@ -35,6 +35,7 @@ from product.backend.infra.runtime.jobs.events import append_job_event
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailureCode, FatalFailure, JobEventType, RetryableFailureCode, RetryableFailure
 from product.backend.workflows.recording.processing import FlowDraftProcessor
+from product.backend.core.recording.models import RecordingPurpose
 from product.backend.workflows.recording.source import require_recording_source
 from product.backend.infra.recording.request_store import RecordingRequestStore
 
@@ -452,8 +453,10 @@ class RecordingSubmission:
             ):
                 raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求与持久来源不一致")
             templates = ()
+            allow_created_resources = False
             try:
                 action, _, understanding = require_recording_source(work, request)
+                allow_created_resources = action.state_changing and any(effect.effect_kind.value == "OBJECT_CREATION" for effect in action.effect_catalog)
                 binding = work.business_boundaries.action_binding(action.action_id, action.revision)
                 templates = tuple(candidate.canonical_key for candidate in understanding.action_candidates
                     if candidate.candidate_id in binding.action_candidate_ids and not candidate.stale)
@@ -473,6 +476,7 @@ class RecordingSubmission:
                 events=result.events,
                 known_secrets=known_secrets,
                 action_path_templates=templates,
+                allow_created_resources=allow_created_resources and request.purpose is RecordingPurpose.TARGET,
             )
             pending = transition_recording_state(
                 persisted.to_domain(),

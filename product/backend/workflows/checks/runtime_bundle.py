@@ -130,6 +130,10 @@ class CheckRuntimeBuilder:
                 primary_resource_concept=action.primary_resource_concept,
                 state_changing=action.state_changing, flow_id=flow.id, flow_sha256=execution.flow_sha256,
                 execution_binding_fingerprint=execution.binding_fingerprint, steps=steps, proofs=[])
+            if flow.schema_version == '4':
+                config['created_resource'] = next(extractor.model_dump(mode='json') for step in flow.steps
+                    if step.id == flow.target_step_id for extractor in step.request_template.response_extractors
+                    if extractor.extractor_id == 'created_resource_id')
             effects = {effect.effect_id: effect for effect in action.effect_catalog}
             permissions = tuple(item for item in boundary.permission_intents if item.business_action_id == action.action_id)
             protected = {effect for permission in permissions for effect in permission.protected_effect_ids}
@@ -221,8 +225,10 @@ class CheckRuntimeBuilder:
             if isinstance(reference,NodeRuntimeReference) and self._json_sources_reader is not None:
                 sources = self._json_sources_reader(project_id)
                 if sources:
-                    from product.protocols.checks.json_check_runtime import ProofCheckRuntimeBundle
-                    return ProofCheckRuntimeBundle.model_validate_json(json.dumps(payload|dict(schema_version='6',
+                    from product.protocols.checks.json_check_runtime import ProofCheckRuntimeBundle, CreationCheckRuntimeBundle
+                    created = any(config.get('created_resource') is not None for config in configs)
+                    model = CreationCheckRuntimeBundle if created else ProofCheckRuntimeBundle
+                    return model.model_validate_json(json.dumps(payload|dict(schema_version='7' if created else '6',
                         runtime_reference=reference.model_dump(mode='json'),json_sources=[item.model_dump(mode='json') for item in sources])),strict=True)
             return model.model_validate_json(json.dumps(payload|dict(runtime_reference=reference.model_dump(mode='json'))),strict=True)
         return CheckRuntimeBundle.model_validate_json(json.dumps(payload),strict=True)
@@ -256,8 +262,8 @@ class CheckRuntimeBuilder:
 
 def derive_target_classifiers(config, specs, identities):
     """只派生新检查快照的 TARGET 分类；历史录制 Flow 与 SETUP 原样保留。"""
-    from product.protocols.checks.json_check_runtime import CurrentCheckActionConfig
-    model=CurrentCheckActionConfig if any(item['effect_kind']=='FILE_CONTENT_DELIVERY' for item in config['proofs']) else CheckActionConfig
+    from product.protocols.checks.json_check_runtime import CurrentCheckActionConfig, CreationCheckActionConfig
+    model=CreationCheckActionConfig if config.get('created_resource') is not None else CurrentCheckActionConfig
     action=model.model_validate_json(json.dumps(config),strict=True)
     try:
         parsed_specs = {key: ObserverSpec.model_validate_json(json.dumps(value), strict=True) for key, value in specs.items()}

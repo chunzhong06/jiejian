@@ -3,8 +3,14 @@
 .proof-material-list .proof-index { display:contents; }
 .proof-material-list .proof-index-item { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;align-items:center;gap:var(--space-24);width:100%;margin:0;padding:var(--space-24);border-radius:0;border-bottom:1px solid var(--color-border);text-align:left; }
 .proof-material-list .proof-index-item[aria-current="true"] { border-left:3px solid var(--color-primary); }
-.proof-row-identity { display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-12); }
-.proof-index-item .proof-row-identity > strong { font-size:var(--font-body); }
+/* 状态占左列，名称与修订共用右列；窄卡片中的长名称只在自身列换行。 */
+.proof-row-identity { display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:var(--space-8);min-width:0; }
+.proof-row-identity > .product-status { justify-self:start;max-width:7em;white-space:normal; }
+.proof-row-copy { display:grid;gap:var(--space-8);min-width:0;text-align:left; }
+.proof-index-item .proof-row-copy > strong { font-size:var(--font-body);overflow-wrap:anywhere; }
+/* 整组居中、列内左对齐，避免每个短文本独立居中导致上下行错位。 */
+.proof-preflight-content > .proof-facts { width:min(100%,760px);margin-inline:auto;align-items:start;text-align:left; }
+.proof-preflight-content > .proof-facts > div { min-width:0; }
 .proof-row-purpose { justify-self:center;color:var(--color-secondary);font-size:var(--font-secondary); }
 .proof-row-operation { justify-self:end;white-space:nowrap;color:var(--color-primary); }
 .proof-material-list .proof-detail { border:0;border-radius:0;box-shadow:none;padding:var(--space-24);border-bottom:1px solid var(--color-border); }
@@ -21,3 +27,6 @@
 @media(max-width:650px){.proof-material-list .proof-index-item{grid-template-columns:minmax(0,1fr);padding:var(--space-20)}.proof-row-purpose,.proof-row-operation{grid-column:1;grid-row:auto}.proof-material-list .proof-detail{padding:var(--space-20)}.proof-purpose-facts{grid-template-columns:1fr;gap:var(--space-16)}.proof-task-footer{flex-direction:column;align-items:stretch}.proof-task-footer .task-action-bar{align-self:flex-end}}
 .proof-missing-row {display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);padding-block:var(--space-20);border-bottom:1px solid var(--color-border);}
 @media(max-width:650px){.proof-missing-row{flex-wrap:wrap}.proof-missing-row>.ant-btn{margin-left:auto}}
+
+/* 认证失败在主内容可见，重登与重新预检查分开执行。 */
+.proof-identity-recovery{margin-block:var(--space-24)}.proof-identity-recovery-actions{display:flex;justify-content:flex-end;margin-top:var(--space-12)}

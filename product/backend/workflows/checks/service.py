@@ -201,6 +201,9 @@ class CheckService:
                 from product.protocols.checks.execution_request import PersistedExecutionRequestV5
                 request = PersistedExecutionRequestV5(**request.model_dump(exclude={'schema_version', 'evidence_schema_version'}),
                     evidence_schema_version='2' if bundle.schema_version == '6' else '1', requirement_scope=requirement_scope)
+            if bundle.schema_version=='7':
+                from product.protocols.checks.execution_request import PersistedExecutionRequestV6
+                request = PersistedExecutionRequestV6(**request.model_dump(exclude={'schema_version','evidence_schema_version'}))
             validate_check_inputs(request, bundle)
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")

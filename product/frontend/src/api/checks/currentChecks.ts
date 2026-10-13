@@ -77,7 +77,7 @@ export type ActionResultStory = {
 }
 export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
-  schema_version: '1' | '2'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
+  schema_version: '1' | '2' | '3'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
   trace: { complete: boolean; events: Array<{ event_id: string; parent_event_ids: string[]; kind: string; source_component: string; source_location: string }> } | null
 }

@@ -320,7 +320,7 @@ class PreparationBatchService:
             if (resource is None or resource['resource_id'] != 'campus' or action is None
                 or action['label'] not in ('取得内部完整包','查看公开预览','下载公开展示版')
                 or config.get('collection') != 'galleries' or config['relative_path_template'] != '/collections/galleries/{resource_id}'
-                or config['source_kind'] == 'JSON_HTTP_RESOURCE' or not claims
+                or config['source_kind'] in {'JSON_HTTP_RESOURCE','CREATED_OBJECT_RECORDS'} or not claims
                 or any(item.get('request_path') != '/api/me' or item['application_subject_id'] not in ('curator','judge') for item in claims)
                 or not any(item['identity_id'] == resource['owner_identity_id'] and item['application_subject_id'] == 'curator' for item in claims)
                 or config['max_response_bytes'] > 4194304 or config['timeout_us'] > 5000000):

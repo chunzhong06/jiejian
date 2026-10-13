@@ -2,7 +2,7 @@
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, ForeignKeyConstraint, Integer, String, Text, select, update
 from sqlalchemy.orm import Mapped, mapped_column
 
-from product.backend.core.preparation.suggestions import PreparationSuggestionRevision
+from product.backend.core.preparation.suggestions import preparation_suggestion_reader
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.base import Base, _flush, ensure_storage_payload_safe
 
@@ -50,7 +50,7 @@ class PreparationSuggestionRepository:
             return None
         if len(row.payload.encode('utf-8')) > 256*1024:
             raise JiejianError(ErrorCode.STORAGE_STATE, '保存的材料建议超过读取范围')
-        value = PreparationSuggestionRevision.model_validate_json(row.payload)
+        value = preparation_suggestion_reader.validate_json(row.payload)
         if (value.project_id,value.suggestion_id,value.revision) != (project_id,suggestion_id,expected_revision):
             raise JiejianError(ErrorCode.STORAGE_STATE, '材料建议修订归属不一致')
         return value

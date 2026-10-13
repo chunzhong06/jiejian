@@ -8,6 +8,19 @@
           "title": "Candidate Id",
           "type": "string"
         },
+        "expected_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        },
         "operation": {
           "const": "CONFIRM_RESOURCE_SLOT",
           "title": "Operation",
@@ -86,13 +99,41 @@
       ],
       "title": "ConfirmFlowDraftVariableChoice",
       "type": "object"
+    },
+    "RefreshFlowDraftResources": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "operation": {
+          "const": "REFRESH_RESOURCE_CANDIDATES",
+          "title": "Operation",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "expected_revision"
+      ],
+      "title": "RefreshFlowDraftResources",
+      "type": "object"
     }
   },
   "discriminator": {
     "mapping": {
       "CONFIRM_RESOURCE_SLOT": "#/$defs/ConfirmFlowDraftResource",
       "CONFIRM_TARGET_STEP": "#/$defs/ConfirmFlowDraftTarget",
-      "CONFIRM_VARIABLE_CHOICE": "#/$defs/ConfirmFlowDraftVariableChoice"
+      "CONFIRM_VARIABLE_CHOICE": "#/$defs/ConfirmFlowDraftVariableChoice",
+      "REFRESH_RESOURCE_CANDIDATES": "#/$defs/RefreshFlowDraftResources"
     },
     "propertyName": "operation"
   },
@@ -105,6 +146,9 @@
     },
     {
       "$ref": "#/$defs/ConfirmFlowDraftResource"
+    },
+    {
+      "$ref": "#/$defs/RefreshFlowDraftResources"
     }
   ]
 }

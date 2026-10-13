@@ -20,7 +20,7 @@ import { TaskReceipt } from '../../shared/ui/TaskReceipt'
 import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { LoadingState } from '../../shared/ui/LoadingState'
-import { FlowDraftReview } from './FlowDraftReview'
+import { FlowDraftReview, requiredDraftVariables } from './FlowDraftReview'
 import { RecordingCaptureCard, captureLabel } from './RecordingCaptureCard'
 import './recording.css'
 import { preparationApi, type MaterialRecordingContext } from '../../api/preparation/preparation'
@@ -136,7 +136,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
 
   const draft = recording?.draft ?? undefined
   const steps = useMemo(() => draft?.steps ?? [], [draft?.revision])
-  const variables = useMemo(() => draft?.variables ?? [], [draft?.revision])
+  const variables = useMemo(() => requiredDraftVariables(draft), [draft?.revision])
   useEffect(() => {
     if (!draft) return
     setSources((current) => Object.fromEntries(variables.map((variable) => {
@@ -301,7 +301,7 @@ export function RecordingPage({ project, task: primaryTask, materialContext, eff
       : <Alert type="info" showIcon message="要准备新的业务演示，请返回检查准备，按当前任务选择的账号和资源继续。" />}
     {recording && !reviewable && recording.state !== 'COMPLETED' && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
     {reviewable && recording && <AgentWorkflowEntry projectId={project.project_id} stage="RECORDING" recordingId={recording.recording_id}/>}
-    {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
+    {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} busy={busy} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
     {reviewable && draft && recordingPurpose !== 'TARGET' && <section><h2>{recordingPurpose === 'OBSERVATION' ? '哪一步用于确认业务结果？' : '哪一步用于恢复业务状态？'}</h2>
       {supplementChoices.length > 1 && <Radio.Group value={draft.target_step_id} disabled={busy} onChange={(event) => void review({ schema_version: '1', operation: 'CONFIRM_TARGET_STEP', step_id: event.target.value })}>
         <Space direction="vertical">{supplementChoices.map((item) => <Radio key={item.step_id} value={item.step_id}>{item.label}</Radio>)}</Space>

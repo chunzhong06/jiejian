@@ -9,9 +9,9 @@ export type SuggestedMaterial=
   |{kind:'recovery';expected_state:string;entry_candidate_id?:string|null;existing_recording_ids?:string[]}
 export type MaterialSuggestion={item_id:string;material:SuggestedMaterial;description:string;gap:string|null;depends_on:string[];handler:'USER'|'AGENT'|'SYSTEM';
   target:{kind:'APPROVED'|'CANDIDATE';candidate_id?:string;revision?:number};source:{classification:'SOURCE_CANDIDATE'|'HYPOTHESIS';explanation:string;candidate_ids:string[]}}
-export type SuggestionItemView={item_id:string;current:boolean;return_url:string;resolved_target:{state:'APPROVED'|'WAITING_APPROVAL'|'ASSOCIATION_UNAVAILABLE'|'STALE';action_id:string|null;action_revision:number|null;action_label:string;actor_label?:string|null;effect_label?:string|null;candidate_id?:string;candidate_revision?:number};
+export type SuggestionItemView={item_id:string;current:boolean;reason_codes?:string[];return_url:string;resolved_target:{state:'APPROVED'|'WAITING_APPROVAL'|'ASSOCIATION_UNAVAILABLE'|'STALE';action_id:string|null;action_revision:number|null;action_label:string;actor_label?:string|null;effect_label?:string|null;candidate_id?:string;candidate_revision?:number};
   source_locations:Array<{candidate_id:string;relative_path:string;line_start:number;line_end:number;symbol:string|null}>}
 export type PreparationSuggestionView={suggestion:{project_id:string;suggestion_id:string;revision:number;basis_id:string;submitted_via:'MCP'|'LOCAL_GUI';content:{items:MaterialSuggestion[];unresolved_questions:string[]}};
-  state:'CURRENT'|'STALE'|'SUPERSEDED';current_basis_id:string;latest_revision:number;items:SuggestionItemView[];review_url:string}
+  state:'CURRENT'|'PARTIAL'|'STALE'|'SUPERSEDED';current_count?:number;review_count?:number;current_basis_id:string;latest_revision:number;items:SuggestionItemView[];review_url:string}
 export type PreparationSuggestionContext={project_id:string;basis_id?:string;state:'CURRENT'|'NEEDS_REFRESH'|'UNAVAILABLE';latest:PreparationSuggestionView|null;note?:string}
 export const preparationSuggestionsApi={show:(projectId:string,id:string,revision?:string|null)=>request<PreparationSuggestionView>(`/api/projects/${encodeURIComponent(projectId)}/proof-preparation/suggestions/${encodeURIComponent(id)}${revision==null?'':`?revision=${encodeURIComponent(revision)}`}`)}

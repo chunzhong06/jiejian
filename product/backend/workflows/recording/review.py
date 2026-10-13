@@ -152,6 +152,8 @@ class FlowDraftReviewer:
     ) -> str | None:
         """识别资源位置原有的动态变量，确认后由 CASE_RESOURCE_ID 取代。"""
 
+        if str(candidate.consumer).startswith("RESPONSE_"):
+            return None
         value: Any = None
         if candidate.consumer is ValueSlotConsumer.PATH:
             index = int(candidate.location.removeprefix("path[").removesuffix("]"))

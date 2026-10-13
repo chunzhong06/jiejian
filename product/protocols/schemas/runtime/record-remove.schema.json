@@ -1,0 +1,39 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "collection": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Collection",
+      "type": "string"
+    },
+    "expected_version": {
+      "minimum": 0,
+      "title": "Expected Version",
+      "type": "integer"
+    },
+    "resource_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Resource Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Scope Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "collection",
+    "resource_id",
+    "scope_id",
+    "expected_version"
+  ],
+  "title": "RecordRemove",
+  "type": "object"
+}

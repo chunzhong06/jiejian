@@ -101,8 +101,24 @@ async function main() {
   function openCollection(collection) {
     if (typeof collection !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(collection)) throw new Error('RECORD_COLLECTION_INVALID')
     return Object.freeze({
-      seed: (resource_id, owner_id, data) => recordRequest('/resource/seed', {schema_version:'1',collection,resource_id,owner_id,data}),
+      seed: async (resource_id, owner_id, data) => {
+        const scope = requestScopes.getStore()
+        if (!scope) return recordRequest('/resource/seed', {schema_version:'1',collection,resource_id,owner_id,data})
+        if (scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
+        scope.pending += 1
+        try {
+          return await recordRequest('/resource/seed', {schema_version:'2',collection,resource_id,owner_id,data,scope_id:scope.id})
+        } finally { scope.pending -= 1 }
+      },
       read: resource_id => recordRequest('/resource/read', {collection,resource_id}),
+      remove: async (resource_id, expected_version) => {
+        const scope = requestScopes.getStore()
+        if (!scope || scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
+        scope.pending += 1
+        try {
+          return await recordRequest('/resource/remove', {schema_version:'1',collection,resource_id,expected_version,scope_id:scope.id})
+        } finally { scope.pending -= 1 }
+      },
       trace: async (resource_id, event) => {
         const scope = requestScopes.getStore()
         if (!scope || scope.ending) throw new Error('RECORD_SCOPE_CLOSED')

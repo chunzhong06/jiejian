@@ -111,10 +111,15 @@ def scope_items(value):
     result = []
     for source in getattr(value.content, "requirement_sources", ()):
         # 权限映射由后续提案审阅；补齐映射不改变已经确认的原话和业务解释。
-        fingerprint = boundary_sha256([value.candidate_id, value.basis_id,
-            source.model_dump(mode="json", exclude={"permission_item_ids"})])
+        semantic_source = source.model_dump(mode="json", exclude={"permission_item_ids"})
+        fingerprint = boundary_sha256(["REQUIREMENT_MEANING", value.candidate_id, semantic_source])
         decision = references.get(source.requirement_id) or decisions.get(source.requirement_id)
-        status = "NEEDS_DECISION" if decision is None else "STALE" if decision.requirement_fingerprint != fingerprint else "DEFER" if decision.disposition == "DEFER" else "CONFIRMED"
+        # 范围决定确认原话与解释，不批准正式规则。规则依据变化仍由候选CAS、提案和批准校验。
+        # 旧决定按其保存时的basis复算原指纹，不改写历史，也不把新来源视为已确认。
+        accepted = {fingerprint}
+        if decision is not None:
+            accepted.add(boundary_sha256([value.candidate_id, decision.expected_basis_id, semantic_source]))
+        status = "NEEDS_DECISION" if decision is None else "STALE" if decision.requirement_fingerprint not in accepted else "DEFER" if decision.disposition == "DEFER" else "CONFIRMED"
         result.append({"source": source, "fingerprint": fingerprint, "status": status, "decision": decision})
     by_id = {item['source'].requirement_id: item for item in result}
     for item in result:

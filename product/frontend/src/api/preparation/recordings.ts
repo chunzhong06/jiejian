@@ -28,7 +28,8 @@ export type FlowDraftStepDto = {
   name: string
   method?: string | null
   path?: string | null
-  resource_candidates: Array<{ candidate_id: string; consumer: 'PATH' | 'QUERY' | 'JSON_BODY'; location: string; label: string }>
+  depends_on_step_ids?: string[]
+  resource_candidates: Array<{ candidate_id: string; consumer: 'PATH' | 'QUERY' | 'JSON_BODY' | 'RESPONSE_JSON' | 'RESPONSE_LOCATION'; location: string; label: string }>
 }
 export type FlowDraftVariableSourceDto = {
   source_step_id: string
@@ -40,9 +41,10 @@ export type FlowDraftVariableDto = {
   status: 'INFERRED' | 'UNCONFIRMED' | 'CONFIRMED'
   candidate_sources: FlowDraftVariableSourceDto[]
   confirmed_source?: FlowDraftVariableSourceDto | null
+  consumer_step_ids?: string[]
 }
 export type FlowDraftDto = {
-  schema_version: '3'
+  schema_version: '3' | '4'
   recording_id: string
   flow_id: string
   business_action_id: string
@@ -57,6 +59,7 @@ export type FlowDraftDto = {
   variables?: FlowDraftVariableDto[]
 }
 export type RecordingDto = {
+  reason_codes?: string[]
   subject_test_identity_id?: string
   resource_owner_test_identity_id?: string
   supplement_choices?: SupplementChoiceDto[]

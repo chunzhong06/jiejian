@@ -63,6 +63,7 @@
               "FIELD_DISCLOSURE": "#/$defs/FieldDisclosureFact",
               "FILE_RECEIPT": "#/$defs/FileReceiptFact",
               "IDENTITY_CHECK": "#/$defs/IdentityCheckFact",
+              "OBJECT_CREATION": "#/$defs/ObjectCreationFact",
               "REFERENCE_ARTIFACT": "#/$defs/ReferenceArtifactFact"
             },
             "propertyName": "kind"
@@ -82,6 +83,9 @@
             },
             {
               "$ref": "#/$defs/FileReceiptFact"
+            },
+            {
+              "$ref": "#/$defs/ObjectCreationFact"
             }
           ],
           "title": "Data"
@@ -1217,6 +1221,58 @@
         "role_match"
       ],
       "title": "IdentityCheckFact",
+      "type": "object"
+    },
+    "ObjectCreationFact": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "incarnation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Incarnation",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OBJECT_CREATION",
+          "default": "OBJECT_CREATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "sequence",
+        "resource_id",
+        "incarnation",
+        "subject_identity_id",
+        "owner_identity_id"
+      ],
+      "title": "ObjectCreationFact",
       "type": "object"
     },
     "ObservationFactReference": {

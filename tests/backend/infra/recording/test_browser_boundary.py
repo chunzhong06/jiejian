@@ -223,7 +223,7 @@ def test_browser_safely_stops_unsupported_unbounded_response_modes(path: str) ->
     assert result.result_type is RecordingRunnerResultType.SAFETY_STOPPED
     assert "UNSUPPORTED_RESPONSE" in result.reason_codes
     assert any(
-        event.reason_code == "RECORD_RESPONSE_UNSUPPORTED"
+        event.reason_code in {"SSE_UNSUPPORTED", "CONTENT_LENGTH_REQUIRED"}
         for event in result.events
     )
 

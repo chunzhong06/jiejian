@@ -38,7 +38,7 @@ FlowDraft 仍只是候选业务流程。唯一且可执行的 TARGET 与资源�
 
 ## 失败与安全语义
 
-TargetScope、身份、协议、主机、端口、私网、重定向、响应大小、下载、SSE、长连接和清理均受限制。写盘前必须脱敏；原始 Cookie、Authorization、storage state、trace 和秘密不发布。审阅缺失、revision 冲突、编译失败或回放重验证失败时停止。
+TargetScope、身份、协议、主机、端口、私网、重定向、响应大小、有界文件响应、SSE、长连接和清理均受限制。写盘前必须脱敏；原始 Cookie、Authorization、storage state、trace 和秘密不发布。审阅缺失、revision 冲突、编译失败或回放重验证失败时停止。
 
 ## 控制与状态投影
 
@@ -49,7 +49,7 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 ## 版本规则与 Schema 真源
 
-当前 `RecordingRunnerRequest`、`FlowDraft` 与最终 `Flow` 的根 `schema_version` 为字符串 3；`RecordingEvent`、`RecordingRunnerResult` 与审阅命令仍为字符串 1。只升级发生不兼容变化的独立根，不按产品版本机械同步。模型、required 和 strict parsing 以：
+`RecordingRunnerRequest` 的根 `schema_version` 为字符串3。原请求资源模式的 `FlowDraft` 与 `Flow` 保持格式3；含响应对象候选的 `FlowDraft` 及采用响应对象的 `Flow` 使用格式4。`RecordingEvent`、`RecordingRunnerResult` 与审阅命令仍为字符串1。只升级发生不兼容变化的独立根，不按产品版本机械同步。模型、required 和 strict parsing 以：
 
 - `product/protocols/recording/events.py`
 - `product/protocols/recording/flow_draft.py`
@@ -74,3 +74,9 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 - [浏览器录制、身份隔离与 FlowDraft 边界](../../../决策/ADR-0037-浏览器录制身份隔离与FlowDraft边界.md)
 - [执行与观察架构](../../检查执行/执行与观察.md)
+
+文件演示沿用格式1事件的 RESPONSE/message 字段，body为空，message为本地计算的长度/摘要解释；这些值不参与自动填充参照或安全结论。当前根格式不因新增受控响应类型而升级，旧事件仍按原严格reader读取。
+
+格式4资源候选增加 RESPONSE_JSON 与 RESPONSE_LOCATION，分别指向同一目标响应的有限JSON位置或同源Location。该模式须由人工确认。最终Flow在唯一TARGET上保存非秘密 created_resource_id 响应提取器，不携带CASE_RESOURCE_ID输入槽；格式3仍严格要求唯一资源输入槽。新旧流程字段不作隐式猜测，旧字节和hash保持原样。REFRESH_RESOURCE_CANDIDATES仅对待审录制按expected_revision追加新草稿，由当前持久来源重建候选。
+
+格式4 Flow 的输出对象通过 CHECK 运行格式7执行。计划保留样本编号作为材料引用，正式执行从本次独立创建记录发现实际对象，证据格式3单独保存实际编号与实例身份。只有已采用 `OBJECT_CREATION_V1` 来源、完整集合读取授权和恢复材料齐备时才能进入检查；否则保留 `CREATED_RESOURCE_PROOF_REQUIRED`。不得把响应201、返回编号或演示对象当成独立证明。

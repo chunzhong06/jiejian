@@ -32,6 +32,10 @@ def observe_records(owner, *, source, case, action_id, requirement, proof, phase
             if (response.status_code != 200 or record_value(data,claim.subject_path) != claim.application_subject_id
                     or record_value(data,claim.role_path) != source.identity_roles[identity_id]):
                 return owner._unknown(common,'ACTUAL_IDENTITY_MISMATCH')
+        if config.source_kind=='CREATED_OBJECT_RECORDS':
+            from product.backend.infra.observers.checks.creation_evidence import observe_creation
+            return observe_creation(owner,source=source,case=case,action_id=action_id,requirement=requirement,
+                proof=proof,phase=phase,cleanup=cleanup,common=common,claims=claims)
         target = owner.web.target_response(case.case_id) if phase in {'AFTER','EVENTUAL'} else None
         view = read_record_source(owner.var_dir,owner.bundle.runtime_reference,config,case.resource_id,
             request_nonce=target.request_nonce if target is not None else None,

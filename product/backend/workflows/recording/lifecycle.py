@@ -199,6 +199,36 @@ class RecordingLifecycle:
             return "AWAITING_CAPTURE"
         return "PREPARING_BROWSER"
 
+    def _refresh_resources(self, work, recording, draft, command):
+        """复用原事件补充对象候选；保存新修订，不改写历史或重发创建请求。"""
+        from product.backend.workflows.recording.processing import FlowDraftProcessor
+        if command.expected_revision != draft.revision:
+            raise JiejianError(ErrorCode.RECORD_REVIEW_STATE, "录制已被更新，请重新读取后再识别对象")
+        if self._var_dir is None:
+            raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制来源不可用")
+        action, _, understanding = require_persisted_recording_source(work, recording, self._var_dir)
+        binding = work.business_boundaries.action_binding(action.action_id, action.revision)
+        templates = tuple(item.canonical_key for item in understanding.action_candidates
+            if binding is not None and item.candidate_id in binding.action_candidate_ids and not item.stale)
+        fresh = FlowDraftProcessor().build(recording_id=draft.recording_id, flow_id=draft.flow_id,
+            business_action_id=draft.business_action_id, action_revision=draft.action_revision,
+            subject_test_identity_id=draft.subject_test_identity_id, resource_owner_test_identity_id=draft.resource_owner_test_identity_id,
+            purpose=draft.purpose, parent_recording_id=draft.parent_recording_id, effect_id=draft.effect_id,
+            events=recording.browser_events, action_path_templates=templates,
+            allow_created_resources=recording.purpose is RecordingPurpose.TARGET and action.state_changing
+                and any(effect.effect_kind.value == "OBJECT_CREATION" for effect in action.effect_catalog))
+        replacement = {step.id: step for step in fresh.steps}
+        if any(step.id not in replacement or replacement[step.id].request_id != step.request_id for step in draft.steps):
+            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "原步骤与事件无法对应，已保留原审阅")
+        payload = draft.model_dump(mode="json")
+        payload.update(schema_version=fresh.schema_version, revision=draft.revision + 1)
+        for step in payload["steps"]:
+            step["resource_candidates"] = [item.model_dump(mode="json") for item in replacement[step["id"]].resource_candidates]
+        chosen = replacement.get(draft.target_step_id)
+        if chosen is None or not any(item.candidate_id == draft.resource_candidate_id for item in chosen.resource_candidates):
+            payload["resource_candidate_id"] = None
+        return FlowDraft.model_validate_json(json.dumps(payload), strict=True)
+
     def review(
         self,
         recording_id: str,
@@ -218,7 +248,12 @@ class RecordingLifecycle:
                 )
             if draft_record is None:
                 raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "录制缺少 Flow 草稿")
-            draft = self._reviewer.apply(draft_record.draft, command)
+            expected = getattr(command, "expected_revision", None)
+            if expected is not None and expected != draft_record.draft.revision:
+                raise JiejianError(ErrorCode.RECORD_REVIEW_STATE, "录制已更新，请重新读取当前对象再确认")
+            from product.protocols.recording.flow_draft import RefreshFlowDraftResources
+            draft = (self._refresh_resources(work, recording, draft_record.draft, command)
+                if isinstance(command, RefreshFlowDraftResources) else self._reviewer.apply(draft_record.draft, command))
             encoded = canonical_flow_draft_json_bytes(draft)
             work.flow_drafts.add(
                 FlowDraftRevisionRecord(
@@ -336,7 +371,7 @@ class RecordingLifecycle:
             if isinstance(parsed, dict) and parsed.get("schema_version") == "2":
                 from product.protocols.recording.recording_legacy import read_legacy_document
                 return read_legacy_document(raw, "flow", expected_hash=expected_hash)
-            if not isinstance(parsed, dict) or parsed.get("schema_version") != "3":
+            if not isinstance(parsed, dict) or parsed.get("schema_version") not in {"3", "4"}:
                 raise ValueError("unsupported flow schema version")
             flow = Flow.model_validate_json(raw, strict=True)
             if _canonical_flow_bytes(flow) != raw:

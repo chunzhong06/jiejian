@@ -43,10 +43,13 @@ class RepairCaseIdentity(WireModel):
         return content_hash("RepairCaseIdentity", self.model_dump(mode="json"))
 
 
-def repair_case_identity(action, case) -> RepairCaseIdentity:
+def repair_case_identity(action, case, bundle=None) -> RepairCaseIdentity:
     """技术重录与源码变化不改变原题；账号、归属、权限及效果变化必须改变身份。"""
     values = {name: getattr(case, name) for name in RepairCaseIdentity.model_fields
         if name not in {"action_id", "action_revision", "action_semantic_fingerprint"}}
+    configured=next((item for item in bundle.actions if item.action_id==action.action_id),None) if bundle is not None else None
+    if getattr(configured,'created_resource',None) is not None:
+        values['resource_id']='runtime-created-object'
     return RepairCaseIdentity(action_id=action.action_id, action_revision=action.action_revision,
         action_semantic_fingerprint=action.action_semantic_fingerprint, **values)
 
@@ -66,7 +69,7 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
         verification = identity.verification
         if verification is None or proof.rule == "RECORDED_SUPPORT":
             raise ValueError("repair requires independently verified decisive standard")
-        if bundle.schema_version=='6':
+        if bundle.schema_version in {'6','7'}:
             sources=[source for source in bundle.json_sources if (source.config.action_id,source.config.effect_id)==(action.action_id,requirement.effect_id)]
             if len(sources)!=1:raise ValueError('repair requires one frozen current source')
             source=sources[0]
@@ -88,6 +91,9 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
                 contract=source.contract.model_dump(mode='json'),resource_id=case.resource_id,owner_identity_id=case.resource_owner_test_identity_id,owner_subject_id=source.owner_subject_id,
                 commit_semantics='ATOMIC_COMMIT',completeness='ATTRIBUTED_COMPLETE_CLOSED',
                 file_comparison='FULL_ENTITY_SIZE_SHA256' if source.config.source_kind=='REFERENCE_FILE' else None)
+            if source.config.source_kind=='CREATED_OBJECT_RECORDS':
+                payload.update(resource_id='runtime-created-object',resource_mode='OUTPUT',
+                    created_resource=configured.created_resource.model_dump(mode='json'))
             standards.append(content_hash('CurrentProofRepairStandard',payload))
             continue
         payload = {name:getattr(proof,name) for name in (
@@ -194,7 +200,7 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
     candidates = {}
     for action in request.actions:
         for case in action.cases:
-            candidates.setdefault(repair_case_identity(action,case).fingerprint(),[]).append((action,case))
+            candidates.setdefault(repair_case_identity(action,case,bundle).fingerprint(),[]).append((action,case))
     results = {item.case_id:item for item in result.case_results}
     documents = {item.evidence_id:item for item in evidence}
     matches = candidates.get(contract.deny.identity.fingerprint(),[])

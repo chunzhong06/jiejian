@@ -1,5 +1,6 @@
 # 核对建议引用现成材料、真实源码线索与全部来源头；准备可用性仍由原投影决定。
 import json
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -41,9 +42,11 @@ def test_real_material_references_are_reused_without_changing_preparation(tmp_pa
         with pytest.raises(JiejianError):core.preparation_suggestions.save(project,_command(harness,[wrong]))
         unknown=_item(harness,5,{'kind':'identity','account_requirement':'未知账号','existing_identity_ids':['tid_'+'f'*32]})
         with pytest.raises(JiejianError):core.preparation_suggestions.save(project,_command(harness,[unknown]))
-        # 新增同项目录制也必须改变建议依据，不能只覆盖已经采用的绑定。
+        # 写入依据仍变化；已有建议依赖未变时，不因其他录制完成而要求重发。
+        basis_before = core.preparation_suggestions.basis(project)
         add_recording(harness)
-        assert core.preparation_suggestions.show(project,saved['suggestion']['suggestion_id'])['state']=='STALE'
+        assert core.preparation_suggestions.basis(project) != basis_before
+        assert core.preparation_suggestions.show(project,saved['suggestion']['suggestion_id'])['state']=='CURRENT'
     finally:harness.close()
 
 
@@ -109,3 +112,47 @@ def test_stored_suggestion_payload_cannot_change_its_project_identity(tmp_path):
         with pytest.raises(JiejianError) as rejected:core.preparation_suggestions.show(project,suggestion_id,1)
         assert rejected.value.code=='STORAGE_STATE'
     finally:harness.close()
+
+
+def test_missing_account_only_invalidates_its_suggestion_and_dependents(tmp_path):
+    harness = ready_check_harness(tmp_path)
+    try:
+        service, project = harness.core.preparation_suggestions, harness.project_id
+        account = _item(harness, 1, {'kind':'identity', 'account_requirement':'当前账号', 'existing_identity_ids':[harness.identities[0].identity_id]})
+        dependent = _item(harness, 2, {'kind':'execution', 'normal_steps':['使用所列账号操作']})
+        dependent['depends_on'] = [account['item_id']]
+        other = _item(harness, 3, {'kind':'resource', 'resource_concept':'另一份测试资源'})
+        saved = service.save(project, _command(harness, [dependent, other, account]))
+        with harness.core.uow_factory() as work:
+            snapshot = service._snapshot(work, project)
+            snapshot['facts'] = replace(snapshot['facts'], identities=())
+            snapshot['basis_id'] = 'psb_'+'f'*64
+            value = work.preparation_suggestions.get(project, saved['suggestion']['suggestion_id'])
+            shown = service._view(work, value, snapshot)
+        rows = {item['item_id']:item for item in shown['items']}
+        assert shown['state'] == 'PARTIAL' and shown['current_count'] == 1
+        assert rows[other['item_id']]['current']
+        assert rows[account['item_id']]['reason_codes'] == ['MATERIAL_REFERENCE_CHANGED']
+        assert rows[dependent['item_id']]['reason_codes'] == ['DEPENDENCY_NEEDS_REVIEW']
+    finally:
+        harness.close()
+
+
+def test_legacy_suggestion_needs_evidence_after_basis_change(tmp_path):
+    harness = ready_check_harness(tmp_path)
+    try:
+        service, project = harness.core.preparation_suggestions, harness.project_id
+        saved = service.save(project, _command(harness, [_item(harness, 1, {'kind':'identity', 'account_requirement':'当前账号'})]))
+        payload = saved['suggestion']
+        payload['schema_version'] = '1'
+        payload.pop('item_bases')
+        with harness.core.uow_factory() as work:
+            work._session.get(PreparationSuggestionRevisionRow, (payload['suggestion_id'], 1)).payload = json.dumps(payload)
+            work.commit()
+        assert service.show(project, payload['suggestion_id'])['state'] == 'CURRENT'
+        add_recording(harness)
+        shown = service.show(project, payload['suggestion_id'])
+        assert shown['state'] == 'STALE'
+        assert shown['items'][0]['reason_codes'] == ['LEGACY_BASIS_UNVERIFIED']
+    finally:
+        harness.close()

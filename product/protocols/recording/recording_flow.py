@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
 from product.backend.core.boundaries.entities import ACTION_ID_PATTERN
+from product.protocols.recording.created_resource import CREATED_RESOURCE_EXTRACTOR
 from product.protocols.web.workflow import (
     HttpOutcomeClassifier,
     HttpRequestTemplate,
@@ -76,7 +77,7 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["3", "4"] = "3"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
@@ -102,7 +103,13 @@ class Flow(RecordingFlowModel):
             for slot in step.request_template.input_slots
             if slot.source is ValueSlotSource.CASE_RESOURCE_ID
         )
-        if len(resource_slots) != 1 or resource_slots[0][0] != self.target_step_id:
+        created_sources = tuple((step, source) for step in self.steps
+            for source in step.request_template.response_extractors if source.extractor_id == CREATED_RESOURCE_EXTRACTOR)
+        if self.schema_version == "4":
+            if (resource_slots or len(created_sources) != 1 or created_sources[0][0].id != self.target_step_id
+                    or created_sources[0][1].secret or created_sources[0][1].kind.value not in {"JSON_PATH", "LOCATION"}):
+                raise ValueError("created resource flow requires one target response locator and no input resource")
+        elif len(resource_slots) != 1 or resource_slots[0][0] != self.target_step_id:
             raise ValueError("flow target must bind exactly one case resource slot")
         graph = {step.id: set(step.depends_on_step_ids) for step in self.steps}
         if any(

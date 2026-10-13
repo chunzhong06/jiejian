@@ -19,6 +19,7 @@ class RegisteredEffectProofCapability(WireModel):
     states: tuple[Literal["CONFIRMED"], Literal["ABSENT"], Literal["UNKNOWN"]] = ("CONFIRMED", "ABSENT", "UNKNOWN")
     closure_supported: bool
     resource_correlation_supported: bool
+    created_resource_supported: bool = False
 
 
 class PreparedIdentityAssignment(WireModel):
@@ -165,6 +166,7 @@ def _compile_action(prepared, source_fingerprint, config_fingerprint):
         if execution is None or resource.resource_injection != execution.resource_injection:
             gap("ACTION_EXECUTION_REQUIRED", permission)
             return None
+        created_resource = resource.resource_injection.consumer.value.startswith("RESPONSE_")
         if action.state_changing and prepared.recovery is None:
             gap("ACTION_RECOVERY_REQUIRED", permission)
             return None
@@ -175,9 +177,15 @@ def _compile_action(prepared, source_fingerprint, config_fingerprint):
             # Binding 的双身份是经 Workflow 检查的采集来源；参数化证明按当前 case 资源重建。
             # 将来源 owner 当成模板适用范围，会令同动作的其他合法 owner 永远缺证明。
             if binding is None or effect is None:
-                gap("EFFECT_VERDICT_PROOF_REQUIRED", permission, effect_id)
+                gap("CREATED_RESOURCE_PROOF_REQUIRED" if created_resource else "EFFECT_VERDICT_PROOF_REQUIRED", permission, effect_id)
                 continue
             proof = derive_effect_proof(effect, binding, resource.actual_resource_id, prepared.observer_capabilities)
+            # 演示编号保留为冻结材料引用；只有能发现本次新对象的独立来源才可执行输出资源模式。
+            if created_resource and (effect.effect_kind.value != 'OBJECT_CREATION' or not any(
+                capability.created_resource_supported and capability.descriptor_fingerprint == getattr(proof.reference, 'descriptor_fingerprint', None)
+                and capability.effect_id == effect_id for capability in prepared.observer_capabilities)):
+                gap('CREATED_RESOURCE_PROOF_REQUIRED', permission, effect_id)
+                continue
             if proof.level != "VERDICT_REQUIRED":
                 gap("EFFECT_VERDICT_PROOF_REQUIRED", permission, effect_id)
             proofs.append(proof)

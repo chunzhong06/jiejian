@@ -1,0 +1,199 @@
+{
+  "$defs": {
+    "CreationEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "CREATE",
+            "REMOVE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "member": {
+          "$ref": "#/$defs/CreationMember"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Id"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sequence",
+        "kind",
+        "member"
+      ],
+      "title": "CreationEvent",
+      "type": "object"
+    },
+    "CreationMember": {
+      "additionalProperties": false,
+      "properties": {
+        "data_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Data Digest",
+          "type": "string"
+        },
+        "incarnation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Incarnation",
+          "type": "string"
+        },
+        "owner_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 0,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "resource_id",
+        "owner_id",
+        "incarnation",
+        "version",
+        "data_digest"
+      ],
+      "title": "CreationMember",
+      "type": "object"
+    },
+    "RecordRequestScope": {
+      "additionalProperties": false,
+      "description": "宿主独立记录的请求完成边界；应用不能通过业务事务声明完成。",
+      "properties": {
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "request_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Digest",
+          "type": "string"
+        },
+        "request_nonce": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Nonce",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Scope Id",
+          "type": "string"
+        },
+        "state": {
+          "default": "OPEN",
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope_id",
+        "generation",
+        "request_nonce",
+        "request_digest"
+      ],
+      "title": "RecordRequestScope",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "collection": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Collection",
+      "type": "string"
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CreationEvent"
+      },
+      "maxItems": 32,
+      "title": "Events",
+      "type": "array"
+    },
+    "foreign_mutations": {
+      "default": false,
+      "title": "Foreign Mutations",
+      "type": "boolean"
+    },
+    "generation": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Generation",
+      "type": "string"
+    },
+    "members": {
+      "items": {
+        "$ref": "#/$defs/CreationMember"
+      },
+      "maxItems": 256,
+      "title": "Members",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecordRequestScope"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "watermark": {
+      "minimum": 0,
+      "title": "Watermark",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "generation",
+    "collection",
+    "watermark",
+    "members"
+  ],
+  "title": "CreationView",
+  "type": "object"
+}

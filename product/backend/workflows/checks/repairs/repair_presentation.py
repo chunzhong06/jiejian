@@ -44,7 +44,7 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
     if available:
         for action in current.request.actions:
             for case in action.cases:
-                candidates.setdefault(repair_case_identity(action, case).fingerprint(), []).append(case)
+                candidates.setdefault(repair_case_identity(action, case,current.bundle).fingerprint(), []).append(case)
         current_results = {item.case_id: item for item in current.result.case_results}
     rows = []
     # 每项义务独立保留；同一 Case 同时承担控制与回归时不能隐式合并角色。

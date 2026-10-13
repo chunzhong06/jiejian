@@ -107,6 +107,9 @@ class CheckExecutor:
         return CheckExecutionOutput(result, tuple(evidence))
 
     def _case(self, action, configured, case, allow_verdict):
+        if getattr(configured, 'created_resource', None) is not None:
+            from product.backend.infra.execution.creation_check import execute_creation_case
+            return execute_creation_case(self, action, configured, case, allow_verdict)
         execution, status, identity = "UNKNOWN", None, "UNKNOWN"
         baseline, recovered, correlated = False, not configured.state_changing, False
         observations = []
@@ -186,10 +189,10 @@ class CheckExecutor:
                 unique_observations[observation_key] = item
         observations = tuple(unique_observations.values())
         evidence_fields={}
-        if self.bundle.schema_version=='6':
+        if self.bundle.schema_version in {'6','7'}:
             from product.backend.infra.observers.checks.sealed_facts import finalize_facts
             observations,facts,references=finalize_facts(observations,self.observers._evidence_sources)
-            evidence_fields=dict(detailed=True,business_facts=facts,fact_references=references)
+            evidence_fields=dict(detailed=True,creation=self.bundle.schema_version=='7',business_facts=facts,fact_references=references)
         outcome = CheckCaseOutcome(execution_outcome=execution, http_status=status,
             actual_identity_status=identity, baseline_trusted=baseline, recovery_verified=recovered,
             run_correlated=correlated, resource_correlated=correlated)

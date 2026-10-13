@@ -15,7 +15,7 @@ from product.protocols.checks.check_publication import CheckPublicationManifest
 from product.protocols.checks.check_runtime import check_payload_contains_secret
 from product.protocols.runtime.runtime_identity import RuntimeCorrespondence
 from product.protocols.runtime.node_runtime import NodeRuntimeCorrespondence
-from product.protocols.checks.business_facts import BusinessFact,ObservationFactReference,CommittedStateFact
+from product.protocols.checks.business_facts import BusinessFact,ObservationFactReference,CommittedStateFact,CreationFactReference,ObjectCreationFact
 
 RunId = Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]
 JobId = Annotated[str, Field(pattern=r"^job_[0-9a-f]{32}$")]
@@ -155,6 +155,8 @@ class DetailedCheckEvidence(CheckEvidence):
         proofs={proof.proof_fingerprint:proof for proof in self.case.proof_requirements}
         operations=set()
         for fact in facts.values():
+            if self.schema_version=='2' and isinstance(fact.data,ObjectCreationFact):
+                raise ValueError('creation facts require evidence 3')
             if (fact.case_id,fact.request_ref)!=(self.case.case_id,marker):raise ValueError('fact belongs to another request')
             for ref in fact.proofs:
                 proof=proofs.get(ref.proof_fingerprint)
@@ -174,6 +176,11 @@ class DetailedCheckEvidence(CheckEvidence):
             referenced.update(reference.fact_ids)
         if referenced!=set(facts):raise ValueError('unreferenced business fact')
         return self
+
+
+class CreationCheckEvidence(DetailedCheckEvidence):
+    schema_version:Literal['3']='3'
+    fact_references:tuple[Annotated[ObservationFactReference|CreationFactReference,Field(discriminator='method')],...]=Field(default=(),max_length=240)
 
 
 class CheckCaseResult(WireModel):
@@ -233,9 +240,9 @@ def evidence_content_id(payload) -> str:
     return "ev_" + hashlib.sha256(raw).hexdigest()
 
 
-def seal_check_evidence(*,detailed=False,**fields) -> CheckEvidence:
+def seal_check_evidence(*,detailed=False,creation=False,**fields) -> CheckEvidence:
     # 先补齐根默认值，再计算内容地址；最终严格 reader 仍拒绝绕过校验的嵌套事实。
-    model=DetailedCheckEvidence if detailed else CheckEvidence
+    model=CreationCheckEvidence if creation else DetailedCheckEvidence if detailed else CheckEvidence
     draft = model.model_construct(evidence_id="ev_" + "0" * 64, **fields)
     payload = draft.model_dump(mode="json", exclude={"evidence_id"})
     payload["evidence_id"] = evidence_content_id(payload)
@@ -257,7 +264,7 @@ class CheckResultProtocolError(ValueError):
 
 
 CheckDocument = TypeVar("CheckDocument", CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
-_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, DetailedCheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
+_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, DetailedCheckEvidence, CreationCheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
 
 
 def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[str, ...] = ()) -> bytes:
@@ -297,7 +304,7 @@ def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secret
             if model is None:
                 raise ValueError('unsupported result version')
         if model is CheckEvidence and isinstance(payload,dict):
-            model={'1':CheckEvidence,'2':DetailedCheckEvidence}.get(payload.get('schema_version'))
+            model={'1':CheckEvidence,'2':DetailedCheckEvidence,'3':CreationCheckEvidence}.get(payload.get('schema_version'))
             if model is None:raise ValueError('unsupported evidence version')
         document = model.model_validate_json(raw, strict=True)
         if canonical_check_document(document, known_secrets=known_secrets) != raw:

@@ -19,6 +19,7 @@ from product.backend.infra.observers.records.transaction_store import Transactio
 from product.protocols.runtime.transaction_records import RecordKey, RecordSeed, RecordTransaction
 from product.protocols.runtime.transaction_records import RecordProviderReference, RecordProofRequest
 from product.protocols.runtime.record_trace import RecordTraceWrite,RecordTraceReceipt
+from product.protocols.runtime.creation_records import ScopedRecordSeed, RecordRemove
 from product.protocols.runtime.node_runtime import ProjectId
 
 
@@ -30,11 +31,11 @@ def record_store_path(var_dir: Path, project_id: str) -> Path:
 def record_provider_fingerprint() -> str:
     """冻结产品记录组件本身的实现身份；与任何接入应用的文件名、角色或业务无关。"""
     from product.backend.infra.observers.records import transaction_store, record_history
-    from product.protocols.runtime import transaction_records, record_trace
+    from product.protocols.runtime import transaction_records, record_trace, creation_records
     record_capabilities = import_module('product.backend.infra.runtime.process.records.record_capabilities')
     exclusive_file = import_module('product.backend.infra.runtime.process.exclusive_file')
     digest = hashlib.sha256()
-    for module in (transaction_store, record_history, transaction_records, record_trace, record_capabilities, exclusive_file):
+    for module in (transaction_store, record_history, transaction_records, record_trace, creation_records, record_capabilities, exclusive_file):
         path = Path(module.__file__)
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
@@ -96,9 +97,12 @@ class OwnedRecordServer:
                     elif self.path == '/scope/close' and set(data) == {'scope_id','complete'} and type(data['complete']) is bool:
                         result = owner.store.close_scope(data['scope_id'],data['complete'])
                     elif self.path == "/resource/seed":
-                        command = RecordSeed.model_validate_json(json.dumps(data,allow_nan=False))
+                        model = ScopedRecordSeed if data.get('schema_version') == '2' else RecordSeed
+                        command = model.model_validate_json(json.dumps(data,allow_nan=False))
                         result = owner.store.seed(command)
                         owner.collections.add(command.collection)
+                    elif self.path == '/resource/remove':
+                        result = owner.store.remove(RecordRemove.model_validate_json(json.dumps(data, allow_nan=False)))
                     elif self.path == "/resource/read" and set(data) == {"collection", "resource_id"}:
                         collection = TypeAdapter(RecordKey).validate_python(data["collection"], strict=True)
                         resource = TypeAdapter(RecordKey).validate_python(data["resource_id"], strict=True)
@@ -126,6 +130,10 @@ class OwnedRecordServer:
                         return self.reply(403, {'error':'RECORD_READ_DENIED'})
                     parsed = urlsplit(self.path)
                     parts = parsed.path.split('/')
+                    if not parsed.query and not parsed.fragment and parts[:3] == ['', 'creation', 'read'] and len(parts) in {4, 5}:
+                        collection = TypeAdapter(RecordKey).validate_python(unquote(parts[3]), strict=True)
+                        nonce = TypeAdapter(RecordKey).validate_python(unquote(parts[4]), strict=True) if len(parts) == 5 else None
+                        return self.reply(200, {'data': owner.store.creation_view(collection, nonce).model_dump(mode='json')})
                     trace = parts[:3] == ['', 'trace', 'read'] and len(parts)==6
                     if parsed.query or parsed.fragment or not trace and (parts[:3] != ['', 'proof', 'read'] or len(parts) not in {5,6}):
                         return self.reply(404, {'error':'RECORD_READ_UNSUPPORTED'})

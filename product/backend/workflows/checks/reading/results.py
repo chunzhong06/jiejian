@@ -277,7 +277,7 @@ class CheckResultReader:
             labels = tuple(dict.fromkeys(proofs[item.binding_fingerprint].business_label for item in case.proof_requirements))
             return CheckProgressCaseView(case_id=case.case_id, action_label=configured.display_name,
                 expectation=case.permission.expectation, planned_subject_label=subject.label,
-                planned_resource_owner_label=owner.label, resource_id=case.resource_id, effect_labels=labels)
+                planned_resource_owner_label=owner.label, resource_id='由本次创建后独立识别' if getattr(configured,'created_resource',None) is not None else case.resource_id, effect_labels=labels)
         except (ValueError, OSError, JiejianError):
             # 冻结资产不可读或关联失效只降级本说明；原有效阶段/计数继续保留，编程错误不宽泛吞掉。
             return None

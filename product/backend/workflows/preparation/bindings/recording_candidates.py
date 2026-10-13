@@ -49,6 +49,26 @@ def resource_value(event, candidate) -> str:
     return str(value)
 
 
+def recorded_resource_value(recording, step, candidate) -> str:
+    """最终化时重读原始响应候选，不能靠前端标签或草稿中的自填值保存对象。"""
+    event = request_event(recording, step)
+    if not str(candidate.consumer).startswith("RESPONSE_"):
+        return resource_value(event, candidate)
+    from product.protocols.recording.created_resource import response_object_candidates
+    responses = [item for item in recording.browser_events
+        if item.kind is RecordingEventKind.RESPONSE and item.request_id == step.request_id]
+    if len(responses) != 1:
+        raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "创建响应不能唯一关联")
+    response = responses[0]
+    if response.truncated or response.status_code is None or not 200 <= response.status_code < 300 or response.status_code == 202:
+        raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "创建响应不完整或尚未成功完成")
+    candidates = response_object_candidates(response.body, [(h.name, h.value) for h in response.headers], event.url)
+    matches = [value for kind, location, value in candidates if (kind, location) == (candidate.consumer, candidate.location)]
+    if len(matches) != 1:
+        raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "新建对象与录制响应不一致")
+    return matches[0]
+
+
 def flow_resource_injection(flow, candidate) -> ResourceInjection:
     target = next(item for item in flow.steps if item.id == flow.target_step_id)
     template = target.request_template
@@ -56,10 +76,10 @@ def flow_resource_injection(flow, candidate) -> ResourceInjection:
     fingerprint = boundary_sha256({
         "method": template.method, "path": template.path,
         "query_names": sorted(item.name for item in template.query),
-        "consumer": candidate.consumer.value, "location": candidate.location,
+        "consumer": str(candidate.consumer), "location": candidate.location,
     })
     return ResourceInjection(
-        consumer=ResourceInjectionKind(candidate.consumer.value), location=candidate.location,
+        consumer=ResourceInjectionKind(str(candidate.consumer)), location=candidate.location,
         template_fingerprint=fingerprint,
     )
 

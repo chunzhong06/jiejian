@@ -143,3 +143,21 @@
 /* 说明业务识别、权限决定和最终批准的关系；编号表示流程位置，不伪造完成状态。 */
 .boundary-setup-path{display:flex;flex-wrap:wrap;gap:var(--space-16) var(--space-32);list-style:none;padding:0;margin:0;color:var(--color-secondary);font-size:var(--font-secondary)}
 .boundary-setup-path [aria-current]{color:var(--color-primary);font-weight:var(--weight-strong)}
+
+/* 停用影响以明确清单确认，仍只修改待审草稿。 */
+.definition-workspace .definition-document{width:100%;max-width:none}
+.definition-heading>div{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-16)}
+.definition-heading h2{margin:0}
+.definition-overview{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:center;gap:var(--space-32);padding:var(--space-24) 0;border-bottom:1px solid var(--color-border)}
+.definition-overview .definition-section-label{margin:0 0 var(--space-8)}
+.definition-overview .definition-description{margin:0}
+.definition-overview .definition-properties{border:0;padding:0;margin:0;display:grid;gap:var(--space-12);justify-self:center}
+.definition-overview .definition-properties>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:var(--space-16)}
+.definition-details-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-32);margin-top:var(--space-24)}
+.definition-details-grid>.definition-effect-summary{background:transparent;border:0;padding:0;border-radius:0}
+.definition-details-grid>.definition-linked{margin:0;border-left:1px solid var(--color-border);padding-left:var(--space-24)}
+.definition-details-grid h3{margin:0 0 var(--space-16);font-size:var(--font-secondary);color:var(--color-secondary);font-weight:var(--weight-medium)}
+.definition-details-grid .definition-linked-rule{align-items:center;gap:var(--space-12)}
+.definition-edit-surface{max-width:760px;margin-inline:auto}
+@media(max-width:900px){.definition-overview,.definition-details-grid{grid-template-columns:minmax(0,1fr)}.definition-details-grid>.definition-linked{border-left:0;border-top:1px solid var(--color-border);padding:var(--space-24) 0 0}}
+.definition-retirement{padding:var(--space-20);margin-block:var(--space-20);border:1px solid var(--color-border);border-radius:var(--radius-medium)}.definition-retirement p{color:var(--color-secondary);line-height:1.85}.definition-retirement .ant-checkbox-wrapper{display:flex;align-items:center}.definition-retirement li{margin-block:var(--space-8)}
