@@ -297,7 +297,7 @@ export function BusinessBoundaryPage({ project, requestedIntentId, requestedInte
     {!candidatesOpen && !proposalView && pendingOptions.length > 0 && <section className="boundary-pending-choices"><h2>待审权限提案</h2><p>批准后才会更新生效权限。</p>{pendingOptions.map((item,index)=><Button key={item.proposal_id} onClick={()=>void openProposal(item.proposal_id)}>审阅提案 {index+1}</Button>)}</section>}
 
     {proposalView
-      ? <BoundaryProposalReview key={proposalView.proposal.proposal_id} proposalView={proposalView} onContinue={onNavigate?()=>onNavigate(`/workspace?project_id=${encodeURIComponent(project.project_id)}`):undefined} busy={busy || approvalUncertain} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
+      ? <BoundaryProposalReview key={proposalView.proposal.proposal_id} proposalView={proposalView} onRules={()=>{setProposalView(undefined);setEditing(null);setLocalCandidatesOpen(false);onNavigate?.(`/permissions?project_id=${encodeURIComponent(project.project_id)}`)}} onContinue={onNavigate?()=>onNavigate(`/workspace?project_id=${encodeURIComponent(project.project_id)}`):undefined} busy={busy || approvalUncertain} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
       : !candidatesOpen && editing === 'INITIAL'
         ? onProvidedProposal && !initialCommand ? <section className="boundary-provided-proposal" aria-label="提供的权限材料">
             <header><h2>核对官方示例的权限草稿</h2><p className="editorial-muted">这份草稿随官方示例提供，不是本次源码分析或 Agent 自动生成的结论。先选择评审的下载权限，再审阅完整规则；经你批准后才会生效。</p></header>

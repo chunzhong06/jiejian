@@ -50,6 +50,7 @@ class RegisteredCheckProof(WireModel):
     closure_supported: bool
     resource_correlation_supported: bool
     exclusive_resource_window: bool = False
+    created_resource_supported: bool = False
     auxiliary_sources: tuple[RegisteredAuxiliarySource, ...] = Field(default=(), max_length=5)
 
     @model_validator(mode="after")
@@ -164,4 +165,5 @@ class CheckRuntimeRegistry:
     def capability(self, project_id, reference, effect_id):
         proof = self.proof(project_id, reference, effect_id)
         return None if proof is None else RegisteredEffectProofCapability(**reference.model_dump(), effect_id=effect_id,
-            closure_supported=proof.closure_supported, resource_correlation_supported=proof.resource_correlation_supported)
+            closure_supported=proof.closure_supported, resource_correlation_supported=proof.resource_correlation_supported,
+            created_resource_supported=proof.created_resource_supported)

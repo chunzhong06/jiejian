@@ -1,0 +1,671 @@
+{
+  "$defs": {
+    "ApprovedMaterialTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "actor_id": {
+          "anyOf": [
+            {
+              "pattern": "^bar_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id"
+        },
+        "actor_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Revision"
+        },
+        "effect_id": {
+          "anyOf": [
+            {
+              "pattern": "^bef_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Id"
+        },
+        "kind": {
+          "const": "APPROVED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "action_id",
+        "action_revision"
+      ],
+      "title": "ApprovedMaterialTarget",
+      "type": "object"
+    },
+    "CandidateMaterialTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "action_item_id": {
+          "pattern": "^pactn_[0-9a-f]{16}$",
+          "title": "Action Item Id",
+          "type": "string"
+        },
+        "actor_item_id": {
+          "anyOf": [
+            {
+              "pattern": "^pactr_[0-9a-f]{16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Item Id"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "effect_item_id": {
+          "anyOf": [
+            {
+              "pattern": "^peff_[0-9a-f]{16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Item Id"
+        },
+        "kind": {
+          "const": "CANDIDATE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "candidate_id",
+        "revision",
+        "action_item_id"
+      ],
+      "title": "CandidateMaterialTarget",
+      "type": "object"
+    },
+    "EvidenceSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capability"
+        },
+        "existing_source_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^psr_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Existing Source Ids",
+          "type": "array"
+        },
+        "field_hints": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Field Hints",
+          "type": "array"
+        },
+        "kind": {
+          "const": "evidence",
+          "title": "Kind",
+          "type": "string"
+        },
+        "observable_result": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Observable Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "observable_result"
+      ],
+      "title": "EvidenceSuggestion",
+      "type": "object"
+    },
+    "ExecutionSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_candidate_id": {
+          "anyOf": [
+            {
+              "pattern": "^action_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry Candidate Id"
+        },
+        "existing_recording_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^rec_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Existing Recording Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "execution",
+          "title": "Kind",
+          "type": "string"
+        },
+        "normal_steps": {
+          "default": [],
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Normal Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ExecutionSuggestion",
+      "type": "object"
+    },
+    "IdentitySuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "account_requirement": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Account Requirement",
+          "type": "string"
+        },
+        "existing_identity_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^tid_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Existing Identity Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "identity",
+          "title": "Kind",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "kind",
+        "account_requirement"
+      ],
+      "title": "IdentitySuggestion",
+      "type": "object"
+    },
+    "PreparationSuggestionContent": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PreparationSuggestionItem"
+          },
+          "maxItems": 50,
+          "title": "Items",
+          "type": "array"
+        },
+        "unresolved_questions": {
+          "default": [],
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unresolved Questions",
+          "type": "array"
+        }
+      },
+      "title": "PreparationSuggestionContent",
+      "type": "object"
+    },
+    "PreparationSuggestionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "depends_on": {
+          "default": [],
+          "items": {
+            "pattern": "^psi_[0-9a-f]{16}$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Depends On",
+          "type": "array"
+        },
+        "description": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "gap": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gap"
+        },
+        "handler": {
+          "enum": [
+            "USER",
+            "AGENT",
+            "SYSTEM"
+          ],
+          "title": "Handler",
+          "type": "string"
+        },
+        "item_id": {
+          "pattern": "^psi_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "material": {
+          "discriminator": {
+            "mapping": {
+              "evidence": "#/$defs/EvidenceSuggestion",
+              "execution": "#/$defs/ExecutionSuggestion",
+              "identity": "#/$defs/IdentitySuggestion",
+              "recovery": "#/$defs/RecoverySuggestion",
+              "resource": "#/$defs/ResourceSuggestion"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IdentitySuggestion"
+            },
+            {
+              "$ref": "#/$defs/ExecutionSuggestion"
+            },
+            {
+              "$ref": "#/$defs/ResourceSuggestion"
+            },
+            {
+              "$ref": "#/$defs/EvidenceSuggestion"
+            },
+            {
+              "$ref": "#/$defs/RecoverySuggestion"
+            }
+          ],
+          "title": "Material"
+        },
+        "source": {
+          "$ref": "#/$defs/SuggestionSource"
+        },
+        "target": {
+          "discriminator": {
+            "mapping": {
+              "APPROVED": "#/$defs/ApprovedMaterialTarget",
+              "CANDIDATE": "#/$defs/CandidateMaterialTarget"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ApprovedMaterialTarget"
+            },
+            {
+              "$ref": "#/$defs/CandidateMaterialTarget"
+            }
+          ],
+          "title": "Target"
+        }
+      },
+      "required": [
+        "item_id",
+        "target",
+        "material",
+        "description",
+        "source",
+        "handler"
+      ],
+      "title": "PreparationSuggestionItem",
+      "type": "object"
+    },
+    "RecoverySuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_candidate_id": {
+          "anyOf": [
+            {
+              "pattern": "^action_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry Candidate Id"
+        },
+        "existing_recording_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^rec_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Existing Recording Ids",
+          "type": "array"
+        },
+        "expected_state": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Expected State",
+          "type": "string"
+        },
+        "kind": {
+          "const": "recovery",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "expected_state"
+      ],
+      "title": "RecoverySuggestion",
+      "type": "object"
+    },
+    "ResourceFieldRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Field",
+          "type": "string"
+        },
+        "requirement": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Requirement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "requirement"
+      ],
+      "title": "ResourceFieldRequirement",
+      "type": "object"
+    },
+    "ResourceSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "existing_resource_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^res_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Existing Resource Ids",
+          "type": "array"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResourceFieldRequirement"
+          },
+          "maxItems": 16,
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "const": "resource",
+          "title": "Kind",
+          "type": "string"
+        },
+        "preparation_steps": {
+          "default": [],
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Preparation Steps",
+          "type": "array"
+        },
+        "resource_concept": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Resource Concept",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "resource_concept"
+      ],
+      "title": "ResourceSuggestion",
+      "type": "object"
+    },
+    "SuggestionItemBasis": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "item_id": {
+          "pattern": "^psi_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "fingerprint"
+      ],
+      "title": "SuggestionItemBasis",
+      "type": "object"
+    },
+    "SuggestionSource": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^(role|action)_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "classification": {
+          "enum": [
+            "SOURCE_CANDIDATE",
+            "HYPOTHESIS"
+          ],
+          "title": "Classification",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Explanation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "classification",
+        "explanation"
+      ],
+      "title": "SuggestionSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "basis_id": {
+      "pattern": "^psb_[0-9a-f]{64}$",
+      "title": "Basis Id",
+      "type": "string"
+    },
+    "content": {
+      "$ref": "#/$defs/PreparationSuggestionContent"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "item_bases": {
+      "items": {
+        "$ref": "#/$defs/SuggestionItemBasis"
+      },
+      "maxItems": 50,
+      "title": "Item Bases",
+      "type": "array"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "submitted_via": {
+      "enum": [
+        "LOCAL_GUI",
+        "MCP"
+      ],
+      "title": "Submitted Via",
+      "type": "string"
+    },
+    "suggestion_id": {
+      "pattern": "^psg_[0-9a-f]{32}$",
+      "title": "Suggestion Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "suggestion_id",
+    "revision",
+    "basis_id",
+    "content",
+    "submitted_via",
+    "created_at_us",
+    "item_bases"
+  ],
+  "title": "PreparationSuggestionRevisionV2",
+  "type": "object"
+}

@@ -81,6 +81,7 @@ class CheckObserverRuntime:
         self._trusted_histories = {}
         self._json_histories = {}
         self._evidence_sources = {}
+        self._creation_histories = {}
         self._json_sources = {'json_' + item.source_id[4:]:item for item in getattr(bundle,'json_sources',())}
         self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if self._json_sources else None
 

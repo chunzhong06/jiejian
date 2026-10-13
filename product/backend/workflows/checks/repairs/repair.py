@@ -18,7 +18,7 @@ def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
         twin = next(item for item in action.twins if item.deny_case_id == source_case_id)
         def requirement(pair):
             parent,current = pair
-            return RepairCaseRequirement(source_case_id=current.case_id,identity=repair_case_identity(parent,current),
+            return RepairCaseRequirement(source_case_id=current.case_id,identity=repair_case_identity(parent,current,package.bundle),
                 evidence_standard_fingerprints=repair_evidence_standards(parent,current,package.bundle),
                 evidence_refs=results[current.case_id].evidence_ids)
         regressions = tuple(sorted((requirement(pair) for pair in cases.values()

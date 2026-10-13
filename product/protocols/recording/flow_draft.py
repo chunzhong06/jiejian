@@ -115,7 +115,7 @@ class FlowDraftVariable(FlowDraftProtocolModel):
 
 class FlowDraftResourceCandidate(FlowDraftProtocolModel):
     candidate_id: str = Field(pattern=r"^resource-[0-9a-f]{16}$")
-    consumer: ValueSlotConsumer
+    consumer: ValueSlotConsumer | Literal["RESPONSE_JSON", "RESPONSE_LOCATION"]
     location: str = Field(min_length=1, max_length=512)
     label: str = Field(min_length=1, max_length=256)
 
@@ -125,14 +125,20 @@ class FlowDraftResourceCandidate(FlowDraftProtocolModel):
             ValueSlotConsumer.PATH,
             ValueSlotConsumer.QUERY,
             ValueSlotConsumer.JSON_BODY,
+            "RESPONSE_JSON",
+            "RESPONSE_LOCATION",
         }:
             raise ValueError("flow draft resource candidate location is unsupported")
         if self.consumer is ValueSlotConsumer.PATH:
             valid = re.fullmatch(r"path\[[0-9]{1,3}\]", self.location) is not None
         elif self.consumer is ValueSlotConsumer.QUERY:
             valid = re.fullmatch(r"query\.[A-Za-z0-9_.~-]{1,128}", self.location) is not None
+        elif self.consumer == "RESPONSE_LOCATION":
+            valid = self.location == "$location"
         else:
             valid = re.fullmatch(_JSON_PATH, self.location) is not None
+            if self.consumer == "RESPONSE_JSON":
+                valid = valid and self.location.startswith("$.") and not _SENSITIVE_FIELD.search(self.location)
         if not valid:
             raise ValueError("flow draft resource candidate location is invalid")
         return self
@@ -208,7 +214,7 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["3", "4"] = "3"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
@@ -233,6 +239,11 @@ class FlowDraft(FlowDraftProtocolModel):
 
     @model_validator(mode="after")
     def validate_draft_graph(self) -> FlowDraft:
+        if self.schema_version == "3" and any(
+            str(candidate.consumer).startswith("RESPONSE_")
+            for step in self.steps for candidate in step.resource_candidates
+        ):
+            raise ValueError("response resource candidates require flow draft version 4")
         if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
             raise ValueError("supplemental draft requires its target recording parent")
         if self.parent_recording_id == self.recording_id:
@@ -309,12 +320,21 @@ class ConfirmFlowDraftResource(FlowDraftProtocolModel):
     schema_version: Literal["1"] = "1"
     operation: Literal["CONFIRM_RESOURCE_SLOT"]
     candidate_id: str = Field(pattern=r"^resource-[0-9a-f]{16}$")
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
+# 重识别只消费当前录制已保存的事件；必须带修订，不能覆盖迟到的人工作业。
+class RefreshFlowDraftResources(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
+    operation: Literal["REFRESH_RESOURCE_CANDIDATES"]
+    expected_revision: int = Field(ge=1)
 
 
 FlowDraftReviewCommand: TypeAlias = Annotated[
     ConfirmFlowDraftVariableChoice
     | ConfirmFlowDraftTarget
-    | ConfirmFlowDraftResource,
+    | ConfirmFlowDraftResource
+    | RefreshFlowDraftResources,
     Field(discriminator="operation"),
 ]
 _COMMAND_ADAPTER = TypeAdapter(FlowDraftReviewCommand)
@@ -322,6 +342,7 @@ _COMMAND_TYPES = (
     ConfirmFlowDraftVariableChoice,
     ConfirmFlowDraftTarget,
     ConfirmFlowDraftResource,
+    RefreshFlowDraftResources,
 )
 
 
@@ -366,7 +387,7 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    if parsed.get("schema_version") != "3":
+    if parsed.get("schema_version") not in {"3", "4"}:
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)

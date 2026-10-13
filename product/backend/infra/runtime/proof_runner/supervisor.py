@@ -36,7 +36,7 @@ class ProofPreflightHandler:
         try:
             with self._uow() as work:
                 request = work.proof_sources.preflight(job.project_id, job.preflight_id)
-            input = ProofRunnerInput(job_id=job_id, attempt=job.attempt, fencing_token=job.fencing_token,
+            input = ProofRunnerInput(schema_version='3' if request.schema_version=='4' else '2', job_id=job_id, attempt=job.attempt, fencing_token=job.fencing_token,
                 lease_owner=self._owner, request=request, request_fingerprint=job.request_hash)
             names = check_secret_names(request)
             known = tuple(self._environ[name] for name in names if self._environ.get(name))

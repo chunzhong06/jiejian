@@ -160,10 +160,12 @@ class ScopedCandidateContent(ScopedCandidateContentInput):
         if any(freeze_scenario(item, self) != item for item in self.scenarios):
             raise ValueError("情境指纹与内容不一致")
         ids = {item.item_id for item in self.permissions}
-        if any(not set(item.permission_item_ids) <= ids for item in self.requirement_sources):
-            raise ValueError("要求只能关联这份候选已有的权限项")
-        if any(not {target.permission_item_id for target in item.targets} <= ids for item in self.coverage_suggestions):
-            raise ValueError("检查建议只能关联这份候选已有的权限项")
+        for index, item in enumerate(self.requirement_sources):
+            if not set(item.permission_item_ids) <= ids:
+                raise PydanticCustomError('requirement_permission_outside', '要求只能关联这份候选已有的权限项', {'source_index': index})
+        for index, item in enumerate(self.coverage_suggestions):
+            if not {target.permission_item_id for target in item.targets} <= ids:
+                raise PydanticCustomError('coverage_permission_outside', '检查建议只能关联这份候选已有的权限项', {'source_index': index})
         return self
 
 

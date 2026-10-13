@@ -24,3 +24,19 @@
 .recording-facts dd { margin:0;overflow-wrap:anywhere; }
 .recording-capture-guide p { line-height:1.8; }
 @media(max-width:600px) { .recording-facts { grid-template-columns:minmax(0,1fr); }.recording-facts > div { display:grid;grid-template-columns:100px minmax(0,1fr);gap:var(--space-16); }.recording-facts dt { margin:0; } }
+
+/* 失败原因和可执行恢复紧邻展示，不把停止误写为回滚。 */
+.recording-recovery>p{max-width:76ch;color:var(--color-secondary);line-height:1.85;margin-block:var(--space-20)}
+.recording-recovery-actions{display:flex;align-items:center;justify-content:space-between;gap:var(--space-24)}
+
+.recording-recovery-actions>details{order:0}.recording-recovery-actions>.ant-btn{order:1;margin-inline-start:auto}
+/* 对象选择是本页唯一决定；来源与重识别作为次级信息，不让用户填写技术路径。 */
+.recording-object-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-16);width:100%}
+.recording-object-options .ant-radio-wrapper{align-items:center;padding:var(--space-20);margin:0;border:1px solid var(--color-border);border-radius:var(--radius-medium)}
+.recording-object-options strong,.recording-object-options span>span{display:block}
+.recording-object-options .ant-radio-label>span{display:block;color:var(--color-secondary);font-size:var(--font-secondary);margin-top:var(--space-8)}
+.recording-object-refresh{display:flex;align-items:center;justify-content:space-between;gap:var(--space-20);margin-block:var(--space-24);color:var(--color-secondary);font-size:var(--font-secondary)}
+.recording-object-confirmed{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-32);align-items:center;padding-block:var(--space-24);border-block:1px solid var(--color-border);margin-bottom:var(--space-24)}
+.recording-object-confirmed span,.recording-object-confirmed strong{display:block}.recording-object-confirmed span{color:var(--color-secondary);margin-bottom:var(--space-12)}
+.recording-object-confirmed p{color:var(--color-secondary);margin:0;line-height:1.85}
+@media(max-width:700px){.recording-object-options,.recording-object-confirmed{grid-template-columns:minmax(0,1fr)}.recording-object-refresh{flex-wrap:wrap}}

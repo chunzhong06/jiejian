@@ -45,11 +45,21 @@ class BoundedHTTPResponse:
     body: bytes
 
 
+def is_file_response(headers: Mapping[str, str]) -> bool:
+    """只决定正文的记录方式；响应是否允许仍由完整传输校验决定。"""
+    media = headers.get('content-type', '').split(';', 1)[0].strip().casefold()
+    return 'attachment' in headers.get('content-disposition', '').casefold() or media in {
+        'application/octet-stream', 'application/pdf', 'application/zip', 'application/x-zip-compressed',
+    }
+
+
 class BoundedRouteTransport:
     """保持浏览器请求语义，并在读取正文前执行响应能力检查。"""
 
-    def __init__(self, scope: WebTargetScope) -> None:
+    def __init__(self, scope: WebTargetScope, *, allow_files: bool = False) -> None:
         self._scope = scope
+        # 登录准备复用本传输但不授予文件能力；只有业务录制显式开启。
+        self._allow_files = allow_files
 
     def fetch(
         self,
@@ -128,7 +138,8 @@ class BoundedRouteTransport:
         if reason is not None:
             raise JiejianError(
                 ErrorCode.RECORD_RESPONSE_UNSUPPORTED,
-                "浏览器响应不属于 有界普通 HTTP 能力范围",
+                "录制响应未通过传输边界校验",
+                details={"reason": reason},
             )
 
         return self._end_to_end_headers(
@@ -142,14 +153,13 @@ class BoundedRouteTransport:
         headers: Mapping[str, str],
     ) -> str | None:
         content_type = headers.get("content-type", "").casefold()
-        disposition = headers.get("content-disposition", "").casefold()
         transfer_encoding = headers.get("transfer-encoding", "").casefold()
         content_encoding = headers.get("content-encoding", "").casefold()
         if request_method == "HEAD":
             return "HEAD_UNSUPPORTED"
         if content_type.startswith("text/event-stream"):
             return "SSE_UNSUPPORTED"
-        if "attachment" in disposition:
+        if is_file_response(headers) and not self._allow_files:
             return "DOWNLOAD_UNSUPPORTED"
         if transfer_encoding:
             return "STREAMING_UNSUPPORTED"
@@ -176,7 +186,8 @@ class BoundedRouteTransport:
                 if len(body) + len(chunk) > expected:
                     raise JiejianError(
                         ErrorCode.RECORD_RESPONSE_UNSUPPORTED,
-                        "浏览器响应不属于 有界普通 HTTP 能力范围",
+                        "响应长度不完整或读取中断，录制未接受该响应",
+                        details={"reason": "RECORD_RESPONSE_UNSUPPORTED"},
                     )
                 body.extend(chunk)
         except JiejianError:
@@ -184,12 +195,14 @@ class BoundedRouteTransport:
         except httpx.HTTPError:
             raise JiejianError(
                 ErrorCode.RECORD_RESPONSE_UNSUPPORTED,
-                "浏览器响应不属于 有界普通 HTTP 能力范围",
+                "响应长度不完整或读取中断，录制未接受该响应",
+                details={"reason": "RECORD_RESPONSE_UNSUPPORTED"},
             ) from None
         if len(body) != expected:
             raise JiejianError(
                 ErrorCode.RECORD_RESPONSE_UNSUPPORTED,
-                "浏览器响应不属于 有界普通 HTTP 能力范围",
+                "响应长度不完整或读取中断，录制未接受该响应",
+                details={"reason": "RECORD_RESPONSE_UNSUPPORTED"},
             )
         return bytes(body)
 

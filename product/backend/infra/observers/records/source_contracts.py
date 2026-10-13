@@ -5,7 +5,7 @@ import hashlib
 import json
 
 from product.backend.infra.observers.records.record_source import record_provider
-from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig,ProofContractAttestation
+from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig,CreationProofSourceConfig,ProofContractAttestation
 
 
 def audit_source_contract(var_dir, reference, config, *, require_live=True):
@@ -21,6 +21,6 @@ def audit_source_contract(var_dir, reference, config, *, require_live=True):
         'collection': config.collection, 'contract_id': config.source_contract_id}
     fingerprint = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return ProofContractAttestation(contract_id=config.source_contract_id,
-        implementation_profile='CONTROLLED_FILE_RECEIPT_V1' if isinstance(config,FileProofSourceConfig) else 'CONTROLLED_TRANSACTION_RECORDS_V2',fingerprint=fingerprint,
-        approved_effect_kind='FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else
+        implementation_profile='CONTROLLED_CREATION_V1' if isinstance(config,CreationProofSourceConfig) else 'CONTROLLED_FILE_RECEIPT_V1' if isinstance(config,FileProofSourceConfig) else 'CONTROLLED_TRANSACTION_RECORDS_V2',fingerprint=fingerprint,
+        approved_effect_kind='OBJECT_CREATION' if isinstance(config,CreationProofSourceConfig) else 'FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else
             'STATE_MUTATION' if config.source_contract_id=='TRANSACTION_HISTORY_V2' else 'DATA_DISCLOSURE')

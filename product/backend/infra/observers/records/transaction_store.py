@@ -68,6 +68,10 @@ class TransactionRecordStore:
                     ordinal INTEGER NOT NULL, PRIMARY KEY(scope_id,ordinal));
                 CREATE TABLE IF NOT EXISTS execution_traces(scope_id TEXT NOT NULL, collection TEXT NOT NULL,
                     resource_id TEXT NOT NULL, document BLOB NOT NULL, PRIMARY KEY(scope_id,collection,resource_id));
+                CREATE TABLE IF NOT EXISTS creation_events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collection TEXT NOT NULL, resource_id TEXT NOT NULL, scope_id TEXT, document TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS resource_incarnations(collection TEXT NOT NULL, resource_id TEXT NOT NULL,
+                    incarnation TEXT NOT NULL, PRIMARY KEY(collection,resource_id));
                 """)
                 db.execute("INSERT OR IGNORE INTO metadata VALUES(1,2,?,NULL)", (uuid4().hex,))
                 if db.execute("SELECT format FROM metadata WHERE singleton=1").fetchone()[0] != 2:
@@ -158,11 +162,24 @@ class TransactionRecordStore:
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                scope_id = getattr(command, 'scope_id', None)
+                if scope_id is not None:
+                    self._open_creation_scope(db, scope_id)
+                # 已删除编号不复用，防止旧恢复请求命中新的一次创建；历史现存对象仍可幂等读取。
+                exists = db.execute('SELECT 1 FROM resources WHERE collection=? AND resource_id=?',
+                    (command.collection, command.resource_id)).fetchone()
+                if not exists and db.execute('SELECT 1 FROM creation_events WHERE collection=? AND resource_id=?',
+                        (command.collection, command.resource_id)).fetchone():
+                    raise RecordStoreError('RECORD_RESOURCE_ID_REUSED')
                 inserted = db.execute("INSERT OR IGNORE INTO resources VALUES(?,?,?,?,?,NULL)",
                     (command.collection, command.resource_id, command.owner_id, 0, _json(command.data)))
                 current = self._snapshot(db, command.collection, command.resource_id)
                 if current.owner_id != command.owner_id:
                     raise RecordStoreError("RECORD_OWNER_CONFLICT")
+                if inserted.rowcount:
+                    db.execute('INSERT INTO resource_incarnations VALUES(?,?,?)',
+                        (command.collection, command.resource_id, uuid4().hex))
+                    self._creation_event(db, command.collection, current, scope_id, 'CREATE')
                 db.execute("COMMIT")
                 if inserted.rowcount:
                     self._persist()
@@ -171,6 +188,80 @@ class TransactionRecordStore:
                 if db.in_transaction:
                     db.execute("ROLLBACK")
                 raise
+
+    def _open_creation_scope(self, db, scope_id):
+        scope = self._scope(db, scope_id)
+        if scope.state != 'OPEN':
+            raise RecordStoreError('RECORD_SCOPE_CLOSED')
+        if db.execute('SELECT COUNT(*) FROM creation_events WHERE scope_id=?', (scope_id,)).fetchone()[0] >= 32:
+            raise RecordStoreError('RECORD_REQUEST_LIMIT')
+
+    def _creation_member(self, db, snapshot):
+        from product.protocols.runtime.creation_records import CreationMember
+        row = db.execute('SELECT incarnation FROM resource_incarnations WHERE collection=? AND resource_id=?',
+            (snapshot.collection, snapshot.resource_id)).fetchone()
+        # 老对象只有稳定身份，不补造它被创建的时间或请求回执。
+        incarnation = row[0] if row else hashlib.sha256(_json(
+            [snapshot.generation, snapshot.collection, snapshot.resource_id]).encode()).hexdigest()
+        return CreationMember(resource_id=snapshot.resource_id, owner_id=snapshot.owner_id,
+            incarnation=incarnation, version=snapshot.version,
+            data_digest=hashlib.sha256(_json(snapshot.data).encode()).hexdigest())
+
+    def _creation_event(self, db, collection, snapshot, scope_id, kind):
+        from product.protocols.runtime.creation_records import CreationEvent
+        cursor = db.execute('INSERT INTO creation_events(collection,resource_id,scope_id,document) VALUES(?,?,?,?)',
+            (collection, snapshot.resource_id, scope_id, '{}'))
+        event = CreationEvent(sequence=cursor.lastrowid, scope_id=scope_id, kind=kind,
+            member=self._creation_member(db, snapshot))
+        db.execute('UPDATE creation_events SET document=? WHERE sequence=?', (event.model_dump_json(), event.sequence))
+
+    def remove(self, command):
+        """按版本删除单个对象并保留不可变回执；不开放清空集合或删除历史的能力。"""
+        with self._connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                self._open_creation_scope(db, command.scope_id)
+                current = self._snapshot(db, command.collection, command.resource_id)
+                if current.version != command.expected_version:
+                    raise RecordStoreError('RECORD_VERSION_CONFLICT')
+                self._creation_event(db, command.collection, current, command.scope_id, 'REMOVE')
+                db.execute('DELETE FROM resources WHERE collection=? AND resource_id=?',
+                    (command.collection, command.resource_id))
+                db.execute('COMMIT')
+                self._persist()
+                return current
+            except BaseException:
+                if db.in_transaction:
+                    db.execute('ROLLBACK')
+                raise
+
+    def creation_view(self, collection, request_nonce=None):
+        """在同一锁内读取完整有限集合和指定请求的创建历史；超限报错，绝不截断为完整。"""
+        from product.protocols.runtime.creation_records import CreationView, CreationEvent
+        with self._connection() as db:
+            if not (db.execute('SELECT 1 FROM resources WHERE collection=?', (collection,)).fetchone()
+                    or db.execute('SELECT 1 FROM creation_events WHERE collection=?', (collection,)).fetchone()):
+                raise RecordStoreError('CREATION_COLLECTION_UNKNOWN')
+            ids = [row[0] for row in db.execute('SELECT resource_id FROM resources WHERE collection=? ORDER BY resource_id LIMIT 257', (collection,))]
+            if len(ids) > 256:
+                raise RecordStoreError('CREATION_COLLECTION_LIMIT')
+            scope, events = None, ()
+            if request_nonce is not None:
+                row = db.execute('SELECT document FROM scopes WHERE request_nonce=?', (request_nonce,)).fetchone()
+                scope = RecordRequestScope.model_validate_json(row[0]) if row else None
+                if scope is not None:
+                    events = tuple(CreationEvent.model_validate_json(row[0]) for row in db.execute(
+                        'SELECT document FROM creation_events WHERE collection=? AND scope_id=? ORDER BY sequence', (collection, scope.scope_id)))
+            foreign = False
+            for event in events:
+                if event.kind == 'CREATE' and db.execute(
+                        "SELECT 1 FROM operations WHERE json_extract(document,'$.collection')=? AND json_extract(document,'$.resource_id')=? AND (json_extract(document,'$.scope_id') IS NULL OR json_extract(document,'$.scope_id')<>?) LIMIT 1",
+                        (collection, event.member.resource_id, scope.scope_id)).fetchone():
+                    foreign = True
+            return CreationView(generation=db.execute('SELECT generation FROM metadata WHERE singleton=1').fetchone()[0],
+                collection=collection, watermark=db.execute('SELECT COALESCE(MAX(sequence),0) FROM creation_events').fetchone()[0],
+                members=tuple(self._creation_member(db, self._snapshot(db, collection, item)) for item in ids),
+                scope=scope, events=events, foreign_mutations=foreign)
 
     def read(self, collection: str, resource_id: str) -> RecordSnapshot:
         with self._connection() as db:

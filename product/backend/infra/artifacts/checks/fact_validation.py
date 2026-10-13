@@ -1,15 +1,17 @@
 # 发布和读取共用的有限事实复核；校验冻结来源和归约一致，不访问应用或重新裁决Verdict。
-from product.backend.core.verification.business_facts import reduce_record_facts,reduce_disclosure_facts,reduce_file_facts
+from product.backend.core.verification.business_facts import reduce_record_facts,reduce_disclosure_facts,reduce_file_facts,reduce_creation_facts
 from product.protocols.preparation.proof_sources import FileProofSourceConfig
-from product.protocols.checks.business_facts import ReferenceArtifactFact
+from product.protocols.checks.business_facts import ReferenceArtifactFact, CreationFactReference
 from product.protocols.checks.check_result import DetailedCheckEvidence
 
 
 def validate_frozen_facts(evidence,bundle,started_at_us,completed_at_us):
-    if bundle.schema_version!='6':
+    if bundle.schema_version not in {'6','7'}:
         if isinstance(evidence,DetailedCheckEvidence):raise ValueError('new facts cannot be attached to legacy runtime')
         return
     if not isinstance(evidence,DetailedCheckEvidence):raise ValueError('current runtime requires detailed evidence')
+    if evidence.schema_version != ('3' if bundle.schema_version=='7' else '2'):
+        raise ValueError('evidence version differs from frozen runtime')
     sources={source.source_id:source for source in bundle.json_sources}
     configured=next(action for action in bundle.actions if action.action_id==evidence.action_id)
     runtime_proofs={proof.binding_fingerprint:proof for proof in configured.proofs}
@@ -37,7 +39,15 @@ def validate_frozen_facts(evidence,bundle,started_at_us,completed_at_us):
         if (reference.source.source_id,reference.source.source_revision,reference.source.source_fingerprint)!=(
             source.source_id,source.revision,source.source_fingerprint):raise ValueError('observation source differs from frozen source')
         snapshot=observation.phase in {'BASELINE','BEFORE','RECOVERY'}
-        if isinstance(source.config,FileProofSourceConfig):
+        if source.config.source_kind=='CREATED_OBJECT_RECORDS':
+            if not isinstance(reference,CreationFactReference) or getattr(configured,'created_resource',None) is None:
+                raise ValueError('creation facts require an adopted creation contract')
+            state,closure,complete=reduce_creation_facts(reference,evidence.business_facts,case=evidence.case)
+            if reference.phase=='RECOVERY' and evidence.outcome.recovery_verified and (
+                    not reference.creation_window.source_complete
+                    or reference.creation_window.current_digest!=reference.creation_window.baseline_digest):
+                raise ValueError('creation recovery differs from original collection')
+        elif isinstance(source.config,FileProofSourceConfig):
             window=reference.file_window
             if reference.method!=('FILE_SNAPSHOT' if snapshot else 'FILE_DELIVERY') or window is None or window.expected!=source.config.reference_artifact:
                 raise ValueError('file method differs from adopted source')

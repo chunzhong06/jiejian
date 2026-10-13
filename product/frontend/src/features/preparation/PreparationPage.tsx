@@ -26,6 +26,7 @@ import { proofSourcesApi } from '../../api/preparation/proofSources'
 import { preparationSuggestionsApi } from '../../api/preparation/preparationSuggestions'
 import { useMaterialSuggestions } from './materials/useMaterialSuggestions'
 import { materialSuggestionEntries, UnboundMaterialSuggestions } from './materials/MaterialSuggestions'
+import { PreparationProgress } from './materials/PreparationProgress'
 
 function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: MaterialReference) {
   if (!task?.can_execute || task.business_action_id !== ref.action_id || task.action_revision !== ref.action_revision) return false
@@ -295,6 +296,8 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   return <EditorialPage label="检查材料" width="summary">
     <EditorialHeader eyebrow={project.name || '当前应用'} title="检查准备"/>
     {providedControl()}
+    {guidance?.state === 'CURRENT' && guidance.progress && !materialSync.retrying && <PreparationProgress progress={guidance.progress}
+      currentActionId={task?.business_action_id} selectedActionId={chosenActionId} onSelect={id => void selectAction(id)}/>}
     {!onProvidedMaterials && <AgentAssistEntry aside projectId={project.project_id} contextKey={`materials:${chosenActionId ?? ''}:${requestedSuggestionId ?? ''}:${requestedSuggestionRevision ?? ''}`}
       title="整理检查需要的材料" description="让原来的 Agent 核对已有材料，并说明缺少的账号、操作、测试资源、证明或恢复方式怎样准备。"
       heading={<div className="materials-context">
@@ -325,7 +328,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       }}/>}
     {suggestions.error && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.error} action={requestedSuggestionId != null && <Button onClick={() => { const query = new URLSearchParams(assistQuery); query.delete('suggestion_id'); query.delete('suggestion_revision'); onNavigate(`/tests?${query}`) }}>返回当前材料</Button>}/>}
     {!suggestions.error && suggestions.context && suggestions.context.state !== 'CURRENT' && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.context.note ?? '准备依据正在变化，请重新读取材料建议。'}/>}
-    {!suggestions.error && suggestions.context?.state === 'CURRENT' && suggestions.view && suggestions.view.state !== 'CURRENT' && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.view.state === 'SUPERSEDED' ? '这份建议已有新修订，可用“读取建议”查看。' : '规则、源码或材料已经变化，以下原建议仅供回看；请让 Agent 按当前依据重新整理。'}/>}
+    {!suggestions.error && suggestions.context?.state === 'CURRENT' && suggestions.view && suggestions.view.state !== 'CURRENT' && <Alert className="flow-feedback" type="warning" showIcon message={suggestions.view.state === 'SUPERSEDED' ? '这份建议已有新修订，可用“读取建议”查看。' : suggestions.view.state === 'PARTIAL' ? `${suggestions.view.current_count} 项建议可沿用，${suggestions.view.review_count} 项需要核对；原因列在对应材料中。` : '这份建议的依据需要重新核对，请查看各项原因。真实材料的准备状态仍以当前核对结果为准。'}/>}
     {suggestions.view && suggestions.view.suggestion.content.unresolved_questions.length > 0 && <details className="material-dependencies"><summary>整理时还未确定的事项</summary><ul>{suggestions.view.suggestion.content.unresolved_questions.map((question, index) => <li key={index}>{question}</li>)}</ul></details>}
     {!preparation.actions.length && (receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对准备材料'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
     {materialSync.retrying && <Alert className="flow-feedback" type="warning" message="材料状态暂未同步" description={materialSync.stopped ? '当前读取未通过校验，请重新读取后再继续。' : '以下保留上次读取的内容，界鉴正在重新同步。继续操作前会再次核对。'} />}

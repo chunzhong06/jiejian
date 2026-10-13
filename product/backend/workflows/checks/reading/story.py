@@ -245,7 +245,9 @@ class CheckStoryBuilder:
                 stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
                     display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement,
                     fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
-                        planned_resource_owner=planned_owner, resource_id=case.resource_id,
+                        planned_resource_owner=planned_owner, resource_id=(
+                            '、'.join(sorted({fact.data.resource_id for document in documents for fact in getattr(document,'business_facts',()) if fact.data.kind=='OBJECT_CREATION'})) or '本次未确认创建对象'
+                            ) if getattr(config,'created_resource',None) is not None else case.resource_id,
                         verified_actual_identity=actual, http_surface=result.outcome,
                         http_explanation=EXECUTION_LABELS[result.outcome.execution_outcome], effects=tuple(effects), allow_control=control),
                     breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),

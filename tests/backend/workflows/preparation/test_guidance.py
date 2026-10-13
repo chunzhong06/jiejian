@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.workflows.preparation.guidance.service import PreparationGuidanceService, _source_advice
+from product.backend.workflows.preparation.guidance.service import PreparationGuidanceService, _source_advice, _preparation_progress
 from product.backend.workflows.workspace.models import PrimaryTaskView
 
 
@@ -97,10 +97,9 @@ def test_cancelled_job_with_a_report_does_not_become_usable():
 
 
 def guidance(context, primary, after=None):
-    reads = iter([context, after or deepcopy(context)])
-    return PreparationGuidanceService(sources=SimpleNamespace(context=lambda _: next(reads)),
-        workspace=SimpleNamespace(get=lambda _: SimpleNamespace(primary_task=primary)),
-        preparation=SimpleNamespace(get=lambda _: SimpleNamespace(actions=()))).context('app_guidance')['guidance']
+    return PreparationGuidanceService(sources=SimpleNamespace(basis=lambda _: context['basis_id'], context=lambda _: after or deepcopy(context)),
+        workspace=SimpleNamespace(get=lambda _, **kwargs: SimpleNamespace(primary_task=primary)),
+        preparation=SimpleNamespace(get=lambda _: SimpleNamespace(actions=(), preparation_complete=False))).context('app_guidance')['guidance']
 
 
 def test_global_account_task_precedes_source_preflight():
@@ -133,4 +132,20 @@ def test_official_ready_task_does_not_require_a_node_proof_source():
     context = source_context(); context.update(runtime_available=False, sources=[])
     result = guidance(context, task('RUN_CURRENT_CHECK'))
     assert result['next_action']['kind'] == 'RUN_CURRENT_CHECK'
-    assert result['next_action']['mcp_tool'] == 'jiejian_check_run'
+    assert result['next_action']['mcp_tool'] == 'jiejian_check_preview'
+
+
+def test_progress_keeps_other_completed_actions_visible_and_does_not_replace_gate():
+    preparation = SimpleNamespace(preparation_complete=False, actions=(
+        SimpleNamespace(action_id='download', action_revision=1, display_name='下载', preparation_complete=False, reason_codes=('ALLOW_CONTROL_REQUIRED',)),
+        SimpleNamespace(action_id='preview', action_revision=1, display_name='预览', preparation_complete=True, reason_codes=()),
+    ))
+    materials = tuple(SimpleNamespace(action_id=action, action_revision=1, kind=kind, status=status)
+        for action in ('download', 'preview') for kind, status in (('execution','SATISFIED'), ('recovery','NOT_REQUIRED')))
+    result = _preparation_progress('app_progress', preparation, materials)
+    assert result.completed_actions == 1 and result.total_actions == 2
+    assert not result.preparation_complete
+    blocked, ready = result.actions
+    assert blocked.satisfied == blocked.required == 1 and not blocked.preparation_complete
+    assert blocked.reason_codes == ('ALLOW_CONTROL_REQUIRED',)
+    assert ready.preparation_complete and 'action_id=preview' in ready.gui_url

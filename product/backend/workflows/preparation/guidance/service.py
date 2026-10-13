@@ -3,12 +3,13 @@ from urllib.parse import urlencode
 from pydantic import ValidationError
 from product.backend.core.errors import JiejianError
 
-from product.backend.workflows.preparation.guidance.models import PreparationGuidance, PreparationMaterialAdvice, PreparationNextAction, ProofSourceAdvice
+from product.backend.workflows.preparation.guidance.models import PreparationGuidance, PreparationMaterialAdvice, PreparationNextAction, ProofSourceAdvice, PreparationProgress, PreparationActionProgress
 
 
 PREPARATION_TASKS = frozenset({'SELECT_ALLOW_CONTROL', 'REVIEW_RECORDING', 'PREPARE_TEST_IDENTITY',
     'DEMONSTRATE_ACTION', 'PREPARE_ACTION_RESOURCE', 'COMPLETE_EFFECT_EVIDENCE', 'COMPLETE_RECOVERY'})
 REASONS = {
+    'CREATED_RESOURCE_PROOF_REQUIRED': '创建录制已保存。请为本次新对象准备独立创建记录，并确认集合读取范围与恢复材料；正式检查将使用本次实际生成的编号。',
     'TEST_IDENTITY_REQUIRED': '所需测试账号尚未准备，请先补齐当前业务角色的账号。',
     'TEST_IDENTITY_LOGIN_REQUIRED': '该账号缺少当前可用的登录状态，请重新登录后核对原材料。',
     'TEST_IDENTITY_REVIEW_REQUIRED': '账号与当前角色依据需要重新核对；不是要求删除账号或重做其他材料。',
@@ -164,6 +165,21 @@ def _material_advice(project, preparation, identities=()):
     return tuple(rows)
 
 
+def _preparation_progress(project, preparation, materials):
+    """统计全部动作的真实准备项；完成条件仍取Preparation，不由计数替代合法对照等门槛。"""
+    actions = []
+    for action in preparation.actions:
+        rows = [item for item in materials if (item.action_id, item.action_revision) == (action.action_id, action.action_revision)
+            and item.status != 'NOT_REQUIRED']
+        actions.append(PreparationActionProgress(action_id=action.action_id, action_revision=action.action_revision,
+            label=action.display_name, preparation_complete=action.preparation_complete,
+            satisfied=sum(item.status == 'SATISFIED' for item in rows), required=len(rows),
+            remaining_kinds=tuple(dict.fromkeys(item.kind for item in rows if item.status != 'SATISFIED')),
+            reason_codes=action.reason_codes, gui_url=_url('/tests', project, materials=1, action_id=action.action_id)))
+    return PreparationProgress(preparation_complete=preparation.preparation_complete,
+        completed_actions=sum(action.preparation_complete for action in preparation.actions), total_actions=len(actions), actions=tuple(actions))
+
+
 class PreparationGuidanceService:
     def __init__(self, *, sources, workspace, preparation, suggestions=None):
         self._sources, self._workspace, self._preparation = sources, workspace, preparation
@@ -226,6 +242,7 @@ class PreparationGuidanceService:
                     action_id=gap['action_id'],gui_url=_url('/tests',project_id,materials=1,proof_sources=1,action_id=gap['action_id']))
             guidance = PreparationGuidance(project_id=project_id, basis_id=context['basis_id'], state='CURRENT',
                 next_action=next_action, materials=materials, sources=sources,
+                progress=_preparation_progress(project_id, preparation, materials),
                 note='建议依据当前事实生成。打开入口不代表授权执行；准备可用不代表权限已通过检查。')
         if suggestion_context is not None:
             if suggestion_context.get('state') != 'UNAVAILABLE':

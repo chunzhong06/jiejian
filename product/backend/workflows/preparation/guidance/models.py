@@ -12,7 +12,7 @@ class PreparationNextAction(BoundaryModel):
     reason: str = Field(min_length=1, max_length=1024)
     handler: Literal['USER', 'AGENT', 'EITHER', 'SYSTEM']
     gui_url: str = Field(pattern=r'^#/(application|permissions|tests|changes|environment|history)(\?|$)', max_length=2048)
-    mcp_tool: Literal['jiejian_proof_source_save', 'jiejian_proof_preflight_start',
+    mcp_tool: Literal['jiejian_rule_context', 'jiejian_proof_source_save', 'jiejian_proof_preflight_start',
                       'jiejian_proof_preflight_status', 'jiejian_proof_adoption_preview',
                       'jiejian_check_preview', 'jiejian_change_registration_preview'] | None = None
     required_level: Literal['READ', 'PREPARE', 'EXECUTE'] | None = None
@@ -44,6 +44,25 @@ class ProofSourceAdvice(BoundaryModel):
     next_action: PreparationNextAction | None
 
 
+class PreparationActionProgress(BoundaryModel):
+    action_id: str
+    action_revision: int = Field(ge=1)
+    label: str
+    preparation_complete: bool
+    satisfied: int = Field(ge=0)
+    required: int = Field(ge=0)
+    remaining_kinds: tuple[str, ...]
+    reason_codes: tuple[str, ...]
+    gui_url: str
+
+
+class PreparationProgress(BoundaryModel):
+    preparation_complete: bool
+    completed_actions: int = Field(ge=0)
+    total_actions: int = Field(ge=0)
+    actions: tuple[PreparationActionProgress, ...]
+
+
 class PreparationGuidance(BoundaryModel):
     project_id: str
     basis_id: str
@@ -51,4 +70,5 @@ class PreparationGuidance(BoundaryModel):
     next_action: PreparationNextAction | None
     materials: tuple[PreparationMaterialAdvice, ...]
     sources: tuple[ProofSourceAdvice, ...]
+    progress: PreparationProgress | None = None
     note: str

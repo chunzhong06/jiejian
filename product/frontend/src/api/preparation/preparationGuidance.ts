@@ -13,6 +13,10 @@ export type PreparationMaterialAdvice = {
 export type PreparationGuidance = {
   project_id: string; basis_id: string; state: 'CURRENT' | 'NEEDS_REFRESH'; next_action: PreparationNextAction | null
   materials: PreparationMaterialAdvice[]
+  progress?: {preparation_complete: boolean; completed_actions: number; total_actions: number; actions: Array<{
+    action_id: string; action_revision: number; label: string; preparation_complete: boolean; satisfied: number; required: number
+    remaining_kinds: PreparationMaterialAdvice['kind'][]; reason_codes: string[]; gui_url: string
+  }>} | null
   sources: Array<{source_id: string; revision: number; state: 'NEEDS_ACTION' | 'WAITING' | 'USABLE' | 'UNSUPPORTED'; next_action: PreparationNextAction | null}>
   note: string
 }

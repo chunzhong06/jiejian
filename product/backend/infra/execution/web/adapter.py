@@ -230,6 +230,7 @@ class HttpExecutionAdapter:
                 binding.method,
                 _render_path(binding.path, values),
                 case_id=case_id,
+                action_id=action_id,
                 query=binding.query,
                 headers=binding.headers,
                 body=binding.body,
@@ -275,6 +276,7 @@ class HttpExecutionAdapter:
         *,
         case_id: str,
         json_body: dict[str, Any] | None = None,
+        action_id: str | None = None,
         query: Sequence[HttpParameter] | Mapping[str, str] = (),
         headers: Sequence[HttpParameter] | Mapping[str, str] = (),
         data: Mapping[str, str] | Sequence[tuple[str, str]] | None = None,
@@ -336,6 +338,11 @@ class HttpExecutionAdapter:
         request_headers = {key:value for key,value in request_headers.items() if key.lower() != 'x-jiejian-request-nonce'}
         request_nonce = secrets.token_hex(32)
         request_headers['X-Jiejian-Request-Nonce'] = request_nonce
+        # 超时也可能已提交；保留执行器生成的关联键供独立来源查询，不自动重发。
+        if not hasattr(self, 'request_receipts'):
+            self.request_receipts = {}
+        self.request_receipts[(case_id, action_id)] = (request_nonce, hashlib.sha256(
+            method.upper().encode('ascii') + b'\n' + httpx.Request(method, target.url, params=rendered_query).url.raw_path).hexdigest())
         if test_mode:
             request_headers["X-Jiejian-Test-Mode"] = "1"
         request_kwargs = _render_body(body, json_body=json_body, data=data, slot_values=slot_values or {}, fixture_artifacts=self.fixture_artifacts)

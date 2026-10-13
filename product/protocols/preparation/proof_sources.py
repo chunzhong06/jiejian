@@ -146,6 +146,13 @@ def source_identity_paths(config, identities=()):
     return tuple(sorted({item.verification.request.path for item in identities if item.verification is not None}))
 
 
+def source_read_paths(config, identities=()):
+    paths = {*source_identity_paths(config, identities), config.relative_path_template}
+    if config.source_kind == 'CREATED_OBJECT_RECORDS':
+        paths.add(f'/collections/{config.collection}')
+    return tuple(sorted(paths))
+
+
 class LegacyProofSourceRevision(RuntimeModel):
     schema_version:Literal['1','2']='2'
     project_id:ProjectId
@@ -228,7 +235,7 @@ class LegacyProofPreflightInput(RuntimeModel):
             or self.target.base_url!=self.scope.origin or self.target.base_url!=f'http://127.0.0.1:{self.runtime_reference.port}'
             or self.source_fingerprint!=proof_fingerprint(self.config) or self.config.read_scope_id not in (None,self.scope.scope_id)
             or self.config.relative_path_template not in self.scope.path_templates
-            or not set(source_identity_paths(self.config,self.identities))<=set(self.scope.path_templates)
+            or not set(source_read_paths(self.config,self.identities))<=set(self.scope.path_templates)
             or self.config.resource_binding_id not in self.scope.resource_binding_ids
             or set(self.identity_roles)!={item.identity_id for item in self.identities}
             or not set(self.identity_roles)<=set(self.scope.identity_ids)
@@ -332,26 +339,45 @@ class FileProofSourceConfig(AtomicProofSourceConfig):
         return self
 
 
-CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig,Field(discriminator='source_kind')]
+class CreationProofSourceConfig(AtomicProofSourceConfig):
+    source_kind:Literal['CREATED_OBJECT_RECORDS']='CREATED_OBJECT_RECORDS'
+    source_contract_id:Literal['OBJECT_CREATION_V1']='OBJECT_CREATION_V1'
+
+    @model_validator(mode='after')
+    def creation_mapping(self):
+        if set(self.mappings)!={'resource_id','owner_id'}:
+            raise ValueError('creation source uses only object and owner mappings')
+        return self
+
+
+CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig,Field(discriminator='source_kind')]
 
 
 class ProofContractAttestation(LegacyProofContractAttestation):
-    contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1']
-    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
-    approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY']
+    contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1']
+    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
+    approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY','OBJECT_CREATION']
 
     @model_validator(mode='after')
     def matching_profile(self):
         if (self.contract_id=='FILE_RESPONSE_CONTENT_V1')!=(self.implementation_profile=='CONTROLLED_FILE_RECEIPT_V1'):
             raise ValueError('file contract profile mismatch')
-        expected={'FILE_RESPONSE_CONTENT_V1':'FILE_CONTENT_DELIVERY','TRANSACTION_HISTORY_V2':'STATE_MUTATION','RESOURCE_FIELDS_V1':'DATA_DISCLOSURE'}
+        if (self.contract_id=='OBJECT_CREATION_V1')!=(self.implementation_profile=='CONTROLLED_CREATION_V1'):
+            raise ValueError('creation contract profile mismatch')
+        expected={'OBJECT_CREATION_V1':'OBJECT_CREATION','FILE_RESPONSE_CONTENT_V1':'FILE_CONTENT_DELIVERY','TRANSACTION_HISTORY_V2':'STATE_MUTATION','RESOURCE_FIELDS_V1':'DATA_DISCLOSURE'}
         if self.approved_effect_kind!=expected[self.contract_id]:raise ValueError('source contract effect mismatch')
         return self
 
 
 class ProofSourceRevision(LegacyProofSourceRevision):
-    schema_version:Literal['3']='3'
+    schema_version:Literal['3','4']='3'
     config:CurrentProofSourceConfig
+
+    @model_validator(mode='after')
+    def creation_version(self):
+        if (self.schema_version=='4') != isinstance(self.config,CreationProofSourceConfig):
+            raise ValueError('creation source requires format 4')
+        return self
 
 
 class SourceReadScope(LegacySourceReadScope):
@@ -359,13 +385,15 @@ class SourceReadScope(LegacySourceReadScope):
 
 
 class ProofPreflightInput(LegacyProofPreflightInput):
-    schema_version:Literal['3']='3'
+    schema_version:Literal['3','4']='3'
     config:CurrentProofSourceConfig
     scope:SourceReadScope
     contract:ProofContractAttestation|None=None
 
     @model_validator(mode='after')
     def reference_ready(self):
+        if (self.schema_version=='4') != isinstance(self.config,CreationProofSourceConfig):
+            raise ValueError('creation preflight requires format 4')
         if isinstance(self.config,FileProofSourceConfig) and self.config.reference_artifact is None:
             raise ValueError('reference file must be prepared before preflight')
         return self
@@ -382,14 +410,22 @@ class FrozenProofSource(FrozenJsonProofSource):
 
     @model_validator(mode='after')
     def file_adoption_reference(self):
+        if isinstance(self.config,CreationProofSourceConfig) and self.adoption_preflight_id is None:
+            raise ValueError('creation proof requires adopted preflight')
         if isinstance(self.config,FileProofSourceConfig) and (self.adoption_preflight_id is None or self.config.reference_artifact is None):
             raise ValueError('file proof requires exact adopted preflight')
         return self
 
 
 class ProofRunnerInput(LegacyProofRunnerInput):
-    schema_version:Literal['2']='2'
+    schema_version:Literal['2','3']='2'
     request:ProofPreflightInput
+
+    @model_validator(mode='after')
+    def creation_version(self):
+        if (self.schema_version=='3') != (self.request.schema_version=='4'):
+            raise ValueError('creation runner requires format 3')
+        return self
 
 
 def read_source_revision(raw):

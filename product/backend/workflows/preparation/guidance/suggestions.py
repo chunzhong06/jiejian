@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.preparation.suggestions import PreparationSuggestionRevision, SavePreparationSuggestion
+from product.backend.core.preparation.suggestions import PreparationSuggestionRevisionV2, SuggestionItemBasis, SavePreparationSuggestion
 from product.backend.workflows.preparation.guidance.suggestion_targets import resolve_target, validate_existing_references
 
 
@@ -34,7 +34,7 @@ class PreparationSuggestionService:
         known_code = {} if not source_current else {item.candidate_id:item for item in (*understanding.role_candidates,*understanding.action_candidates)
             if not item.stale and item.decision.value != 'REJECTED' and item.evidence}
         basis = 'psb_' + boundary_sha256({'proof_basis':facts.basis_id,'bindings':sorted(bindings),
-            'proof_contracts':['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1'],
+            'proof_contracts':['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','OBJECT_CREATION_V1'],
             'source_revision':None if understanding is None else understanding.revision,
             'source_authorized':bool(understanding and understanding.source_analysis_authorized),
             'recordings':recordings,'candidate_references':candidate_refs,'sources':source_refs,
@@ -120,8 +120,9 @@ class PreparationSuggestionService:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'材料建议数量已达上限，请更新已有建议')
             for item in command.content.items:
                 self._validate(work,project_id,item,snapshot)
-            value = PreparationSuggestionRevision(project_id=project_id,suggestion_id=command.suggestion_id or 'psg_'+uuid4().hex,
+            value = PreparationSuggestionRevisionV2(project_id=project_id,suggestion_id=command.suggestion_id or 'psg_'+uuid4().hex,
                 revision=(command.expected_revision or 0)+1,basis_id=snapshot['basis_id'],content=command.content,
+                item_bases=tuple(SuggestionItemBasis(item_id=item.item_id, fingerprint=self._item_basis(work, project_id, item, snapshot)) for item in command.content.items),
                 submitted_via=submitted_via,created_at_us=self._clock())
             # 源码属于数据库外部；提交前再核验，不能在文件变化后接受混合依据。
             if self._snapshot(work,project_id)['basis_id'] != snapshot['basis_id']:
@@ -132,28 +133,84 @@ class PreparationSuggestionService:
             work.commit()
             return result
 
+    @staticmethod
+    def _item_basis(work, project_id, item, snapshot):
+        # 建立办法依赖源码和明确引用的配置，不依赖其他材料的登录、录制、预检查进度。
+        facts = snapshot['facts']
+        refs = set(item.source.candidate_ids)
+        entry = getattr(item.material, 'entry_candidate_id', None)
+        if entry:
+            refs.add(entry)
+        code = {ref: [entry.model_dump(mode='json') for entry in snapshot['known_code'][ref].evidence]
+            for ref in sorted(refs) if ref in snapshot['known_code']}
+        sources = []
+        for source_id in getattr(item.material, 'existing_source_ids', ()):
+            source = work.proof_sources.source(project_id, source_id)
+            sources.append([source_id, None if source is None else source.config.model_dump(mode='json')])
+        rules = [] if item.target.kind != 'APPROVED' else sorted(
+            (rule.intent_id, rule.revision, rule.intent_hash) for rule in facts.boundary.permission_intents
+            if rule.business_action_id == item.target.action_id)
+        return boundary_sha256({'source': facts.observed_source, 'source_current': snapshot['source_current'],
+            'code': code, 'sources': sources, 'rules': rules})
+
     def _view(self, work, value, snapshot):
         head = self._required(work,value.project_id,value.suggestion_id)
         matches_basis = value.basis_id == snapshot['basis_id']
-        current = matches_basis and head.revision == value.revision
+        latest = head.revision == value.revision
+        bases = {item.item_id:item.fingerprint for item in getattr(value, 'item_bases', ())}
         items = []
         for item in value.content.items:
+            reasons = []
             try:
                 target = resolve_target(work,value.project_id,item.target,self._candidates,self._boundaries)
-                available = current and target['state'] not in {'STALE','ASSOCIATION_UNAVAILABLE'}
+                if target['state'] in {'STALE','ASSOCIATION_UNAVAILABLE'}:
+                    reasons.append('RULE_REFERENCE_CHANGED')
             except JiejianError:
                 target = {'state':'STALE','action_label':'原规则引用需要核对','action_id':None,'action_revision':None}
-                available = False
+                reasons.append('RULE_REFERENCE_CHANGED')
+            if not latest:
+                reasons.append('NEWER_REVISION')
+            if value.schema_version == '2':
+                if bases[item.item_id] != self._item_basis(work, value.project_id, item, snapshot):
+                    reasons.append('ITEM_DEPENDENCY_CHANGED')
+            elif not matches_basis:
+                # 旧根没有逐项摘要；不能从今天的源码倒推出当时的依赖。
+                reasons.append('LEGACY_BASIS_UNVERIFIED')
+            if not reasons:
+                try:
+                    self._validate(work, value.project_id, item, snapshot)
+                except JiejianError:
+                    reasons.append('MATERIAL_REFERENCE_CHANGED')
             query = {'project_id':value.project_id,'materials':'1','suggestion_id':value.suggestion_id,
                 'suggestion_revision':value.revision,'material_kind':item.material.kind}
             if target.get('action_id'):
                 query['action_id'] = target['action_id']
             locations = [dict(candidate_id=ref,relative_path=e.relative_path,line_start=e.line_start,line_end=e.line_end,symbol=e.symbol)
                 for ref in item.source.candidate_ids if ref in snapshot['known_code'] for e in snapshot['known_code'][ref].evidence[:2]]
-            items.append({'item_id':item.item_id,'resolved_target':target,'current':available,
-                'source_locations':locations if current else [],'return_url':'#/tests?'+urlencode(query)})
+            items.append({'item_id':item.item_id,'resolved_target':target,'current':not reasons, 'reason_codes':reasons,
+                'source_locations':locations if not reasons else [],'return_url':'#/tests?'+urlencode(query)})
+        by_id = {item['item_id']:item for item in items}
+        def resolve_dependencies(item_id):
+            row = by_id[item_id]
+            if item_id in resolved:
+                return row['current']
+            item = definitions[item_id]
+            dependency_states = [resolve_dependencies(ref) for ref in item.depends_on]
+            if not all(dependency_states):
+                row['current'] = False
+                row['source_locations'] = []
+                row['reason_codes'].append('DEPENDENCY_NEEDS_REVIEW')
+            resolved.add(item_id)
+            return row['current']
+        definitions = {item.item_id:item for item in value.content.items}
+        resolved = set()
+        for item in items:
+            resolve_dependencies(item['item_id'])
+        count = sum(item['current'] for item in items)
+        state = 'SUPERSEDED' if not latest else ('CURRENT' if count == len(items) and (items or matches_basis) else 'PARTIAL' if count else 'STALE')
         return {'suggestion':value.model_dump(mode='json'),'current_basis_id':snapshot['basis_id'],
-            'state':'CURRENT' if current else 'SUPERSEDED' if matches_basis else 'STALE','latest_revision':head.revision,'items':items,
+            'state':state,'latest_revision':head.revision,'items':items,
+            'current_count':count,'review_count':len(items)-count,
             'review_url':'#/tests?'+urlencode({'project_id':value.project_id,'materials':'1',
                 'suggestion_id':value.suggestion_id,'suggestion_revision':value.revision})}
 

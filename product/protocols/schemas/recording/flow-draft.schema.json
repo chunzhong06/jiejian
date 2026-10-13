@@ -9,7 +9,19 @@
           "type": "string"
         },
         "consumer": {
-          "$ref": "#/$defs/ValueSlotConsumer"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueSlotConsumer"
+            },
+            {
+              "enum": [
+                "RESPONSE_JSON",
+                "RESPONSE_LOCATION"
+              ],
+              "type": "string"
+            }
+          ],
+          "title": "Consumer"
         },
         "label": {
           "maxLength": 256,
@@ -355,8 +367,11 @@
       "type": "integer"
     },
     "schema_version": {
-      "const": "3",
       "default": "3",
+      "enum": [
+        "3",
+        "4"
+      ],
       "title": "Schema Version",
       "type": "string"
     },

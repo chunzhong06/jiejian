@@ -25,6 +25,7 @@ from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.recording.recording_flow import Flow, FlowStep, FlowVariableSource
+from product.protocols.recording.created_resource import CREATED_RESOURCE_EXTRACTOR
 from product.protocols.recording.flow_draft import FlowDraft, FlowDraftResourceCandidate, FlowDraftVariableStatus
 from product.protocols.web.workflow import (
     EmptyBody,
@@ -70,14 +71,6 @@ class FlowDraftCompiler:
                 ErrorCode.RECORD_DRAFT_UNCONFIRMED,
                 "Flow 草稿的业务资源位置尚未确认",
             )
-        if any(
-            variable.status is not FlowDraftVariableStatus.CONFIRMED
-            for variable in draft.variables
-        ):
-            raise JiejianError(
-                ErrorCode.RECORD_DRAFT_UNCONFIRMED,
-                "Flow 草稿的变量来源尚未确认",
-            )
         step_map = {step.id: step for step in draft.steps}
         graph = {step.id: set(step.depends_on_step_ids) for step in draft.steps}
         ancestors: set[str] = set()
@@ -89,10 +82,14 @@ class FlowDraftCompiler:
             ancestors.add(current)
             pending.extend(graph[current])
         retained_step_ids = ancestors | {draft.target_step_id}
+        required_variables = tuple(variable for variable in draft.variables
+            if retained_step_ids.intersection(variable.consumer_step_ids))
+        if any(variable.status is not FlowDraftVariableStatus.CONFIRMED for variable in required_variables):
+            raise JiejianError(ErrorCode.RECORD_DRAFT_UNCONFIRMED, "执行目标所需的变量来源尚未确认")
 
         # 目标后的观察步骤不会进入可执行 Flow，其变量需求也不能反向污染目标响应提取器。
         sources_by_consumer: dict[str, list[FlowVariableSource]] = {}
-        for variable in draft.variables:
+        for variable in required_variables:
             source = variable.confirmed_source
             if source is None:
                 raise JiejianError(
@@ -157,6 +154,14 @@ class FlowDraftCompiler:
                 for item in target.resource_candidates
                 if item.candidate_id == draft.resource_candidate_id
             )
+            response_resource = str(resource.consumer).startswith("RESPONSE_")
+            if response_resource:
+                extractors_by_producer.setdefault(target.id, []).append(ResponseExtractor(
+                    extractor_id=CREATED_RESOURCE_EXTRACTOR,
+                    kind=ResponseExtractorKind.JSON_PATH if resource.consumer == "RESPONSE_JSON" else ResponseExtractorKind.LOCATION,
+                    json_path=resource.location if resource.consumer == "RESPONSE_JSON" else None,
+                    max_length=256 if resource.consumer == "RESPONSE_JSON" else 2048,
+                ))
             steps: list[FlowStep] = []
             for step in draft.steps:
                 if step.id not in ancestors and step.id != draft.target_step_id:
@@ -180,7 +185,7 @@ class FlowDraftCompiler:
                 compiled_path = parsed.path
                 query_items = list(parse_qsl(parsed.query, keep_blank_values=True))
                 compiled_json = self._drop_sensitive_json(step.json_body)
-                if step.id == draft.target_step_id:
+                if step.id == draft.target_step_id and not response_resource:
                     compiled_path, query_items, compiled_json = self._bind_case_resource(
                         compiled_path,
                         query_items,
@@ -240,7 +245,7 @@ class FlowDraftCompiler:
                     sensitive_fields=step.sensitive_fields,
                 ))
             return Flow(
-                schema_version="3",
+                schema_version="4" if response_resource else "3",
                 id=draft.flow_id,
                 business_action_id=draft.business_action_id,
                 action_revision=draft.action_revision,

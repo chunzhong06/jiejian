@@ -102,6 +102,7 @@ class FlowDraftProcessor:
         effect_id: str | None = None,
         known_secrets: Sequence[str] = (),
         action_path_templates: Sequence[str] = (),
+        allow_created_resources: bool = False,
     ) -> FlowDraft:
         """把连续、已脱敏事件确定性整理为只保留业务歧义的首个 revision。"""
 
@@ -126,7 +127,7 @@ class FlowDraftProcessor:
         sources = self._response_sources(steps)
         variables = self._replace_dynamic_values(steps, sources)
         draft_steps = tuple(
-            self._build_step(step, action_path_templates)
+            self._build_step(step, action_path_templates, allow_created_resources)
             for step in steps
         )
         directly_triggered_requests = frozenset(
@@ -163,6 +164,9 @@ class FlowDraftProcessor:
             if target is not None and len(target.resource_candidates) == 1
             else None
         )
+        # 响应编号可能属于新对象、所有者或关联对象；即使只有一个也先由人确认含义。
+        if target is not None and any(str(item.consumer).startswith("RESPONSE_") for item in target.resource_candidates):
+            resource_candidate_id = None
         if resource_candidate_id and target.resource_candidates[0].consumer is ValueSlotConsumer.PATH:
             candidate = target.resource_candidates[0]
             source_step = next(step for step in steps if step.step_id == target.id)
@@ -173,7 +177,7 @@ class FlowDraftProcessor:
                 # 普通单词可能是动作名；没有接口模板或明确编号时必须由人确认。
                 resource_candidate_id = None
         draft = FlowDraft(
-            schema_version="3",
+            schema_version="4" if any(str(item.consumer).startswith("RESPONSE_") for step in draft_steps for item in step.resource_candidates) else "3",
             recording_id=recording_id,
             flow_id=flow_id,
             business_action_id=business_action_id,
@@ -402,6 +406,7 @@ class FlowDraftProcessor:
         self,
         step: _StepData,
         action_path_templates: Sequence[str] = (),
+        allow_created_resources: bool = False,
     ) -> FlowDraftStep:
         request = step.request
         sequences = [event.sequence for event in step.actions]
@@ -426,18 +431,33 @@ class FlowDraftProcessor:
             source_event_sequences=tuple(sorted(sequences)),
             depends_on_step_ids=tuple(sorted(step.dependencies)),
             sensitive_fields=self._sensitive_fields(step),
-            resource_candidates=self._resource_candidates(step, action_path_templates),
+            resource_candidates=self._resource_candidates(step, action_path_templates, allow_created_resources),
         )
 
     def _resource_candidates(
         self,
         step: _StepData,
         action_path_templates: Sequence[str] = (),
+        allow_created_resources: bool = False,
     ) -> tuple[FlowDraftResourceCandidate, ...]:
-        """只列出已录制目标请求中的有界字段位置，不让用户输入任意资源值。"""
+        """从当前请求或已确认创建动作的响应列出有界位置，不接受自填对象。"""
 
         if step.request is None:
             return ()
+        if allow_created_resources:
+            from product.protocols.recording.created_resource import response_object_candidates
+            response = step.response
+            # 只在已批准的对象形成动作上使用成功响应；截断、失败及异步受理不提供对象依据。
+            if (response is None or response.truncated or step.request.truncated
+                    or response.status_code is None or not 200 <= response.status_code < 300
+                    or response.status_code == 202):
+                return ()
+            response_candidates = tuple(self._resource_candidate(step.step_id, kind, location,
+                f"响应中的对象 {identifier[:180]}（候选 {index + 1}）")
+                for index, (kind, location, identifier) in enumerate(response_object_candidates(
+                    response.body, [(header.name, header.value) for header in response.headers], step.request.url)))
+            if response_candidates:
+                return response_candidates
         candidates: list[FlowDraftResourceCandidate] = []
         parsed = urlsplit(step.path or "/")
         recorded = urlsplit(step.request.url or "/")
@@ -509,12 +529,12 @@ class FlowDraftProcessor:
     @staticmethod
     def _resource_candidate(
         step_id: str,
-        consumer: ValueSlotConsumer,
+        consumer: ValueSlotConsumer | str,
         location: str,
         label: str,
     ) -> FlowDraftResourceCandidate:
         digest = hashlib.sha256(
-            f"{step_id}\0{consumer.value}\0{location}".encode("utf-8")
+            f"{step_id}\0{consumer}\0{location}".encode("utf-8")
         ).hexdigest()[:16]
         return FlowDraftResourceCandidate(
             candidate_id=f"resource-{digest}",
@@ -700,6 +720,8 @@ class FlowDraftProcessor:
         base = self._safe_name(tail)
         if base == "id" or json_path.startswith("$location"):
             base = "resource_id"
+        if base == "created_resource_id":
+            base = "response_created_resource_id"
         name = base
         suffix = 2
         while name in used_names:

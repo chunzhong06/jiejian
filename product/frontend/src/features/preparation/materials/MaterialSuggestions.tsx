@@ -8,6 +8,14 @@ export type MaterialSuggestionEntry = { item: MaterialSuggestion; view: Suggesti
 export const materialSuggestionNames: Record<MaterialSuggestionKind, string> = {
   identity: '真实账号', execution: '动作录制', resource: '测试资源', evidence: '结果证明', recovery: '恢复方式',
 }
+const reviewReasons: Record<string, string> = {
+  RULE_REFERENCE_CHANGED: '对应的规则或候选修订已变化，需要核对这项建议的业务含义。',
+  NEWER_REVISION: '这份建议已有新修订，请读取最新建议。',
+  ITEM_DEPENDENCY_CHANGED: '这项建议依赖的源码或证明配置已变化，需要更新建立办法。',
+  MATERIAL_REFERENCE_CHANGED: '这项建议引用的账号、录制、资源或来源已不匹配。',
+  LEGACY_BASIS_UNVERIFIED: '旧建议未保存逐项依据，暂不能确认能否沿用。请让 Agent 按当前材料更新这份建议。',
+  DEPENDENCY_NEEDS_REVIEW: '前置建议仍待核对，请先处理其变化，再继续这一项。',
+}
 export function materialSuggestionEntries(value?: PreparationSuggestionView | null): MaterialSuggestionEntry[] {
   return value?.suggestion.content.items.flatMap(item => {
     const view = value.items.find(row => row.item_id === item.item_id)
@@ -32,6 +40,7 @@ export function MaterialSuggestionNotes({ entries, allEntries = entries }: { ent
       return <article key={item.item_id} className="material-suggestion-item">
         <div className="material-suggestion-content"><p className="editorial-muted">{label({ item, view })}</p>
         <strong>{item.description}</strong>
+        {!view.current && <p role="note">{view.reason_codes?.map(code => reviewReasons[code] ?? '这项建议的依据需要核对。').join(' ') || '这项建议需要按当前依据重新核对。'}</p>}
         {explanation && explanation !== item.description && <p>{explanation}</p>}
         {steps.length > 0 && <ol>{steps.map((step, index) => <li key={index}>{step}</li>)}</ol>}
         {material.kind === 'resource' && material.fields.length > 0 && <dl>{material.fields.map((field, index) => <div key={index}><dt>{field.field}</dt><dd>{field.requirement}</dd></div>)}</dl>}
@@ -55,10 +64,10 @@ export function UnboundMaterialSuggestions({ entries, allEntries, returnKind, pr
   const [expanded, setExpanded] = useState<string | null | undefined>(returnKind)
   useEffect(() => { setExpanded(returnKind) }, [returnKind])
   if (!entries.length) return null
-  const candidates = [...new Set(entries.map(entry => entry.item.target.kind === 'CANDIDATE' ? `${entry.item.target.candidate_id}:${entry.item.target.revision}` : ''))]
-  const only = candidates.length === 1 && candidates[0] ? entries[0].item.target : undefined
+  const candidates = [...new Set(entries.map(entry => entry.item.target.kind === 'CANDIDATE' ? `${entry.view.resolved_target.candidate_id ?? entry.item.target.candidate_id}:${entry.view.resolved_target.candidate_revision ?? entry.item.target.revision}` : ''))]
+  const only = candidates.length === 1 && candidates[0] ? entries[0] : undefined
   const query = new URLSearchParams({ project_id: projectId })
-  if (only?.candidate_id && only.revision) { query.set('candidate', only.candidate_id); query.set('revision', String(only.revision)) }
+  if (only?.item.target.candidate_id) { query.set('candidate', only.view.resolved_target.candidate_id ?? only.item.target.candidate_id); query.set('revision', String(only.view.resolved_target.candidate_revision ?? only.item.target.revision)) }
   return <section className="material-unbound-suggestions" aria-label="尚待规则核对的材料建议">
     <div className="material-suggestion-heading"><div><h2>先整理材料怎样准备</h2><p className="editorial-muted">以下建议尚未对应到当前已批准的动作，可先查看建立办法。</p></div><Button onClick={() => onNavigate(`/permissions?${query}`)}>核对规则</Button></div>
     <div className="material-table" role="table" aria-label="预先整理的材料">

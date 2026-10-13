@@ -1,0 +1,2216 @@
+{
+  "$defs": {
+    "ArtifactManifestReference": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^pai_[0-9a-f]{32}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "exclusiveMinimum": 0,
+          "maximum": 4194304,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "asset_id",
+        "sha256",
+        "size"
+      ],
+      "title": "ArtifactManifestReference",
+      "type": "object"
+    },
+    "BusinessFact": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "collector_kind": {
+          "enum": [
+            "CONTROLLED_RECORDS",
+            "IDENTITY_READER",
+            "HTTP_ENTITY",
+            "REFERENCE_STORE"
+          ],
+          "title": "Collector Kind",
+          "type": "string"
+        },
+        "collector_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Collector Version",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "data": {
+          "discriminator": {
+            "mapping": {
+              "COMMITTED_STATE": "#/$defs/CommittedStateFact",
+              "FIELD_DISCLOSURE": "#/$defs/FieldDisclosureFact",
+              "FILE_RECEIPT": "#/$defs/FileReceiptFact",
+              "IDENTITY_CHECK": "#/$defs/IdentityCheckFact",
+              "OBJECT_CREATION": "#/$defs/ObjectCreationFact",
+              "REFERENCE_ARTIFACT": "#/$defs/ReferenceArtifactFact"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CommittedStateFact"
+            },
+            {
+              "$ref": "#/$defs/IdentityCheckFact"
+            },
+            {
+              "$ref": "#/$defs/FieldDisclosureFact"
+            },
+            {
+              "$ref": "#/$defs/ReferenceArtifactFact"
+            },
+            {
+              "$ref": "#/$defs/FileReceiptFact"
+            },
+            {
+              "$ref": "#/$defs/ObjectCreationFact"
+            }
+          ],
+          "title": "Data"
+        },
+        "fact_id": {
+          "pattern": "^bf_[0-9a-f]{64}$",
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "observed_at_us": {
+          "minimum": 0,
+          "title": "Observed At Us",
+          "type": "integer"
+        },
+        "proofs": {
+          "items": {
+            "$ref": "#/$defs/FactProofReference"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Proofs",
+          "type": "array"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "request_ref": {
+          "pattern": "^req_[0-9a-f]{48}$",
+          "title": "Request Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fact_id",
+        "case_id",
+        "request_ref",
+        "observed_at_us",
+        "collector_kind",
+        "proofs",
+        "complete",
+        "data"
+      ],
+      "title": "BusinessFact",
+      "type": "object"
+    },
+    "CaseRole": {
+      "enum": [
+        "ALLOW_REGRESSION",
+        "ALLOW_CONTROL",
+        "DENY_CHALLENGE"
+      ],
+      "title": "CaseRole",
+      "type": "string"
+    },
+    "CheckCaseOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_identity_status": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Actual Identity Status",
+          "type": "string"
+        },
+        "baseline_trusted": {
+          "title": "Baseline Trusted",
+          "type": "boolean"
+        },
+        "execution_outcome": {
+          "enum": [
+            "ACCEPTED",
+            "DENIED",
+            "FAILED",
+            "UNKNOWN"
+          ],
+          "title": "Execution Outcome",
+          "type": "string"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "maximum": 599,
+              "minimum": 100,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Status"
+        },
+        "recovery_verified": {
+          "title": "Recovery Verified",
+          "type": "boolean"
+        },
+        "resource_correlated": {
+          "title": "Resource Correlated",
+          "type": "boolean"
+        },
+        "run_correlated": {
+          "title": "Run Correlated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "execution_outcome",
+        "actual_identity_status",
+        "baseline_trusted",
+        "recovery_verified",
+        "run_correlated",
+        "resource_correlated"
+      ],
+      "title": "CheckCaseOutcome",
+      "type": "object"
+    },
+    "CheckObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "authoritative": {
+          "title": "Authoritative",
+          "type": "boolean"
+        },
+        "closure": {
+          "enum": [
+            "CLOSED",
+            "OPEN",
+            "UNKNOWN"
+          ],
+          "title": "Closure",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "correlated": {
+          "title": "Correlated",
+          "type": "boolean"
+        },
+        "correlation_refs": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Correlation Refs",
+          "type": "array"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "VERDICT_REQUIRED",
+            "DIAGNOSIS_REQUIRED",
+            "SUPPORTING"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "BASELINE",
+            "BEFORE",
+            "AFTER",
+            "EVENTUAL",
+            "RECOVERY"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "reliable": {
+          "title": "Reliable",
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "CONFIRMED",
+            "ABSENT",
+            "UNKNOWN"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "window_end_us": {
+          "minimum": 0,
+          "title": "Window End Us",
+          "type": "integer"
+        },
+        "window_start_us": {
+          "minimum": 0,
+          "title": "Window Start Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "effect_id",
+        "proof_fingerprint",
+        "observer_id",
+        "level",
+        "phase",
+        "state",
+        "closure",
+        "complete",
+        "reliable",
+        "correlated",
+        "authoritative",
+        "window_start_us",
+        "window_end_us"
+      ],
+      "title": "CheckObservation",
+      "type": "object"
+    },
+    "CommittedFieldChange": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Before"
+        },
+        "path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proof_fingerprint",
+        "path",
+        "before",
+        "after"
+      ],
+      "title": "CommittedFieldChange",
+      "type": "object"
+    },
+    "CommittedStateFact": {
+      "additionalProperties": false,
+      "properties": {
+        "after_version": {
+          "minimum": 1,
+          "title": "After Version",
+          "type": "integer"
+        },
+        "before_version": {
+          "minimum": 0,
+          "title": "Before Version",
+          "type": "integer"
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/CommittedFieldChange"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Changes",
+          "type": "array"
+        },
+        "commit_semantics": {
+          "const": "ATOMIC_COMMIT",
+          "default": "ATOMIC_COMMIT",
+          "title": "Commit Semantics",
+          "type": "string"
+        },
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "kind": {
+          "const": "COMMITTED_STATE",
+          "default": "COMMITTED_STATE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "scope_ordinal": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Scope Ordinal",
+          "type": "integer"
+        },
+        "subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "operation_id",
+        "scope_ordinal",
+        "before_version",
+        "after_version",
+        "subject_identity_id",
+        "owner_identity_id",
+        "resource_id",
+        "changes"
+      ],
+      "title": "CommittedStateFact",
+      "type": "object"
+    },
+    "CreationFactReference": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "creation_window": {
+          "$ref": "#/$defs/CreationObservationWindow"
+        },
+        "fact_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^bf_[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "CREATION_SNAPSHOT",
+            "OBJECT_CREATION"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "BASELINE",
+            "BEFORE",
+            "AFTER",
+            "EVENTUAL",
+            "RECOVERY"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/FactProofReference"
+        }
+      },
+      "required": [
+        "proof_fingerprint",
+        "observer_id",
+        "phase",
+        "source",
+        "method",
+        "creation_window",
+        "complete"
+      ],
+      "title": "CreationFactReference",
+      "type": "object"
+    },
+    "CreationObservationWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Digest",
+          "type": "string"
+        },
+        "baseline_watermark": {
+          "minimum": 0,
+          "title": "Baseline Watermark",
+          "type": "integer"
+        },
+        "created_count": {
+          "maximum": 32,
+          "minimum": 0,
+          "title": "Created Count",
+          "type": "integer"
+        },
+        "current_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Current Digest",
+          "type": "string"
+        },
+        "current_watermark": {
+          "minimum": 0,
+          "title": "Current Watermark",
+          "type": "integer"
+        },
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "request_matched": {
+          "title": "Request Matched",
+          "type": "boolean"
+        },
+        "response_matched": {
+          "default": false,
+          "title": "Response Matched",
+          "type": "boolean"
+        },
+        "response_resource_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Resource Id"
+        },
+        "scope_state": {
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE",
+            "MISSING"
+          ],
+          "title": "Scope State",
+          "type": "string"
+        },
+        "source_complete": {
+          "title": "Source Complete",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "generation",
+        "baseline_watermark",
+        "current_watermark",
+        "baseline_digest",
+        "current_digest",
+        "scope_state",
+        "request_matched",
+        "source_complete",
+        "created_count"
+      ],
+      "title": "CreationObservationWindow",
+      "type": "object"
+    },
+    "DisclosureObservationWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline Digest"
+        },
+        "current_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Digest"
+        },
+        "protected_paths": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Protected Paths",
+          "type": "array"
+        },
+        "rejected_empty_response": {
+          "title": "Rejected Empty Response",
+          "type": "boolean"
+        },
+        "request_matched": {
+          "title": "Request Matched",
+          "type": "boolean"
+        },
+        "resource_matched": {
+          "title": "Resource Matched",
+          "type": "boolean"
+        },
+        "scope_state": {
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE",
+            "MISSING"
+          ],
+          "title": "Scope State",
+          "type": "string"
+        },
+        "source_unchanged": {
+          "title": "Source Unchanged",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protected_paths",
+        "source_unchanged",
+        "resource_matched",
+        "rejected_empty_response",
+        "scope_state",
+        "request_matched"
+      ],
+      "title": "DisclosureObservationWindow",
+      "type": "object"
+    },
+    "EffectProofRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "VERDICT_REQUIRED",
+            "DIAGNOSIS_REQUIRED",
+            "SUPPORTING"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "reference": {
+          "discriminator": {
+            "mapping": {
+              "RECORDED_OBSERVATION": "#/$defs/RecordedProofReference",
+              "REGISTERED_OBSERVER": "#/$defs/ObserverProofReference"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RecordedProofReference"
+            },
+            {
+              "$ref": "#/$defs/ObserverProofReference"
+            }
+          ],
+          "title": "Reference"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "rule": {
+          "enum": [
+            "HTTP_RESOURCE_PRESENCE",
+            "REGISTERED_EFFECT",
+            "RECORDED_SUPPORT"
+          ],
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "effect_id",
+        "level",
+        "rule",
+        "binding_fingerprint",
+        "resource_id",
+        "reference",
+        "proof_fingerprint"
+      ],
+      "title": "EffectProofRequirement",
+      "type": "object"
+    },
+    "ExecutionAssetReference": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Execution Binding Fingerprint",
+          "type": "string"
+        },
+        "flow_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "flow_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Flow Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow_id",
+        "flow_sha256",
+        "execution_binding_fingerprint"
+      ],
+      "title": "ExecutionAssetReference",
+      "type": "object"
+    },
+    "ExecutionCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "config_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Config Fingerprint",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ExecutionAssetReference"
+        },
+        "owner_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Owner Identity Fingerprint",
+          "type": "string"
+        },
+        "permission": {
+          "$ref": "#/$defs/FrozenPermission"
+        },
+        "proof_requirements": {
+          "items": {
+            "$ref": "#/$defs/EffectProofRequirement"
+          },
+          "maxItems": 48,
+          "minItems": 1,
+          "title": "Proof Requirements",
+          "type": "array"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "recovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecoveryReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resource_binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Resource Binding Fingerprint",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_owner_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Resource Owner Actor Id",
+          "type": "string"
+        },
+        "resource_owner_actor_revision": {
+          "minimum": 1,
+          "title": "Resource Owner Actor Revision",
+          "type": "integer"
+        },
+        "resource_owner_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Resource Owner Test Identity Id",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "$ref": "#/$defs/CaseRole"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        },
+        "subject_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Subject Actor Id",
+          "type": "string"
+        },
+        "subject_actor_revision": {
+          "minimum": 1,
+          "title": "Subject Actor Revision",
+          "type": "integer"
+        },
+        "subject_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Subject Identity Fingerprint",
+          "type": "string"
+        },
+        "subject_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Test Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "roles",
+        "permission",
+        "subject_test_identity_id",
+        "subject_actor_id",
+        "subject_actor_revision",
+        "subject_identity_fingerprint",
+        "resource_owner_test_identity_id",
+        "resource_owner_actor_id",
+        "resource_owner_actor_revision",
+        "owner_identity_fingerprint",
+        "resource_id",
+        "resource_binding_fingerprint",
+        "execution",
+        "protected_effect_ids",
+        "proof_requirements",
+        "recovery",
+        "source_fingerprint",
+        "config_fingerprint"
+      ],
+      "title": "ExecutionCase",
+      "type": "object"
+    },
+    "ExecutionTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TraceEvent"
+          },
+          "maxItems": 512,
+          "title": "Events",
+          "type": "array"
+        },
+        "planned_subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Planned Subject Id",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "action_id",
+        "planned_subject_id",
+        "complete"
+      ],
+      "title": "ExecutionTrace",
+      "type": "object"
+    },
+    "FactProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^(psr|exp)_[0-9a-f]{32}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_revision": {
+          "minimum": 1,
+          "title": "Source Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "effect_id",
+        "proof_fingerprint",
+        "source_id",
+        "source_revision",
+        "source_fingerprint"
+      ],
+      "title": "FactProofReference",
+      "type": "object"
+    },
+    "FieldContentComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Digest"
+        },
+        "matched": {
+          "title": "Matched",
+          "type": "boolean"
+        },
+        "path": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "received_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Received Digest"
+        }
+      },
+      "required": [
+        "path",
+        "matched"
+      ],
+      "title": "FieldContentComparison",
+      "type": "object"
+    },
+    "FieldDisclosureFact": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldContentComparison"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "const": "FIELD_DISCLOSURE",
+          "default": "FIELD_DISCLOSURE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject_identity_id",
+        "owner_identity_id",
+        "resource_id",
+        "fields"
+      ],
+      "title": "FieldDisclosureFact",
+      "type": "object"
+    },
+    "FileObservationWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "expected": {
+          "$ref": "#/$defs/ArtifactManifestReference"
+        },
+        "refused": {
+          "title": "Refused",
+          "type": "boolean"
+        },
+        "request_matched": {
+          "title": "Request Matched",
+          "type": "boolean"
+        },
+        "resource_matched": {
+          "title": "Resource Matched",
+          "type": "boolean"
+        },
+        "scope_state": {
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE",
+            "MISSING"
+          ],
+          "title": "Scope State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected",
+        "resource_matched",
+        "request_matched",
+        "scope_state",
+        "refused"
+      ],
+      "title": "FileObservationWindow",
+      "type": "object"
+    },
+    "FileReceiptFact": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Sha256"
+        },
+        "actual_size": {
+          "maximum": 4194304,
+          "minimum": 0,
+          "title": "Actual Size",
+          "type": "integer"
+        },
+        "comparison": {
+          "enum": [
+            "MATCH",
+            "DIFFERENT",
+            "INCOMPLETE"
+          ],
+          "title": "Comparison",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "expected": {
+          "$ref": "#/$defs/ArtifactManifestReference"
+        },
+        "kind": {
+          "const": "FILE_RECEIPT",
+          "default": "FILE_RECEIPT",
+          "title": "Kind",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "actual_size",
+        "complete",
+        "expected",
+        "comparison",
+        "subject_identity_id",
+        "owner_identity_id",
+        "resource_id"
+      ],
+      "title": "FileReceiptFact",
+      "type": "object"
+    },
+    "FrozenPermission": {
+      "additionalProperties": false,
+      "properties": {
+        "expectation": {
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ],
+          "title": "Expectation",
+          "type": "string"
+        },
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "relation": {
+          "enum": [
+            "OWNS",
+            "SAME_ROLE_OTHER_ACCOUNT",
+            "OTHER_ROLE"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "resource_owner_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Resource Owner Actor Id",
+          "type": "string"
+        },
+        "resource_owner_actor_revision": {
+          "minimum": 1,
+          "title": "Resource Owner Actor Revision",
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "subject_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Subject Actor Id",
+          "type": "string"
+        },
+        "subject_actor_revision": {
+          "minimum": 1,
+          "title": "Subject Actor Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash",
+        "expectation",
+        "relation",
+        "subject_actor_id",
+        "subject_actor_revision",
+        "resource_owner_actor_id",
+        "resource_owner_actor_revision",
+        "protected_effect_ids"
+      ],
+      "title": "FrozenPermission",
+      "type": "object"
+    },
+    "IdentityCheckFact": {
+      "additionalProperties": false,
+      "properties": {
+        "identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "IDENTITY_CHECK",
+          "default": "IDENTITY_CHECK",
+          "title": "Kind",
+          "type": "string"
+        },
+        "role_match": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Role Match",
+          "type": "string"
+        },
+        "subject_match": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Subject Match",
+          "type": "string"
+        }
+      },
+      "required": [
+        "identity_id",
+        "subject_match",
+        "role_match"
+      ],
+      "title": "IdentityCheckFact",
+      "type": "object"
+    },
+    "ObjectCreationFact": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "incarnation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Incarnation",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OBJECT_CREATION",
+          "default": "OBJECT_CREATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "sequence",
+        "resource_id",
+        "incarnation",
+        "subject_identity_id",
+        "owner_identity_id"
+      ],
+      "title": "ObjectCreationFact",
+      "type": "object"
+    },
+    "ObservationFactReference": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "disclosure_window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisclosureObservationWindow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fact_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^bf_[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "file_window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileObservationWindow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "method": {
+          "enum": [
+            "STATE_SNAPSHOT",
+            "ATOMIC_STATE",
+            "FIELD_SNAPSHOT",
+            "FIELD_DISCLOSURE",
+            "FILE_SNAPSHOT",
+            "FILE_DELIVERY"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "BASELINE",
+            "BEFORE",
+            "AFTER",
+            "EVENTUAL",
+            "RECOVERY"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "record_window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecordObservationWindow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "$ref": "#/$defs/FactProofReference"
+        }
+      },
+      "required": [
+        "proof_fingerprint",
+        "observer_id",
+        "phase",
+        "source",
+        "method",
+        "complete"
+      ],
+      "title": "ObservationFactReference",
+      "type": "object"
+    },
+    "ObserverProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "descriptor_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Descriptor Fingerprint",
+          "type": "string"
+        },
+        "descriptor_id": {
+          "pattern": "^(exp|psr)_[0-9a-f]{32}$",
+          "title": "Descriptor Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "REGISTERED_OBSERVER",
+          "default": "REGISTERED_OBSERVER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "descriptor_id",
+        "descriptor_fingerprint",
+        "observer_id"
+      ],
+      "title": "ObserverProofReference",
+      "type": "object"
+    },
+    "RecordObservationWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "after_operation": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After Operation"
+        },
+        "after_value": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After Value"
+        },
+        "after_version": {
+          "minimum": 0,
+          "title": "After Version",
+          "type": "integer"
+        },
+        "before_operation": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Before Operation"
+        },
+        "before_value": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Before Value"
+        },
+        "before_version": {
+          "minimum": 0,
+          "title": "Before Version",
+          "type": "integer"
+        },
+        "field_path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Field Path",
+          "type": "array"
+        },
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "operation_count": {
+          "maximum": 32,
+          "minimum": 0,
+          "title": "Operation Count",
+          "type": "integer"
+        },
+        "request_matched": {
+          "title": "Request Matched",
+          "type": "boolean"
+        },
+        "scope_state": {
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE",
+            "MISSING"
+          ],
+          "title": "Scope State",
+          "type": "string"
+        },
+        "source_complete": {
+          "title": "Source Complete",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "generation",
+        "before_version",
+        "after_version",
+        "before_value",
+        "after_value",
+        "scope_state",
+        "operation_count",
+        "request_matched",
+        "source_complete",
+        "field_path"
+      ],
+      "title": "RecordObservationWindow",
+      "type": "object"
+    },
+    "RecordedProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_revision": {
+          "minimum": 1,
+          "title": "Draft Revision",
+          "type": "integer"
+        },
+        "draft_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Draft Sha256",
+          "type": "string"
+        },
+        "kind": {
+          "const": "RECORDED_OBSERVATION",
+          "default": "RECORDED_OBSERVATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "request_template_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Template Fingerprint",
+          "type": "string"
+        },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recording_id",
+        "draft_revision",
+        "draft_sha256",
+        "step_id",
+        "request_template_fingerprint"
+      ],
+      "title": "RecordedProofReference",
+      "type": "object"
+    },
+    "RecoveryReference": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "draft_revision": {
+          "minimum": 1,
+          "title": "Draft Revision",
+          "type": "integer"
+        },
+        "draft_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Draft Sha256",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "request_template_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Template Fingerprint",
+          "type": "string"
+        },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recording_id",
+        "draft_revision",
+        "draft_sha256",
+        "step_id",
+        "binding_fingerprint",
+        "request_template_fingerprint"
+      ],
+      "title": "RecoveryReference",
+      "type": "object"
+    },
+    "ReferenceArtifactFact": {
+      "additionalProperties": false,
+      "properties": {
+        "adoption_ref": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Adoption Ref",
+          "type": "string"
+        },
+        "kind": {
+          "const": "REFERENCE_ARTIFACT",
+          "default": "REFERENCE_ARTIFACT",
+          "title": "Kind",
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/$defs/ArtifactManifestReference"
+        },
+        "origin": {
+          "enum": [
+            "UPLOAD",
+            "REFERENCE_CAPTURE"
+          ],
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "origin",
+        "adoption_ref"
+      ],
+      "title": "ReferenceArtifactFact",
+      "type": "object"
+    },
+    "TraceAuthorityScope": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_action_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Allowed Action Ids",
+          "type": "array"
+        },
+        "allowed_resource_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Allowed Resource Ids",
+          "type": "array"
+        },
+        "delegated_from_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delegated From Event Id"
+        },
+        "origin_authorization_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Authorization Event Id"
+        }
+      },
+      "title": "TraceAuthorityScope",
+      "type": "object"
+    },
+    "TraceAuthorizationDecision": {
+      "enum": [
+        "ALLOW",
+        "DENY"
+      ],
+      "title": "TraceAuthorizationDecision",
+      "type": "string"
+    },
+    "TraceCorrelationKind": {
+      "enum": [
+        "EXPLICIT_PARENT",
+        "CASE_MARKER",
+        "RESOURCE_LINK",
+        "TEMPORAL"
+      ],
+      "title": "TraceCorrelationKind",
+      "type": "string"
+    },
+    "TraceEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id"
+        },
+        "authority_scope": {
+          "$ref": "#/$defs/TraceAuthorityScope"
+        },
+        "authorization_decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TraceAuthorizationDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "case_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "correlation_kind": {
+          "$ref": "#/$defs/TraceCorrelationKind"
+        },
+        "credential_source": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Source"
+        },
+        "dispatch_effect_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Dispatch Effect Ids",
+          "type": "array"
+        },
+        "effect_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Id"
+        },
+        "event_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/TraceEventKind"
+        },
+        "parent_event_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Parent Event Ids",
+          "type": "array"
+        },
+        "recorded_at_us": {
+          "minimum": 0,
+          "title": "Recorded At Us",
+          "type": "integer"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
+        },
+        "semantic_key": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "source_component": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Component",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Source Location",
+          "type": "string"
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Id"
+        }
+      },
+      "required": [
+        "event_id",
+        "case_id",
+        "action_id",
+        "resource_ids",
+        "kind",
+        "semantic_key",
+        "source_component",
+        "source_location",
+        "correlation_kind",
+        "recorded_at_us"
+      ],
+      "title": "TraceEvent",
+      "type": "object"
+    },
+    "TraceEventKind": {
+      "enum": [
+        "ENTRY",
+        "IDENTITY",
+        "AUTHORIZATION",
+        "PERSISTENT_EFFECT",
+        "MESSAGE",
+        "DELEGATION",
+        "FINAL_EFFECT",
+        "RECOVERY"
+      ],
+      "title": "TraceEventKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action_id": {
+      "pattern": "^bac_[0-9a-f]{32}$",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "action_revision": {
+      "minimum": 1,
+      "title": "Action Revision",
+      "type": "integer"
+    },
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "business_facts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BusinessFact"
+      },
+      "maxItems": 64,
+      "title": "Business Facts",
+      "type": "array"
+    },
+    "case": {
+      "$ref": "#/$defs/ExecutionCase"
+    },
+    "config_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "evidence_id": {
+      "pattern": "^ev_[0-9a-f]{64}$",
+      "title": "Evidence Id",
+      "type": "string"
+    },
+    "fact_references": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "ATOMIC_STATE": "#/$defs/ObservationFactReference",
+            "CREATION_SNAPSHOT": "#/$defs/CreationFactReference",
+            "FIELD_DISCLOSURE": "#/$defs/ObservationFactReference",
+            "FIELD_SNAPSHOT": "#/$defs/ObservationFactReference",
+            "FILE_DELIVERY": "#/$defs/ObservationFactReference",
+            "FILE_SNAPSHOT": "#/$defs/ObservationFactReference",
+            "OBJECT_CREATION": "#/$defs/CreationFactReference",
+            "STATE_SNAPSHOT": "#/$defs/ObservationFactReference"
+          },
+          "propertyName": "method"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ObservationFactReference"
+          },
+          {
+            "$ref": "#/$defs/CreationFactReference"
+          }
+        ]
+      },
+      "maxItems": 240,
+      "title": "Fact References",
+      "type": "array"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/CheckObservation"
+      },
+      "maxItems": 240,
+      "title": "Observations",
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/$defs/CheckCaseOutcome"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "3",
+      "default": "3",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "trace": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExecutionTrace"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "evidence_id",
+    "run_id",
+    "job_id",
+    "attempt",
+    "action_id",
+    "action_revision",
+    "request_hash",
+    "config_hash",
+    "case",
+    "outcome",
+    "observations"
+  ],
+  "title": "CreationCheckEvidence",
+  "type": "object"
+}

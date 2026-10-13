@@ -205,12 +205,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   }} />
   const running = runs.find(active)
   const selectedMode = Boolean(selected)
+  const createdObjectGap = preview?.gaps.some(gap=>gap.reason==='CREATED_RESOURCE_PROOF_REQUIRED') ?? false
   const needsBoundary = Boolean(preview?.boundary_review_gaps?.length) || Boolean(props.workspace && props.workspace.actions.every(action=>action.current_permissions.length===0))
   const headline = selectedMode ? (completionPending ? '本轮检查已完成' : story?.judgement) ?? (runFailed || pollPaused && !story ? '暂时无法读取本次检查' : status?.result_integrity === 'INVALID' ? '结果完整性校验失败，不能展示安全结论' : status ? lifecycleLabel(status.run.lifecycle) : '正在读取检查记录')
-    : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : needsBoundary ? '请先核对权限要求与未覆盖范围' : '请先补齐本次检查所需材料'
+    : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : createdObjectGap ? '还需准备新对象的独立证明' : needsBoundary ? '请先核对权限要求与未覆盖范围' : '请先补齐本次检查所需材料'
   const primaryAction = selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
     : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
-    : needsBoundary ? { label:'核对权限要求',disabled:loading || busy,onClick:()=>onNavigate('/permissions?view=candidates') } : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
+    : createdObjectGap ? {label:'准备创建证明',disabled:loading || busy,onClick:showMaterials} : needsBoundary ? { label:'核对权限要求',disabled:loading || busy,onClick:()=>onNavigate('/permissions?view=candidates') } : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
   return <EditorialPage label="权限验证工作区" width={!story ? 'summary' : undefined}>
     {selectedMode && !(story && !completionPending) && <div className="result-return"><Button type="link" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>← 返回检查记录</Button></div>}
     {selectedMode && story && !completionPending ? <>
@@ -232,6 +233,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     {selectedMode && workspaceSyncFailed && <p role="status">检查记录已读取，工作台状态暂未同步。<Button onClick={() => void syncWorkspace(`retry:${selected}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
     {!selectedMode && loading && <LoadingState>正在读取检查状态…</LoadingState>}
     {!selectedMode && readFailed && <Alert className="flow-feedback" type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
+    {!selectedMode && createdObjectGap && <Alert className="flow-feedback" type="warning" showIcon message="下一步：准备本次创建的独立记录" description="录制已保留对象的识别方式。请在检查材料中读取 Agent 整理的创建证明，确认集合读取范围并采用；恢复材料仍需对应这项创建动作。正式检查会识别本次新对象，取证后再恢复。" />}
     {!selectedMode && <RequirementNotice gaps={preview?.boundary_review_gaps ?? []} purpose="check" onOpen={gap=>onNavigate((gap.next_url??gap.review_url).replace(/^#/,''))}/>}
     {!selectedMode && <RequirementScopeSummary scopes={preview?.requirement_scope??[]}/>}
     {!selectedMode && submissionUncertain && <Alert className="flow-feedback" type="warning" showIcon message="检查请求已发出，但尚未收到确认。请先读取检查记录；再次确认会使用同一次请求。" />}
@@ -255,7 +257,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       <div className="result-record-actions">{resultView === 'source' && <Button onClick={() => onNavigate('/changes')}>查看当前代码变化</Button>}<Button loading={runLoading} onClick={() => setRefreshEpoch(value => value + 1)}>刷新检查结果</Button></div>
     </>}
     {!selectedMode && <>
-      {preview && !preview.can_execute && !needsBoundary && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
+      {preview && !preview.can_execute && !needsBoundary && !createdObjectGap && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
     </>}
     {!(selectedMode && story && !completionPending) && <div className="check-footer">{!selectedMode && <nav className="check-related-actions" aria-label="检查相关内容">{(running || preview?.can_execute) && <Button type="link" onClick={showMaterials} disabled={busy}>管理准备材料</Button>}</nav>}<TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : changeId ? '返回本批交付' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate(changeId ? '/changes?change_id=' + encodeURIComponent(changeId) : '/workspace') } }}
       refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: (selectedMode ? runLoading : loading) || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}

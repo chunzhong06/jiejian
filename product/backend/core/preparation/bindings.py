@@ -27,6 +27,8 @@ class ResourceInjectionKind(StrEnum):
     PATH = "PATH"
     QUERY = "QUERY"
     JSON_BODY = "JSON_BODY"
+    RESPONSE_JSON = "RESPONSE_JSON"
+    RESPONSE_LOCATION = "RESPONSE_LOCATION"
 
 
 class ActionEvidenceKind(StrEnum):
@@ -46,6 +48,8 @@ class ResourceInjection(BoundaryModel):
             ResourceInjectionKind.PATH: r"path\[[0-9]{1,3}\]",
             ResourceInjectionKind.QUERY: r"query\.[A-Za-z0-9_.~-]{1,128}",
             ResourceInjectionKind.JSON_BODY: r"\$(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[0-9]+\])+",
+            ResourceInjectionKind.RESPONSE_JSON: r"\$(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[0-9]+\])+",
+            ResourceInjectionKind.RESPONSE_LOCATION: r"\$location",
         }
         if re.fullmatch(patterns[self.consumer], self.location) is None:
             raise ValueError("resource injection location is invalid")

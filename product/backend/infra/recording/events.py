@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -36,7 +37,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.recording.events import RECORDING_EVENT_MAX_BYTES, RecordingBudget, RecordingEventKind, RecordingEvent
 from product.backend.infra.execution.web.adapter import WebTargetGuard
 from product.backend.core.recording.sanitization import RecordingSanitizer
-from product.backend.infra.recording.transport import BoundedRouteTransport
+from product.backend.infra.recording.transport import BoundedRouteTransport, is_file_response
 from product.backend.infra.recording.ui_capture import install_ui_capture
 
 _SAFETY_EVENT_RESERVE_BYTES = 768
@@ -59,7 +60,7 @@ class RecordingEventCollector:
         self.now_us = now_us
         self.started_at_us = started_at_us
         self._sanitizer = RecordingSanitizer(budget, known_secrets)
-        self._transport = BoundedRouteTransport(scope)
+        self._transport = BoundedRouteTransport(scope, allow_files=True)
         self.events: tuple[RecordingEvent, ...] = ()
         self.safety_error: JiejianError | None = None
         self.safety_reason = RecordingReasonCode.TARGET_SCOPE_VIOLATION
@@ -71,6 +72,7 @@ class RecordingEventCollector:
         self._frame_ids: dict[Frame, str] = {}
         self._request_ids: dict[Request, str] = {}
         self._discarded_requests: set[Request] = set()
+        self._recorded_file_responses: set[Request] = set()
         self._websocket_count = 0
         self._action_count = 0
         self._pending_actions: dict[tuple[str, str, str], str] = {}
@@ -262,9 +264,28 @@ class RecordingEventCollector:
                 )
                 return
             if exc.code == ErrorCode.RECORD_RESPONSE_UNSUPPORTED.value:
-                self._stop_for_response(identity_id, page_id, request_id)
+                self._stop_for_response(identity_id, page_id, request_id, exc.to_dict().get("details", {}).get("reason"))
                 return
             raise
+        if response.status_code == 401:
+            # 认证被目标拒绝不能等待成录制超时，也不能把拒绝页当作正常演示。
+            self.safety_error = JiejianError(ErrorCode.RECORD_SESSION_EXPIRED, '目标应用未接受当前登录状态，请重新准备账号')
+            self.safety_reason = RecordingReasonCode.SESSION_REFERENCE_EXPIRED
+            route.abort('blockedbyclient')
+            return
+        if is_file_response(response.headers):
+            # 下载导航可能没有 requestfinished；只在完整有界接收后记一次真实响应。
+            # 正文只交当前隔离浏览器内存，事件与 Flow 不保存二进制，也不把摘要当证明参照。
+            self._recorded_file_responses.add(request)
+            safe_headers, clipped = self._sanitizer.sanitize_headers(response.headers)
+            self._append(identity_id=identity_id, kind=RecordingEventKind.RESPONSE,
+                page_id=page_id, frame_id=frame_id, request_id=request_id,
+                url=url, status_code=response.status_code, headers=safe_headers,
+                body=None, message=f'完整文件响应：{len(response.body)} 字节；SHA256 {hashlib.sha256(response.body).hexdigest()}。仅记录演示，正式检查需重新接收比对。',
+                truncated=clipped or url_truncated)
+        if self.safety_error is not None:
+            route.abort('blockedbyclient')
+            return
         route.fulfill(
             status=response.status_code,
             headers=response.headers,
@@ -404,6 +425,9 @@ class RecordingEventCollector:
     def _request_finished(self, identity_id: str, request: Request) -> None:
         # response.body() 会让出浏览器事件循环；准备期回调必须在读取正文前退出，
         # 否则开始采集后恢复的回调会把准备期响应误记为业务事件。
+        if request in self._recorded_file_responses:
+            self._recorded_file_responses.discard(request)
+            return
         if not self._capture_enabled:
             return
         if request in self._discarded_requests:
@@ -608,6 +632,7 @@ class RecordingEventCollector:
         identity_id: str,
         page_id: str | None,
         request_id: str,
+        detail_reason: str | None = None,
     ) -> None:
         if self.safety_error is not None:
             return
@@ -622,7 +647,7 @@ class RecordingEventCollector:
             kind=RecordingEventKind.SAFETY_BLOCKED,
             page_id=page_id,
             request_id=request_id,
-            reason_code=ErrorCode.RECORD_RESPONSE_UNSUPPORTED.value,
+            reason_code=detail_reason if detail_reason in {"HEAD_UNSUPPORTED", "SSE_UNSUPPORTED", "STREAMING_UNSUPPORTED", "ENCODING_UNSUPPORTED", "CONTENT_LENGTH_REQUIRED", "CONTENT_LENGTH_INVALID", "CONTENT_LENGTH_EXCEEDED"} else ErrorCode.RECORD_RESPONSE_UNSUPPORTED.value,
         )
 
     def _append(self, *, force_safety: bool = False, **values: Any) -> None:

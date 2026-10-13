@@ -8,7 +8,7 @@ export type ProofConfig = {
   mappings: Record<string, string[]>; target_operation_path: string[]; source_contract_id: string
   identity_claims: Array<{identity_id: string; application_subject_id: string; request_path?: string; subject_path?: string[]; role_path?: string[]; application_role?: string}>; source_files: string[]
   collection?: string; protected_projection?: string[]
-  max_response_bytes: number; timeout_us: number; source_kind: 'JSON_HTTP_RESOURCE' | 'MANAGED_TRANSACTION_RECORDS' | 'REFERENCE_FILE'
+  max_response_bytes: number; timeout_us: number; source_kind: 'JSON_HTTP_RESOURCE' | 'MANAGED_TRANSACTION_RECORDS' | 'REFERENCE_FILE' | 'CREATED_OBJECT_RECORDS'
   reference_artifact?: ArtifactManifest | null; reference_origin?: 'UPLOAD' | 'REFERENCE_CAPTURE' | null
   reference_resource_id?: string; reference_owner_identity_id?: string
 }

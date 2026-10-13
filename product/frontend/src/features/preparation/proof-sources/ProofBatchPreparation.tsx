@@ -24,7 +24,7 @@ export function ProofBatchPreparation({context,onChanged}:{context:ProofContext;
         const action=review.actions.find(item=>item.action_id===source.config.action_id),resource=review.resources.find(item=>item.resource_binding_id===source.config.resource_binding_id)
         return <section key={source.source_id} className="proof-batch-item"><h3>{action?.effects.find(item=>item.effect_id===source.config.effect_id)?.label??action?.label}</h3>
           <p>测试资源：{resource?.resource_id??'尚未确认'}。读取账号：{source.config.identity_claims.map(claim=>review.identities.find(item=>item.identity_id===claim.identity_id)?.label??claim.application_subject_id).join('、')}。</p>
-          <p>读取位置：{source.config.relative_path_template}；{[...new Set(source.config.identity_claims.map(item=>item.request_path))].join('、')}。</p>
+          <p>读取位置：{source.config.source_kind==='CREATED_OBJECT_RECORDS'?`整个集合 /collections/${source.config.collection}（最多 256 个对象的标识、归属、版本、内容摘要及本次创建记录）`:source.config.relative_path_template}；{[...new Set(source.config.identity_claims.map(item=>item.request_path))].join('、')}。</p>
           <p>每次最多 {Math.ceil(source.config.max_response_bytes/1024)} KiB，超时 {source.config.timeout_us/1_000_000} 秒。</p>
           {source.config.reference_artifact&&<Button href={proofSourcesApi.referenceDownload(review.project_id,source.config.reference_artifact.asset_id)}>查看这项测试文件</Button>}
         </section>

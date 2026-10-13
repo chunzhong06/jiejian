@@ -361,6 +361,13 @@ class PersistedExecutionRequestV5(PersistedExecutionRequestV3):
         return self
 
 
+class PersistedExecutionRequestV6(PersistedExecutionRequestV5):
+    # 动态对象证据另存本次关联，Case仍引用录制时的材料，历史Case哈希不被重写。
+    schema_version:Literal['6']='6'
+    evidence_schema_version:Literal['3']='3'
+    requirement_scope:tuple[FrozenRequirementScope,...]=Field(default=(),max_length=200)
+
+
 class ExecutionV3Error(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
@@ -370,7 +377,7 @@ def canonical_execution_request_v3_bytes(request: PersistedExecutionRequestV3) -
 
 
 def canonical_execution_request_bytes(request):
-    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5}.get(request.schema_version)
+    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5,'6':PersistedExecutionRequestV6}.get(request.schema_version)
     if model is None:raise ExecutionV3Error('执行快照格式无效')
     return _canonical_execution_request(request,model)
 
@@ -416,7 +423,7 @@ def _parse_execution_request(raw,model):
             raise ValueError("execution bytes")
         payload=json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
                    parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5}.get(payload.get('schema_version'))
+        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5,'6':PersistedExecutionRequestV6}.get(payload.get('schema_version'))
         if model is None:raise ValueError('unsupported execution version')
         request=model.model_validate_json(raw,strict=True)
         if _canonical_execution_request(request,model)!=raw:
