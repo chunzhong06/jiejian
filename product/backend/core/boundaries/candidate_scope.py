@@ -135,7 +135,7 @@ def scope_items(value):
 
 
 def scope_issues(value):
-    if value.schema_version not in {"4", "5"}:
+    if value.schema_version not in {"4", "5", "6"}:
         return []
     items = scope_items(value)
     if not items:

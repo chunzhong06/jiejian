@@ -57,27 +57,42 @@ class BoundaryReviewRecord(BoundaryReviewCommand):
 
 
 def boundary_review_items(value):
-    """问题标识与文字及候选绑定；业务变化保守失效，例子和其他问题的修订不失效。"""
+    """沿用人确认的依赖范围；旧记录没有范围时仍保守失效，建议不能解除阻塞。"""
+    from product.backend.core.boundaries.candidate_corrections import review_fingerprint, suggestion_dependency_fingerprint
     records = {record.issue_id: record for record in getattr(value, "boundary_reviews", ())}
+    contexts = {item.issue_id: item for item in getattr(value, 'review_contexts', ())}
+    suggestions = {item.issue_id: item for item in getattr(value, 'review_suggestions', ())}
     content = value.content
-    business = content.model_dump(mode="json", include={"original_text", "actors", "actions", "permissions"})
     scene_questions = {item.question for item in getattr(content, "scenarios", ())}
     result = []
     for source in ("unresolved_questions", "unsupported_constraints"):
         occurrences = {}
-        for text in getattr(content, source):
+        for index, text in enumerate(getattr(content, source)):
             occurrence = occurrences.get(text, 0)
             occurrences[text] = occurrence + 1
             issue_id = "bri_" + boundary_sha256([value.candidate_id, source, text, occurrence])
-            fingerprint = boundary_sha256([issue_id, value.basis_id, business])
+            context = contexts.get(issue_id)
+            try:
+                fingerprint = review_fingerprint(value, issue_id, None if context is None else context.dependencies)
+            except ValueError:
+                # 依赖被删除时必须失效；确定性标识支持回读，不能沿用旧决定。
+                fingerprint = boundary_sha256([issue_id, 'MISSING_DEPENDENCY', value.revision])
             record = records.get(issue_id)
             # 已有情境继续走原含义选择，不能同时用新入口规避权限选项。
             if source == "unresolved_questions" and text in scene_questions:
                 continue
             current = record is not None and record.issue_fingerprint == fingerprint
             status = "NEEDS_DECISION" if record is None else "STALE" if not current else "RESOLVED" if record.outcome in RESOLVED_OUTCOMES else "OPEN"
+            suggestion = suggestions.get(issue_id)
+            try:
+                suggested = suggestion is not None and suggestion.issue_fingerprint == fingerprint and suggestion.dependency_fingerprint == suggestion_dependency_fingerprint(value, suggestion)
+            except ValueError:
+                suggested = False
             result.append({"issue_id": issue_id, "issue_fingerprint": fingerprint, "source": source,
-                "text": text, "status": status, "blocking": status != "RESOLVED", "decision": record})
+                "text": text, "path": f'candidate.content.{source}[{index}]', "status": status, "blocking": status != "RESOLVED", "decision": record,
+                'dependencies': None if context is None else context.dependencies,
+                'suggestion': suggestion.model_dump(mode='json', exclude={'dependency_fingerprint'}) if suggested else None,
+                'invalidation_reason': None if status != 'STALE' else '相关要求、规则或确认范围已变化' if context else '旧记录未保存关联范围，需要核对一次并保存关联要求'})
     return result
 
 

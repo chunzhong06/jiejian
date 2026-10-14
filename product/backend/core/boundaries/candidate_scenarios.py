@@ -71,6 +71,29 @@ def freeze_scenario(scenario: RuleScenarioInput, content) -> RuleScenario:
         "original_text_hash": text_hash, "scenario_fingerprint": fingerprint}))
 
 
+def scenario_dependencies(scenario, content):
+    """已有完整要求关联时才局部复用；旧自由文本情境无法证明依赖时继续保守核对。"""
+    ids = {item.item_id for option in scenario.options for item in option.replacements}
+    sources = [item for item in getattr(content, 'requirement_sources', ()) if ids.intersection(item.permission_item_ids)]
+    if not ids <= {key for source in sources for key in source.permission_item_ids}:
+        return None
+    original = normalized_rule_text(content.original_text)
+    excerpt = normalized_rule_text(scenario.original_excerpt)
+    if original.count(excerpt) != 1 or scenario.occurrence != 1:
+        return None
+    rules = [item for option in scenario.options for item in option.replacements]
+    action_ids = {item.business_action_item_id for item in rules}
+    actor_ids = {key for item in rules for key in (item.subject_actor_item_id, item.resource_owner_actor_item_id)}
+    actions = {item.item_id: item for item in content.actions}
+    actors = {item.item_id: item for item in content.actors}
+    if not action_ids <= actions.keys() or not actor_ids <= actors.keys():
+        return None
+    return boundary_sha256({'scenario':scenario.model_dump(mode='json', include=set(RuleScenarioInput.model_fields)),
+        'requirements':[item.model_dump(mode='json') for item in sorted(sources, key=lambda item:item.requirement_id)],
+        'actions':[actions[key].model_dump(mode='json') for key in sorted(action_ids)],
+        'actors':[actors[key].model_dump(mode='json') for key in sorted(actor_ids)]})
+
+
 class RuleCandidateDecide(BoundaryModel):
     operation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     expected_basis_id: str = Field(pattern=r"^rb_[0-9a-f]{64}$")

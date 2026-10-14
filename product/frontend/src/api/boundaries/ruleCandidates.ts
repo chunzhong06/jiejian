@@ -8,8 +8,9 @@ export type RuleScenario = {
 }
 export type MeaningChoice = {scenario_id: string; scenario_fingerprint: string; action: 'SELECT'|'CORRECT'|'DEFER'|'DISMISS'; option_id?: string; correction?: string}
 export type ScenarioDecision = {scenario_id: string; status: MeaningChoice['action']|'NEEDS_DECISION'; decision: null|{decision_id: string; option_id: string|null; correction: string|null}}
-export type BoundaryChoice = {issue_id: string; issue_fingerprint: string; outcome: 'NOT_SEPARATE_ACTION'|'AGENT_OVERINTERPRETATION'|'REPRESENTED_BY_RULES'|'BUSINESS_RULE'|'PREPARATION_DEPENDENCY'|'EVIDENCE_GAP'|'COVERAGE_GAP'|'DEFER'; reason: string; retained_requirement: string; permission_item_ids?: string[]}
-export type BoundaryReview = {issue_id: string; issue_fingerprint: string; source: 'unresolved_questions'|'unsupported_constraints'; text: string; status: 'NEEDS_DECISION'|'STALE'|'OPEN'|'RESOLVED'; blocking: boolean; decision: (BoundaryChoice & {output_revision:number})|null}
+export type ReviewDependencies = {requirement_ids:string[];permission_item_ids:string[]}
+export type BoundaryChoice = {issue_id: string; issue_fingerprint: string; outcome: 'NOT_SEPARATE_ACTION'|'AGENT_OVERINTERPRETATION'|'REPRESENTED_BY_RULES'|'BUSINESS_RULE'|'PREPARATION_DEPENDENCY'|'EVIDENCE_GAP'|'COVERAGE_GAP'|'DEFER'; reason: string; retained_requirement: string; permission_item_ids?: string[];dependencies?:ReviewDependencies|null}
+export type BoundaryReview = {issue_id: string; issue_fingerprint: string; source: 'unresolved_questions'|'unsupported_constraints'; text: string; status: 'NEEDS_DECISION'|'STALE'|'OPEN'|'RESOLVED'; blocking: boolean; decision: (BoundaryChoice & {output_revision:number})|null;suggestion?:BoundaryChoice|null;dependencies?:ReviewDependencies|null;invalidation_reason?:string|null}
 export type BoundaryReviewGap = {candidate_id:string; revision:number; issue_id:string; message:string; status:string; review_url:string;next_url?:string|null;next_label?:string|null}
 export type RequirementSource = {requirement_id:string;title:string;origin:'USER'|'SOURCE'|'AGENT';source_excerpt:string;interpretation:string;permission_item_ids:string[]}
 export type ScopeChoice = {requirement_id:string;requirement_fingerprint:string;disposition:'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE'|'DEFER'|'SUPPORTING';requirement:string;reason:string;time_scope:'CHECK_WINDOW'|'HISTORY'|'NOT_APPLICABLE';related_requirement_ids?:string[]}
@@ -23,6 +24,7 @@ export type RuleCandidateView = {
   candidate: {
     candidate_id: string; project_id: string; revision: number; basis_id: string
     submitted_via: 'MCP' | 'LOCAL_GUI'; created_at_us: number
+    supporting_notes?:Array<{note_id:string;kind:'SOURCE_CLUE'|'TECHNICAL_PRECONDITION'|'CAPABILITY_INFORMATION';text:string;state:'ACTIVE'|'WITHDRAWN';withdrawal_reason?:string|null;related_requirement_ids:string[]}>
     content: { original_text: string; actors: ProposedActorDto[]; actions: ProposedActionDto[]
       permissions: ProposedPermissionDto[]; examples: Array<{description: string; permission_item_id: string | null; uncovered_reason: string | null}>
       unresolved_questions: string[]; unsupported_constraints: string[]; scenarios?: RuleScenario[];requirement_sources?:RequirementSource[];coverage_suggestions?:Array<{issue_id:string;targets:CoverageChoice['targets'];time_scope:CoverageChoice['time_scope'];explanation:string}> }

@@ -5,6 +5,7 @@ from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.boundaries.permissions import permission_relation_consistent
 from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision
 from product.backend.core.boundaries.candidate_scenarios import CandidateApprovalEntities, CandidateActorReference, CandidateActionReference, CandidateEffectReference
+from product.backend.core.boundaries.candidate_scenarios import scenario_dependencies
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.candidate_reviews import boundary_review_items
 from product.backend.core.boundaries.candidate_scope import scope_issues
@@ -12,8 +13,10 @@ from product.backend.workflows.business_boundaries.candidates.coverage import co
 
 
 CANDIDATE_REVISION_GUIDANCE = [
-    "优先按next_tasks处理：USER由人核对，AGENT修订规则，CAPABILITY说明能力边界。不要把材料问题一律转为情境。",
-    "先保存requirement_sources，再由人确认本轮范围；补充权限引用已确认要求，源码接口只作为线索。可用merge=true分批补充同一候选，未提交项不会删除。",
+    "先修正明确的草稿错误，再把真正未确定的业务含义交给用户。next_tasks.handler只说明该项决定由谁作出，不禁止你修订其他草稿、补全关联或提出纠正建议。用户已经明确允许的操作不能反写为DENY，也不能为改回用户原话编造相反选项。",
+    "一次整理requirement_sources与对应权限；源码线索、技术前提、通用能力说明放在候选保存命令的supporting_notes或相关要求解释中，不自动新增业务要求。已有来源仍保留，由用户关联为补充依据。",
+    "旧问题不适用或由Agent误读造成时，保留原文，在保存命令的review_suggestions中引用issue_id与当前issue_fingerprint，提出reason、retained_requirement和outcome，可关联dependencies。GUI由用户核对建议，MCP不能生成决定。未读回已有问题前不要猜测issue_id。",
+    "unsupported_constraints只记录本候选实际要求遇到的能力限制，不能照抄context.limitations的通用说明。旧限制需说明适用的业务要求、缺失能力/证明及恢复条件；纠正建议本身不解除阻塞。辅助说明可按note_id设WITHDRAWN并保留text和withdrawal_reason，不得撤回原业务要求或旧问题。",
     "已关联具体权限、入口和时间范围的准备缺口可进入规则审阅；检查前仍核验实际计划与材料。PLANNED不是已覆盖或PASS。任意历史范围仍阻塞。",
     "不单独建模、基础接口归属及Agent额外推断可由用户在候选详情的“业务边界核对”直接确认；无需编造权限选项或原文摘录。",
     "原问题和unsupported_constraints原文持续保留。人工分类及保留的实际要求从boundary_reviews读取；准备前提、证据及覆盖缺口仍阻塞，不能用分类代替检查。",
@@ -48,7 +51,12 @@ def scenario_state(work, value, *, extra=None):
     for scenario in getattr(value.content, "scenarios", ()):
         decision = latest.get(scenario.scenario_id)
         if decision is not None and decision.scenario_fingerprint != scenario.scenario_fingerprint:
-            decision = None
+            prior = work.rule_candidates.get(value.project_id, value.candidate_id, decision.expected_revision)
+            old = None if prior is None else next((item for item in getattr(prior.content, 'scenarios', ()) if item.scenario_id == scenario.scenario_id), None)
+            old_key = None if old is None else scenario_dependencies(old, prior.content)
+            new_key = scenario_dependencies(scenario, value.content)
+            if value.schema_version != '6' or old is None or old.scenario_fingerprint != decision.scenario_fingerprint or old_key is None or old_key != new_key:
+                decision = None
         option = None if decision is None else next((item for item in scenario.options if item.option_id == decision.option_id), None)
         status = decision.action if decision is not None else "NEEDS_DECISION"
         if status == "SELECT" and option is None:
@@ -72,7 +80,8 @@ def decision_digest(states):
 
 
 def pending_scenario_issues(states, conflicts):
-    issues = [{"code": "NEEDS_DECISION", "message": "这处含义仍需你选择或说明。", "scenario_id": item["scenario_id"]}
+    issues = [{"code": "SCENARIO_CORRECTION_REQUIRED" if item['status']=='CORRECT' else "NEEDS_DECISION",
+        "message": "请按用户已保存的纠正修订草稿，不重复询问同一个问题。" if item['status']=='CORRECT' else "这处含义仍需你选择或说明。", "scenario_id": item["scenario_id"]}
         for item in states if item["status"] not in {"SELECT", "DISMISS"}]
     if conflicts:
         issues.append({"code": "CHOICES_CONFLICT", "message": "这些选择对同一权限提出了不同要求，请重新整理。"})
@@ -127,7 +136,9 @@ def check_candidate_edit(work, current, incoming):
             raise _edit_error(current, "CANDIDATE_SCENARIO_REVIEW_REQUIRED", "修订未保存：已有未决情境不能静默删除。",
                 [{"code": "SCENARIO_REVIEW_REQUIRED", "path": f"candidate.content.scenarios[{index}]", "scenario_id": scenario_id}],
                 "保留这处情境；请用户在候选详情的“含义核对”作选择或纠正。不适用时由用户填写原因并明确结束该问题，Agent不能代替人的决定。")
-        if new is not None and new.scenario_fingerprint == old.scenario_fingerprint and state_by_id[scenario_id]["status"] == "SELECT":
+        same_meaning = new is not None and (new.scenario_fingerprint == old.scenario_fingerprint or
+            scenario_dependencies(old, current.content) is not None and scenario_dependencies(old, current.content) == scenario_dependencies(new, incoming))
+        if same_meaning and state_by_id[scenario_id]["status"] == "SELECT":
             actual = {item.item_id: item for item in incoming.permissions}
             for option in old.options:
                 if option.option_id == state_by_id[scenario_id]["decision"].option_id:
