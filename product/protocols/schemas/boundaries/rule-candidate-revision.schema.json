@@ -1,5 +1,135 @@
 {
   "$defs": {
+    "AssistedRuleCandidateRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "basis_id": {
+          "pattern": "^rb_[0-9a-f]{64}$",
+          "title": "Basis Id",
+          "type": "string"
+        },
+        "boundary_reviews": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BoundaryReviewRecord"
+          },
+          "maxItems": 20,
+          "title": "Boundary Reviews",
+          "type": "array"
+        },
+        "candidate_id": {
+          "pattern": "^rcd_[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/ScopedCandidateContent"
+        },
+        "coverage_dependencies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageDependency"
+          },
+          "maxItems": 20,
+          "title": "Coverage Dependencies",
+          "type": "array"
+        },
+        "coverage_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageLink"
+          },
+          "maxItems": 20,
+          "title": "Coverage Links",
+          "type": "array"
+        },
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "review_contexts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReviewContext"
+          },
+          "maxItems": 20,
+          "title": "Review Contexts",
+          "type": "array"
+        },
+        "review_suggestions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SavedReviewSuggestion"
+          },
+          "maxItems": 20,
+          "title": "Review Suggestions",
+          "type": "array"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "6",
+          "default": "6",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_decisions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ScopeDecision"
+          },
+          "maxItems": 100,
+          "title": "Scope Decisions",
+          "type": "array"
+        },
+        "scope_references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ScopeReference"
+          },
+          "maxItems": 100,
+          "title": "Scope References",
+          "type": "array"
+        },
+        "submitted_via": {
+          "enum": [
+            "MCP",
+            "LOCAL_GUI"
+          ],
+          "title": "Submitted Via",
+          "type": "string"
+        },
+        "supporting_notes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SupportingNote"
+          },
+          "maxItems": 100,
+          "title": "Supporting Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project_id",
+        "candidate_id",
+        "revision",
+        "basis_id",
+        "content",
+        "submitted_via",
+        "created_at_us"
+      ],
+      "title": "AssistedRuleCandidateRevision",
+      "type": "object"
+    },
     "BoundaryReviewRecord": {
       "additionalProperties": false,
       "properties": {
@@ -149,6 +279,33 @@
       ],
       "title": "BusinessRevisionState",
       "type": "string"
+    },
+    "CoverageDependency": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "issue_id",
+        "output_revision",
+        "fingerprint"
+      ],
+      "title": "CoverageDependency",
+      "type": "object"
     },
     "CoverageLink": {
       "additionalProperties": false,
@@ -1005,6 +1162,65 @@
       "title": "RequirementSource",
       "type": "object"
     },
+    "ReviewContext": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "pattern": "^brd_[0-9a-f]{32}$",
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/ReviewDependencies"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "output_revision": {
+          "minimum": 2,
+          "title": "Output Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "issue_id",
+        "decision_id",
+        "dependencies",
+        "output_revision"
+      ],
+      "title": "ReviewContext",
+      "type": "object"
+    },
+    "ReviewDependencies": {
+      "additionalProperties": false,
+      "properties": {
+        "permission_item_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Permission Item Ids",
+          "type": "array"
+        },
+        "requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Requirement Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirement_ids"
+      ],
+      "title": "ReviewDependencies",
+      "type": "object"
+    },
     "ReviewedRuleCandidateRevision": {
       "additionalProperties": false,
       "description": "只有人的边界核对升级为v3；旧候选按原版本读，Agent不能提交这些决定。",
@@ -1348,6 +1564,82 @@
         "replacements"
       ],
       "title": "RuleScenarioOption",
+      "type": "object"
+    },
+    "SavedReviewSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "dependencies": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReviewDependencies"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dependency_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Dependency Fingerprint",
+          "type": "string"
+        },
+        "issue_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Issue Fingerprint",
+          "type": "string"
+        },
+        "issue_id": {
+          "pattern": "^bri_[0-9a-f]{64}$",
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "NOT_SEPARATE_ACTION",
+            "AGENT_OVERINTERPRETATION",
+            "REPRESENTED_BY_RULES",
+            "BUSINESS_RULE",
+            "PREPARATION_DEPENDENCY",
+            "EVIDENCE_GAP",
+            "COVERAGE_GAP",
+            "DEFER"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "permission_item_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Permission Item Ids",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "retained_requirement": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Retained Requirement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_id",
+        "issue_fingerprint",
+        "outcome",
+        "reason",
+        "retained_requirement",
+        "dependency_fingerprint"
+      ],
+      "title": "SavedReviewSuggestion",
       "type": "object"
     },
     "ScopeDecision": {
@@ -1731,6 +2023,70 @@
       ],
       "title": "ScopedRuleCandidateRevision",
       "type": "object"
+    },
+    "SupportingNote": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "SOURCE_CLUE",
+            "TECHNICAL_PRECONDITION",
+            "CAPABILITY_INFORMATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "note_id": {
+          "pattern": "^note_[0-9a-f]{16}$",
+          "title": "Note Id",
+          "type": "string"
+        },
+        "related_requirement_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Related Requirement Ids",
+          "type": "array"
+        },
+        "state": {
+          "default": "ACTIVE",
+          "enum": [
+            "ACTIVE",
+            "WITHDRAWN"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "withdrawal_reason": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Withdrawal Reason"
+        }
+      },
+      "required": [
+        "note_id",
+        "kind",
+        "text"
+      ],
+      "title": "SupportingNote",
+      "type": "object"
     }
   },
   "discriminator": {
@@ -1739,7 +2095,8 @@
       "2": "#/$defs/RuleCandidateRevision",
       "3": "#/$defs/ReviewedRuleCandidateRevision",
       "4": "#/$defs/ScopedRuleCandidateRevision",
-      "5": "#/$defs/GroupedRuleCandidateRevision"
+      "5": "#/$defs/GroupedRuleCandidateRevision",
+      "6": "#/$defs/AssistedRuleCandidateRevision"
     },
     "propertyName": "schema_version"
   },
@@ -1758,6 +2115,9 @@
     },
     {
       "$ref": "#/$defs/GroupedRuleCandidateRevision"
+    },
+    {
+      "$ref": "#/$defs/AssistedRuleCandidateRevision"
     }
   ]
 }

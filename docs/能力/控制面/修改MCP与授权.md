@@ -20,6 +20,8 @@
 
 ## Agent 协作的完整顺序
 
+MCP输入模型在调用业务服务前单独解析；只在该边界报告INPUT_INVALID及安全字段提示。业务服务内部ValidationError报告STORAGE_STATE和诊断编号，不回显异常正文或输入值。GUI内部校验错误同样与RequestValidationError分开，诊断保留产品版本、前端构建身份、受控项目/候选引用及trace_id。MCP的system_status从实际服务目录返回frontend_identity；无法核验时明确UNCONFIRMED。材料页据实际接口原因处理，不以权限为空推断读取失败。
+
 | 阶段 | Agent 做什么 | 界鉴与用户如何接续 |
 | --- | --- | --- |
 | 权限约定 | 读取上下文，整理角色、动作和允许/禁止要求，保存候选 | 用户审阅完整变更并批准 |

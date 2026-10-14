@@ -13,6 +13,7 @@ from product.backend.core.boundaries.proposals import (
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
 from product.backend.core.boundaries.candidate_scenarios import RuleScenario, RuleScenarioInput, freeze_scenario
 from product.backend.core.boundaries.candidate_reviews import BoundaryReviewRecord
+from product.backend.core.boundaries.candidate_corrections import ReviewSuggestion, SavedReviewSuggestion, ReviewContext, SupportingNote, CoverageDependency
 from product.backend.core.boundaries.candidate_scope import RequirementSource, ScopeDecision, ScopeReference, CoverageLink, CoverageSuggestion
 
 CANDIDATE_ID_PATTERN = r"^rcd_[0-9a-f]{32}$"
@@ -196,6 +197,28 @@ class GroupedRuleCandidateRevision(ScopedRuleCandidateRevision):
         return self
 
 
+class AssistedRuleCandidateRevision(GroupedRuleCandidateRevision):
+    # v6追加Agent建议与人的依赖范围；旧根和旧决定原样读取，不自动推断批准。
+    schema_version: Literal['6'] = '6'
+    review_suggestions: tuple[SavedReviewSuggestion, ...] = Field(default=(), max_length=20)
+    review_contexts: tuple[ReviewContext, ...] = Field(default=(), max_length=20)
+    supporting_notes: tuple[SupportingNote, ...] = Field(default=(), max_length=100)
+    coverage_dependencies: tuple[CoverageDependency, ...] = Field(default=(), max_length=20)
+
+    @model_validator(mode='after')
+    def assisted_identity(self):
+        for records, key in ((self.review_suggestions, 'issue_id'), (self.review_contexts, 'issue_id'),
+                             (self.supporting_notes, 'note_id'), (self.coverage_dependencies, 'issue_id')):
+            if len({getattr(item, key) for item in records}) != len(records):
+                raise ValueError('辅助记录不能重复')
+            if any(getattr(item, 'output_revision', 0) > self.revision for item in records):
+                raise ValueError('辅助记录不能引用未来修订')
+        records = {item.issue_id: item for item in self.boundary_reviews}
+        if any(item.issue_id not in records or records[item.issue_id].decision_id != item.decision_id for item in self.review_contexts):
+            raise ValueError('局部依赖必须对应同一次人工决定')
+        return self
+
+
 def scoped_content(value):
     data = value.model_dump(exclude={"scenarios"})
     return ScopedCandidateContent(**data, scenarios=tuple(freeze_scenario(item, value) for item in getattr(value, "scenarios", ())))
@@ -206,13 +229,15 @@ def revised_candidate(current, **changes):
     values = current.model_dump(exclude={"schema_version", "content"})
     values["content"] = scoped_content(current.content)
     values.update(changes)
+    if current.schema_version == '6' or any(key in changes for key in ('review_contexts', 'review_suggestions', 'supporting_notes', 'coverage_dependencies')):
+        return AssistedRuleCandidateRevision(**values)
     if current.schema_version not in {'4', '5'} and not changes.get('coverage_links') and not values['content'].requirement_sources:
         values['content'] = RuleCandidateContent(**values['content'].model_dump(exclude={'requirement_sources', 'coverage_suggestions'}))
         return ReviewedRuleCandidateRevision(**values)
     return GroupedRuleCandidateRevision(**values) if current.schema_version == '5' or 'scope_references' in changes else ScopedRuleCandidateRevision(**values)
 
 
-_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision | ReviewedRuleCandidateRevision | ScopedRuleCandidateRevision | GroupedRuleCandidateRevision, Field(discriminator="schema_version")])
+_reader = TypeAdapter(Annotated[LegacyRuleCandidateRevision | RuleCandidateRevision | ReviewedRuleCandidateRevision | ScopedRuleCandidateRevision | GroupedRuleCandidateRevision | AssistedRuleCandidateRevision, Field(discriminator="schema_version")])
 
 
 def read_candidate_revision(payload: str):
@@ -232,6 +257,9 @@ class RuleCandidateSave(BoundaryModel):
     expected_revision: int | None = Field(default=None, ge=1)
     content: ScopedCandidateContentInput
     merge: bool = False
+    # 省略即保留；按稳定标识追加或修订。Agent只能提交建议，不能携带人工决定。
+    review_suggestions: tuple[ReviewSuggestion, ...] = Field(default=(), max_length=20)
+    supporting_notes: tuple[SupportingNote, ...] = Field(default=(), max_length=100)
 
     @model_validator(mode="after")
     def paired_revision(self) -> RuleCandidateSave:

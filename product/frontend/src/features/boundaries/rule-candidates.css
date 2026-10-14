@@ -68,6 +68,35 @@
 .boundary-review-intro p { margin-block:var(--space-12);max-width:56ch; }
 .boundary-review-help { margin-block:var(--space-12) var(--space-24); }
 .boundary-review-help p { max-width:72ch; }
+/* 一屏先说明当前责任，原文、已确认项和后续任务在辅助入口展开。 */
+.candidate-work-plan { display:grid;gap:var(--space-32); }
+.candidate-work-plan>header { display:flex;justify-content:space-between;align-items:center;gap:var(--space-24); }
+.candidate-work-plan h2 { margin-block:var(--space-12); }
+.candidate-work-plan header p { max-width:65ch;color:var(--color-secondary); }
+.candidate-work-path { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-24);list-style:none;padding:var(--space-24) 0;margin:0;border-block:1px solid var(--color-border);text-align:center; }
+.candidate-work-path li { display:grid;gap:var(--space-8);color:var(--color-secondary); }
+.candidate-work-path [aria-current] strong { color:var(--color-primary-ink); }
+.candidate-work-path span { font-size:var(--font-secondary); }
+.candidate-work-focus { display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,2fr);gap:var(--space-32);align-items:start; }
+.candidate-work-focus h3 { margin-block:0 var(--space-12); }
+.candidate-work-focus ul { list-style:none;padding:0;margin:0; }
+.candidate-work-focus li { padding-block:var(--space-16);border-block-end:1px solid var(--color-border); }
+.candidate-work-focus li:first-child { padding-block-start:0; }
+.candidate-work-focus li p { color:var(--color-secondary);font-size:var(--font-secondary);max-width:66ch; }
+.candidate-work-handoff { display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);padding-block:var(--space-24);border-block-end:1px solid var(--color-border); }
+.candidate-work-handoff>p { max-width:50ch;color:var(--color-secondary); }
+.candidate-work-handoff>div { display:flex;gap:var(--space-12);flex-wrap:wrap;justify-content:flex-end; }
+.candidate-work-later summary { color:var(--color-primary-ink);cursor:pointer; }
+.candidate-task-counts { display:flex;justify-content:center;gap:var(--space-48);margin-block:var(--space-24); }
+.candidate-task-counts strong { font-size:var(--font-local);margin-inline-end:var(--space-8); }
+.boundary-correction { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:var(--space-24) var(--space-32);margin-block:var(--space-24);padding:var(--space-24);background:var(--color-surface);border-radius:var(--radius-medium); }
+.boundary-correction h4 { margin-block:var(--space-12);font-size:var(--font-local); }
+.boundary-review-heading h3>.editorial-eyebrow { display:block;margin-block-end:var(--space-8);font-weight:var(--weight-medium); }
+.boundary-correction p { max-width:62ch;line-height:1.75; }
+.boundary-correction-requirement { font-weight:600; }
+.boundary-correction-note { grid-column:1/-1;margin:0; }
+.boundary-correction .ant-btn { display:block;margin-inline-start:auto; }
+@media(max-width:760px){.candidate-work-focus,.boundary-correction{grid-template-columns:minmax(0,1fr)}.candidate-work-path{gap:var(--space-12)}.candidate-work-handoff{flex-direction:column;align-items:stretch}.candidate-task-counts{gap:var(--space-16);flex-wrap:wrap}.candidate-work-plan>header{align-items:flex-start}}
 .boundary-review-decision { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:var(--space-32);margin-block:var(--space-24); }
 .boundary-review-decision h4 { font-size:var(--font-local);margin:var(--space-8) 0; }
 .boundary-review-decision p { margin:var(--space-8) 0; }

@@ -15,7 +15,7 @@ from product.backend.composition import ApplicationCore
 from product.backend.core.boundaries.proposals import ProposedActionItem, ProposedActorItem, ProposedPermissionItem
 from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
 from product.backend.core.boundaries.candidate_scenarios import RuleCandidateDecide
-from product.backend.core.boundaries.candidate_reviews import BoundaryReviewCommand
+from product.backend.core.boundaries.candidate_corrections import ContextualBoundaryReviewCommand as BoundaryReviewCommand
 from product.backend.core.boundaries.candidate_scope import ScopeDecisionCommand, ScopeBatchCommand, ScopeBatchChoice, CoverageLinkCommand, CoverageTarget
 from product.backend.core.boundaries.rule_preview import RulePreviewCommand
 from product.backend.workflows.business_boundaries import (

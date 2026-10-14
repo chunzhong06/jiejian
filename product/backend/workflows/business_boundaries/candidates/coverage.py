@@ -2,11 +2,13 @@
 import re
 from product.backend.core.boundaries.candidate_reviews import boundary_review_items
 from product.backend.core.boundaries.candidate_scope import scope_items, only_auxiliary_scope
+from product.backend.core.boundaries.candidate_corrections import coverage_dependency_fingerprint
 
 
 def coverage_items(value):
     links = {item.issue_id: item for item in getattr(value, 'coverage_links', ())}
     permissions = {item.item_id: item for item in value.content.permissions if item.effective_state.value == 'ACTIVE'}
+    dependencies = {item.issue_id: item for item in getattr(value, 'coverage_dependencies', ())}
     result = []
     for review in boundary_review_items(value):
         link = links.get(review['issue_id'])
@@ -16,6 +18,9 @@ def coverage_items(value):
             and review['decision'].output_revision == link.review_revision
             and review['decision'].outcome in {'PREPARATION_DEPENDENCY', 'EVIDENCE_GAP', 'COVERAGE_GAP'}
             and {target.permission_item_id for target in link.targets} <= permissions.keys())
+        dependency = dependencies.get(review['issue_id'])
+        if dependency is not None:
+            current = current and dependency.output_revision == link.output_revision and dependency.fingerprint == coverage_dependency_fingerprint(value, link.targets)
         status = 'STALE' if not current else 'UNSUPPORTED_HISTORY' if link.time_scope == 'HISTORY' else 'DRAFT' if not link.complete else 'PLANNED'
         result.append({'issue_id': review['issue_id'], 'status': status, 'link': link,
             'message': '业务依据已变化，请重新关联' if not current else '任意历史范围仍不受支持，不能转为本次过程检查' if status == 'UNSUPPORTED_HISTORY' else '关联清单尚未确认完整，继续保留阻塞；可补充其他权限与入口' if status == 'DRAFT' else '规则可审阅；批准后逐项核验入口与证明，尚未检查'})

@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Any, Literal
 
 from mcp.server import MCPServer
@@ -65,6 +66,7 @@ def build_mcp_control(
     *,
     control_origin: str,
     control_host: str,
+    frontend_dir: Path | None = None,
 ) -> MCPControl:
     """注册精确分级工具集，并绑定当前 loopback origin。"""
 
@@ -159,8 +161,9 @@ def build_mcp_control(
     def rule_candidate_save(ctx: Context, project_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
         """批量保存权限及要求来源，或在信息不足时先保存范围。读取context/show的next_tasks与scope_review；可merge=true分批保存同一候选。保留原要求与正常对照，不把材料缺口改成业务选项；不能确认范围、批准或开始检查。"""
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        return _json(_invoke(lambda: context.rule_candidates.save(project_id,
-            RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), submitted_via="MCP"), input_model=RuleCandidateSave))
+        command = _invoke(lambda:RuleCandidateSave.model_validate_json(json.dumps(candidate, allow_nan=False)), input_model=RuleCandidateSave)
+        return _json(_invoke(lambda: context.rule_candidates.save(project_id, command, submitted_via="MCP"),
+            diagnostic_context={'tool':'rule_candidate_save', 'project_id':project_id, 'candidate_id':command.candidate_id, 'revision':command.expected_revision}))
 
     @server.tool(name="jiejian_rule_candidate_show", structured_output=True)
     def rule_candidate_show(ctx: Context, project_id: str, candidate_id: str, revision: int | None = None) -> dict[str, Any]:
@@ -178,8 +181,8 @@ def build_mcp_control(
     def rule_preview(ctx: Context, project_id: str, reference: dict[str, Any], situation: dict[str, Any] | None = None) -> dict[str, Any]:
         """查看精确规则怎样适用；只做规则匹配，不执行目标或判断是否安全。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        return _json(_invoke(lambda: context.rule_candidates.preview(project_id,
-            RulePreviewCommand.model_validate_json(json.dumps({'reference': reference, 'situation': situation}, allow_nan=False)))))
+        command = _invoke(lambda:RulePreviewCommand.model_validate_json(json.dumps({'reference': reference, 'situation': situation}, allow_nan=False)), input_model=RulePreviewCommand)
+        return _json(_invoke(lambda: context.rule_candidates.preview(project_id, command)))
 
     @server.tool(name="jiejian_identity_list", structured_output=True)
     def identity_list(ctx: Context, project_id: str) -> list[dict[str, Any]]:
@@ -189,6 +192,7 @@ def build_mcp_control(
     @server.tool(name="jiejian_system_status", structured_output=True)
     def system_status(ctx: Context) -> dict[str, Any]:
         require_mcp_level(access, ctx, MCPAccessLevel.READ)
+        from product.backend.infra.runtime.frontend_assets import frontend_asset_identity
         environment = runtime_environment_details()
         return {
             "schema_version": "1",
@@ -196,6 +200,7 @@ def build_mcp_control(
             "api": "available",
             **context.worker_status(),
             "browser": environment["playwright"]["status"],
+            "frontend_identity": frontend_asset_identity(frontend_dir),
         }
 
     @server.tool(name="jiejian_change_show",structured_output=True)

@@ -2,6 +2,10 @@
 from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import TypeVar
+import logging
+import re
+from uuid import uuid4
+from product.backend import __version__
 from mcp import MCPError
 from mcp.server.mcpserver import Context
 from pydantic import BaseModel, ValidationError
@@ -22,6 +26,7 @@ def _recovery_for(code: str) -> str:
         ErrorCode.MCP_AUTH_REQUIRED.value: "请在界鉴的连接与授权页核对连接是否暂停或失效，并按所选客户端指引恢复；无需复制凭据。",
         ErrorCode.MCP_PERMISSION_REQUIRED.value: "请打开界鉴“连接与授权”，选择本应用并调整允许范围。所需级别见 required_level；保存候选和建议需要 PREPARE。不得代替用户授权。",
         ErrorCode.INPUT_INVALID.value: "读取当前工具上下文，按字段提示修正输入；不改变原业务要求或绕过人工批准。",
+        ErrorCode.STORAGE_STATE.value: "界鉴内部记录未能读取。保留业务要求与材料，提供诊断编号，并在界鉴系统状态页核对实际版本与前端构建；不要通过改权限或删除候选重试。",
     }.get(code, "请回到界鉴查看当前应用状态并按页面提示恢复。")
 
 def _as_mcp_error(exc: JiejianError) -> MCPError:
@@ -133,7 +138,7 @@ def _validation_issues(exc: ValidationError, model: type[BaseModel], root: str =
     return issues
 
 
-def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None = None, input_root: str = 'candidate') -> _T:
+def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None = None, input_root: str = 'candidate', diagnostic_context: dict | None = None) -> _T:
     try:
         return operation()
     except JiejianError as exc:
@@ -145,4 +150,12 @@ def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None 
             summary = "；".join(f"{item['path']}：{item['message']}" for item in issues[:3])
             raise _as_mcp_error(JiejianError(ErrorCode.INPUT_INVALID, "工具输入不符合公开合同：" + summary,
                 details={"issues": issues, "recovery": "读取当前工具上下文，按字段提示修正输入；不要修改业务含义来绕过校验"})) from None
-        raise _as_mcp_error(JiejianError(ErrorCode.INPUT_INVALID, "工具输入不符合公开合同，请读取上下文中的输入格式")) from None
+        diagnostic_id = uuid4().hex
+        # 只记录受控标识与错误数量，不记录异常正文、原文、秘密或客户端任意字段。
+        safe = {key:value for key,value in (diagnostic_context or {}).items()
+            if key in {'project_id', 'candidate_id', 'tool', 'revision'} and
+            (type(value) is int and value >= 0 or isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_]{1,96}', value))}
+        details = {'diagnostic_id':diagnostic_id, 'version':__version__, 'validation_error_count':exc.error_count(), **safe}
+        logging.getLogger(__name__).error('MCP internal record validation: %s', details)
+        raise _as_mcp_error(JiejianError(ErrorCode.STORAGE_STATE,
+            '界鉴内部记录校验失败，尚未完成本次读取；请保留现有业务要求并提交诊断编号', details=details)) from None

@@ -14,6 +14,7 @@ import { RequirementNotice } from '../../shared/ui/RequirementNotice'
 import { RulePreparationProgress } from './RulePreparationProgress'
 import { RulePreparationStages } from '../../shared/ui/RulePreparationStages'
 import { RuleCandidateList } from './RuleCandidateList'
+import { CandidateWorkPlan } from './CandidateWorkPlan'
 import './rule-candidates.css'
 
 export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision, recoveryOperation, onProposal, onSelected, onRecoveryChange, onExit, onNavigate, onOverview }: {
@@ -107,6 +108,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
       if (latest.candidate.revision !== selected.candidate.revision || latest.visibility?.archived) {setNotice('候选已有变化，请核对最新内容后继续。'); return}
       await navigator.clipboard.writeText([`请补充界鉴项目 ${projectId} 的规则候选 ${latest.candidate.candidate_id}，修订 ${latest.candidate.revision}。`,
         '先调用 jiejian_rule_context 和 jiejian_rule_candidate_show 读取最新内容，再读取 jiejian_application_understanding 沿用已确认的角色和动作。',
+        '先修正明确的草稿错误。USER只表示最终业务决定需要我作出，不禁止你修订其他草稿、补充关联或提出纠正建议。不要因为存在USER事项而说无事可做。',
         ...(latest.next_tasks ?? latest.issues).map(item => `${'handler' in item ? {USER:'需用户确认，勿代办',AGENT:'请修改候选',CAPABILITY:'能力或覆盖问题，先说明可行路径'}[item.handler] : '需要处理'}${item.path ? `（${item.path}）` : ''}：${item.message}${item.permission_item_ids?.length?` 对应权限项：${item.permission_item_ids.join('、')}`:''}`),
         ...(latest.revision_guidance ?? []),
         ...(latest.scope_review ?? []).filter(item=>item.status==='CONFIRMED').map(item=>`已确认范围（沿用，不重复提问）：${item.source.title}；${item.decision?.disposition}；实际要求：${item.decision?.requirement}；时间：${item.decision?.time_scope}`),
@@ -115,7 +117,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
         '只处理当前未解决事项。需要修正规则时用 jiejian_rule_candidate_save 更新原候选，可merge=true分批补充；保持来源、已确认要求和正常使用对照。',
         '没有范围清单时先补requirement_sources；不要把全部源码接口自动变成本轮权限，不凭空扩大历史范围。',
         '仅有真实权限歧义才提供情境；范围判断由我在本轮业务范围确认。材料缺口走准备流程，能力不足明确说明，不能说记录限制即可通过。返回准确review_url，不替我批准。'].join('\n'))
-      if (generation === current.current) setNotice('补充请求已复制，请粘贴到原 Agent 对话中；保存后点击“读取候选”。')
+      if (generation === current.current) {setCopiedRequest(true);setNotice('补充请求已复制，请粘贴到原 Agent 对话中；保存后读取候选。')}
     } catch { if (generation === current.current) setError('暂时无法复制补充请求，请重新读取候选后重试。') }
     finally {inFlight.current=false; if(generation===current.current)setBusy(false)}
   }
@@ -255,6 +257,13 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   // 范围确认与规则审阅分开呈现；后续修订使范围失效时，仍回到人工确认而不跳过门禁。
   const scopeFirst=Boolean(selected.scope_review?.length)&&!selected.decision&&!isArchived&&(!rulesOpen||needsScope)
   const frozen=busy||Boolean(operation)||visibilityUncertain
+  const userDecisionOnly=!isArchived&&!selected.decision&&!operation&&!visibilityUncertain&&selected.assessment==='NEEDS_CHANGES'&&Boolean(selected.next_tasks?.length)&&selected.next_tasks!.every(item=>item.handler==='USER')
+  const agentFirst=!rulesOpen&&!selected.decision&&!isArchived&&!operation&&!visibilityUncertain&&selected.next_tasks?.some(item=>item.handler==='AGENT')
+  if(agentFirst) return <section className="rule-candidates" aria-label="修正权限草稿">
+    <CandidateWorkPlan value={selected} busy={frozen} copied={copiedRequest} onCopy={()=>void supplement()} onRead={readLatest} onReview={()=>{setRulesOpen(true);window.scrollTo({top:0,behavior:'instant'})}}/>
+    {error&&<Alert type="warning" message={error}/>}
+    <div className="scope-support-actions"><Button type="link" disabled={frozen} onClick={leave}>← 返回整理结果</Button></div>
+  </section>
   if(scopeFirst) return <section className="rule-candidates" aria-label="核对本轮范围">
     {!context?.formal_permission_count&&<RulePreparationStages phase={1}/>}
     <div className="scope-candidate-meta"><span>Agent 整理 · 修订 {selected.candidate.revision} · 尚未批准权限</span></div>
@@ -268,7 +277,6 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   return <section className="rule-candidates" aria-label="审阅对话规则">
     {!context?.formal_permission_count&&<RulePreparationStages phase={1}/>}
     {heading(<div className="rule-candidates-title rule-candidate-detail-title"><div className="rule-candidate-title-line"><h2>{isArchived ? '查看已归档候选' : selected.decision ? '查看当时的业务约定' : selected.scope_only ? '本轮范围已记录' : confirmed ? '沿用已有业务约定' : '核对整理后的业务要求'}</h2><StatusBadge kind="rule">{isArchived ? '已归档' : selected.scope_only ? '无需新增权限' : confirmed ? '与当前规则一致' : selected.decision?.decision === 'APPROVED' ? '已有批准记录' : selected.decision ? '提案已放弃' : '尚未生效'}</StatusBadge></div><p>{selected.candidate.submitted_via === 'MCP' ? 'Agent 整理' : '本机整理'} · 修订 {selected.candidate.revision}</p></div>)}
-    <div className="rule-candidate-context"><div><span className="editorial-eyebrow">这份候选保存的业务原文</span><p className="rule-candidate-original">{content.original_text}</p></div><p className="editorial-muted">{selected.decision || confirmed || selected.scope_only || isArchived ? '此处保留当时的业务约定；实际检查结论请查看检查记录。' : '先核对是否准确表达你的要求，再审阅提案并批准。Agent 修改后，点击“读取候选”查看最新内容。'}</p></div>
     {isArchived && <Alert type="info" message="这条候选已归档，恢复后可以继续整理。原修订与决定记录保留。"/>}
     {notice && <p role="status" className="rule-candidate-notice">{notice}</p>}
     {!isArchived && !selected.decision && selected.assessment==='NEEDS_CHANGES' && !selected.next_tasks && <section className="rule-revision-next" aria-label="候选修订下一步">
@@ -276,20 +284,22 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
       <p>{needsBoundary ? '在下方逐条说明实际情况和仍保留的要求。确需补充规则或证据时，再将补充请求交给原 Agent；它保存后读取最新候选。' : pendingQuestions.length ? '这些问题还没有形成可供你核对的情境。点击“复制补充请求”交给原 Agent；它保存新修订后，点击“读取候选”。' : needsMeaning ? '逐处选择、说明实际要求或标记暂不确定，并保存。需要 Agent 修改时，点击“复制补充请求”；它保存后再读取候选。' : '点击“复制补充请求”，让原 Agent 按下方问题或你的纠正补充；保存新修订后，点击“读取候选”。已经保存的选择无需重复确认。'}</p>
       <p className="editorial-muted">不单独建模和 Agent 额外推断可在“业务边界核对”直接处理。真实缺口会继续阻塞；分类不会补齐证据或批准权限。</p>
     </section>}
+    {!selected.decision && !!selected.next_tasks?.length && <div aria-label="当前待办数量">
+      <div className="candidate-task-counts"><span><strong>{selected.next_tasks.filter(item=>item.handler==='USER').length}</strong> 项由你判断</span><span><strong>{selected.next_tasks.filter(item=>item.handler==='AGENT').length}</strong> 项交给 Agent</span><span><strong>{selected.next_tasks.filter(item=>item.handler==='CAPABILITY').length}</strong> 项检查限制</span></div>
+    </div>}
+    <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
+    <BoundaryReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)} onCoverage={choice=>void saveMeaning(choice)}/>
+    <details className="scope-records"><summary>辅助 · 原始要求与 Agent 说明</summary><p className="rule-candidate-original">{content.original_text}</p>{selected.candidate.supporting_notes?.map(note=><article key={note.note_id}><h4>{{SOURCE_CLUE:'源码线索',TECHNICAL_PRECONDITION:'技术前提',CAPABILITY_INFORMATION:'通用能力说明'}[note.kind]}{note.state==='WITHDRAWN'?' · 已撤回':''}</h4><p>{note.text}</p>{note.withdrawal_reason&&<p>撤回原因：{note.withdrawal_reason}</p>}</article>)}</details>
     {!!selected.scope_review?.length&&<details className="scope-records"><summary>辅助 · 回看已确认范围</summary><RuleScopeReview value={selected} readOnly busy={frozen} onSave={saveMeaning}/>{!selected.decision&&!isArchived&&<Button disabled={frozen} onClick={()=>{setRulesOpen(false);window.scrollTo({top:0,behavior:'instant'})}}>调整本轮范围</Button>}</details>}
-    {!selected.decision && !!selected.next_tasks?.length && <section className="candidate-next-tasks" aria-label="当前需要处理的事项">
-      <header><h2>审阅规则前，还要处理什么？</h2><p>先确认业务含义，再补齐规则与检查方式。下面列出各项问题和下一步。</p></header>
-      <div className="candidate-task-columns" aria-hidden="true"><span>由谁处理</span><span>待解决的问题</span><span>接下来怎么做</span></div>
+    {!selected.decision && !!selected.next_tasks?.length &&
+      <details className="scope-records"><summary>辅助 · 查看全部待办与分工</summary>
       {selected.next_tasks.map((task,index)=><div className="candidate-next-task" key={`${task.code}-${index}`}>
         <StatusBadge kind="rule" tone={task.handler==='CAPABILITY'?'warning':'neutral'}>{{USER:'由你确认',AGENT:'Agent 补充',CAPABILITY:'核对检查方式'}[task.handler]}</StatusBadge>
         <p>{task.message}</p><p className="candidate-task-next">{task.next_step}</p>
-      </div>)}
-    </section>}
-    <RuleMeaningReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)}/>
-    <BoundaryReview value={selected} readOnly={Boolean(selected.decision) || isArchived} busy={busy || Boolean(operation) || visibilityUncertain} onSave={choice=>void saveMeaning(choice)} onCoverage={choice=>void saveMeaning(choice)}/>
-    <div className="rule-example-table" role="table" aria-label="具体情形与要求">
+      </div>)}</details>}
+    <details className="scope-records"><summary>回看整理后的允许与禁止</summary><div className="rule-example-table" role="table" aria-label="具体情形与要求">
       {content.examples.map((example, index) => <div className="rule-candidate-row" role="row" key={index}><p role="cell">{example.description}</p><span role="cell">{example.uncovered_reason ?? (permissions.get(example.permission_item_id ?? '')?.expectation === 'DENY' ? '应当拒绝' : permissions.has(example.permission_item_id ?? '') ? '应当允许' : '沿用已确认规则')}</span></div>)}
-    </div>
+    </div></details>
     {!selected.next_tasks && selected.issues.some(item=>item.code!=='NEEDS_DECISION') && (isArchived ? <details><summary>归档时仍待核对的内容</summary><ul>{selected.issues.map((issue,index)=><li key={index}>{issue.message}</li>)}</ul></details> : <Alert type="warning" message="以下问题仍需核对" description={<ul>{selected.issues.filter(item=>item.code!=='NEEDS_DECISION').map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>} />)}
     {!isArchived && !!selected.reuse.actions?.length && <p className="editorial-muted">{selected.reuse.message}</p>}
     {!!selected.reuse.actions?.length && <div aria-label="已有材料与准备缺口">{selected.reuse.actions.map(action => <div className="rule-candidate-row" key={action.item_id}>
@@ -297,7 +307,7 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
       <StatusBadge kind="preparation" tone={action.status === 'MAY_REUSE' ? 'neutral' : 'warning'}>{action.status === 'MAY_REUSE' ? '可能沿用' : action.status === 'NEEDS_REVIEW' ? '需要核对' : '需要准备'}</StatusBadge>
     </div>)}</div>}
     {error && <Alert type="warning" message={error} />}
-    <TaskActionBar back={{label:'返回整理结果', disabled:busy || Boolean(operation), onClick:leave}} refresh={!isArchived && !operation && !visibilityUncertain && (!selected.proposal_id || Boolean(selected.decision)) ? {label:'归档候选',disabled:busy,onClick:()=>void changeVisibility(true)} : undefined} primary={{
+    <TaskActionBar back={{label:'返回整理结果', disabled:busy || Boolean(operation), onClick:leave}} refresh={!isArchived && !operation && !visibilityUncertain && (!selected.proposal_id || Boolean(selected.decision)) ? {label:'归档候选',disabled:busy,onClick:()=>void changeVisibility(true)} : undefined} primary={userDecisionOnly?undefined:{
       label:visibilityUncertain ? '读取归档状态' : operation ? '查询原操作结果' : isArchived ? '恢复候选' : selected.proposal_id ? '查看已保存提案' : selected.scope_only ? '返回整理结果' : confirmed ? '查看当前规则' : needsScope ? '核对本轮范围' : selected.assessment==='NEEDS_CHANGES' ? '复制补充请求' : '继续审阅完整变更',
       disabled:busy, loading:busy,
       onClick:()=>{ if(visibilityUncertain) setEpoch(value=>value+1); else if(operation) void recover(); else if(isArchived) void changeVisibility(false); else if(selected.proposal_id) void openProposal(selected).catch(()=>setError('提案暂时无法读取')); else if(confirmed) {if(onOverview)onOverview();else leave()} else if(selected.scope_only) leave(); else if(needsScope) document.querySelector('.rule-scope')?.scrollIntoView({block:'start',behavior:'smooth'}); else if(selected.assessment==='NEEDS_CHANGES') void supplement(); else void propose() },

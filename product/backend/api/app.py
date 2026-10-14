@@ -83,6 +83,7 @@ def create_app(
         mcp_access,
         control_origin=local_control_guard.origin,
         control_host=local_control_guard.host,
+        frontend_dir=frontend_dir,
     )
     app = FastAPI(title="界鉴本地控制面", version=__version__)
     app.state.context = context

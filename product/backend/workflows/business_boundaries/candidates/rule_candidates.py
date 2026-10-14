@@ -10,6 +10,9 @@ from pydantic import ValidationError
 from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.boundaries.rule_candidates import RuleCandidateRevision, ReviewedRuleCandidateRevision, RuleCandidateSave, RuleCandidateContentInput, freeze_candidate_content
 from product.backend.core.boundaries.rule_candidates import ScopedRuleCandidateRevision, GroupedRuleCandidateRevision, scoped_content, revised_candidate
+from product.backend.core.boundaries.rule_candidates import AssistedRuleCandidateRevision
+from product.backend.core.boundaries.candidate_corrections import ReviewContext, review_fingerprint
+from product.backend.workflows.business_boundaries.candidates.corrections import carry_assistance
 from product.backend.core.boundaries.candidate_scope import scope_items, scope_issues, only_auxiliary_scope
 from product.backend.workflows.business_boundaries.candidates.scope import decide_scope, decide_scope_batch, merge_content, protect_scope, issue_tasks
 from product.backend.workflows.business_boundaries.candidates.coverage import coverage_items
@@ -103,13 +106,16 @@ class RuleCandidateService:
                 protect_review_sources(current, content)
                 protect_scope(current, content)
             carried = {name: getattr(current, name, ()) for name in ('boundary_reviews', 'scope_decisions', 'coverage_links')}
-            revision_model = GroupedRuleCandidateRevision if current is not None and current.schema_version == '5' else ScopedRuleCandidateRevision
-            if revision_model is GroupedRuleCandidateRevision:
-                carried['scope_references'] = current.scope_references
+            revision_model = AssistedRuleCandidateRevision
+            for name in ('scope_references', 'review_suggestions', 'review_contexts', 'supporting_notes', 'coverage_dependencies'):
+                carried[name] = getattr(current, name, ())
             value = revision_model(**carried, project_id=project_id,
                 candidate_id=command.candidate_id or f"rcd_{uuid4().hex}",
                 revision=(command.expected_revision or 0) + 1, basis_id=command.expected_basis_id,
                 content=content, submitted_via=submitted_via, created_at_us=self._clock_us())
+            value = carry_assistance(current, value, command)
+            # model_copy不替代根校验：辅助记录的数量、1MiB预算与关联仍须校验。
+            value = AssistedRuleCandidateRevision.model_validate_json(value.model_dump_json())
             # 每个选项只替换有限权限项；保存前验证所有选项的引用，不执行其中任何业务动作。
             for scenario in content.scenarios:
                 for option in scenario.options:
@@ -177,6 +183,8 @@ class RuleCandidateService:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "候选已变化，请读取最新内容后重新核对", details={"reason": "CONFLICT"})
             if work.rule_candidates.visibility(candidate_id)["archived"]:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先恢复候选再核对业务边界")
+            if work.rule_candidates.proposal_id(candidate_id, current.revision):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '本修订已有提案，请返回修改后再核对')
             issue = next((item for item in boundary_review_items(current) if item["issue_id"] == command.issue_id), None)
             if issue is None or issue["issue_fingerprint"] != command.issue_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "问题及其业务依据已变化，请重新读取")
@@ -184,15 +192,30 @@ class RuleCandidateService:
                 raise JiejianError(ErrorCode.INPUT_INVALID, "接口合并或不单独建模不能消除能力与覆盖缺口")
             if not set(command.permission_item_ids) <= {item.item_id for item in current.content.permissions}:
                 raise JiejianError(ErrorCode.INPUT_INVALID, "只能引用这份候选中已经存在的权限项")
-            record = BoundaryReviewRecord(**command.model_dump(), decision_id="brd_" + uuid4().hex,
+            dependencies = getattr(command, 'dependencies', None)
+            try:
+                final_fingerprint = review_fingerprint(current, command.issue_id, dependencies)
+            except ValueError:
+                raise JiejianError(ErrorCode.INPUT_INVALID, '关联要求、权限、动作或角色不完整，请先由Agent补充') from None
+            if dependencies is not None and not set(command.permission_item_ids) <= set(dependencies.permission_item_ids) | {
+                key for source in current.content.requirement_sources if source.requirement_id in dependencies.requirement_ids for key in source.permission_item_ids}:
+                raise JiejianError(ErrorCode.INPUT_INVALID, '核对范围必须包含承接本问题的全部权限')
+            payload = command.model_dump(exclude={'dependencies'})
+            payload['issue_fingerprint'] = final_fingerprint
+            record = BoundaryReviewRecord(**payload, decision_id="brd_" + uuid4().hex,
                 source=issue["source"], text=issue["text"], output_revision=current.revision + 1, created_at_us=self._clock_us())
             records = tuple(item for item in getattr(current, "boundary_reviews", ()) if item.issue_id != command.issue_id) + (record,)
             # v1首次进入此入口只补空情境；不制造权限选项或原话摘录。
             content = current.content if hasattr(current.content, "scenarios") else freeze_candidate_content(
                 RuleCandidateContentInput(**current.content.model_dump()))
+            contexts = tuple(item for item in getattr(current, 'review_contexts', ()) if item.issue_id != command.issue_id)
+            if dependencies is not None:
+                contexts += (ReviewContext(issue_id=command.issue_id, decision_id=record.decision_id,
+                    dependencies=dependencies, output_revision=current.revision+1),)
+            assistance = {'review_contexts':contexts} if current.schema_version == '6' or dependencies is not None else {}
             value = revised_candidate(current,
                 revision=current.revision + 1, content=scoped_content(content),
-                boundary_reviews=records, submitted_via="LOCAL_GUI", created_at_us=self._clock_us())
+                boundary_reviews=records, submitted_via="LOCAL_GUI", created_at_us=self._clock_us(), **assistance)
             work.rule_candidates.append(value, expected_revision=current.revision)
             work.rule_candidates.add_receipt(project_id, "DECIDE", command.operation_id, fingerprint, value)
             result = self._view(work, value)
@@ -282,15 +305,10 @@ class RuleCandidateService:
         review_items = boundary_review_items(value)
         coverage = coverage_items(value)
         planned = {item['issue_id'] for item in coverage if item['status'] == 'PLANNED'}
-        pending = {(item["source"], item["text"]) for item in review_items if item["blocking"]}
-        resolved = {(item["source"], item["text"]) for item in review_items if not item["blocking"] or item['issue_id'] in planned}
-        resolved -= {(item['source'], item['text']) for item in review_items if item['blocking'] and item['issue_id'] not in planned}
-        for index, text in enumerate(content.unsupported_constraints):
-            if ("unsupported_constraints", text) not in resolved:
-                issues.append({"code": "RULE_KIND_UNSUPPORTED", "message": text, "path": f"candidate.content.unsupported_constraints[{index}]"})
-        for index, text in enumerate(content.unresolved_questions):
-            if ("unresolved_questions", text) not in resolved:
-                issues.append({"code": "NEEDS_CLARIFICATION", "message": text, "path": f"candidate.content.unresolved_questions[{index}]"})
+        for item in review_items:
+            if item['blocking'] and item['issue_id'] not in planned:
+                issues.append({'code':'RULE_KIND_UNSUPPORTED' if item['source']=='unsupported_constraints' else 'NEEDS_CLARIFICATION',
+                    'message':item['text'], 'path':item['path'], 'issue_id':item['issue_id']})
         permission_ids = {item.item_id for item in content.permissions}
         known_ids = permission_ids | {item.item_id for item in draft.permissions}
         mapped = {item.permission_item_id for item in content.examples}
@@ -319,12 +337,12 @@ class RuleCandidateService:
         proposal_id = work.rule_candidates.proposal_id(value.candidate_id, value.revision)
         decision = None if proposal_id is None else work.business_boundaries.decision_for_proposal(proposal_id)
         scope_only = only_auxiliary_scope(value)
-        if value.schema_version in {'4', '5'} and not content.permissions and (not scope_items(value) or any(item['status'] != 'CONFIRMED' for item in scope_items(value))):
+        if value.schema_version in {'4', '5', '6'} and not content.permissions and (not scope_items(value) or any(item['status'] != 'CONFIRMED' for item in scope_items(value))):
             issues = [issue for issue in issues if issue['code'] not in {'ROLE_REQUIRED', 'ACTION_REQUIRED', 'PERMISSION_REQUIRED', 'PERMISSION_EXAMPLE_REQUIRED', 'REQUIREMENT_RULE_REQUIRED'}]
         if scope_only:
             issues = [issue for issue in issues if issue['code'] not in {'ROLE_REQUIRED', 'ACTION_REQUIRED', 'PERMISSION_REQUIRED', 'PERMISSION_EXAMPLE_REQUIRED'}]
         # 范围/覆盖确认也需要一次精确提案来源，即使权限正文沿用；否则无法冻结新范围。
-        assessment = "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if scope_only or unchanged and value.schema_version not in {'4', '5'} else "REVIEWABLE"
+        assessment = "DECIDED" if decision else "NEEDS_CHANGES" if issues else "ALREADY_CONFIRMED" if scope_only or unchanged and value.schema_version not in {'4', '5', '6'} else "REVIEWABLE"
         visibility = work.rule_candidates.visibility(value.candidate_id)
         if summary:
             # 列表共用一份正式基线，不展开逐条材料库存和完整审阅正文。

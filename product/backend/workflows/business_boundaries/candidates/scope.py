@@ -3,6 +3,7 @@ import json
 from product.backend.core.boundaries.entities import boundary_sha256
 from product.backend.core.boundaries.candidate_scope import ScopeDecision, ScopeReference, CoverageLink, scope_items, scope_decision_fingerprint
 from product.backend.core.boundaries.candidate_reviews import boundary_review_items
+from product.backend.core.boundaries.candidate_corrections import CoverageDependency, coverage_dependency_fingerprint
 from product.backend.core.boundaries.rule_candidates import revised_candidate, ScopedCandidateContentInput
 from product.backend.core.errors import ErrorCode, JiejianError
 
@@ -55,13 +56,16 @@ def decide_scope(service, project_id, candidate_id, command, *, coverage=False):
                 raise JiejianError(ErrorCode.INPUT_INVALID, "覆盖只能关联当前候选中的有效权限")
             record = CoverageLink(**command.model_dump(), output_revision=current.revision+1, created_at_us=service._clock_us())
             updates = {"coverage_links": tuple(v for v in getattr(current, 'coverage_links', ()) if v.issue_id != command.issue_id)+(record,)}
+            dependency = CoverageDependency(issue_id=command.issue_id, output_revision=record.output_revision,
+                fingerprint=coverage_dependency_fingerprint(current, command.targets))
+            updates['coverage_dependencies'] = tuple(v for v in getattr(current, 'coverage_dependencies', ()) if v.issue_id != command.issue_id)+(dependency,)
         else:
             item = next((item for item in scope_items(current) if item['source'].requirement_id == command.requirement_id), None)
             if item is None or item['fingerprint'] != command.requirement_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "要求来源或解释已变化，请重新读取")
             record = ScopeDecision(**command.model_dump(), output_revision=current.revision+1, created_at_us=service._clock_us())
             updates = {"scope_decisions": tuple(v for v in getattr(current, 'scope_decisions', ()) if v.requirement_id != command.requirement_id)+(record,)}
-            if current.schema_version == '5':
+            if current.schema_version in {'5', '6'}:
                 updates['scope_references'] = tuple(v for v in current.scope_references if v.requirement_id != command.requirement_id)
         value = revised_candidate(current, revision=current.revision+1, submitted_via='LOCAL_GUI', created_at_us=service._clock_us(), **updates)
         work.rule_candidates.append(value, expected_revision=current.revision)
@@ -131,13 +135,15 @@ def protect_scope(current, content):
 
 
 def issue_tasks(issues, reviews):
-    by_path = {(item['source'], item['text']): item for item in reviews}
+    by_id = {item['issue_id']: item for item in reviews}
     tasks = []
     for issue in issues:
         code = issue['code']
-        review = next((v for (_, text), v in by_path.items() if text == issue['message']), None)
-        human = code in {'SCOPE_DECISION_REQUIRED', 'NEEDS_DECISION', 'CHOICES_CONFLICT'} or review is not None and review['status'] in {'NEEDS_DECISION', 'STALE'}
+        review = by_id.get(issue.get('issue_id'))
+        # 未整理的旧问题先交Agent提供可核对的说明；不是要求用户替Agent填写技术诊断。
+        human = code in {'SCOPE_DECISION_REQUIRED', 'NEEDS_DECISION'} or review is not None and review['status'] in {'NEEDS_DECISION', 'STALE'} and review.get('suggestion') is not None
         limitation = code == 'HISTORY_CAPABILITY_REQUIRED' or review is not None and review['status'] == 'OPEN' and review['decision'].outcome in {'PREPARATION_DEPENDENCY', 'EVIDENCE_GAP', 'COVERAGE_GAP'}
         tasks.append({**issue, 'handler': 'USER' if human else 'CAPABILITY' if limitation else 'AGENT',
-            'stage': 'RULES', 'next_step': '在本页确认实际要求' if human else '关联所需权限与检查入口；不支持的历史范围继续保留阻塞' if limitation else '修订当前候选，保留已确认要求与正常使用对照'})
-    return tasks
+            'stage': 'RULES', 'agent_can_revise_draft':True,
+            'next_step': '核对实际要求；Agent仍可先修正草稿并提供建议' if human else '说明对应要求、缺失能力与恢复条件；补齐入口和证明后才能检查' if limitation else '先修正明确错误，保留旧问题并提交有依据的纠正建议；不代用户作决定'})
+    return sorted(tasks, key=lambda item:{'AGENT':0,'USER':1,'CAPABILITY':2}[item['handler']])

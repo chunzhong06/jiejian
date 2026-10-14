@@ -40,7 +40,10 @@ export function useMaterialSuggestions(projectId: string, enabled: boolean, refr
     })().catch((failure: unknown) => {
       // 仅展示HTTP边界已脱敏的错误，原始异常与响应正文不进入界面；不据权限数量猜根因。
       const detail = failure instanceof ApiError ? `原因：${failure.message}（${failure.code}）${failure.traceId ? `，记录编号 ${failure.traceId}` : ''}。` : '尚未取得有效响应，请重新读取；持续失败时保留本次接口错误记录。'
-      if (scope.current === key) setSnapshot({ key, error: `材料建议暂时无法读取。${detail}仍可查看下方实际材料；尚无正式权限时，请先到权限页核对候选并批准。` })
+      const error=failure instanceof ApiError&&failure.code==='STORAGE_STATE'
+        ? `材料建议暂时无法读取。界鉴内部记录读取失败${failure.traceId?`（记录编号 ${failure.traceId}）`:''}。请保留当前材料并反馈此编号；下方实际材料仍可查看，无需重新确认权限。`
+        : `材料建议暂时无法读取。${detail}仍可查看下方实际材料；请按上述接口原因处理，不要通过修改权限或删除材料消除报错。`
+      if (scope.current === key) setSnapshot({ key, error })
     }).finally(() => {
       if (pending.current?.promise === request) pending.current = undefined
       if (scope.current === key) setBusyKey(undefined)
