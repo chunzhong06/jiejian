@@ -1,7 +1,7 @@
 // 只翻译已发布的节点、原因和定位精度，不从文案、时间或布局派生安全结论。
 import type { ActionResultStory, StoryTraceEvent } from '../../../api/checks/currentChecks'
 
-export const traceKindLabels = { ENTRY: '请求进入', IDENTITY: '身份识别', AUTHORIZATION: '权限判断', PERSISTENT_EFFECT: '持久业务变化', MESSAGE: '任务派发', DELEGATION: '委托执行', FINAL_EFFECT: '最终业务结果', RECOVERY: '恢复操作' }
+export const traceKindLabels = { ENTRY: '请求进入', IDENTITY: '身份识别', AUTHORIZATION: '权限判断', PERSISTENT_EFFECT: '已保存的数据修改', MESSAGE: '任务派发', DELEGATION: '委托执行', FINAL_EFFECT: '最终业务结果', RECOVERY: '恢复操作' }
 export const breakpointLabels = {
   AUTHORIZATION_MISSING: '关键操作缺少权限检查', AUTHORIZATION_LATE: '权限检查介入过晚',
   AUTHORIZATION_BYPASS: '业务操作绕过了权限检查', IDENTITY_SUBSTITUTION: '执行身份发生替换',

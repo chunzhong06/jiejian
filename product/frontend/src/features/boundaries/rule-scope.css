@@ -25,7 +25,7 @@
 .scope-save-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);padding-block:var(--space-20);border-top:1px solid var(--color-border);margin-top:var(--space-24)}
 .scope-save-row>p{font-size:var(--font-label);color:var(--color-secondary);max-width:52ch;margin:0}.scope-save-row>.ant-btn{flex-shrink:0}
 .scope-records{border-top:1px solid var(--color-border);padding-block:var(--space-20);margin-top:var(--space-24)}
-.scope-records>summary,.scope-previous>summary,.rule-other-entry>summary{color:var(--color-secondary);cursor:pointer}
+.scope-records>summary,.scope-previous>summary{color:var(--color-secondary);cursor:pointer}
 .scope-summary-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);padding-block:var(--space-20);border-top:1px solid var(--color-border)}
 .scope-summary-row h3{margin:0 0 var(--space-8)}.scope-summary-row p{max-width:72ch;line-height:1.85;margin:0 0 var(--space-8)}.scope-summary-row small{color:var(--color-secondary)}.scope-summary-row>.ant-btn{flex-shrink:0}.scope-support-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-12)}
 @media(max-width:700px){.scope-save-row,.scope-summary-row{flex-wrap:wrap}.scope-save-row>.ant-btn,.scope-summary-row>.ant-btn{margin-inline-start:auto}}

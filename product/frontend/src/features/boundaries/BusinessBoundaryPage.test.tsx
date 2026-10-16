@@ -8,11 +8,11 @@ import type { BoundaryProposalCommandDto, BoundaryDraftViewDto } from '../../api
 
 const mockApi = vi.hoisted(() => ({
   editor: vi.fn(), proposal: vi.fn(), current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
-  maintenanceDraft: vi.fn(), createMaintenanceProposal: vi.fn(), approve: vi.fn(), reject: vi.fn(),
+  candidateContext: vi.fn(), maintenanceDraft: vi.fn(), createMaintenanceProposal: vi.fn(), approve: vi.fn(), reject: vi.fn(),
 }))
 
 vi.mock('../../api/boundaries/businessBoundaries', () => ({ businessBoundariesApi: mockApi }))
-vi.mock('../../api/boundaries/ruleCandidates', () => ({ruleCandidatesApi:{context:async()=>({candidates:[],next_offset:null})}}))
+vi.mock('../../api/boundaries/ruleCandidates', () => ({ruleCandidatesApi:{context:mockApi.candidateContext}}))
 
 const project = { project_id: 'app_demo', name: '演示应用' }
 const preview = {
@@ -77,10 +77,10 @@ describe('业务边界页面', () => {
     expect(list.getByText('没有符合筛选条件的权限规则。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio',{name:'全部规则'}))
     expect(list.getAllByText('允许',{exact:true})).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button',{name:'整理权限候选'}))
+    fireEvent.click(screen.getByRole('button',{name:'Agent 整理与读取候选'}))
     await screen.findByRole('region',{name:'对话规则候选'})
     expect(screen.queryByRole('region',{name:'当前权限清单'})).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button',{name:'← 返回权限要求'}))
+    fireEvent.click(screen.getByRole('button',{name:'← 返回权限规则'}))
     expect(screen.getByRole('textbox',{name:'搜索业务动作'})).toHaveValue('查看日常')
     expect(mockApi.createProposal).not.toHaveBeenCalled()
     expect(mockApi.approve).not.toHaveBeenCalled()
@@ -125,6 +125,7 @@ describe('业务边界页面', () => {
   afterEach(() => cleanup())
   beforeEach(() => {
     vi.clearAllMocks()
+    mockApi.candidateContext.mockResolvedValue({candidates:[],next_offset:null})
     // 旧场景数据仍用于构造新editor/proposal响应，不是生产端的并行请求。
     mockApi.editor.mockImplementation(async () => {
       const boundary = await mockApi.current(), pending = await mockApi.proposals()
@@ -155,13 +156,13 @@ describe('业务边界页面', () => {
     expect(screen.getByRole('button', { name: '确认这组业务边界' })).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox', { name: '我已核对本次变更和沿用的业务要求' }))
     fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
-    expect(await screen.findByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).toBeInTheDocument()
+    expect(await screen.findByText('批准事实已保留，权限记录暂时未完成同步。请重试读取，不要重复批准。')).toBeInTheDocument()
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
     expect(onFeedback).toHaveBeenCalledWith('权限变更已批准，正在同步当前工作。')
     expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
     expect(screen.getByText(/权限版本 1 · 3 条生效规则/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新读取下一步' }))
-    await waitFor(() => expect(screen.queryByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('批准事实已保留，权限记录暂时未完成同步。请重试读取，不要重复批准。')).not.toBeInTheDocument())
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
   })
 
@@ -183,10 +184,39 @@ describe('业务边界页面', () => {
     expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
   })
 
+  it.each([false,true])('示例入口与候选入口直接显示模拟回复，第三步不回退（候选入口=%s）', async (requestedCandidatesView) => {
+    mockApi.candidateContext.mockResolvedValue({candidates:[],next_offset:null,source_summary:{roles:0,actions:0,pending:10,analyzed:true},formal_permission_count:0})
+    const provided=vi.fn()
+    render(<BusinessBoundaryPage project={project} requestedCandidatesView={requestedCandidatesView} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided} providedDownloadChoiceRequired/>)
+    await screen.findByRole('heading',{name:'权限草稿'})
+    expect(screen.queryByRole('button',{name:'整理权限候选'})).not.toBeInTheDocument()
+    expect(screen.getByText('评审不能取得内部完整包。')).toBeInTheDocument()
+    expect(screen.getByText('Agent 整理结果')).toBeInTheDocument()
+    expect(screen.getByText('示例模拟 · 尚未批准')).toBeInTheDocument()
+    expect(screen.queryByText(/其他入口/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'查看整理结果 →'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'交给原 Agent 重新整理'})).not.toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
+    await screen.findByRole('region',{name:'对话规则候选'})
+    expect(await screen.findByRole('listitem',{name:'整理权限要求 · 需要核对'})).toHaveAttribute('aria-current','step')
+    expect(screen.queryByText(/沿用已保存的业务清单/)).not.toBeInTheDocument()
+    expect(screen.getByText(/源码识别中有 10 项候选待核对/)).toBeInTheDocument()
+    expect(provided).not.toHaveBeenCalled()
+    expect(mockApi.approve).not.toHaveBeenCalled()
+  })
+
+  it('来源摘要未提供时仍显示当前整理阶段，不显示零计数', async () => {
+    mockApi.candidateContext.mockResolvedValue({candidates:[],next_offset:null,source_summary:null})
+    render(<BusinessBoundaryPage project={project} requestedCandidatesView onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    await screen.findByRole('region',{name:'对话规则候选'})
+    expect(await screen.findByRole('listitem',{name:'整理权限要求 · 当前阶段'})).toHaveAttribute('aria-current','step')
+    expect(screen.queryByText(/0 个角色/)).not.toBeInTheDocument()
+  })
+
   it('提供的权限提案只在明确采用后加载，仍需普通人工批准', async () => {
     const provided=vi.fn().mockResolvedValue({proposal,decision:null})
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided}/>)
-    const button=await screen.findByRole('button',{name:'使用已提供的权限提案'})
+    const button=await screen.findByRole('button',{name:'继续审阅完整规则'})
     expect(provided).not.toHaveBeenCalled()
     fireEvent.click(button)
     expect(await screen.findByRole('heading',{name:'核对本次业务变更'})).toBeInTheDocument()
@@ -196,15 +226,21 @@ describe('业务边界页面', () => {
   })
 
   it('展示版要求必须明确选择，并进入待审提案而非自动批准',async()=>{
-    const provided=vi.fn().mockResolvedValue({proposal,decision:null})
-    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided} providedDownloadChoiceRequired/>)
-    const button=await screen.findByRole('button',{name:'使用已提供的权限提案'})
+    const provided=vi.fn().mockResolvedValue({proposal,decision:null,review:{basis_state:'COMPLETE',current_state_changed:false,items:[]}})
+    mockApi.approve.mockResolvedValue(approvedBoundary)
+    render(<BusinessBoundaryPage project={project} requestedCandidatesView onError={vi.fn()} onStateChanged={vi.fn().mockResolvedValue({project})} onBack={vi.fn()} onProvidedProposal={provided} providedDownloadChoiceRequired/>)
+    const button=await screen.findByRole('button',{name:'继续审阅完整规则'})
     expect(button).toBeDisabled()
     fireEvent.click(screen.getByRole('radio',{name:/仅允许在线预览/}))
     fireEvent.click(button)
     expect(await screen.findByRole('heading',{name:'核对本次业务变更'})).toBeInTheDocument()
     expect(provided).toHaveBeenCalledExactlyOnceWith(false)
     expect(mockApi.approve).not.toHaveBeenCalled()
+    expect(screen.getByRole('button',{name:'确认这组业务边界'})).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox',{name:'我已核对本次变更和沿用的业务要求'}))
+    fireEvent.click(screen.getByRole('button',{name:'确认这组业务边界'}))
+    await waitFor(()=>expect(mockApi.approve).toHaveBeenCalledExactlyOnceWith('app_demo',proposal,expect.any(String)))
+    expect(await screen.findByText('权限规则已确认，当前规则列表已更新。')).toBeInTheDocument()
   })
 
   it('不符合与待定都是独立选择，不按禁止下载生成官方提案',async()=>{
@@ -214,10 +250,10 @@ describe('业务边界页面', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(4)
     fireEvent.click(screen.getByRole('radio',{name:'允许下载展示版'}))
     fireEvent.click(screen.getByRole('radio',{name:'暂不确定'}))
-    expect(screen.getByRole('button',{name:'使用已提供的权限提案'})).toBeDisabled()
+    expect(screen.getByRole('button',{name:'继续审阅完整规则'})).toBeDisabled()
     expect(screen.getByText('当前不生成权限提案。明确需求后，再选择符合要求的选项。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio',{name:'这些都不是'}))
-    expect(screen.queryByRole('button',{name:'使用已提供的权限提案'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'继续审阅完整规则'})).not.toBeInTheDocument()
     const write=screen.getByRole('button',{name:'编写我的权限要求'})
     fireEvent.click(write)
     expect(screen.getByRole('button',{name:'收起自定义草稿'})).toHaveAttribute('aria-expanded','true')
@@ -326,7 +362,7 @@ describe('业务边界页面', () => {
     expect(screen.queryByRole('button', { name: '核对代码关联' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('当前代码定位与关联'))
     fireEvent.click(screen.getByRole('button', { name: '管理业务对象与代码关联' }))
-    expect(await screen.findByRole('heading', { name: '权限要求' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '手动维护规则' })).toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '取消编辑' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '核对代码关联' }))

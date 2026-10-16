@@ -38,7 +38,7 @@ export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onErr
   const baseline = journey?.implementation === 'BASELINE'
   const fixed = journey?.implementation === 'FIXED'
   const custom = journey?.implementation === 'CUSTOM'
-  const galleryHeading=baseline?'先确认起始规则与检查':followUp?(journey?.verdict==='PASS'?'后续预览修改已完成检查':'预览已调整，继续核对原有功能'):fixed?(journey?.repair_verified?'原题复验已通过，可以继续下一次修改':'权限实现已修复，等待原题复验'):journey?.implementation==='EXPOSE_REVOKE'?'请求被拒绝之前，访问权是否已开放':'内部完整包的交付方式已修改'
+  const galleryHeading=baseline?'先确认起始规则与检查':followUp?(journey?.verdict==='PASS'?'后续预览修改已完成检查':'预览已调整，继续核对原有功能'):fixed?(journey?.repair_verified?'原问题的修复检查已通过，可以继续修改':'权限实现已修改，等待检查修复结果'):journey?.implementation==='EXPOSE_REVOKE'?'检查请求被拒绝前是否已经开放访问权':'内部完整包的交付方式已修改'
   const galleryDescription=baseline?'评审查看公开内容，团队内部资料保持受限，负责人仍能取得完整包。展示版下载要求以你批准的规则为准。':followUp?'本次只调整公开预览，继续沿用原规则检查完整范围，核对哪些材料可以复用。':fixed?'同时检查原来的禁止要求、公开预览和负责人导出，避免修复时关闭正常功能。':journey?.implementation==='EXPOSE_REVOKE'?'这次实现先提交开放，再返回拒绝并撤回。查看证据，核对真实发生过的变化。':'预设改动省略了交付前的权限判断。请用原规则检查实际收到的内容。'
   const presetLabels:Partial<Record<OfficialScenarioVersion,string>>={VULNERABLE:'错误交付改动',EXPOSE_REVOKE:'先开放后撤回改动',FIXED:'权限修复',PREVIEW_CHANGED:'公开预览改动'}
   const apply = async (resume = false) => {
@@ -60,10 +60,10 @@ export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onErr
   }
   return <section className="sample-development" aria-label="官方示例开发流程">
     <header><div><p className="editorial-eyebrow">{`${custom?'普通开发协作':'预设开发演练'} · ${value.display_name}`} </p><h2>官方示例演练</h2></div><span className="sample-development-label">真实执行与独立验证</span></header>
-    {!custom && <ol className="sample-development-steps" aria-label="开发演练流程"><li aria-current={baseline ? 'step' : undefined}>确认起始实现</li><li aria-current={journey && !baseline && !fixed && !followUp ? 'step' : undefined}>{gallery?'修改与检查':'异步优化与检查'}</li><li aria-current={fixed || followUp ? 'step' : undefined}>{gallery?'修复与后续修改':'修复与原题复验'}</li></ol>}
+    {!custom && <ol className="sample-development-steps" aria-label="开发演练流程"><li aria-current={baseline ? 'step' : undefined}>确认起始实现</li><li aria-current={journey && !baseline && !fixed && !followUp ? 'step' : undefined}>{gallery?'修改与检查':'异步优化与检查'}</li><li aria-current={fixed || followUp ? 'step' : undefined}>{gallery?'修复与后续修改':'修复并重新检查'}</li></ol>}
     {!journey ? <div className="sample-development-loading" role="status"><Spin size="small"/><span>正在读取开发与验证状态…</span>{live.retrying && <span>暂时无法读取，正在重试。</span>}</div> : <div className="sample-development-body"><div>
-      <h3>{gallery&&!custom?galleryHeading:custom ? '已进入真实代码开发' : baseline ? journey.can_optimize ? '起始检查已通过，可以开始优化' : '先验证同步导出的起始实现' : fixed ? journey.repair_verified ? '本次修复已通过原题复验' : '授权顺序已调整，等待独立复验' : journey.verdict === 'BLOCK' ? '检查发现权限问题，继续修复本次修改' : '后台导出已应用，核对这次修改'}</h3>
-      <p>{gallery&&!custom?galleryDescription:custom ? '源码已有外部修改，预设变更不会覆盖它。请由 Agent 登记实际变化，沿用普通材料核对和独立检查流程；外部修改不等于已经通过验证。' : baseline ? '当前请求会等待项目包生成后返回。本次开发目标是引入后台队列，让用户提交后继续使用页面。' : fixed ? '保留异步导出，先核对权限再创建后台任务。是否修好以原题及正常业务的独立复验为准。' : '观察页面回应和后台项目包是否一致。403 只说明请求被拒绝，不能代替最终业务结果。'}</p>
+      <h3>{gallery&&!custom?galleryHeading:custom ? '已进入真实代码开发' : baseline ? journey.can_optimize ? '起始检查已通过，可以开始优化' : '先验证同步导出的起始实现' : fixed ? journey.repair_verified ? '本次修复已通过针对原问题的检查' : '授权顺序已调整，等待独立复验' : journey.verdict === 'BLOCK' ? '检查发现权限问题，继续修复本次修改' : '后台导出已应用，核对这次修改'}</h3>
+      <p>{gallery&&!custom?galleryDescription:custom ? '源码已有外部修改，预设变更不会覆盖它。请由 Agent 登记实际变化，沿用普通材料核对和独立检查流程；外部修改不等于已经通过验证。' : baseline ? '当前请求会等待项目包生成后返回。本次开发目标是引入后台队列，让用户提交后继续使用页面。' : fixed ? '保留异步导出，先核对权限再创建后台任务。需要重新检查原问题，并确认正常功能仍可使用，才能认定修复通过。' : '观察页面回应和后台项目包是否一致。403 只说明请求被拒绝，不能代替最终业务结果。'}</p>
       <div className="task-focus-actions">
         {journey.run_id && <Button onClick={() => onNavigate(`/history?run_id=${encodeURIComponent(journey.run_id!)}`)}>查看本次检查</Button>}
         {!baseline && task && <Button onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(task.contract.repair_fingerprint)}`)}>查看修复依据</Button>}
@@ -74,7 +74,7 @@ export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onErr
           : !baseline && !fixed && !custom && task ? <Button type="primary" disabled={busy || uncertain || live.retrying} onClick={() => setConfirm('FIXED')}>应用预设修复</Button>
           : <Button type="primary" onClick={() => { const change = gallery ? value.current_change_id : fixed ? value.repair_change_id : !custom ? value.vulnerable_change_id : undefined; onNavigate(change ? `/tests?change_id=${encodeURIComponent(change)}` : '/workspace') }}>继续准备与验证</Button>}
       </div>
-      {tasks.length > 1 && <Select aria-label="选择待修复原题" value={reference} onChange={setReference} options={tasks.map((item, i) => ({ value: item.contract.repair_fingerprint, label: `原问题 ${i + 1}` }))}/>}
+      {tasks.length > 1 && <Select aria-label="选择待修复的问题" value={reference} onChange={setReference} options={tasks.map((item, i) => ({ value: item.contract.repair_fingerprint, label: `原问题 ${i + 1}` }))}/>}
       {busy ? <p role="status"><Spin size="small"/> 正在登记源码并重新加载示例，完成后继续核对材料。</p> : feedback && <p role="status">{feedback}</p>}
       {uncertain && <Alert type="warning" message="操作回执或页面同步尚未确认" description="先核对当前实现和修改记录，不重复应用变更。" action={<Button onClick={async () => { try { const next = await experienceApi.status(); await onChanged(next); await read(); const applied = next.scenario_version === pendingTarget.current; const recorded = gallery ? next.current_change_id : pendingTarget.current === 'FIXED' ? next.repair_change_id : next.vulnerable_change_id; setCanResumeRegistration(applied && !recorded); if (applied && recorded) setUncertain(false) } catch (error) { onError(error as ApiError) } }}>核对当前状态</Button>}/>}
       {uncertain && canResumeRegistration && <Button loading={busy} onClick={() => void apply(true)}>恢复本批交付登记</Button>}

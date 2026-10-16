@@ -28,7 +28,7 @@ export function DeliveryFacts({ projectId, change, acceptanceOnly = false, chang
   const unclaimed = change.manifest.claimed_paths.length ? actual.filter(path => !change.manifest.claimed_paths.includes(path)) : []
   const unobserved = change.manifest.claimed_paths.filter(path => !actual.includes(path))
   const verification = current?.verification
-  const summary = verification?.run_id ? verification.verdict === 'BLOCK' ? '发现权限问题' : verification.verdict === 'PASS' ? verification.runtime_status === 'MATCHED' ? '本批权限要求已验证' : '检查已通过，交付运行对应未确认' : verification.verdict === 'INCONCLUSIVE' ? '证据不足，尚不能确认' : '检查结果尚未发布或未通过完整性核验' : current ? '这批交付尚无关联检查' : '历史修改未关联精确检查'
+  const summary = verification?.run_id ? verification.verdict === 'BLOCK' ? '发现权限问题' : verification.verdict === 'PASS' ? verification.runtime_status === 'MATCHED' ? '本批权限要求已验证' : '检查已通过，交付尚未确认实际运行的代码版本' : verification.verdict === 'INCONCLUSIVE' ? '证据不足，尚不能确认' : '检查结果尚未发布或未通过完整性核验' : current ? '这批交付尚无关联检查' : '历史修改未关联精确检查'
   return <div className="delivery-facts" aria-label="交付差异与验收">
     {!ready && <p role="status">正在核对这次修改的检查记录…</p>}
     {providedDetails === undefined && failed && <p role="alert">交付关联暂时无法核对，正在重试。不能将其它检查当作本批结果。</p>}
@@ -38,7 +38,7 @@ export function DeliveryFacts({ projectId, change, acceptanceOnly = false, chang
       <div className="delivery-declaration"><h4>声明与实际变化</h4>{change.change_set.status === 'NO_BASELINE' ? <p>缺少基线，暂不能核对文件声明与实际变化的差异。</p> : !change.manifest.claimed_paths.length ? <p>本批未提供文件声明；上方列表来自实际源码。</p> : <><p>{unclaimed.length ? `发现 ${unclaimed.length} 个声明外的变化文件。` : '实际变化均已列入文件声明。'}</p>{unclaimed.map(path => <code key={path}>{path}</code>)}{!!unobserved.length && <><p>声明中未观察到内容变化的文件：</p>{unobserved.map(path => <code key={path}>{path}</code>)}</>}</>}<p>文件变化不能单独证明作者身份或修复有效。</p></div>
     </section>}
     {ready && (providedDetails !== undefined || !failed) && !changesOnly && <section className="delivery-acceptance"><header><div><p className="editorial-eyebrow">验收结果</p><h3>{summary}</h3></div>{verification?.run_id ? <Button type="primary" onClick={() => onNavigate('/history?run_id=' + encodeURIComponent(verification.run_id!))}>查看本批检查记录</Button> : <Button type="primary" disabled={!change.revalidation.can_execute} onClick={() => onNavigate('/tests?change_id=' + encodeURIComponent(change.manifest.change_id))}>检查这次变化</Button>}</header>
-      {verification?.repair_status && <p>原题复验：{repairLabels[verification.repair_status as keyof typeof repairLabels] ?? verification.repair_status}</p>}
+      {verification?.repair_status && <p>原问题的修复检查：{repairLabels[verification.repair_status as keyof typeof repairLabels] ?? verification.repair_status}</p>}
       {verification?.run_id && <p>只对应这批交付关联的检查；查看记录不会再次提交检查。</p>}
 
       <p className="editorial-muted">登记修改不表示权限通过；开发需求继续在开发客户端讨论。</p>

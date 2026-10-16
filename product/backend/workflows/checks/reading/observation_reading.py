@@ -26,7 +26,7 @@ def observation_reading(item: CheckObservation, *, source_type: str | None = Non
     if 'SOURCE_REQUIRES_MIGRATION' in reasons:
         return reading('UNSUPPORTED','旧来源需要重新准备','旧应用专用核验已停止用于新检查。历史证据保留，请通过通用记录组件重新准备来源。',True)
     if reasons & {'RECORD_REQUEST_INCOMPLETE','RECORD_HISTORY_INCOMPLETE','RECORD_SOURCE_INVALID'}:
-        return reading('INCOMPLETE','业务记录尚未闭合','本次请求未确认完成，或记录存在连续性缺口，不能据此证明业务后果没有发生。',True)
+        return reading('INCOMPLETE','本次请求的记录尚未收齐','本次请求未确认完成，或记录存在连续性缺口，不能据此证明业务后果没有发生。',True)
     if reasons & {"OBSERVER_CORRELATION_INVALID", "OPERATION_CORRELATION_INVALID", "HISTORY_GENERATION_CHANGED"}:
         return reading("INCOMPLETE", "记录关联未核对", "记录与本次操作、资源或历史版本未能准确对应，不能用于证明本次业务后果。", True)
     if any("TIMEOUT" in code or "TIMED_OUT" in code for code in reasons):
@@ -48,7 +48,7 @@ def observation_reading(item: CheckObservation, *, source_type: str | None = Non
     if auxiliary and "SOURCE_RECORDS_AVAILABLE" in reasons:
         return reading("PROCESS", "已取得关联过程记录", "已取得本次操作的关联记录，可用于追踪执行；记录中的派发或完成事件不能单独证明最终业务结果。")
     if auxiliary and "SOURCE_WINDOW_EMPTY" in reasons:
-        return reading("PROCESS", "观察窗口内未见消息", "只说明本次队列读取窗口没有关联消息；消息可能已被消费，不能据此认定业务后果未发生。")
+        return reading("PROCESS", "本次读取未找到关联消息", "只说明本次读取的队列范围没有关联消息；消息可能已被消费，不能据此认定业务后果未发生。")
     trusted = item.complete and item.reliable and item.correlated and item.authoritative
     if auxiliary and source_type == "ASYNC_TASK_STATUS" and trusted and item.closure == "CLOSED":
         if item.state == "CONFIRMED":
@@ -62,5 +62,5 @@ def observation_reading(item: CheckObservation, *, source_type: str | None = Non
             return reading("WAITING", "此阶段尚未完成观察", "这一阶段未取得完成条件；若本轮没有更晚的有效观察，仍不能确认最终结果。")
         return reading("INCOMPLETE", "证明依据不足", "本条记录未形成完整、可靠且对应本次操作的证明。需核对来源与关联条件，再发起新的检查。", True)
     if item.state == "ABSENT" and item.closure != "CLOSED":
-        return reading("WAITING", "此阶段暂未观察到", "观察窗口尚未闭合，不能确认该业务后果不存在。")
-    return reading("OBSERVED", "已观察到业务结果" if item.state == "CONFIRMED" else "闭合窗口内未发生", "本条仅说明已观察的业务事实，是否符合权限要求由本轮完整检查判断。")
+        return reading("WAITING", "此阶段暂未观察到", "本次请求的观察尚未完成，不能确认该业务后果不存在。")
+    return reading("OBSERVED", "已观察到业务结果" if item.state == "CONFIRMED" else "本次观察已完成，未发现该结果", "本条仅说明已观察的业务事实，是否符合权限要求由本轮完整检查判断。")

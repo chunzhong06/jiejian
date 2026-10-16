@@ -41,7 +41,7 @@ export function ChangeRegistration({ projectId, repair, requestedRepair, onSaved
   const submit = async (values:{reason?:string;paths?:string}) => {
     if(locked.current || (uncertain&&!retryReady) || !preview)return
     const task=reference?repair?.tasks.find(item=>item.contract.repair_fingerprint===reference && item.status!=='STALE'):undefined
-    if(reference&&!task){onError(new ApiError('STATE_PRECONDITION','原题引用不可用，请从原问题重新进入。'));return}
+    if(reference&&!task){onError(new ApiError('STATE_PRECONDITION','无法读取原问题的记录，请从该问题的结果页重新进入。'));return}
     const paths=(values.paths??'').split(/\r?\n/).map(item=>item.trim()).filter(Boolean)
     if(paths.length>128){onError(new ApiError('INPUT_INVALID','最多填写 128 个相对路径。'));return}
     locked.current=true;setBusy(true)

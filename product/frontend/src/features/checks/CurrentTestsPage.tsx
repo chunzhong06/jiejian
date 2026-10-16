@@ -17,6 +17,7 @@ import { CurrentResultStory } from '../results/CurrentResultStory'
 import { ResultAgentHandoff } from '../results/ResultAgentHandoff'
 import { CheckProgressPanel } from './CheckProgressPanel'
 import { ResultOverviewHeader, ResultScope } from '../results/overview/ResultOverview'
+import { runHeading } from '../results/overview/resultLanguage'
 import { SourceIdentityPanel } from '../changes/delivery/SourceIdentityPanel'
 
 const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.run.lifecycle)
@@ -138,7 +139,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
             timer = setTimeout(() => void read(), 2000)
           }
         }
-        // 已发布事实保持只读；终态以后另行刷新唯一 Workspace，不能让工作台继续保留旧缺口。
+        // 已保存的检查记录保持只读；终态以后另行刷新唯一 Workspace，不能让工作台继续保留旧缺口。
         if (valid && !active(next)) void syncWorkspace(`${selected}:${next.run.lifecycle}:${next.result_integrity}:${next.run.finished_at_us}`)
       } catch (error) { if (valid) {
         if (error instanceof ApiError && ['STATE_PRECONDITION','ARTIFACT_MANIFEST','API_VERSION_UNSUPPORTED'].includes(error.code)) { setStatus(null); setStory(null); setRunFailed(true); onError(error) }
@@ -242,7 +243,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     {changeId && !selectedMode && <p className="editorial-muted">本轮对应所选修改批次，覆盖完整当前权限要求。</p>}
     {completionPending && story && <section className="task-focus check-completion" aria-label="本轮检查完成"><div className="agent-task-main">
       <p className="editorial-eyebrow task-focus-label" role="status">检查已完成，结果已保存。</p>
-      <h2>{story.judgement}</h2>
+      <h2>{runHeading(story)}</h2>
       <p>{story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? '下一步：核对原问题与必须保留的正常业务，查看修复依据。' : '查看本轮结果与证据，了解检查结论及适用范围。'}</p>
       <div className="task-focus-actions">
         <Button type={story.verdict === 'BLOCK' && story.actions.some(action => action.repair_requirement) ? 'default' : 'primary'} onClick={() => setOpenedResult(story.run_id)}>查看本轮结果</Button>

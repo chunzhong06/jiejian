@@ -17,13 +17,15 @@ import { RuleCandidateList } from './RuleCandidateList'
 import { CandidateWorkPlan } from './CandidateWorkPlan'
 import './rule-candidates.css'
 
-export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision, recoveryOperation, onProposal, onSelected, onRecoveryChange, onExit, onNavigate, onOverview }: {
+export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision, recoveryOperation, onProposal, onSelected, onRecoveryChange, onExit, onNavigate, onOverview, exampleDraft }: {
   projectId: string; requestedId?: string | null; requestedRevision?: number
   onProposal: (proposalId: string) => Promise<void>
   recoveryOperation?: string | null
   onSelected: (id: string, revision: number) => void
   onExit?: () => void
   onOverview?: () => void
+  // 示例回复只作为带来源的展示内容嵌入，不伪造持久候选、修订或 Agent 保存回执。
+  exampleDraft?: ReactNode
   onNavigate?: (path: string) => void
   onRecoveryChange?: (id: string, revision: number, operation: string | null) => void
 }) {
@@ -227,8 +229,14 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
   }
 
   if (loading && !listOpen) return <section className="rule-candidates-inbox" aria-label="读取规则候选"><Spin size="small" /> 正在读取规则候选</section>
+  if (!selected && exampleDraft) return <section className="rule-candidates-inbox" aria-label="对话规则候选">
+    {sourceOverview}
+    {error && <Alert type="warning" message={error}/>}
+    {exampleDraft}
+    {!!context?.candidates.length && <section aria-label="实际保存的候选"><h2>另有 Agent 实际保存的候选</h2><RuleCandidateList candidates={context.candidates} archived={false} onSelect={(id,revision)=>void select(id,revision)}/>{context.next_offset != null && <Button loading={busy} onClick={()=>void nextPage()}>下一页候选</Button>}</section>}
+  </section>
   if (!selected) return <section className="rule-candidates-inbox" aria-label="对话规则候选">
-
+    {onOverview && <Button type="link" onClick={onOverview}>← 返回权限规则</Button>}
     {!listOpen && <>{sourceOverview}{heading(null)}</>}
     {error && <Alert type="warning" message={error} />}
     <RequirementNotice gaps={context?.boundary_review_gaps ?? []} listedCandidateIds={listOpen&&!loading?(context?.candidates??[]).map(item=>item.candidate_id):[]} purpose="candidate" disabled={busy || Boolean(operation)} onOpen={gap=>void select(gap.candidate_id,gap.revision)}/>
@@ -242,7 +250,6 @@ export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision,
     {archived && !context?.candidates.length && <p>暂无已归档候选。归档只收起候选，原始记录会保留。</p>}
     <RuleCandidateList candidates={context?.candidates ?? []} archived={archived} onSelect={(id, revision) => void select(id, revision)}/>
     {context?.next_offset != null && <Button loading={busy} onClick={() => void nextPage()}>下一页候选</Button>}</>}</>}
-    {!listOpen&&onOverview&&<details className="rule-other-entry"><summary>其他入口 · 查看现有规则或使用官方示例草稿</summary><p>这是独立的权限总览，不是本次 Agent 整理的上一步。</p><Button onClick={onOverview}>打开权限总览</Button></details>}
   </section>
 
   const content = selected.candidate.content

@@ -8,12 +8,12 @@ export function ObservationSources({ sources, onEvidence }: { sources: EvidenceE
   if (!sources.length) return null
   return <section className="result-observation-sources" aria-label="观察来源与阶段">
     <h3>观察来源与阶段</h3>
-    <p className="editorial-muted">观察状态描述业务事实，权限结论由本轮完整检查给出；辅助记录不替代必要证明。</p>
+    <p className="editorial-muted">这里显示各来源实际读到了什么。过程记录用于解释执行；能否证明某项结果，要看对应的判断证据。</p>
     {observationGroups(sources).map(group => {
       const source = group.latest
       const reading = sourceReading(source)
       const name = sourceLabels[source.source_label] ?? source.source_label
-      const role = { VERDICT_REQUIRED: '必要证明', SUPPORTING: '辅助观察', DIAGNOSIS_REQUIRED: '诊断记录' }[source.observed_fact.level]
+      const role = { VERDICT_REQUIRED: '判断所需证据', SUPPORTING: '辅助观察', DIAGNOSIS_REQUIRED: '诊断记录' }[source.observed_fact.level]
       return <article className="result-observation-source" key={group.key} aria-label={`${name}的阶段记录`}>
         <details className="result-observation-stages"><summary className="result-observation-heading">
           <span className="result-observation-name"><strong>{name}</strong><small>{role}</small></span>

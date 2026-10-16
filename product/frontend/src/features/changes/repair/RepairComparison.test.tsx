@@ -7,14 +7,14 @@ const row=(role:RepairComparisonRow['role'],id:string):RepairComparisonRow=>({ro
 it('零回归仍保留原问题与独立正常对照，不写死样例三行',()=>{
  render(<RepairComparison rows={[row('DENY','one'),row('SELECTED_ALLOW','two')]}/>)
  expect(document.querySelectorAll('.repair-comparison > section')).toHaveLength(2)
- expect(screen.getByText('必须保留的正常对照')).toBeInTheDocument()
+ expect(screen.getByText('修复后仍应正常的允许操作')).toBeInTheDocument()
  expect(screen.queryByText('technical-only')).not.toBeInTheDocument()
- expect(screen.queryByText(/原题复验通过/)).not.toBeInTheDocument()
+ expect(screen.queryByText(/原问题修复已验证/)).not.toBeInTheDocument()
 })
 it('全部回归按角色保留，同 Case 不去重且模糊匹配不显示新 SAFE',()=>{
  const entries=[row('DENY','one'),row('SELECTED_ALLOW','two'),...['two','three','four'].map((id)=>({...row('REGRESSION',id),match_status:'AMBIGUOUS' as const,after_verdict:'SAFE' as const}))]
  render(<RepairComparison rows={entries}/>)
  const sections=document.querySelectorAll('.repair-comparison > section');expect(sections).toHaveLength(5)
- expect(screen.getAllByText('必须保留的原安全回归')).toHaveLength(3)
+ expect(screen.getAllByText('修复后仍须通过的其他检查')).toHaveLength(3)
  expect(within(sections[2] as HTMLElement).getByText('存在多项可能对应的操作，尚不能逐项关联')).toBeInTheDocument()
 })

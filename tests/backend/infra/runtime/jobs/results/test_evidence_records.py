@@ -34,8 +34,8 @@ def detailed_package(parts,verdict='VULNERABLE',reasons=('ORPHAN_EFFECT_CONFIRME
     return replace(package,evidence=(document,),result=package.result.model_copy(update={'case_results':results})),document
 
 
-@pytest.mark.parametrize('verdict,reasons,word',[('VULNERABLE',('ORPHAN_EFFECT_CONFIRMED',),'禁止'),('SAFE',(),'验证'),
-    ('INCONCLUSIVE',('ACTUAL_IDENTITY_UNKNOWN',),'不能'),('INCONCLUSIVE',('FUTURE_REASON',),'不能')])
+@pytest.mark.parametrize('verdict,reasons,word',[('VULNERABLE',('ORPHAN_EFFECT_CONFIRMED',),'禁止'),('SAFE',(),'符合'),
+    ('INCONCLUSIVE',('ACTUAL_IDENTITY_UNKNOWN',),'无法'),('INCONCLUSIVE',('FUTURE_REASON',),'无法')])
 def test_detailed_record_reads_exact_values_and_published_reason(package_parts,monkeypatch,verdict,reasons,word):
     package,document=detailed_package(package_parts,verdict,reasons)
     def forbidden(*args,**kwargs):raise AssertionError('read must not evaluate')
@@ -45,7 +45,7 @@ def test_detailed_record_reads_exact_values_and_published_reason(package_parts,m
     view=record_view(package,document.evidence_id,document.case.case_id,observation.record_id)
     assert word in view.published_judgement
     assert view.values[0]==dict(label='state',before='private',after='public')
-    assert view.verification[2].status=='CONFIRMED' and '独立提交' in view.verification[2].text
+    assert view.verification[2].status=='CONFIRMED' and '每一次已保存的数据修改' in view.verification[2].text
     if reasons==('FUTURE_REASON',):assert view.verification[4].status=='UNKNOWN' and '尚无对应说明' in view.verification[4].text
     fact_link=next(item for item in view.related_records if item.kind=='FACT')
     fact=record_view(package,document.evidence_id,document.case.case_id,fact_link.record_id)
