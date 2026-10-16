@@ -22,7 +22,7 @@ describe('结果总览与单项调查', () => {
     value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof',required_level:'VERDICT_REQUIRED',source_label:'导出文件',observed_state:'CONFIRMED',evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
-    fireEvent.click(screen.getByRole('button',{name:'查看必要证明记录'}))
+    fireEvent.click(screen.getByRole('button',{name:'查看判断所用记录'}))
     expect(await screen.findByRole('region',{name:'怎样验证这项要求'})).toHaveAttribute('data-selection',JSON.stringify({proof:'proof'}))
   })
 
@@ -61,12 +61,12 @@ describe('结果总览与单项调查', () => {
     expect(screen.queryByText('应用服务 · task-record')).not.toBeInTheDocument()
   })
   it('辅助证明只在记录页展示，保持等级及所选要求上下文', async () => {
-    const value=story();value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'SUPPORTING',source_label:'历史来源',observed_state:'UNKNOWN',evidence_refs:[],supporting_evidence_refs:['ev1'],limitations:['辅助材料不替代必要证明']}]
+    const value=story();value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'SUPPORTING',source_label:'历史来源',observed_state:'UNKNOWN',evidence_refs:[],supporting_evidence_refs:['ev1'],limitations:['辅助材料不替代判断所需证据']}]
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>); inspect()
     expect(screen.queryByRole('button',{name:'查看辅助观察记录'})).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'证据记录'}))
-    expect(screen.getByRole('region',{name:'本轮要求与证据对应'})).toHaveTextContent('辅助材料不替代必要证明')
+    expect(screen.getByRole('region',{name:'本轮实际结果与证据'})).toHaveTextContent('辅助材料不替代判断所需证据')
     fireEvent.click(screen.getByRole('button',{name:'查看辅助观察记录'}))
     expect(await screen.findByRole('region',{name:'怎样验证这项要求'})).toHaveAttribute('data-selection',JSON.stringify({proof:'proof1'}))
     expect(api.evidence).toHaveBeenCalledWith('r1','ev1')
@@ -98,17 +98,17 @@ describe('结果总览与单项调查', () => {
     await act(async () => resolve(evidence()))
     expect(error).not.toHaveBeenCalled()
     expect(screen.queryByRole('region',{name:'已发布证据'})).not.toBeInTheDocument()
-    expect(screen.getByRole('heading',{name:value.judgement,level:1})).toBeInTheDocument()
+    expect(screen.getByRole('heading',{name:'本轮发现违反权限要求的结果',level:1})).toBeInTheDocument()
     expect(screen.getByRole('heading',{name:'另一项操作',level:2})).toBeInTheDocument()
   })
   it('证明详情返回原事实入口，保持两次点击可达已发布文件', async () => {
     const value=story();value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'VERDICT_REQUIRED',source_label:'资源状态',observed_state:'CONFIRMED',evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
-    const trigger=screen.getByRole('button',{name:'查看必要证明记录'});trigger.focus();fireEvent.click(trigger)
+    const trigger=screen.getByRole('button',{name:'查看判断所用记录'});trigger.focus();fireEvent.click(trigger)
     await screen.findByRole('region',{name:'怎样验证这项要求'})
     fireEvent.keyDown(screen.getByRole('region',{name:'已发布证据'}),{key:'Escape'})
-    expect(screen.getByRole('button',{name:'查看必要证明记录'})).toHaveFocus()
+    expect(screen.getByRole('button',{name:'查看判断所用记录'})).toHaveFocus()
   })
   it('初始和恢复保持独立核对，不把不适用阶段列成无法确认', () => {
     const value=story(),source=value.actions[0].decisive_proof_chain[0]

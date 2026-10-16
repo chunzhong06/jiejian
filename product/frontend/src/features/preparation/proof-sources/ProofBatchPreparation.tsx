@@ -15,7 +15,7 @@ export function ProofBatchPreparation({context,onChanged}:{context:ProofContext;
     setReview(undefined);await batch.start('REVIEWED',review)
   }
   return <section className="provided-material-preparation" aria-label="集中核对材料">
-    <div><h3>核对后，连续准备这批材料</h3><p>{ready?'确认账号、资源和读取位置后，界鉴会逐项检查，并采用通过检查的材料。':'先补齐文件、资源对应和运行条件，再集中核对这批材料。'}</p>{message&&<p role="status">{message}</p>}</div>
+    <div><h3>确认用途后，逐项准备检查材料</h3><p>{ready?'确认账号、资源和读取位置后，界鉴会逐项检查，并将通过核对的材料用于这次检查。':'先补齐文件、资源对应和运行条件，再集中核对这批材料。'}</p>{message&&<p role="status">{message}</p>}</div>
     {batch.queryRequired?<Button type="primary" loading={batch.sending} onClick={()=>void batch.refresh()}>查询本次准备</Button>:busy&&batch.value?<Button danger loading={batch.value.cancel_requested} onClick={()=>void batch.cancel()}>停止材料准备</Button>:<Button type="primary" loading={batch.sending} disabled={!ready} onClick={()=>{setConfirmed(false);setReview(context)}}>核对这批材料</Button>}
     {batch.retrying&&!batch.queryRequired&&<Button onClick={()=>void batch.refresh()}>查询本次准备</Button>}
     {error&&<Alert type="warning" showIcon message={error}/>}

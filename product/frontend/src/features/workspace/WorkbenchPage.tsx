@@ -38,7 +38,7 @@ export function WorkbenchPage({ selected, workspace, systemStatus, experience, o
     setMaterials(preparation); setRecent(history.items)
   }, 10000)
   if (!selected) return <EditorialPage label="建立权限基线" width="welcome">
-    <section className="welcome-hero"><p className="editorial-eyebrow">界鉴 · 轻量权限验证</p><h1>让权限要求，<br />有真实业务事实支撑。</h1><p>开发仍在你已有的工具中完成。界鉴帮你确认权限、核对结果，并沿原题复验。</p></section>
+    <section className="welcome-hero"><p className="editorial-eyebrow">界鉴 · 轻量权限验证</p><h1>让权限要求，<br />有真实业务事实支撑。</h1><p>开发仍在你已有的工具中完成。界鉴帮你确认权限、核对结果，并在修改后重新检查原问题。</p></section>
     <div className="welcome-paths"><section className="welcome-path"><div><h2>接入自己的应用</h2><p>选择本地项目，再确认地址与源码读取范围。</p></div><Button type="primary" onClick={()=>onNavigate('/application')}>选择应用目录 <ArrowRightOutlined aria-hidden="true" /></Button></section>
     <section className="welcome-path"><div><h2>先了解完整过程</h2><p>使用独立的官方示例，体验权限确认、检查与复验。</p></div><Button type="link" onClick={()=>onNavigate('/environment')}>查看官方示例 <ArrowRightOutlined aria-hidden="true" /></Button></section></div>
   </EditorialPage>
@@ -54,7 +54,7 @@ export function WorkbenchPage({ selected, workspace, systemStatus, experience, o
   const running = workspace?.active_check
   const active = running && ['RUNNING','QUEUED'].includes(running.run.lifecycle)
   const changeTask = primary?.task_kind === 'REGISTER_SOURCE_CHANGE'
-  // 当前工作区可能因源码变化不再提供可信结果；历史已发布事实仍可回看，不能误报为从未检查。
+  // 当前工作区可能因源码变化不再提供可信结果；历史已保存的检查记录仍可回看，不能误报为从未检查。
   const published = recent.find(item=>item.status.result_integrity === 'VALID' && item.status.run.verdict)
   const result = workspace?.latest_result ?? (published?.status.run.verdict ? {
     run_id: published.status.run.run_id, verdict: published.status.run.verdict,

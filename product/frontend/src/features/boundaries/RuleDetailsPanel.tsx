@@ -31,7 +31,7 @@ export function RuleDetailsPanel({projectId,intentId,revision,onBack,onEdit,onNa
     <section className="rule-detail-axes centered-fact-groups" aria-label="规则、材料与检查分别呈现">
       <div><p className="editorial-eyebrow">规则</p><strong>{value.current?'已由你确认':'历史规则'}</strong><p className="editorial-muted">{formatTimestamp(value.approval.approved_at_us)}</p></div>
       <div><p className="editorial-eyebrow">检查材料</p><strong>{!value.current?'查看历史引用':value.preparation_complete?'可进入完整检查':'仍有材料待准备'}</strong><p className="editorial-muted">材料齐备本身不产生权限结论。</p></div>
-      <div><p className="editorial-eyebrow">已发布结果</p><strong>{latest ? latest.applies_to_current_implementation?'有对应当前实现的记录':'有历史记录，当前实现未核验':'本次读取未找到对应记录'}</strong><p className="editorial-muted">按本条规则的精确修订关联。</p></div>
+      <div><p className="editorial-eyebrow">已保存的检查结果</p><strong>{latest ? latest.applies_to_current_implementation?'有对应当前实现的记录':'有历史记录，当前实现未核验':'本次读取未找到对应记录'}</strong><p className="editorial-muted">只列出使用这一版规则的检查记录。</p></div>
     </section>
     <section className="rule-detail-proof"><h2>这条规则怎样检查</h2><p>{value.expectation==='DENY'?'用不应获准的账号执行这项业务，并保留合法账号的正常对照。':'用这条规则对应的合法账号执行这项业务。'}随后独立读取真实业务结果。</p>
       {value.effects.map(effect=><div key={effect.effect_id}><strong>{effect.label}</strong><p className="editorial-muted">{effect.description}</p></div>)}

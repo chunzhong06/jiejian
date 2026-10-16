@@ -85,7 +85,7 @@ export type EvidenceRecordLink = {record_id:string;kind:'FACT'|'OUTCOME'|'OBSERV
 export type EvidenceRecordIndex = {project_id:string;run_id:string;case_id:string;action_id:string;evidence_id:string;records:EvidenceRecordLink[]}
 export type EvidenceRecordView = Omit<EvidenceRecordIndex,'records'> & {record:EvidenceRecordLink;summary:string;published_judgement:string;role:'PROOF'|'SUPPORTING';
   verification:Array<{key:string;title:string;status:'CONFIRMED'|'LIMITED'|'UNKNOWN';text:string;record_refs:string[];source:Record<string,string>;fragment:Record<string,unknown>}>;
-  values:Array<{label:string;before?:unknown;after?:unknown;value?:unknown}>;location:Record<string,string>;fragment:Record<string,unknown>;related_records:EvidenceRecordLink[];limitations:string[]}
+  values:Array<{label:string;before?:unknown;after?:unknown;before_label?:string;after_label?:string;value?:unknown}>;location:Record<string,string>;fragment:Record<string,unknown>;related_records:EvidenceRecordLink[];limitations:string[]}
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`
 const runPath = (id: string) => `/api/runs/${encodeURIComponent(id)}`
 export type CheckHistoryCursor = { created_at_us: number; run_id: string }

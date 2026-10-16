@@ -65,11 +65,11 @@ def _entries(document):
     def add(kind,value,pointer,label,**fields):
         key=value.fact_id if kind=='FACT' else _record_id(document,kind,value.model_dump(mode='json'))
         entries.append((RecordLink(record_id=key,kind=kind,label=label,**fields),value,pointer))
-    add('OUTCOME',document.outcome,'/outcome','本题的实际执行核对')
+    add('OUTCOME',document.outcome,'/outcome','本次操作的执行记录')
     for index,fact in enumerate(getattr(document,'business_facts',())):
-        labels={'OBJECT_CREATION':'本次创建的实际对象','COMMITTED_STATE':'独立业务提交','IDENTITY_CHECK':'实际账号核对','FIELD_DISCLOSURE':'受保护字段比较',
+        labels={'OBJECT_CREATION':'本次创建的实际对象','COMMITTED_STATE':'已保存的数据修改','IDENTITY_CHECK':'实际账号核对','FIELD_DISCLOSURE':'受保护字段比较',
             'REFERENCE_ARTIFACT':'已采用的文件参照','FILE_RECEIPT':'实际接收的文件内容'}
-        label=f'第 {fact.data.scope_ordinal+1} 次独立提交' if fact.data.kind=='COMMITTED_STATE' else labels[fact.data.kind]
+        label=f'第 {fact.data.scope_ordinal+1} 次数据修改' if fact.data.kind=='COMMITTED_STATE' else labels[fact.data.kind]
         add('FACT',fact,f'/business_facts/{index}',label)
     for index,item in enumerate(document.observations):
         add('OBSERVATION',item,f'/observations/{index}',PHASES[item.phase]+'的结果观察',
@@ -104,7 +104,7 @@ def _summary(link,value):
         return {'CONFIRMED':'这项业务后果已被观察到。','ABSENT':'在这条记录的观察范围内没有发现该后果。','UNKNOWN':'这条记录不足以确认业务后果。'}[value.state]
     data=value.data
     if data.kind=='OBJECT_CREATION':return '独立业务记录确认本次请求创建了这个对象；随后删除或接口拒绝不会抹去创建事实。'
-    if data.kind=='COMMITTED_STATE':return '这次独立提交改变了受保护字段。下方保留提交前后的值，可核对变化到底发生在哪里。'
+    if data.kind=='COMMITTED_STATE':return '这条记录保存了一次数据修改。下方列出修改前后的值，用于核对受保护字段是否发生变化。'
     if data.kind=='IDENTITY_CHECK':return '独立身份读取的结果：账号'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.subject_match]+'，角色'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.role_match]+'。'
     if data.kind=='FIELD_DISCLOSURE':return '对实际返回的受保护字段逐项比较；摘要用于核对内容，不展示原始敏感正文。'
     if data.kind=='REFERENCE_ARTIFACT':return '这是用户采用的测试参照，只定义要比较的内容，本身不能证明本次已经收到文件。'
@@ -114,7 +114,7 @@ def _summary(link,value):
 def record_view(package,evidence_id,case_id,record_id):
     document,result=_select(package,evidence_id,case_id);entries=_entries(document)
     entry=next((entry for entry in entries if entry[0].record_id==record_id),None)
-    if entry is None:raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'未找到这条封存记录，请核对原链接')
+    if entry is None:raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'未找到这条封存记录，请从原检查项重新打开')
     link,value,pointer=entry;case=document.case;outcome=document.outcome
     configuration=next(action for action in package.bundle.actions if action.action_id==document.action_id)
     identities={item.identity_id:item for item in package.bundle.identities}
@@ -128,7 +128,7 @@ def record_view(package,evidence_id,case_id,record_id):
     related=tuple(item for item,_,_ in entries if item.record_id in related_ids and item.record_id!=record_id)
     outcome_ref=entries[0][0].record_id
     supporting=link.kind in {'TRACE','OUTCOME'} or link.kind=='OBSERVATION' and value.level!='VERDICT_REQUIRED'
-    limitations=['本次判断只覆盖当时冻结的规则、账号、资源和观察范围。']
+    limitations=['本次结论只适用于当时使用的规则、账号、资源和记录读取范围。']
     if document.schema_version=='1':limitations.append('这份旧证据未保存逐次提交或内容比较值，无法补回当时没有记录的细节。')
     if supporting:limitations.append('这条过程记录不能单独证明权限安全或业务后果。')
     method='；'.join(dict.fromkeys(METHODS[ref.method] for ref in refs))
@@ -136,24 +136,24 @@ def record_view(package,evidence_id,case_id,record_id):
         selected_proofs={ref.proof_fingerprint for ref in refs}
         bindings={proof.binding_fingerprint for proof in case.proof_requirements if proof.proof_fingerprint in selected_proofs}
         expected=[proof.expected_state for proof in configuration.proofs if proof.binding_fingerprint in bindings and proof.expected_state is not None]
-        if expected:method+=' 本次要核对的目标状态为：'+'、'.join(dict.fromkeys(expected))+'。'
+        if expected:method+=' 判断条件采用本轮确认的状态定义，具体字段和值可在原始记录中核对。'
     if not method:
         method='读取同一封存证据中的实际执行核对。' if link.kind=='OUTCOME' else '读取本题显式执行事件及它记录的前序关系；不按时间相邻推断因果。' if link.kind=='TRACE' else '原观察只保存了来源、阶段和判断字段，没有封存更细的采集步骤。'
     reasons=[REASONS.get(code,f'已发布原因 {code} 尚无对应说明，请结合原记录核对。') for code in result.reason_codes]
     if not reasons:
-        reasons=['已发布结果确认本题的身份、请求与资源关联、必要证明和恢复条件满足要求。'+('对应正常业务对照也已通过。' if case.permission.expectation=='DENY' else '')] if result.verdict.value=='SAFE' else ['本题未封存可读的原因说明，保留已发布结论和具体记录。']
+        reasons=['本轮已核对实际账号、请求和资源，判断所需证据与恢复条件均符合要求。'+('对应的允许操作也已通过检查。' if case.permission.expectation=='DENY' else '')] if result.verdict.value=='SAFE' else ['本题未封存可读的原因说明，保留已发布结论和具体记录。']
     relevant_reasons=tuple(item.record_id for item,observation,_ in entries if item.kind=='OBSERVATION' and observation.level=='VERDICT_REQUIRED' and observation.phase in {'AFTER','EVENTUAL'})
     actual={'MATCH':'与计划一致','MISMATCH':'与计划不一致','UNKNOWN':'尚未独立确认'}[outcome.actual_identity_status]
     association=f'实际账号{actual}；记录与本次请求'+('对应' if outcome.run_correlated else '尚未确认对应')+'；记录与本题资源'+('对应。' if outcome.resource_correlated else '尚未确认对应。')
     resource_label='本次请求新建的对象' if getattr(configuration,'created_resource',None) is not None else f'资源“{case.resource_id}”'
     sections=(
-        VerificationSection(key='rule',title='本次要验证什么',status='CONFIRMED',text=f'{subject.label}对{owner.label}拥有的{resource_label}，'+('不得' if case.permission.expectation=='DENY' else '可以')+configuration.display_name+f'。采用权限修订 {case.permission.revision}。',record_refs=(outcome_ref,)),
-        VerificationSection(key='experiment',title='这次怎样执行',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' else 'LIMITED',
-            text=f'计划使用{subject.label}执行“{configuration.display_name}”；实际账号{actual}。'+('未取得HTTP状态。' if outcome.http_status is None else f'请求返回HTTP {outcome.http_status}。')+'请求状态需要与实际业务后果一起阅读。',record_refs=(outcome_ref,)),
-        VerificationSection(key='method',title='怎样取得这条证据',status='CONFIRMED' if refs or link.kind in {'TRACE','OUTCOME'} else 'UNKNOWN',text=method,record_refs=(record_id,)),
-        VerificationSection(key='association',title='为什么属于本次检查',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' and outcome.run_correlated and outcome.resource_correlated else 'LIMITED',text=association,record_refs=(outcome_ref,)),
-        VerificationSection(key='reason',title='为什么得到这个判断',status='CONFIRMED' if all(code in REASONS for code in result.reason_codes) and (result.reason_codes or result.verdict.value=='SAFE') else 'UNKNOWN',text=' '.join(reasons),record_refs=relevant_reasons),
-        VerificationSection(key='boundary',title='这条记录能说明到哪里',status='LIMITED',text=' '.join(limitations),record_refs=()),
+        VerificationSection(key='rule',title='检查要求',status='CONFIRMED',text=f'{subject.label}对{owner.label}拥有的{resource_label}，'+('不得' if case.permission.expectation=='DENY' else '可以')+configuration.display_name+f'。采用权限修订 {case.permission.revision}。',record_refs=(outcome_ref,)),
+        VerificationSection(key='experiment',title='实际操作',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' else 'LIMITED',
+            text=f'计划使用{subject.label}执行“{configuration.display_name}”；实际账号{actual}。'+('未取得HTTP状态。' if outcome.http_status is None else f'请求返回HTTP {outcome.http_status}。')+'接口状态只说明请求如何被处理，实际结果还要看下面的业务记录。',record_refs=(outcome_ref,)),
+        VerificationSection(key='method',title='取证与比较方法',status='CONFIRMED' if refs or link.kind in {'TRACE','OUTCOME'} else 'UNKNOWN',text=method,record_refs=(record_id,)),
+        VerificationSection(key='association',title='账号、请求与资源对应',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' and outcome.run_correlated and outcome.resource_correlated else 'LIMITED',text=association,record_refs=(outcome_ref,)),
+        VerificationSection(key='reason',title='判断依据',status='CONFIRMED' if all(code in REASONS for code in result.reason_codes) and (result.reason_codes or result.verdict.value=='SAFE') else 'UNKNOWN',text=' '.join(reasons),record_refs=relevant_reasons),
+        VerificationSection(key='boundary',title='结论适用范围',status='LIMITED',text=' '.join(limitations),record_refs=()),
     )
     digest=hashlib.sha256(canonical_check_document(document)).hexdigest()
     result_index=next(index for index,item in enumerate(package.result.case_results) if item.case_id==case_id)
@@ -175,7 +175,7 @@ def record_view(package,evidence_id,case_id,record_id):
             collector_version=value.collector_version,complete=value.complete,reason_codes=value.reason_codes,data=data.model_dump(mode='json'))
         if data.kind=='COMMITTED_STATE':values=[dict(label='.'.join(change.path),before=change.before,after=change.after) for change in data.changes]
         elif data.kind=='OBJECT_CREATION':values=[dict(label='本次实际对象',value=data.resource_id),dict(label='对象实例标识',value=data.incarnation),dict(label='创建记录序号',value=data.sequence),dict(label='录制样本（仅作材料引用）',value=case.resource_id)]
-        elif data.kind=='FILE_RECEIPT':values=[dict(label='内容大小（字节）',before=data.expected.size,after=data.actual_size),dict(label='SHA-256',before=data.expected.sha256,after=data.actual_sha256),dict(label='完整接收',value=data.complete)]
+        elif data.kind=='FILE_RECEIPT':values=[dict(label='文件大小（字节）',before=data.expected.size,after=data.actual_size,before_label='参照文件',after_label='实际收到'),dict(label='内容指纹（SHA-256）',before=data.expected.sha256,after=data.actual_sha256,before_label='参照文件',after_label='实际收到'),dict(label='完整接收',value=data.complete)]
         elif data.kind=='FIELD_DISCLOSURE':values=[dict(label=item.path,value='与参照一致' if item.matched else '未形成一致比较') for item in data.fields]
         elif data.kind=='REFERENCE_ARTIFACT':values=[dict(label='参照大小（字节）',value=data.manifest.size),dict(label='参照SHA-256',value=data.manifest.sha256)]
         else:values=[dict(label='账号一致',value=data.subject_match),dict(label='角色一致',value=data.role_match)]
@@ -189,12 +189,12 @@ def record_view(package,evidence_id,case_id,record_id):
             # 归约窗口也必须可见，才能解释闭合与未发生；不导出原请求nonce。
             fragment['collection']=tuple(ref.model_dump(mode='json') for ref in refs)
             window=getattr(refs[0],'record_window',None)
-            if window is not None:values=[dict(label='.'.join(window.field_path),before=window.before_value,after=window.after_value),dict(label='独立提交数',value=window.operation_count),dict(label='请求已闭合',value=window.scope_state=='COMPLETE')]
+            if window is not None:values=[dict(label='.'.join(window.field_path),before=window.before_value,after=window.after_value),dict(label='本次请求已保存的修改次数',value=window.operation_count),dict(label='本次请求的记录已收齐',value=window.scope_state=='COMPLETE')]
             elif getattr(refs[0],'creation_window',None) is not None:
                 created=refs[0].creation_window
                 values=[dict(label='本次创建记录数',value=created.created_count),dict(label='响应编号与独立记录对应',value=created.response_matched),
-                    dict(label='本次请求已闭合',value=created.scope_state=='COMPLETE'),dict(label='集合已恢复检查前状态',value=created.source_complete and created.current_digest==created.baseline_digest)]
-            elif getattr(refs[0],'file_window',None) is not None:values=[dict(label='本次请求已闭合',value=refs[0].file_window.scope_state=='COMPLETE')]
+                    dict(label='本次请求的记录已收齐',value=created.scope_state=='COMPLETE'),dict(label='集合已恢复检查前状态',value=created.source_complete and created.current_digest==created.baseline_digest)]
+            elif getattr(refs[0],'file_window',None) is not None:values=[dict(label='本次请求的记录已收齐',value=refs[0].file_window.scope_state=='COMPLETE')]
     return EvidenceRecordView(project_id=package.request.project_id,run_id=document.run_id,case_id=case_id,action_id=document.action_id,
         evidence_id=evidence_id,record=link,summary=_summary(link,value),published_judgement=JUDGEMENTS[result.verdict.value],
         role='SUPPORTING' if supporting else 'PROOF',verification=sections,values=tuple(values),

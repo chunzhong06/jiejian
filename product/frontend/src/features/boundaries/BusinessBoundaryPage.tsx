@@ -3,7 +3,7 @@ import { LoadingState } from '../../shared/ui/LoadingState'
 import { SearchField } from '../../shared/ui/SearchField'
 
 import { PermissionRuleRows } from './PermissionRuleRows'
-import { Alert, Button, Radio, Result, Segmented, Typography } from 'antd'
+import { Alert, Button, Result, Segmented, Typography } from 'antd'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ruleCandidatesApi } from '../../api/boundaries/ruleCandidates'
 import {
@@ -30,6 +30,7 @@ import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
 import { BoundaryProposalReview } from './proposals/BoundaryProposalReview'
 import { RuleCandidatesPanel } from './RuleCandidatesPanel'
 import { RuleDetailsPanel } from './RuleDetailsPanel'
+import { ProvidedPermissionReply, type DownloadChoice } from './ProvidedPermissionReply'
 import { RulePreparationStages } from '../../shared/ui/RulePreparationStages'
 
 export function BusinessBoundaryPage({ project, requestedIntentId, requestedIntentRevision, onRuleRoute, onNavigate, requestedProposalId, requestedActionId, requestedCandidatesView, requestedCandidateId, requestedCandidateRevision, candidateRecoveryOperation, onCandidateRoute, onError, onStateChanged, onBack, onProvidedProposal, providedDownloadChoiceRequired=false, onFeedback }: {
@@ -54,7 +55,7 @@ export function BusinessBoundaryPage({ project, requestedIntentId, requestedInte
 }) {
   const [selectedRule,setSelectedRule] = useState<{id:string;revision?:number} | undefined>(requestedIntentId ? {id:requestedIntentId,revision:requestedIntentRevision} : undefined)
   useEffect(()=>{setSelectedRule(requestedIntentId ? {id:requestedIntentId,revision:requestedIntentRevision}:undefined)},[project.project_id,requestedIntentId,requestedIntentRevision])
-  const [exhibitionDownload,setExhibitionDownload]=useState<boolean | 'OTHER' | 'DEFER'>()
+  const [exhibitionDownload,setExhibitionDownload]=useState<DownloadChoice>()
   useEffect(()=>setExhibitionDownload(undefined),[project.project_id,providedDownloadChoiceRequired])
   const providedInFlight = useRef(false)
   const [manualOpen, setManualOpen] = useState(false)
@@ -277,49 +278,39 @@ export function BusinessBoundaryPage({ project, requestedIntentId, requestedInte
   }
   const permissionsComplete = boundary.actions.length > 0
     && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
-  const providedEntry = !candidatesOpen && !proposalView && editing === 'INITIAL' && Boolean(onProvidedProposal) && !initialCommand && !requestedCandidateId
-  const candidates = candidatesOpen && !proposalView && editing !== 'MAINTENANCE' && <RuleCandidatesPanel key={project.project_id} projectId={project.project_id} requestedId={requestedCandidateId} requestedRevision={requestedCandidateRevision}
+  const providedEntry = !proposalView && editing === 'INITIAL' && Boolean(onProvidedProposal) && !initialCommand && !requestedCandidateId
+  // 普通候选入口与示例入口共用同一整理工作面，示例选择后继续使用既有 Proposal / Human Approval。
+  const exampleDraft = providedEntry ? <ProvidedPermissionReply
+    requiresDownloadChoice={providedDownloadChoiceRequired} choice={exhibitionDownload} busy={busy} manualOpen={manualOpen}
+    onChoice={setExhibitionDownload} onReview={() => void loadProvidedProposal()} onManual={() => setManualOpen(!manualOpen)}>
+    {manualOpen && <BoundaryProposalEditor key={editorKey} preview={preview} busy={busy} onSubmit={(command) => void createProposal(command)}/>}
+  </ProvidedPermissionReply> : undefined
+  const candidates = (candidatesOpen || providedEntry) && !proposalView && editing !== 'MAINTENANCE' && <RuleCandidatesPanel key={project.project_id} projectId={project.project_id} requestedId={requestedCandidateId} requestedRevision={requestedCandidateRevision}
+    exampleDraft={exampleDraft}
     recoveryOperation={candidateRecoveryOperation} onRecoveryChange={onCandidateRoute} onNavigate={onNavigate} onOverview={()=>showCandidates(false)}
     onExit={() => onCandidateRoute?.(null,0,null)}
     onSelected={(id,revision) => {setEditing(null); onCandidateRoute?.(id,revision,null)}} onProposal={openProposal}/>
-  return <EditorialPage label="权限规则文档" width={proposalView || candidatesOpen ? undefined : 'summary'}>
-    {editing !== 'MAINTENANCE' && <EditorialHeader eyebrow={project.name || '当前应用'} title={proposalView ? proposalView.decision ? '权限变更记录' : '审阅权限变更' : candidatesOpen ? '整理本轮权限要求' : editing ? '建立权限规则' : '权限要求'} status={!candidatesOpen && !proposalView && !editing && <span className="boundary-version">权限版本 {boundary.policy_epoch} · {boundary.permission_intents.length} 条生效规则</span>}><p className="editorial-muted">{candidatesOpen && !proposalView ? '沿用已保存的角色与动作，先确认本轮要求，再审阅并批准完整规则。' : !proposalView && !editing ? (!boundary.permission_intents.length && boundary.policy_epoch === 0 ? '尚未批准权限。已保存的业务信息和候选仍保留，可进入“整理权限候选”继续。' : permissionsComplete ? '查看各个角色在不同资源上的权限，后续检查以已确认的规则为依据。' : '部分业务动作仍需确认权限，详见下方清单。') : providedEntry ? '角色和动作已整理。现在需要明确：谁可以对谁的资源做什么。' : proposalView ? proposalView.decision ? '这份提案已有决定。下方保留当时审阅的变更；继续当前工作可查看最新任务。' : '下方是本次待审提案。核对具体变化后，再决定是否批准。' : '先由 Agent 整理业务约定，再核对候选并批准权限规则。'}</p></EditorialHeader>}
-    {(proposalView || !candidatesOpen && editing === 'INITIAL') && <RulePreparationStages
+  return <EditorialPage label="权限规则文档" width={providedEntry ? 'summary' : proposalView || candidatesOpen ? undefined : 'summary'}>
+    {editing !== 'MAINTENANCE' && <EditorialHeader eyebrow={project.name || '当前应用'} title={proposalView ? proposalView.decision ? '权限变更记录' : '审阅权限变更' : candidatesOpen ? '整理本轮权限要求' : editing ? '建立权限规则' : '权限要求'} status={!candidatesOpen && !proposalView && !editing && <span className="boundary-version">权限版本 {boundary.policy_epoch} · {boundary.permission_intents.length} 条生效规则</span>}><p className="editorial-muted">{candidatesOpen && !proposalView ? '在这里整理本轮权限要求，再审阅并批准完整规则。' : !proposalView && !editing ? (!boundary.permission_intents.length && boundary.policy_epoch === 0 ? '尚未批准权限。已保存的业务信息和候选仍保留，可进入“整理权限候选”继续。' : permissionsComplete ? '查看各个角色在不同资源上的权限，后续检查以已确认的规则为依据。' : '部分业务动作仍需确认权限，详见下方清单。') : providedEntry ? '示例权限草稿已备好。核对下面的整理结果，再继续审阅完整规则。' : proposalView ? proposalView.decision ? '这份提案已有决定。下方保留当时审阅的变更；继续当前工作可查看最新任务。' : '下方是本次待审提案。核对具体变化后，再决定是否批准。' : '先由 Agent 整理业务约定，再核对候选并批准权限规则。'}</p></EditorialHeader>}
+    {(proposalView || !candidatesOpen && !providedEntry && editing === 'INITIAL') && <RulePreparationStages
       phase={proposalView ? proposalView.decision?.decision === 'APPROVED' ? 3 : 2 : 1}
       complete={proposalView?.decision?.decision === 'APPROVED'}
       note={proposalView?.decision?.decision === 'REJECTED' ? '本次提案已放弃' : providedEntry ? '核对草稿中的允许与禁止' : undefined}
     />}
     {success && <TaskReceipt message={success} pending={syncError} onRetry={syncError && !busy ? () => void syncApproved() : undefined}/>}
     {approvalUncertain && <Alert type="warning" message="批准回执尚未确认。请先核对同一提案的决定，不要重复批准。" action={<Button loading={busy} onClick={() => void readApproval()}>核对批准结果</Button>}/>}
-    {!candidatesOpen && !proposalView && editing !== 'MAINTENANCE' && !initialCommand && <section className="boundary-candidate-entry" aria-label="权限候选入口"><div><strong>{boundary.policy_epoch>0 ? '通过 Agent 新增、修改或停用规则' : '从业务约定开始整理权限'}</strong><p>{candidateSummary}。{boundary.policy_epoch>0?'保留现有规则，读取本次候选后审阅变更；批准后才生效。':'把要求交给原 Agent，保存后在这里读取。'}</p></div><Button type="primary" onClick={() => showCandidates(true)}>{boundary.policy_epoch>0?'Agent 整理与读取候选':'整理权限候选'}</Button></section>}
+    {!providedEntry && !candidatesOpen && !proposalView && editing !== 'MAINTENANCE' && !initialCommand && <section className="boundary-candidate-entry" aria-label="权限候选入口"><div><strong>{boundary.policy_epoch>0 ? '通过 Agent 新增、修改或停用规则' : '从业务约定开始整理权限'}</strong><p>{candidateSummary}。{boundary.policy_epoch>0?'保留现有规则，读取本次候选后审阅变更；批准后才生效。':'把要求交给原 Agent，保存后在这里读取。'}</p></div><Button type="primary" onClick={() => showCandidates(true)}>{boundary.policy_epoch>0?'Agent 整理与读取候选':'整理权限候选'}</Button></section>}
     {!proposalView && !editing && <section className="boundary-browser" hidden={candidatesOpen}><CurrentBoundary requestedActionId={requestedActionId} boundary={boundary} onEdit={beginMaintenance} onRule={(id,revision)=>{setSelectedRule({id,revision});onRuleRoute?.(id,revision)}} /></section>}
-    {!providedEntry && candidates}
+    {candidates}
     {!candidatesOpen && !proposalView && pendingOptions.length > 0 && <section className="boundary-pending-choices"><h2>待审权限提案</h2><p>批准后才会更新生效权限。</p>{pendingOptions.map((item,index)=><Button key={item.proposal_id} onClick={()=>void openProposal(item.proposal_id)}>审阅提案 {index+1}</Button>)}</section>}
 
     {proposalView
       ? <BoundaryProposalReview key={proposalView.proposal.proposal_id} proposalView={proposalView} onRules={()=>{setProposalView(undefined);setEditing(null);setLocalCandidatesOpen(false);onNavigate?.(`/permissions?project_id=${encodeURIComponent(project.project_id)}`)}} onContinue={onNavigate?()=>onNavigate(`/workspace?project_id=${encodeURIComponent(project.project_id)}`):undefined} busy={busy || approvalUncertain} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
-      : !candidatesOpen && editing === 'INITIAL'
-        ? onProvidedProposal && !initialCommand ? <section className="boundary-provided-proposal" aria-label="提供的权限材料">
-            <header><h2>核对官方示例的权限草稿</h2><p className="editorial-muted">这份草稿随官方示例提供，不是本次源码分析或 Agent 自动生成的结论。先选择评审的下载权限，再审阅完整规则；经你批准后才会生效。</p></header>
-            {providedDownloadChoiceRequired&&<fieldset className="provided-meaning-choice"><legend>评审能否下载只含公开内容的展示版？</legend>
-              <Radio.Group className="product-choice-cards" aria-label="展示版下载要求" value={exhibitionDownload} disabled={busy} onChange={event=>setExhibitionDownload(event.target.value)}>
-                <Radio aria-label="允许下载展示版" value={true}><strong>允许下载展示版</strong><span>可以离线查看已经公开的内容。</span></Radio>
-                <Radio aria-label="仅允许在线预览" value={false}><strong>仅允许在线预览</strong><span>保留在线浏览，不提供展示版下载。</span></Radio>
-                <Radio aria-label="这些都不是" value="OTHER"><strong>这些都不是</strong><span>现有选项不符合要求，改为整理自己的约定。</span></Radio>
-                <Radio aria-label="暂不确定" value="DEFER"><strong>暂不确定</strong><span>先不作决定，明确需求后再继续。</span></Radio>
-              </Radio.Group>
-              <p className="editorial-muted" role="status">{exhibitionDownload === 'OTHER' ? '可以自行编写权限草稿，也可以进入“整理权限候选”，请 Agent 协助整理实际要求。' : exhibitionDownload === 'DEFER' ? '当前不生成权限提案。明确需求后，再选择符合要求的选项。' : '你的选择会写入待审权限提案；内部完整包仍受限制。'}</p>
-            </fieldset>}
-            <div className="boundary-entry-actions">
-              {exhibitionDownload !== 'OTHER' && <Button type="link" aria-expanded={manualOpen} onClick={() => setManualOpen(!manualOpen)}>自行编写权限草稿</Button>}
-              {exhibitionDownload === 'OTHER' ? <Button type={manualOpen ? 'default' : 'primary'} aria-expanded={manualOpen} onClick={() => setManualOpen(!manualOpen)}>{manualOpen ? '收起自定义草稿' : '编写我的权限要求'}</Button>
-                : <Button type="primary" loading={busy} disabled={providedDownloadChoiceRequired&&typeof exhibitionDownload!=='boolean'} onClick={() => void loadProvidedProposal()}>使用已提供的权限提案</Button>}
-            </div>{manualOpen && <BoundaryProposalEditor key={editorKey} preview={preview} busy={busy} onSubmit={(command) => void createProposal(command)} />}
-          </section> : <>{initialCommand ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} /> : <details className="boundary-manual-entry"><summary>自行编写权限草稿</summary><BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} /></details>}</>
+      : !candidatesOpen && !providedEntry && editing === 'INITIAL'
+        ? <>{initialCommand ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} /> : <details className="boundary-manual-entry"><summary>自行编写权限草稿</summary><BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} /></details>}</>
         : editing === 'MAINTENANCE' && maintenanceDraft
           ? <BoundaryMaintenanceEditor key={editorKey} focus={editFocus} draft={maintenanceDraft} initialCommand={initialMaintenanceCommand} busy={busy} onAgent={()=>{setEditing(null);setEditFocus(undefined);setInitialMaintenanceCommand(undefined);showCandidates(true)}} onCancel={() => { setEditing(null); setEditFocus(undefined); setInitialMaintenanceCommand(undefined) }} onSubmit={(command) => void createMaintenanceProposal(command)} />
-          : !candidatesOpen && <div className="boundary-new-proposal"><Typography.Text type="secondary">修改先进入草稿，审阅并批准后才会生效。</Typography.Text></div>}
-    {providedEntry && candidates}
+          : !candidatesOpen && !providedEntry && <div className="boundary-new-proposal"><Typography.Text type="secondary">修改先进入草稿，审阅并批准后才会生效。</Typography.Text></div>}
   </EditorialPage>
 }
 

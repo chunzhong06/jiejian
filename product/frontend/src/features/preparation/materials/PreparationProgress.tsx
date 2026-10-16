@@ -17,7 +17,7 @@ export function PreparationProgress({ progress, currentActionId, selectedActionI
       <tbody>{progress.actions.map(action => <tr key={action.action_id} aria-current={action.action_id === selectedActionId ? 'true' : undefined}>
         <th scope="row">{action.label}{currentActionId === action.action_id && <small>当前待办</small>}</th>
         <td>{action.satisfied} / {action.required}</td>
-        <td>{action.preparation_complete ? '材料已齐备' : action.remaining_kinds.length ? action.remaining_kinds.map(kind => materialSuggestionNames[kind]).join('、') : '材料项已齐备，仍需核对正常对照或规则关联'}</td>
+        <td>{action.preparation_complete ? '材料已齐备' : action.remaining_kinds.length ? action.remaining_kinds.map(kind => materialSuggestionNames[kind]).join('、') : '材料已齐备，仍需核对允许操作及对应规则'}</td>
         <td><Button type="link" onClick={() => onSelect(action.action_id)}>{action.action_id === selectedActionId ? '正在查看' : '查看材料'}</Button></td>
       </tr>)}</tbody>
     </table></div>

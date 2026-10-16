@@ -17,7 +17,7 @@ def observation(**changes):
     ({"phase": "BASELINE", "reason_codes": ("AUDIT_TAG_NOT_FOUND", "REQUIRED_OBSERVER_INCOMPLETE")}, "REFERENCE", "操作前尚无本次事件"),
     ({"phase": "RECOVERY", "reason_codes": ("OBSERVATION_UNINTERPRETED",)}, "REFERENCE", "恢复对照记录"),
     ({"reason_codes": ("SOURCE_RECORDS_AVAILABLE", "REQUIRED_OBSERVER_INCOMPLETE")}, "PROCESS", "已取得关联过程记录"),
-    ({"reason_codes": ("SOURCE_WINDOW_EMPTY", "EFFECT_PROJECTOR_UNSUPPORTED")}, "PROCESS", "观察窗口内未见消息"),
+    ({"reason_codes": ("SOURCE_WINDOW_EMPTY", "EFFECT_PROJECTOR_UNSUPPORTED")}, "PROCESS", "本次读取未找到关联消息"),
     ({"reason_codes": ("EFFECT_PROJECTOR_UNSUPPORTED",)}, "UNSUPPORTED", "不支持判断此类后果"),
     ({"reason_codes": ("TEMPORAL_WINDOW_OPEN",)}, "WAITING", "此阶段尚未完成观察"),
     ({"state": "ABSENT", "closure": "OPEN", "complete": True, "reliable": True, "correlated": True}, "WAITING", "此阶段暂未观察到"),
@@ -25,7 +25,7 @@ def observation(**changes):
     ({"reason_codes": ("MAPPING_TYPE_INVALID",)}, "INCOMPLETE", "来源字段不匹配"),
     ({"reason_codes": ("OPERATION_CORRELATION_INVALID",)}, "INCOMPLETE", "记录关联未核对"),
     ({"reason_codes": ("SOURCE_REQUIRES_MIGRATION",)}, "UNSUPPORTED", "旧来源需要重新准备"),
-    ({"reason_codes": ("RECORD_REQUEST_INCOMPLETE",)}, "INCOMPLETE", "业务记录尚未闭合"),
+    ({"reason_codes": ("RECORD_REQUEST_INCOMPLETE",)}, "INCOMPLETE", "本次请求的记录尚未收齐"),
 ])
 def test_published_reading_does_not_rewrite_evidence(changes, kind, label):
     item = observation(**changes)

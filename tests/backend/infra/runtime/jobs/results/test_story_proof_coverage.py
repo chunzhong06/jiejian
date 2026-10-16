@@ -43,7 +43,7 @@ def test_missing_or_unrelated_observations_never_invent_coverage(observations):
 
 def test_open_absence_is_unknown_without_changing_existing_fact():
     result = _coverage(state="ABSENT", closure="OPEN", observations=(_observation("VERDICT_REQUIRED"),))
-    assert result.observed_state == "UNKNOWN" and "观察窗口尚未闭合" in result.limitations
+    assert result.observed_state == "UNKNOWN" and "本次请求的观察尚未完成" in result.limitations
     closed = _coverage(state="ABSENT", observations=(_observation("VERDICT_REQUIRED"),))
     assert closed.observed_state == "ABSENT" and closed.limitations == ()
 

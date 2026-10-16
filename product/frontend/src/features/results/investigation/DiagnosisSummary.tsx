@@ -8,7 +8,7 @@ export function DiagnosisSummary({ action, onEvidence }: { action: ActionResultS
   const breakpoint = action.breakpoint
   return <section className="diagnosis-summary" aria-label="定位依据与边界">
     <p className="editorial-eyebrow">定位依据</p>
-    <h3>{breakpoint?.breakpoint_type ? breakpointLabels[breakpoint.breakpoint_type] : '当前没有可确认的断裂位置'}</h3>
+    <h3>{breakpoint?.breakpoint_type ? breakpointLabels[breakpoint.breakpoint_type] : '现有证据尚不能定位权限失效的位置'}</h3>
     <p>{breakpoint ? precisionDescriptions[breakpoint.precision] : '没有定位结果不等于权限安全，请以本轮已发布结论和业务证据为准。'}</p>
     {breakpoint && breakpoint.precision !== 'EXACT' && <div className="diagnosis-limitations"><strong>为什么不能进一步定位</strong>{traceLimitations(action).map(text => <p key={text}>{text}</p>)}</div>}
     {!!breakpoint?.evidence_refs.length && <Button icon={<FileSearchOutlined aria-hidden="true" />} onClick={onEvidence}>{breakpoint.precision === 'RANGE' ? '查看区间的定位证据' : '查看定位证据'}</Button>}

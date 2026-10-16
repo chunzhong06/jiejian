@@ -1,13 +1,13 @@
 # 证据阅读固定文案；只翻译封存方法和已发布原因，不运行判定器或模型。
 METHODS={
-    'CREATION_SNAPSHOT':'读取已授权集合的完整有限快照，核对检查前状态和恢复结果。',
+    'CREATION_SNAPSHOT':'在已授权范围内读取对象清单，记录操作前有哪些对象，并核对操作后是否已恢复。',
     'OBJECT_CREATION':'从独立存储读取本次宿主请求实际提交的新对象；响应编号只用于交叉核对，不作为创建证明。',
     'STATE_SNAPSHOT':'读取受控业务存储中这份资源的状态，作为本阶段的对照。',
-    'ATOMIC_STATE':'读取这次请求关联的独立提交，逐次比较提交前后值，再与已确认的目标状态核对。撤回是另一条提交，不抹去先前的开放。',
+    'ATOMIC_STATE':'读取本次请求每一次已保存的数据修改，比较修改前后的内容，判断规则要求核对的结果是否曾经发生。即使后来恢复，也保留之前发生的变化。',
     'FIELD_SNAPSHOT':'在已授权的观察账号下读取指定字段，保存本次比较所需的有限摘要。',
     'FIELD_DISCLOSURE':'比较请求实际返回的受保护字段与同一资源的参照摘要。页面标签和响应状态不代替内容比较。',
-    'FILE_SNAPSHOT':'核对已采用文件参照的大小、摘要和业务归属。',
-    'FILE_DELIVERY':'按字节读取实际返回的完整内容，计算大小和SHA-256，再与已采用的参照比较。空响应、部分内容或中断不能证明完整接收。',
+    'FILE_SNAPSHOT':'核对用户选定的参照文件属于哪份业务资料，并读取它的大小和内容指纹，供实际下载时比较。',
+    'FILE_DELIVERY':'读取实际收到的文件，先确认接收完整结束，再比较它与用户确认的参照文件的大小和内容指纹（SHA-256）。空响应、只收到一部分或接收中断，都不能认定完整收到。',
 }
 REASONS={
     'ORPHAN_EFFECT_CONFIRMED':'已确认禁止的业务后果发生，且实际账号、请求和资源均能对应。之后的拒绝或恢复不会撤销这条事实。',
@@ -19,10 +19,10 @@ REASONS={
     'RECOVERY_UNVERIFIED':'尚未确认恢复要求已经满足。',
     'EXECUTION_FAILED':'本题执行失败，所需验证没有全部完成。',
     'EXECUTION_UNKNOWN':'请求执行情况尚不明确。',
-    'REQUIRED_EFFECT_UNKNOWN':'必要的业务结果证明不足。',
-    'TEMPORAL_CLOSURE_INCOMPLETE':'观察过程尚未闭合，不能把暂未看到解释为没有发生。',
+    'REQUIRED_EFFECT_UNKNOWN':'判断实际结果所需的证据不足。',
+    'TEMPORAL_CLOSURE_INCOMPLETE':'本次请求的观察记录尚未收齐，暂未发现不等于没有发生。',
     'UNAUTHORIZED_EXECUTION_ACCEPTED':'本应拒绝的操作被接受，现有材料尚不足以完成整项判断。',
-    'ALLOW_CONTROL_INVALID':'对应的正常业务对照没有通过。',
+    'ALLOW_CONTROL_INVALID':'对应的允许操作没有通过检查，尚不能排除功能本身失效。',
     'REQUIRED_EFFECT_NOT_ABSENT':'尚不能证明禁止的业务后果没有发生。',
     'ALLOW_EXECUTION_REJECTED':'应当保留的正常操作被拒绝。',
     'ALLOW_EFFECT_UNCONFIRMED':'应当保留的正常业务结果尚未得到完整证明。',
@@ -30,4 +30,4 @@ REASONS={
 PHASES={'BASELINE':'初始','BEFORE':'操作前','AFTER':'操作后','EVENTUAL':'最终观察','RECOVERY':'恢复后'}
 TRACE_LABELS={'ENTRY':'收到业务请求','IDENTITY':'核对身份','AUTHORIZATION':'权限判断','PERSISTENT_EFFECT':'提交业务变化',
     'MESSAGE':'发送消息','DELEGATION':'派发任务','FINAL_EFFECT':'记录最终后果','RECOVERY':'执行恢复'}
-JUDGEMENTS={'SAFE':'本项要求已得到验证','VULNERABLE':'本项出现了禁止的业务后果','INCONCLUSIVE':'本项还不能完成判断'}
+JUDGEMENTS={'SAFE':'本项检查符合权限要求','VULNERABLE':'本项已发生规则禁止的结果','INCONCLUSIVE':'本项证据或条件不足，暂时无法确定'}

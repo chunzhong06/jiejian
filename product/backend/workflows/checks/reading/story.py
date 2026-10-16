@@ -290,9 +290,9 @@ def _proof_coverage(case, proofs, documents, facts):
             limitations.append("本轮没有对应观察")
         if fact is not None and fact.state == "ABSENT" and fact.closure != "CLOSED":
             state = "UNKNOWN"
-            limitations.append("观察窗口尚未闭合")
+            limitations.append("本次请求的观察尚未完成")
         if requirement.level == "SUPPORTING":
-            limitations.append("辅助材料不替代必要证明")
+            limitations.append("辅助材料不能代替判断所需证据")
         if state == "UNKNOWN" and matched:
             limitations.append("现有观察不足以确认业务结果")
         coverage.append(StoryProofCoverage(effect_id=requirement.effect_id, business_label=proof.business_label,

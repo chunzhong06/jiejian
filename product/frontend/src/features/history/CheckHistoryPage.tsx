@@ -133,7 +133,7 @@ export function AllCheckHistory({ project, onError, onNavigate, requestedRunId, 
             return <div key={run.run_id}>
               {heading && <h2 className="history-date">{date}</h2>}
               <button className="history-record" data-run={run.run_id} onClick={() => open(run.run_id)}>
-                <span className="history-record-copy"><strong>{item.action_labels.join('、') || '权限检查'}</strong><small>{formatTimestamp(run.created_at_us)} · 权限版本 {run.policy_epoch}{item.source_run_id ? ' · 原题复验' : item.change_id ? ' · 关联代码变化' : ''}</small><small className="history-id">{run.run_id}</small></span>
+                <span className="history-record-copy"><strong>{item.action_labels.join('、') || '权限检查'}</strong><small>{formatTimestamp(run.created_at_us)} · 权限版本 {run.policy_epoch}{item.source_run_id ? ' · 原问题修复检查' : item.change_id ? ' · 关联代码变化' : ''}</small><small className="history-id">{run.run_id}</small></span>
                 <StatusBadge kind={verdict ? 'verdict' : 'lifecycle'} tone={result_integrity === 'INVALID' ? 'warning' : related?.tone??(verdict === 'PASS' ? 'success' : verdict === 'BLOCK' ? 'danger' : verdict === 'INCONCLUSIVE' ? 'warning' : 'neutral')}>{result_integrity === 'INVALID' ? '结果完整性校验失败' : related?.label??(verdict ? labels[verdict] : '尚无安全结论')}</StatusBadge>
                 <span className="history-lifecycle">{lifecycleLabel(run.lifecycle)}</span><span className="history-open"><span>查看{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '进度' : '结果'}</span><RightOutlined aria-hidden/></span>
               </button>
@@ -144,7 +144,7 @@ export function AllCheckHistory({ project, onError, onNavigate, requestedRunId, 
           {loading && <div role="status" className="history-loading"><Spin size="small" />正在读取检查历史</div>}
         </section></div>
         {cursor && !failed && <Button className="history-more" loading={loading} onClick={() => void load(cursor)}>继续读取更早记录</Button>}
-        <p className="editorial-muted history-boundary">历史结论只覆盖当时冻结的权限与源码。执行完成不等于验证通过。</p>
+        <p className="editorial-muted history-boundary">历史结论对应当时的权限规则和代码版本。检查执行结束，不代表已经通过。</p>
       </EditorialPage>
     </div>
     {requestedRunId && renderRun(requestedRunId, () => onNavigate(returnSearch===undefined?'/history':'/history?'+historyParams()))}

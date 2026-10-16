@@ -27,7 +27,7 @@ type DetailTab='changes'|'verification'|'source'
 const presetNames: Record<string,string> = { VULNERABLE:'错误交付改动', EXPOSE_REVOKE:'先开放后撤回改动', FIXED:'权限修复', PREVIEW_CHANGED:'公开预览改动' }
 const changeReason=(reason:string)=>reason.replace(/预设演示：\s*([A-Z_]+)/,(_all,key)=>`示例改动：${presetNames[key]??key}`)
 const sourceLabel=(value:string|undefined)=>value==='LOCAL_GUI'?'本机登记':value||'来源未提供'
-const statusText=(details:DeliveryDetails|null|undefined)=>!details?'未关联精确检查':!details.verification.run_id?details.verification.same_source_run_id?'同版源码已检查，未绑定本批':'本批尚未关联检查':details.verification.verdict==='PASS'?details.verification.runtime_status==='MATCHED'?'本轮已验证':'已验证，运行对应未确认':details.verification.verdict==='BLOCK'?'发现权限问题':details.verification.verdict==='INCONCLUSIVE'?'证据不足':'尚无已发布结论'
+const statusText=(details:DeliveryDetails|null|undefined)=>!details?'未关联精确检查':!details.verification.run_id?details.verification.same_source_run_id?'同版源码已检查，未绑定本批':'本批尚未关联检查':details.verification.verdict==='PASS'?details.verification.runtime_status==='MATCHED'?'本轮已验证':'已验证，尚未确认实际运行的代码版本':details.verification.verdict==='BLOCK'?'发现权限问题':details.verification.verdict==='INCONCLUSIVE'?'证据不足':'尚无已发布结论'
 function ChangeStatus({details, failed=false}:{details?:DeliveryDetails|null;failed?:boolean}) {
  const tone:StatusTone=failed?'warning':details?.verification.verdict==='BLOCK'?'danger':details?.verification.verdict==='INCONCLUSIVE'?'warning':details?.verification.verdict==='PASS'?(details.verification.runtime_status==='MATCHED'?'success':'warning'):'neutral'
  return <StatusBadge kind={!failed&&details?.verification.verdict?'verdict':'lifecycle'} tone={tone}>{failed?'当前关联读取失败':statusText(details)}</StatusBadge>

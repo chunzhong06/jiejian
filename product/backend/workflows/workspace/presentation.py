@@ -26,8 +26,8 @@ _TASK_PRESENTATION: dict[str, tuple[str, str]] = {
     "COMPLETE_EFFECT_EVIDENCE": ("准备结果证明", "受保护业务效果的证明方式已具备。"),
     "COMPLETE_RECOVERY": ("准备恢复方式", "本次检查需要的恢复方式已明确。"),
     "REGISTER_SOURCE_CHANGE": ("查看变化登记", "本次源码变化已登记并完成实际变化核对。"),
-    "PREPARE_AGENT_REPAIR": ("准备 Agent 修复任务", "Agent 完成修改并登记真实变化后，再按原题独立复验。"),
-    "VERIFY_REPAIR": ("核对原题复验", "原题适用性与复验条件已经核对；修复结果由独立复验确认。"),
+    "PREPARE_AGENT_REPAIR": ("准备 Agent 修复任务", "Agent 完成修改并登记后，再检查原问题是否修好。"),
+    "VERIFY_REPAIR": ("检查原问题的修复结果", "原问题仍适用于当前权限，检查材料已核对；接下来实际执行，确认修复是否通过。"),
     "RUN_CURRENT_CHECK": ("查看检查预览", "正式预览允许执行，并由你明确开始检查。"),
     "VIEW_CURRENT_RESULT": ("查看检查结果", "本次已发布的结果与证据可供查看。"),
 }

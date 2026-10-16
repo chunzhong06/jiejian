@@ -132,14 +132,25 @@
 .boundary-provided-proposal .boundary-entry-actions{justify-content:space-between;border-top:1px solid var(--color-border);padding-top:var(--space-20)}
 .boundary-provided-proposal .boundary-entry-actions>.ant-btn:last-child{margin-inline-start:auto}
 .boundary-entry-actions + .boundary-editor{margin-top:var(--space-24)}
-.provided-meaning-choice { border:0;padding:0;margin:var(--space-24) 0 0;min-width:0; }
-.provided-meaning-choice legend { font-weight:var(--weight-medium);margin-bottom:var(--space-16); }
-.provided-meaning-choice .ant-radio-group { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-16); }
-.provided-meaning-choice .ant-radio-label{min-width:0}
-.provided-meaning-choice .ant-radio-label strong,.provided-meaning-choice .ant-radio-label>span{display:block}
-.provided-meaning-choice .ant-radio-label>span{margin-top:var(--space-8);font-size:var(--font-secondary);color:var(--color-secondary)}
-.provided-meaning-choice>p{margin:var(--space-16) 0 0}
-@media(max-width:700px){.provided-meaning-choice .ant-radio-group{grid-template-columns:minmax(0,1fr)}.boundary-provided-proposal .boundary-entry-actions{justify-content:flex-end}}
+/* 整理回复采用连续正文，只有未决选择形成轻量分组；来源与待批准状态始终可见。 */
+.provided-reply-heading{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-12);margin-bottom:var(--space-24)}
+.provided-reply-author{font-weight:var(--weight-medium);color:var(--color-text)}
+.provided-reply-state{font-size:var(--font-secondary);color:var(--color-secondary)}
+.provided-reply-body{max-width:78ch;line-height:1.8}
+.provided-reply-body>p{margin:var(--space-12) 0 var(--space-24)}
+.provided-reply-rules{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-20)}
+.provided-reply-rules li{display:grid;gap:var(--space-4)}
+.provided-reply-rules li>span{color:var(--color-secondary)}
+.provided-reply-choice{border:0;min-width:0;padding:0;margin:var(--space-32) 0}
+.provided-reply-choice legend{font-weight:var(--weight-medium);padding:0;margin-bottom:var(--space-8)}
+.provided-reply-choice>p{color:var(--color-secondary);margin:0 0 var(--space-16)}
+.provided-reply-choice .ant-radio-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:var(--space-16);width:100%}
+[data-product=jiejian] .provided-reply-choice .ant-radio-wrapper{margin:0;padding:var(--space-24);align-items:center;min-width:0}
+.provided-reply-choice .ant-radio-label{min-width:0}
+.provided-reply-choice .provided-reply-selection{margin:var(--space-16) 0 0;min-height:1.8em}
+.provided-permission-reply .boundary-entry-actions{gap:var(--space-12);flex-wrap:wrap}
+@media(max-width:700px){.provided-permission-reply .boundary-entry-actions{justify-content:flex-end}.provided-reply-choice .ant-radio-group{grid-template-columns:minmax(0,1fr)}}
+
 /* 说明业务识别、权限决定和最终批准的关系；编号表示流程位置，不伪造完成状态。 */
 .boundary-setup-path{display:flex;flex-wrap:wrap;gap:var(--space-16) var(--space-32);list-style:none;padding:0;margin:0;color:var(--color-secondary);font-size:var(--font-secondary)}
 .boundary-setup-path [aria-current]{color:var(--color-primary);font-weight:var(--weight-strong)}

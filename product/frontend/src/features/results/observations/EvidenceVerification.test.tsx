@@ -25,9 +25,15 @@ it('默认定位同一证明最终观察，可打开对应具体提交及封存�
   fireEvent.click(within(screen.getByRole('region',{name:'对应的原始记录'})).getByRole('button',{name:'第1次提交'}))
   await waitFor(()=>expect(api.evidenceRecord).toHaveBeenLastCalledWith('p','run','evidence','case','fact'))
   expect(props.onRecordChange).toHaveBeenLastCalledWith('fact')
-  expect(await screen.findByText('之前：仅内部')).toBeInTheDocument()
-  fireEvent.click(screen.getByText('打开这条封存片段'))
+  expect(await screen.findByText('操作前：仅内部')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('查看已保存的原始片段'))
   expect(screen.getByText(/"state": "CONFIRMED"/)).toBeInTheDocument()
+})
+it('文件参照与实际收到明确区分，不标成操作前后',async()=>{
+  api.evidenceRecord.mockResolvedValue({...view('obs'),values:[{label:'文件大小（字节）',before:120,after:120,before_label:'参照文件',after_label:'实际收到'}]})
+  render(<EvidenceVerification {...props}/>);await screen.findByText('参照文件：120')
+  expect(screen.getByText('实际收到：120')).toBeInTheDocument()
+  expect(screen.queryByText('操作前：120')).not.toBeInTheDocument()
 })
 it.each(['entry','auth'])('流程节点准确打开自身记录：%s',async event=>{
   render(<EvidenceVerification {...props} selection={{event}}/>);await screen.findByText('按独立提交比较状态。')
