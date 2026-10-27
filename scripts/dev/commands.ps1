@@ -18,7 +18,7 @@ function Invoke-DevelopmentTest {
     $baseTemp = Join-Path $testRoot ("dev-{0}" -f [guid]::NewGuid().ToString("N"))
     $previousReport = $env:JIEJIAN_TEST_REPORT
     if (-not $previousReport) { $env:JIEJIAN_TEST_REPORT = Join-Path $script:VarDir ("audit\testing\pytest-{0}.json" -f [guid]::NewGuid().ToString("N")) }
-    try { Invoke-External "pytest" (@($script:Python, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-p", "tests.support.verification.pytest_reporter", "--basetemp", $baseTemp) + $CommandArguments) }
+    try { Invoke-External "pytest" (@($script:Python, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-p", "scripts.quality.pytest_reporter", "--basetemp", $baseTemp) + $CommandArguments) }
     finally {
         Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT)
         $env:JIEJIAN_TEST_REPORT = $previousReport
@@ -50,31 +50,32 @@ function Invoke-Docs {
 }
 
 function Invoke-FrontendTest($Toolchain) {
+    $typesOnly = $CommandArguments.Count -eq 1 -and $CommandArguments[0] -eq "--types-only"
     Remove-LegacyFrontendArtifacts
     $inputs = @(Get-FrontendSourceInputs)
     $dependencyDigest = Get-FrontendDependencyDigest $Toolchain
     Prepare-FrontendWorkspace $Toolchain $inputs $dependencyDigest
     $workspace = Get-FrontendWorkspace
-    Invoke-External "frontend-editor" @($script:Node, (Join-Path $script:ProjectRoot "scripts\editor\verify-controlled-workspace-resolver.cjs"), $workspace, $script:ProjectRoot, $script:VarDir)
+    Invoke-External "frontend-editor" @($script:Node, (Join-Path $script:ProjectRoot "tests/tooling/editor/verify-workspace.cjs"), $workspace, $script:ProjectRoot, $script:VarDir)
     $previousReport = $env:JIEJIAN_TEST_REPORT
     if (-not $previousReport) { $env:JIEJIAN_TEST_REPORT = Join-Path $script:VarDir ("audit\testing\vitest-{0}.json" -f [guid]::NewGuid().ToString("N")) }
-    $reporter = Join-Path $script:ProjectRoot "tests\support\verification\vitest-reporter.mjs"
+    $reporter = Join-Path $script:ProjectRoot "scripts\quality\vitest-reporter.mjs"
     Push-Location -LiteralPath $workspace
     try {
         $env:JIEJIAN_FRONTEND_CACHE_DIR = [IO.Path]::GetFullPath((Join-Path $script:DevelopmentRoot "cache\vite"))
         # Vitest 不负责类型检查，先拒绝失配的组件 props 和 API 夹具。
         Invoke-External "frontend-types" @($script:Node, (Join-Path $workspace "node_modules\typescript\bin\tsc"), "-b", "--pretty", "false")
-        Invoke-External "frontend-test" (@($script:PnpmRunner + @("test", "--reporter=default", "--reporter=$reporter")) + $CommandArguments)
+        if (-not $typesOnly) { Invoke-External "frontend-test" (@($script:PnpmRunner + @("test", "--reporter=default", "--reporter=$reporter")) + $CommandArguments) }
     } finally {
         Pop-Location
-        Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT)
+        if (-not $typesOnly) { Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT) }
         $env:JIEJIAN_TEST_REPORT = $previousReport
     }
 }
 
 function Invoke-DevelopmentCli {
     Exit-PrepareLock
-    Invoke-External "cli" (@($script:Python, "-B", "-m", "product.backend.cli", "--var-dir", $script:VarDir) + $CommandArguments)
+    Invoke-External "cli" (@($script:Python, "-B", "-m", "product.backend.interfaces.cli", "--var-dir", $script:VarDir) + $CommandArguments)
 }
 
 function Invoke-DevelopmentShell {
@@ -86,7 +87,7 @@ function Invoke-DevelopmentShell {
     $child = @"
 function jiejian {
     param([Parameter(ValueFromRemainingArguments=`$true)][object[]]`$Arguments)
-    & '$python' -B -m product.backend.cli --var-dir '$var' @Arguments
+    & '$python' -B -m product.backend.interfaces.cli --var-dir '$var' @Arguments
 }
 function quit { exit }
 Set-Location -LiteralPath '$project'
@@ -100,5 +101,5 @@ Write-Host '输入 exit 退出命令行；也可以输入 quit。' -ForegroundCo
 
 function Invoke-Verification {
     Exit-PrepareLock
-    Invoke-External "verify" (@($script:Python, "-B", "-m", "tests.support.verification.runner") + $CommandArguments)
+    Invoke-External "verify" (@($script:Python, "-B", "-m", "scripts.quality.run") + $CommandArguments)
 }

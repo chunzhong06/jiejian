@@ -6,6 +6,8 @@ import json
 import re
 from enum import StrEnum
 from typing import Annotated, Literal
+from product.protocols.codec import encode_json, decode_document
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
@@ -277,8 +279,22 @@ class RepairContext(WireModel):
         return self
 
 
-class PersistedExecutionRequestV3(WireModel):
-    schema_version: Literal["3"] = "3"
+class FrozenRequirement(WireModel):
+    requirement_id: str = Field(pattern=r'^req_[0-9a-f]{16}$')
+    requirement: str = Field(min_length=1, max_length=1024)
+    disposition: Literal['IN_SCOPE', 'PREPARATION', 'OUT_OF_SCOPE']
+    time_scope: Literal['CHECK_WINDOW', 'HISTORY', 'NOT_APPLICABLE']
+    permissions: tuple[PermissionReference, ...] = Field(max_length=200)
+
+class FrozenRequirementScope(WireModel):
+    candidate_id: str = Field(pattern=r'^rcd_[0-9a-f]{32}$')
+    revision: int = Field(ge=1)
+    requirements: tuple[FrozenRequirement, ...] = Field(min_length=1, max_length=100)
+
+class ExecutionRequest(WireModel):
+    document_type: Literal["jiejian.execution-request"] = "jiejian.execution-request"
+    schema_version: Literal["1"] = "1"
+    requirement_scope: tuple[FrozenRequirementScope, ...] = Field(default=(), max_length=200)
     project_id: LogicalId
     source_fingerprint: Hash
     policy_epoch: int = Field(ge=0)
@@ -322,32 +338,6 @@ class PersistedExecutionRequestV3(WireModel):
             raise ValueError("plan content identity")
         return self
 
-
-class PersistedExecutionRequestV4(PersistedExecutionRequestV3):
-    schema_version:Literal['4']='4'
-    evidence_schema_version:Literal['2']='2'
-
-
-class FrozenRequirement(WireModel):
-    requirement_id: str = Field(pattern=r'^req_[0-9a-f]{16}$')
-    requirement: str = Field(min_length=1, max_length=1024)
-    disposition: Literal['IN_SCOPE', 'PREPARATION', 'OUT_OF_SCOPE']
-    time_scope: Literal['CHECK_WINDOW', 'HISTORY', 'NOT_APPLICABLE']
-    permissions: tuple[PermissionReference, ...] = Field(max_length=200)
-
-
-class FrozenRequirementScope(WireModel):
-    candidate_id: str = Field(pattern=r'^rcd_[0-9a-f]{32}$')
-    revision: int = Field(ge=1)
-    requirements: tuple[FrozenRequirement, ...] = Field(min_length=1, max_length=100)
-
-
-class PersistedExecutionRequestV5(PersistedExecutionRequestV3):
-    # 保存本轮实际范围；历史结果只读当时快照，不用当前候选解释旧PASS。
-    schema_version: Literal['5'] = '5'
-    evidence_schema_version: Literal['1', '2']
-    requirement_scope: tuple[FrozenRequirementScope, ...] = Field(min_length=1, max_length=200)
-
     @model_validator(mode='after')
     def requirements_match_cases(self):
         facts = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash) for action in self.actions for case in action.cases}
@@ -361,73 +351,35 @@ class PersistedExecutionRequestV5(PersistedExecutionRequestV3):
         return self
 
 
-class PersistedExecutionRequestV6(PersistedExecutionRequestV5):
-    # 动态对象证据另存本次关联，Case仍引用录制时的材料，历史Case哈希不被重写。
-    schema_version:Literal['6']='6'
-    evidence_schema_version:Literal['3']='3'
-    requirement_scope:tuple[FrozenRequirementScope,...]=Field(default=(),max_length=200)
-
-
-class ExecutionV3Error(ValueError):
+class ExecutionRequestError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
 
-def canonical_execution_request_v3_bytes(request: PersistedExecutionRequestV3) -> bytes:
-    return _canonical_execution_request(request,PersistedExecutionRequestV3)
-
-
-def canonical_execution_request_bytes(request):
-    model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5,'6':PersistedExecutionRequestV6}.get(request.schema_version)
-    if model is None:raise ExecutionV3Error('执行快照格式无效')
-    return _canonical_execution_request(request,model)
-
-
-def _canonical_execution_request(request,model):
-    # 重新校验以拒绝 model_copy/model_construct 绕过；字段不允许秘密正文或绝对路径。
+def canonical_execution_request_bytes(request: ExecutionRequest) -> bytes:
     try:
-        payload = request.model_dump(mode="json")
-        parsed = model.model_validate_json(json.dumps(payload), strict=True)
-        payload = parsed.model_dump(mode="json")
+        if type(request) is not ExecutionRequest:
+            raise ValueError("unsupported execution root")
+        payload = ExecutionRequest.model_validate_json(request.model_dump_json(), strict=True).model_dump(mode="json")
         payload["actions"].sort(key=lambda item: item["action_id"])
         for action in payload["actions"]:
             action["cases"].sort(key=lambda item: item["case_id"])
             action["twins"].sort(key=lambda item: item["twin_id"])
             for case in action["cases"]:
                 case["proof_requirements"].sort(key=lambda item: (item["effect_id"], item["level"]))
-        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        raw = encode_json(payload)
         if len(raw) > RUNNER_INPUT_MAX_BYTES or re.search(rb"(?i)(?:Bearer\s|password\s*[:=]|token\s*[:=]|<script)", raw):
             raise ValueError("execution boundary")
         return raw
     except (ValueError, TypeError, AttributeError):
-        raise ExecutionV3Error("执行快照格式无效") from None
+        raise ExecutionRequestError("执行快照格式无效") from None
 
 
-def parse_execution_request_v3(raw: bytes) -> PersistedExecutionRequestV3:
-    return _parse_execution_request(raw,PersistedExecutionRequestV3)
-
-
-def parse_execution_request(raw):
-    return _parse_execution_request(raw,None)
-
-
-def _parse_execution_request(raw,model):
-    def unique(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate key")
-            result[key] = value
-        return result
+def parse_execution_request(raw: bytes) -> ExecutionRequest:
     try:
-        if type(raw) is not bytes or len(raw) > RUNNER_INPUT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
-            raise ValueError("execution bytes")
-        payload=json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
-                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        if model is None:model={'3':PersistedExecutionRequestV3,'4':PersistedExecutionRequestV4,'5':PersistedExecutionRequestV5,'6':PersistedExecutionRequestV6}.get(payload.get('schema_version'))
-        if model is None:raise ValueError('unsupported execution version')
-        request=model.model_validate_json(raw,strict=True)
-        if _canonical_execution_request(request,model)!=raw:
-            raise ValueError("noncanonical")
+        decode_document(raw, document_type="jiejian.execution-request", version="1", limit=RUNNER_INPUT_MAX_BYTES)
+        request = ExecutionRequest.model_validate_json(raw, strict=True)
+        if canonical_execution_request_bytes(request) != raw:
+            raise ValueError("noncanonical execution order")
         return request
     except (ValueError, TypeError, UnicodeError):
-        raise ExecutionV3Error("执行快照格式无效") from None
+        raise ExecutionRequestError("执行快照格式无效") from None

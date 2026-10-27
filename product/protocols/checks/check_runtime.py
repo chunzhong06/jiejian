@@ -7,9 +7,13 @@ import re
 from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
+from product.protocols.codec import encode_json, decode_document
+from product.protocols.preparation.proof_sources import FrozenProofSource, proof_fingerprint
+from product.protocols.web.response import ResponseExtractor
 
 from product.protocols.checks.execution_request import ActorId, EffectId, Hash, IdentityId, LogicalId, WireModel, content_hash
-from product.protocols.observer import ObserverSpec
+from product.protocols.observer.config import ObserverSpec
+from product.protocols.checks.identity import CheckIdentity, CheckIdentityVerification
 from product.protocols.web.identity import BearerIdentityBinding, PreparedCookieSessionIdentityBinding
 from product.protocols.web.request import HttpBodyKind, HttpRequestTemplate, ValueSlotConsumer, ValueSlotSource
 from product.protocols.web.response import HttpOutcomeClassifier
@@ -42,38 +46,6 @@ class CheckBudget(WireModel):
         return content_hash("CheckBudget", self.model_dump(mode="json"))
 
 
-class CheckIdentityVerification(WireModel):
-    namespace: LogicalId
-    expected_application_subject_id: Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")]
-    expected_actor_id: ActorId
-    expected_actor_revision: int = Field(ge=1)
-    request: HttpRequestTemplate
-    subject_json_path: Annotated[str, Field(pattern=r"^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$")]
-
-    @model_validator(mode="after")
-    def validate_read_only(self):
-        if self.request.method != "GET" or self.request.input_slots or self.request.body.kind is not HttpBodyKind.EMPTY:
-            raise ValueError("identity verification must be a fixed readonly request")
-        return self
-
-
-class CheckIdentity(WireModel):
-    identity_id: IdentityId
-    actor_id: ActorId
-    actor_revision: int = Field(ge=1)
-    identity_fingerprint: Hash
-    label: SafeLabel
-    actor_label: SafeLabel
-    binding: Annotated[BearerIdentityBinding | PreparedCookieSessionIdentityBinding, Field(discriminator="kind")]
-    verification: CheckIdentityVerification | None = None
-
-    @model_validator(mode="after")
-    def validate_verification_actor(self):
-        if self.verification is not None and (
-            self.verification.expected_actor_id, self.verification.expected_actor_revision
-        ) != (self.actor_id, self.actor_revision):
-            raise ValueError("identity verification actor must match the frozen identity")
-        return self
 
 
 class CheckFlowStep(WireModel):
@@ -104,7 +76,7 @@ class CheckProofConfig(WireModel):
     effect_id: EffectId
     business_label: SafeLabel
     resource_concept: SafeLabel
-    effect_kind: Literal["STATE_MUTATION", "DATA_DISCLOSURE", "OBJECT_CREATION", "EXTERNAL_DISPATCH", "RESTRICTED_FUNCTION_INVOCATION", "CREDENTIAL_ACCESS"]
+    effect_kind: Literal["STATE_MUTATION", "DATA_DISCLOSURE", "OBJECT_CREATION", "EXTERNAL_DISPATCH", "RESTRICTED_FUNCTION_INVOCATION", "CREDENTIAL_ACCESS", "FILE_CONTENT_DELIVERY"]
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")], ...] = Field(default=(), max_length=64)
     binding_fingerprint: Hash
@@ -195,10 +167,11 @@ class CheckActionConfig(WireModel):
     steps: tuple[CheckFlowStep, ...] = Field(min_length=1, max_length=128)
     proofs: tuple[CheckProofConfig, ...] = Field(min_length=1, max_length=48)
     recovery: CheckRecoveryConfig | None = None
+    created_resource: ResponseExtractor | None = None
 
     @model_validator(mode="after")
     def validate_flow(self):
-        # 旧根仍不解释输出对象；新根须明确冻结提取方式和独立创建来源。
+        # 输出对象必须明确冻结提取方式和独立创建来源。
         if (any(source.extractor_id == "created_resource_id" for step in self.steps for source in step.request.response_extractors)
                 and not any(slot.source is ValueSlotSource.CASE_RESOURCE_ID for step in self.steps for slot in step.request.input_slots)
                 and getattr(self, 'created_resource', None) is None):
@@ -223,6 +196,21 @@ class CheckActionConfig(WireModel):
         return self
 
 
+    @model_validator(mode='after')
+    def output_resource(self):
+        if self.created_resource is None:
+            return self
+        target=next(step for step in self.steps if step.purpose=='TARGET')
+        if (not self.state_changing or self.recovery is None
+                or self.created_resource not in target.request.response_extractors
+                or self.created_resource.extractor_id!='created_resource_id'
+                or self.created_resource.kind not in {'JSON_PATH','LOCATION'} or self.created_resource.secret
+                or any(slot.source is ValueSlotSource.CASE_RESOURCE_ID for step in self.steps for slot in step.request.input_slots)
+                or any(proof.effect_kind!='OBJECT_CREATION' or proof.rule!='REGISTERED_EFFECT' or proof.auxiliary_sources for proof in self.proofs)):
+            raise ValueError('creation flow requires exact output, creation proof and recovery')
+        return self
+
+
 def async_completion_candidates(action: CheckActionConfig, observers: dict[str, ObserverSpec],
                                 verified_identity_ids: set[str]) -> dict[str, CheckAuxiliarySource]:
     """只收集同动作正式 proof 的终态辅助来源，重复来源必须具有同一身份和描述引用。"""
@@ -243,7 +231,33 @@ def async_completion_candidates(action: CheckActionConfig, observers: dict[str, 
     return candidates
 
 
+class ExternalWebRuntime(WireModel):
+    kind: Literal["EXTERNAL_WEB"] = "EXTERNAL_WEB"
+
+
+class PythonRuntime(WireModel):
+    kind: Literal["MANAGED_PYTHON"] = "MANAGED_PYTHON"
+    reference: ControlledRuntimeReference
+
+
+class NodeRuntime(WireModel):
+    kind: Literal["MANAGED_NODE"] = "MANAGED_NODE"
+    reference: NodeRuntimeReference
+
+
+RuntimeSpec = Annotated[ExternalWebRuntime | PythonRuntime | NodeRuntime, Field(discriminator="kind")]
+
+
+class CheckRuntimeCorrespondence(WireModel):
+    runtime: Annotated[PythonRuntime | NodeRuntime, Field(discriminator="kind")]
+    before: Literal["MATCHED", "UNCONFIRMED"]
+    after: Literal["MATCHED", "UNCONFIRMED"]
+
+
 class CheckRuntimeBundle(WireModel):
+    document_type: Literal["jiejian.check-runtime"] = "jiejian.check-runtime"
+    runtime: RuntimeSpec = Field(default_factory=ExternalWebRuntime)
+    proof_sources: tuple[FrozenProofSource, ...] = Field(default=(), max_length=256)
     schema_version: Literal["1"] = "1"
     project_id: LogicalId
     source_fingerprint: Hash
@@ -292,32 +306,59 @@ class CheckRuntimeBundle(WireModel):
         return self
 
 
-class ControlledCheckRuntimeBundle(CheckRuntimeBundle):
-    schema_version: Literal["2"] = "2"
-    runtime_reference: ControlledRuntimeReference
+    @model_validator(mode='after')
+    def proof_coverage(self):
+        if len({source.source_id for source in self.proof_sources})!=len(self.proof_sources):
+            raise ValueError('duplicate proof source')
+        proofs={(action.action_id,proof.effect_id):proof for action in self.actions for proof in action.proofs}
+        actions={action.action_id:action for action in self.actions}
+        identities={item.identity_id:item for item in self.identities}
+        for source in self.proof_sources:
+            config=source.config
+            proof=proofs.get((config.action_id,config.effect_id))
+            if (source.source_fingerprint!=proof_fingerprint(config) or proof is None
+                or actions[config.action_id].action_revision!=config.action_revision
+                or proof.rule!='REGISTERED_EFFECT' or proof.descriptor_fingerprint!=source.source_fingerprint
+                or proof.observer_id!='json_'+source.source_id[4:]
+                or proof.observation_identity_id!=config.observation_identity_id
+                or proof.effect_kind!=source.contract.approved_effect_kind
+                or source.contract.contract_id!=config.source_contract_id
+                or set(source.identity_roles)!={claim.identity_id for claim in config.identity_claims}
+                or not set(source.identity_roles)<=set(identities)):
+                raise ValueError('proof association mismatch')
+            for claim in config.identity_claims:
+                identity=identities.get(claim.identity_id)
+                if (identity is None or identity.verification is None
+                    or identity.verification.expected_application_subject_id!=claim.application_subject_id):
+                    raise ValueError('proof identity association mismatch')
+        return self
+
+    @model_validator(mode='after')
+    def creation_sources(self):
+        sources={'json_'+source.source_id[4:]:source for source in self.proof_sources}
+        for action in self.actions:
+            for proof in action.proofs:
+                source=sources.get(proof.observer_id)
+                created=source is not None and source.config.source_kind=='CREATED_OBJECT_RECORDS'
+                if (action.created_resource is not None)!=created:
+                    raise ValueError('creation action requires adopted collection proof')
+        return self
 
     @model_validator(mode="after")
-    def validate_runtime_source(self):
-        if self.runtime_reference.source_fingerprint != self.source_fingerprint:
-            raise ValueError("controlled runtime source differs from check source")
+    def runtime_matches_source(self):
+        if isinstance(self.runtime, ExternalWebRuntime):
+            return self
+        reference = self.runtime.reference
+        if reference.source_fingerprint != self.source_fingerprint:
+            raise ValueError("runtime source differs from frozen check source")
+        if isinstance(self.runtime, NodeRuntime) and (reference.project_id != self.project_id
+                or self.target.base_url != f"http://127.0.0.1:{reference.port}"):
+            raise ValueError("Node instance differs from frozen project or target")
         return self
 
 
 class CheckRuntimeProtocolError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
-
-
-class NodeCheckRuntimeBundle(CheckRuntimeBundle):
-    schema_version: Literal['3'] = '3'
-    runtime_reference: NodeRuntimeReference
-
-    @model_validator(mode='after')
-    def validate_node_runtime(self):
-        reference=self.runtime_reference
-        if (reference.project_id!=self.project_id or reference.source_fingerprint!=self.source_fingerprint
-                or self.target.base_url!=f'http://127.0.0.1:{reference.port}'):
-            raise ValueError('Node instance must match the frozen project, source and target origin')
-        return self
 
 
 def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool:
@@ -333,13 +374,11 @@ def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool
 
 
 def canonical_check_runtime_bytes(bundle: CheckRuntimeBundle) -> bytes:
-    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle, CreationCheckRuntimeBundle
     try:
-        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle, NodeCheckRuntimeBundle, JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle, CreationCheckRuntimeBundle):
+        if type(bundle) is not CheckRuntimeBundle:
             raise ValueError("unsupported runtime document")
-        parsed = type(bundle).model_validate_json(bundle.model_dump_json(), strict=True)
-        payload = parsed.model_dump(mode="json")
-        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        parsed = CheckRuntimeBundle.model_validate_json(bundle.model_dump_json(), strict=True)
+        raw = encode_json(parsed.model_dump(mode="json"))
         if len(raw) > CHECK_DOCUMENT_MAX_BYTES or _SECRET.search(raw.decode()):
             raise ValueError("unsafe or oversized check runtime")
         return raw
@@ -352,24 +391,9 @@ def check_runtime_fingerprint(bundle: CheckRuntimeBundle) -> str:
 
 
 def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
-    from product.protocols.checks.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle, ProofCheckRuntimeBundle, CreationCheckRuntimeBundle
-    def unique(pairs):
-        values = {}
-        for key, value in pairs:
-            if key in values:
-                raise ValueError("duplicate key")
-            values[key] = value
-        return values
     try:
-        if type(raw) is not bytes or len(raw) > CHECK_DOCUMENT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
-            raise ValueError("invalid runtime bytes")
-        payload = json.loads(raw.decode(), object_pairs_hook=unique,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        # 格式 1 的历史配置仍按其原字节和范围读取，绝不补造受控运行证明。
-        model = {'1':CheckRuntimeBundle,'2':ControlledCheckRuntimeBundle,'3':NodeCheckRuntimeBundle,'4':JsonCheckRuntimeBundle,'5':ManagedCheckRuntimeBundle,'6':ProofCheckRuntimeBundle,'7':CreationCheckRuntimeBundle}.get(payload.get('schema_version')) if isinstance(payload,dict) else None
-        if model is None:
-            raise ValueError('unsupported runtime version')
-        bundle = model.model_validate_json(raw, strict=True)
+        decode_document(raw, document_type="jiejian.check-runtime", version="1", limit=CHECK_DOCUMENT_MAX_BYTES)
+        bundle = CheckRuntimeBundle.model_validate_json(raw, strict=True)
         if canonical_check_runtime_bytes(bundle) != raw:
             raise ValueError("noncanonical runtime")
         return bundle

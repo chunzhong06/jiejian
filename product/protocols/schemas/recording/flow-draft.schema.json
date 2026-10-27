@@ -290,6 +290,12 @@
       "title": "Business Action Id",
       "type": "string"
     },
+    "document_type": {
+      "const": "jiejian.flow-draft",
+      "default": "jiejian.flow-draft",
+      "title": "Document Type",
+      "type": "string"
+    },
     "effect_id": {
       "anyOf": [
         {
@@ -367,11 +373,8 @@
       "type": "integer"
     },
     "schema_version": {
-      "default": "3",
-      "enum": [
-        "3",
-        "4"
-      ],
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     },

@@ -2,7 +2,9 @@
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import ControlShell from './app/shell/ControlShell'
-import { ProductThemeProvider } from './app/theme/ThemeContext'
+import App from './app/App'
+import {selectDocumentFont} from './app/model/font'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><ProductThemeProvider><ControlShell /></ProductThemeProvider></StrictMode>)
+void selectDocumentFont().then(()=>{
+  createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)
+})

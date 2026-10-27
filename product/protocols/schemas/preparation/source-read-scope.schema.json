@@ -6,6 +6,12 @@
       "title": "Created At Us",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.source-read-scope",
+      "default": "jiejian.source-read-scope",
+      "title": "Document Type",
+      "type": "string"
+    },
     "identity_ids": {
       "items": {
         "pattern": "^tid_[0-9a-f]{32}$",
@@ -51,8 +57,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "3",
-      "default": "3",
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     },

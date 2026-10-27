@@ -11,17 +11,11 @@ $script:StartupPanelClock = $null
 $script:StartupPanelReadySeconds = $null
 $script:StartupPanelVersion = ""
 $script:StartupPanelArtRows = 0
-$script:StartupPanelArt = @(
-    "     ██╗██╗███████╗       ██╗██╗ █████╗ ███╗   ██╗",
-    "     ██║██║██╔════╝       ██║██║██╔══██╗████╗  ██║",
-    "     ██║██║█████╗         ██║██║███████║██╔██╗ ██║",
-    "██   ██║██║██╔══╝    ██   ██║██║██╔══██║██║╚██╗██║",
-    "╚█████╔╝██║███████╗  ╚█████╔╝██║██║  ██║██║ ╚████║",
-    " ╚════╝ ╚═╝╚══════╝   ╚════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
-)
+$startupBrand = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../product/launcher/windows/brand.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$script:StartupPanelArt = @($startupBrand.art)
 # 与网页的蓝紫强调色同源表达；文字按层级降亮度，错误仍保留语义色。
 $script:StartupPanelPalette = @{ Accent = "186;196;249"; Muted = "166;173;192"; Danger = "237;163;169" }
-$script:StartupPanelArtColors = @("102;118;184", "122;138;205", "143;157;224", "163;175;239", "186;196;249", "207;215;255")
+$script:StartupPanelArtColors = @($startupBrand.colors | ForEach-Object { $_ -join ';' })
 $script:StartupPanelLabels = @("运行工具", "Python 环境", "浏览器", "应用界面", "本地数据", "界鉴服务")
 
 function Format-StartupLine([string]$Text, [int]$Width, [string]$Right = "") {

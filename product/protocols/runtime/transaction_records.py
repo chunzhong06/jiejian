@@ -68,17 +68,6 @@ class RecordSeed(RuntimeModel):
         return bounded_record_data(value)
 
 
-class LegacyRecordTransaction(RuntimeModel):
-    schema_version: Literal["1"] = "1"
-    collection: RecordKey
-    resource_id: RecordKey
-    subject_id: RecordKey
-    request_key: RecordKey
-    scope_id: RecordKey | None = None
-    expected_version: int = Field(ge=0, le=9_007_199_254_740_990)
-    changes: tuple[RecordChange, ...] = Field(max_length=8)
-
-
 class RecordSnapshot(RuntimeModel):
     schema_version: Literal["1"] = "1"
     generation: RecordKey
@@ -94,22 +83,6 @@ class RecordTransition(RuntimeModel):
     ordinal: int = Field(ge=0, le=7)
     before: dict[str, Any]
     after: dict[str, Any]
-
-
-class LegacyRecordOperation(RuntimeModel):
-    schema_version: Literal["1"] = "1"
-    operation_id: RecordKey
-    generation: RecordKey
-    collection: RecordKey
-    resource_id: RecordKey
-    owner_id: RecordKey
-    subject_id: RecordKey
-    request_key: RecordKey
-    scope_id: RecordKey | None = None
-    before_version: int = Field(ge=0)
-    after_version: int = Field(ge=1)
-    state: Literal["COMMITTED"] = "COMMITTED"
-    transitions: tuple[RecordTransition, ...] = Field(max_length=8)
 
 
 class RecordProviderReference(RuntimeModel):
@@ -141,21 +114,32 @@ class RecordRequestScope(RuntimeModel):
     state: Literal['OPEN', 'COMPLETE', 'INCOMPLETE'] = 'OPEN'
 
 
-class LegacyRecordProofView(RuntimeModel):
-    schema_version: Literal['1'] = '1'
-    snapshot: RecordSnapshot
-    operation: LegacyRecordOperation | None = None
-    scope: RecordRequestScope | None = None
-    operations: tuple[LegacyRecordOperation, ...] = Field(default=(), max_length=32)
-
-
-# 新宿主的一次调用形成一次原子提交；旧根继续由独立分支严格读取，不能默认补新含义。
-class RecordTransaction(LegacyRecordTransaction):
+# 一次宿主调用形成一次原子提交，连续版本与作用域顺序由 reader 校验。
+class RecordTransaction(RuntimeModel):
     schema_version: Literal['2'] = '2'
+    collection: RecordKey
+    resource_id: RecordKey
+    subject_id: RecordKey
+    request_key: RecordKey
+    scope_id: RecordKey | None = None
+    expected_version: int = Field(ge=0, le=9_007_199_254_740_990)
+    changes: tuple[RecordChange, ...] = Field(max_length=8)
 
 
-class RecordOperation(LegacyRecordOperation):
+class RecordOperation(RuntimeModel):
     schema_version: Literal['2'] = '2'
+    operation_id: RecordKey
+    generation: RecordKey
+    collection: RecordKey
+    resource_id: RecordKey
+    owner_id: RecordKey
+    subject_id: RecordKey
+    request_key: RecordKey
+    scope_id: RecordKey | None = None
+    before_version: int = Field(ge=0)
+    after_version: int = Field(ge=1)
+    state: Literal["COMMITTED"] = "COMMITTED"
+    transitions: tuple[RecordTransition, ...] = Field(max_length=8)
     scope_ordinal: int | None = Field(default=None, ge=0, le=31)
     commit_semantics: Literal['ATOMIC_COMMIT'] = 'ATOMIC_COMMIT'
 
@@ -190,22 +174,5 @@ class RecordProofView(RuntimeModel):
         return self
 
 
-class RecordStateMigration(RuntimeModel):
-    schema_version: Literal['1'] = '1'
-    source_generation: RecordKey
-    target_generation: RecordKey
-    source_history_sha256: Digest
-    source_state_sha256: Digest
-    target_state_sha256: Digest
-    resource_count: int = Field(ge=0)
-
-    @model_validator(mode='after')
-    def preserve_business_state(self):
-        if self.source_generation == self.target_generation or self.source_state_sha256 != self.target_state_sha256:
-            raise ValueError('migration must preserve state in a new generation')
-        return self
-
-
-def read_record_proof(raw: str | bytes):
-    """按原根版本解析；历史字节不升级、不补字段，也不重新计算旧记录。"""
-    return TypeAdapter(Annotated[LegacyRecordProofView | RecordProofView, Field(discriminator='schema_version')]).validate_json(raw)
+def read_record_proof(raw: str | bytes) -> RecordProofView:
+    return RecordProofView.model_validate_json(raw, strict=True)

@@ -8,13 +8,12 @@ from typing import Annotated, Literal, TypeVar
 
 from pydantic import Field, model_validator
 
-from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
-from product.backend.core.verification.trace import ExecutionTrace
+from product.backend.domain.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
+from product.backend.domain.verification.trace import ExecutionTrace
 from product.protocols.checks.execution_request import ExecutionCase, Hash, LogicalId, WireModel, content_hash
 from product.protocols.checks.check_publication import CheckPublicationManifest
-from product.protocols.checks.check_runtime import check_payload_contains_secret
-from product.protocols.runtime.runtime_identity import RuntimeCorrespondence
-from product.protocols.runtime.node_runtime import NodeRuntimeCorrespondence
+from product.protocols.checks.check_runtime import check_payload_contains_secret, CheckRuntimeCorrespondence
+from product.protocols.codec import encode_json, decode_document
 from product.protocols.checks.business_facts import BusinessFact,ObservationFactReference,CommittedStateFact,CreationFactReference,ObjectCreationFact
 
 RunId = Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]
@@ -37,6 +36,7 @@ class CheckAssetReference(WireModel):
 
 
 class CheckRunnerInput(WireModel):
+    document_type: Literal["jiejian.runner-input"] = "jiejian.runner-input"
     schema_version: Literal["1"] = "1"
     run_id: RunId
     job_id: JobId
@@ -56,6 +56,7 @@ class CheckRunnerInput(WireModel):
 
 
 class CheckRunnerProgress(WireModel):
+    document_type: Literal["jiejian.runner-progress"] = "jiejian.runner-progress"
     schema_version: Literal["1"] = "1"
     run_id: RunId
     job_id: JobId
@@ -109,6 +110,7 @@ class CheckCaseOutcome(WireModel):
 
 
 class CheckEvidence(WireModel):
+    document_type: Literal["jiejian.check-evidence"] = "jiejian.check-evidence"
     schema_version: Literal["1"] = "1"
     evidence_id: EvidenceId
     run_id: RunId
@@ -142,10 +144,8 @@ class CheckEvidence(WireModel):
         return self
 
 
-class DetailedCheckEvidence(CheckEvidence):
-    schema_version:Literal['2']='2'
-    business_facts:tuple[BusinessFact,...]=Field(default=(),max_length=64)
-    fact_references:tuple[ObservationFactReference,...]=Field(default=(),max_length=240)
+    business_facts: tuple[BusinessFact, ...] = Field(default=(), max_length=64)
+    fact_references: tuple[Annotated[ObservationFactReference | CreationFactReference, Field(discriminator="method")], ...] = Field(default=(), max_length=240)
 
     @model_validator(mode='after')
     def validate_fact_associations(self):
@@ -155,8 +155,6 @@ class DetailedCheckEvidence(CheckEvidence):
         proofs={proof.proof_fingerprint:proof for proof in self.case.proof_requirements}
         operations=set()
         for fact in facts.values():
-            if self.schema_version=='2' and isinstance(fact.data,ObjectCreationFact):
-                raise ValueError('creation facts require evidence 3')
             if (fact.case_id,fact.request_ref)!=(self.case.case_id,marker):raise ValueError('fact belongs to another request')
             for ref in fact.proofs:
                 proof=proofs.get(ref.proof_fingerprint)
@@ -178,11 +176,6 @@ class DetailedCheckEvidence(CheckEvidence):
         return self
 
 
-class CreationCheckEvidence(DetailedCheckEvidence):
-    schema_version:Literal['3']='3'
-    fact_references:tuple[Annotated[ObservationFactReference|CreationFactReference,Field(discriminator='method')],...]=Field(default=(),max_length=240)
-
-
 class CheckCaseResult(WireModel):
     case_id: CaseId
     action_id: ActionId
@@ -199,6 +192,7 @@ class CheckPrimaryError(WireModel):
 
 
 class CheckRunnerResult(WireModel):
+    document_type: Literal["jiejian.check-result"] = "jiejian.check-result"
     schema_version: Literal["1"] = "1"
     run_id: RunId
     job_id: JobId
@@ -215,6 +209,7 @@ class CheckRunnerResult(WireModel):
     cleanup_issues: tuple[ReasonCode, ...] = Field(default=(), max_length=32)
     started_at_us: int = Field(ge=0)
     completed_at_us: int = Field(ge=0)
+    runtime_correspondence: CheckRuntimeCorrespondence | None = None
 
     @model_validator(mode="after")
     def validate_result(self):
@@ -240,23 +235,11 @@ def evidence_content_id(payload) -> str:
     return "ev_" + hashlib.sha256(raw).hexdigest()
 
 
-def seal_check_evidence(*,detailed=False,creation=False,**fields) -> CheckEvidence:
-    # 先补齐根默认值，再计算内容地址；最终严格 reader 仍拒绝绕过校验的嵌套事实。
-    model=CreationCheckEvidence if creation else DetailedCheckEvidence if detailed else CheckEvidence
-    draft = model.model_construct(evidence_id="ev_" + "0" * 64, **fields)
+def seal_check_evidence(**fields) -> CheckEvidence:
+    draft = CheckEvidence.model_construct(evidence_id="ev_" + "0" * 64, **fields)
     payload = draft.model_dump(mode="json", exclude={"evidence_id"})
     payload["evidence_id"] = evidence_content_id(payload)
-    return model.model_validate_json(json.dumps(payload), strict=True)
-
-
-class ControlledCheckRunnerResult(CheckRunnerResult):
-    schema_version: Literal["2"] = "2"
-    runtime_correspondence: RuntimeCorrespondence
-
-
-class NodeCheckRunnerResult(CheckRunnerResult):
-    schema_version: Literal['3'] = '3'
-    runtime_correspondence: NodeRuntimeCorrespondence
+    return CheckEvidence.model_validate_json(json.dumps(payload), strict=True)
 
 
 class CheckResultProtocolError(ValueError):
@@ -264,7 +247,7 @@ class CheckResultProtocolError(ValueError):
 
 
 CheckDocument = TypeVar("CheckDocument", CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
-_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, DetailedCheckEvidence, CreationCheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
+_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
 
 
 def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[str, ...] = ()) -> bytes:
@@ -287,25 +270,11 @@ def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[st
 
 
 def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secrets: tuple[str, ...] = ()) -> CheckDocument:
-    def unique(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate key")
-            result[key] = value
-        return result
     try:
-        if model not in _CHECK_ROOTS or type(raw) is not bytes or len(raw) > CHECK_RESULT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
-            raise ValueError("invalid check document")
-        payload = json.loads(raw.decode(), object_pairs_hook=unique,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        if model is CheckRunnerResult and isinstance(payload, dict):
-            model = {'1':CheckRunnerResult,'2':ControlledCheckRunnerResult,'3':NodeCheckRunnerResult}.get(payload.get('schema_version'))
-            if model is None:
-                raise ValueError('unsupported result version')
-        if model is CheckEvidence and isinstance(payload,dict):
-            model={'1':CheckEvidence,'2':DetailedCheckEvidence,'3':CreationCheckEvidence}.get(payload.get('schema_version'))
-            if model is None:raise ValueError('unsupported evidence version')
+        if model not in _CHECK_ROOTS:
+            raise ValueError("unsupported check root")
+        decode_document(raw, document_type=model.model_fields["document_type"].default,
+            version=model.model_fields["schema_version"].default, limit=CHECK_RESULT_MAX_BYTES)
         document = model.model_validate_json(raw, strict=True)
         if canonical_check_document(document, known_secrets=known_secrets) != raw:
             raise ValueError("noncanonical check document")

@@ -1,0 +1,81 @@
+.jj-rule-workspace, .jj-rule-detail-header, .jj-rule-issue, .jj-rule-current, .jj-rule-change-list, .jj-rule-history, .jj-rule-submission { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); overflow: hidden; }
+.jj-rule-summary { display: flex; gap: 18px; padding: 24px 28px; align-items: center; background: var(--inset); border-bottom: 1px solid var(--line); }
+.jj-rule-summary > .anticon { font-size: var(--text-section); color: var(--accent-ink); }
+.jj-rule-summary > div:first-of-type { display: grid; gap: 4px; }
+.jj-rule-summary > div:first-of-type > span, .jj-rule-totals { color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-totals { display: flex; gap: 28px; margin-left: auto; }
+.jj-rule-totals strong { font-size: var(--text-body); color: var(--ink); }
+.jj-rule-matrix { gap: 0; }
+.jj-rule-matrix .jj-rule-toolbar { padding: 20px 24px; }
+.jj-rule-matrix .jj-permission-table { border: 0; border-radius: 0; }
+.jj-rule-matrix .jj-permission-table table { table-layout: fixed; }
+.jj-rule-matrix .jj-permission-table th { min-width: 180px; }
+.jj-rule-matrix .jj-permission-table .jj-permission-cell .jj-badge { margin-top: 7px; font-weight: 500; }
+.jj-rule-archive { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+.jj-rule-detail-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px 30px; margin-bottom: 24px; }
+.jj-rule-detail-header h1 { margin: 12px 0 6px; font-size: var(--text-title); line-height: 1.4; font-weight: 600; }
+.jj-rule-detail-header p, .jj-rule-detail-label > span, .jj-rule-issue header p, .jj-rule-current > p, .jj-rule-change p { color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-detail-label { display: flex; align-items: center; gap: 12px; }
+.jj-rule-detail-status { display: grid; gap: 14px; justify-items: end; flex-shrink: 0; }
+.jj-rule-result-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,.38fr); gap: 28px; align-items: start; }
+.jj-rule-result-main > .jj-section-header { margin-bottom: 16px; }
+.jj-rule-issue + .jj-rule-issue { margin-top: 18px; }
+.jj-rule-issue > header { display: flex; gap: 16px; padding: 24px; }
+.jj-rule-issue-icon { font-size: var(--text-section); color: var(--bad); line-height: 1.65; }
+.jj-rule-issue-icon[data-state=VERIFIED] { color: var(--good); }
+.jj-rule-issue header h3 { margin: 10px 0 6px; font-weight: 550; }
+.jj-rule-verification-gap { margin: 0 24px 20px; }
+.jj-rule-obligations { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin: 0 24px 24px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
+.jj-rule-obligations > div { padding: 16px; display: grid; gap: 8px; }
+.jj-rule-obligations > div + div { border-left: 1px solid var(--line); }
+.jj-rule-obligations span { color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-obligations strong { font-size: var(--text-meta); font-weight: 550; }
+.jj-rule-issue > footer, .jj-rule-submission > footer { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--inset); flex-wrap: wrap; }
+.jj-rule-context { padding: 22px 24px; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--inset); }
+.jj-rule-context h2, .jj-rule-context h3 { font-size: var(--text-body); font-weight: 550; }
+.jj-rule-context dl { margin: 18px 0 12px; display: grid; gap: 16px; }
+.jj-rule-context dl > div { display: grid; gap: 5px; }
+.jj-rule-context dt { font-size: var(--text-meta); color: var(--muted); }
+.jj-rule-context dd { margin: 0; }
+.jj-rule-context p { margin-top: 12px; }
+.jj-rule-context .jj-button { margin-top: 8px; font-size: var(--text-meta); }
+.jj-rule-context-divider { border-top: 1px solid var(--line); margin: 20px 0; }
+.jj-rule-current { padding: 28px; }
+.jj-rule-current h3 { margin-top: 18px; }
+.jj-rule-current > p { margin: 8px 0 20px; }
+.jj-rule-change-list > .jj-section-header, .jj-rule-history > header { padding: 20px 24px; background: var(--inset); border-bottom: 1px solid var(--line); margin: 0; }
+.jj-rule-change { padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+.jj-rule-change:last-child { border: 0; }
+.jj-rule-change h3 { margin: 7px 0 5px; }
+.jj-rule-history > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.jj-rule-history > button { display: grid; grid-template-columns: 160px minmax(150px,1fr) 100px minmax(100px,1fr) 20px; text-align: left; gap: 18px; align-items: center; width: 100%; background: none; color: var(--ink); border: 0; border-bottom: 1px solid var(--line); padding: 20px 24px; }
+.jj-rule-history > button .jj-badge { justify-self: start; }
+.jj-rule-history > button time, .jj-rule-history > button > span:not(.jj-badge) { color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-submission { margin-bottom: 28px; border-color: var(--line-strong); }
+.jj-rule-submission > header { display: flex; justify-content: space-between; align-items: start; gap: 20px; padding: 24px; border-bottom: 1px solid var(--line); }
+.jj-rule-submission > header p { margin-top: 8px; color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-submission-body { display: grid; grid-template-columns: minmax(0,1fr) minmax(260px,.75fr); gap: 28px; padding: 24px; }
+.jj-rule-submission-body fieldset { border: 0; padding: 0; min-width: 0; }
+.jj-rule-submission-body legend { font-weight: 550; font-size: var(--text-meta); margin-bottom: 10px; }
+.jj-rule-fix-target { display: flex; gap: 12px; align-items: start; padding: 12px; background: var(--inset); border: 1px solid var(--line); border-radius: var(--radius-control); }
+.jj-rule-fix-target > span { display: grid; gap: 5px; min-width: 0; }
+.jj-rule-fix-target strong { font-weight: 500; }
+.jj-rule-fix-target small { color: var(--muted); }
+.jj-rule-submission details { padding-block: 14px 0; }
+.jj-rule-submission details .jj-rule-fix-target { margin-top: 10px; }
+@media(max-width:1150px) { .jj-rule-result-layout { grid-template-columns: minmax(0,1fr); } .jj-rule-context dl { grid-template-columns: repeat(3,minmax(0,1fr)); } .jj-rule-change { align-items: start; flex-direction: column; } }
+@media(max-width:700px) { .jj-rule-context dl { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:700px) { .jj-rule-summary { flex-wrap: wrap; padding: 20px; } .jj-rule-totals { width: 100%; margin-left: 0; gap: 20px; } .jj-rule-matrix .jj-rule-toolbar { padding: 18px; } .jj-rule-matrix .jj-permission-table table { min-width: 640px; } .jj-rule-detail-header { padding: 22px; align-items: start; flex-direction: column; } .jj-rule-detail-status { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; } .jj-rule-verification-gap { margin: 0 24px 20px; }
+.jj-rule-obligations { grid-template-columns: minmax(0,1fr); } .jj-rule-obligations > div { display: flex; justify-content: space-between; gap: 14px; } .jj-rule-obligations > div + div { border-left: 0; border-top: 1px solid var(--line); } .jj-rule-submission-body { grid-template-columns: minmax(0,1fr); padding: 20px; } .jj-rule-history > header { align-items: start; flex-direction: column; } .jj-rule-history > button { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 18px; gap: 12px; padding: 18px; } .jj-rule-history > button > span:nth-of-type(3) { display: none; } .jj-rule-history > button > .anticon { grid-column: 3; grid-row: 1/3; } }
+
+.jj-action-tabs > button[aria-selected=true] { color: var(--ink); background: var(--surface); box-shadow: var(--control-shadow); font-weight: 550; }
+.jj-report-rule-link { display: flex; justify-content: flex-end; margin-top: -8px; }
+
+.jj-rule-check-scope { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius-surface); overflow: hidden; }
+.jj-rule-check-scope > header { display: flex; gap: 12px; align-items: center; padding: 22px 26px 0; }
+.jj-rule-check-scope > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 16px; padding: 20px 26px; }
+.jj-rule-check-scope article { display: grid; gap: 6px; }
+.jj-rule-check-scope article span { color: var(--muted); font-size: var(--text-meta); }
+.jj-rule-check-scope > footer { display: flex; flex-wrap: wrap; gap: 12px 26px; border-top: 1px solid var(--line); padding: 16px 26px; background: var(--inset); color: var(--muted); font-size: var(--text-meta); }
+
+

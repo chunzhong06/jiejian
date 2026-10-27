@@ -28,7 +28,21 @@ function Resolve-CondaPrefix([bool]$RequireExisting) {
         Fail-Development "conda" "未找到 Conda" "安装或修复 Miniconda/Conda 后执行 scripts/dev.ps1 bootstrap"
     }
     $script:Conda = $command.Source
-    $raw = & $script:Conda env list --json 2>&1 | Out-String
+    $script:CondaArguments = @()
+    # Windows 的 Conda 包装器可能在加载时失败；标准安装使用同一安装内的 Python 模块入口。
+    # 只识别 Conda 自有目录，不借用 PATH 中的其他 Python，也不改写调用者的 Conda 环境变量。
+    $commandDirectory = Split-Path -Parent $command.Source
+    $installation = $null
+    if ((Split-Path -Leaf $commandDirectory) -in @("condabin", "Scripts")) {
+        $installation = Split-Path -Parent $commandDirectory
+    } elseif ((Split-Path -Leaf $commandDirectory) -eq "bin" -and (Split-Path -Leaf (Split-Path -Parent $commandDirectory)) -eq "Library") {
+        $installation = Split-Path -Parent (Split-Path -Parent $commandDirectory)
+    }
+    if ($installation -and (Test-Path -LiteralPath (Join-Path $installation "python.exe") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $installation "Lib\site-packages\conda\__main__.py") -PathType Leaf)) {
+        $script:Conda = Join-Path $installation "python.exe"
+        $script:CondaArguments = @("-B", "-m", "conda")
+    }
+    $raw = & $script:Conda @script:CondaArguments env list --json 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { Fail-Development "conda" "无法读取 Conda 环境列表" "修复 Conda 后重试" }
     try { $environments = @(($raw | ConvertFrom-Json).envs) }
     catch { Fail-Development "conda" "Conda 环境列表不是有效 JSON" "修复 Conda 后重试" }
@@ -70,11 +84,11 @@ function Ensure-Conda([ValidateSet("auto", "force", "existing")][string]$Mode) {
     }
     if ([string]::IsNullOrWhiteSpace($prefix)) {
         Write-Host "正在创建 jiejian_env Python 基线……" -ForegroundColor Cyan
-        Invoke-External "conda" @($script:Conda, "env", "create", "--file", $script:EnvironmentPath)
+        Invoke-External "conda" (@($script:Conda) + $script:CondaArguments + @("env", "create", "--file", $script:EnvironmentPath))
         $prefix = Resolve-CondaPrefix $true
     } elseif ($mustUpdate -and $Mode -ne "existing") {
         Write-Host "正在更新 jiejian_env Python 基线……" -ForegroundColor Cyan
-        Invoke-External "conda" @($script:Conda, "env", "update", "--name", "jiejian_env", "--file", $script:EnvironmentPath, "--prune")
+        Invoke-External "conda" (@($script:Conda) + $script:CondaArguments + @("env", "update", "--name", "jiejian_env", "--file", $script:EnvironmentPath, "--prune"))
         $prefix = Resolve-CondaPrefix $true
     } elseif (-not $ready) {
         Fail-Development "conda" "jiejian_env 的 Python 基线不符合 3.13" "执行 .\scripts\dev.ps1 bootstrap"
@@ -160,7 +174,7 @@ function Read-DevelopmentIdentity {
     try {
         # 重新计算身份时不能拿旧指纹自证，但读取动作也不能删除已经确认的父进程身份。
         Remove-Item Env:JIEJIAN_RUNTIME_FINGERPRINT -ErrorAction SilentlyContinue
-        $probe = "import json; from product.backend.infra.runtime.process.controlled.identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
+        $probe = "import json; from product.backend.infrastructure.runtime.process.controlled.identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
         $raw = (& $script:Python -B -c $probe 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { return $null }
         try { return $raw | ConvertFrom-Json } catch { return $null }
@@ -175,7 +189,7 @@ function Confirm-DevelopmentIdentity {
     if ($null -eq $report) { Fail-Development "python-identity" "无法读取 Python 环境身份" "执行 .\scripts\dev.ps1 sync" }
     if (-not $report.ok) { Fail-Development "python-identity" ("Python 环境来源异常：" + (@($report.issues) -join "；")) "执行 .\scripts\dev.ps1 bootstrap" }
     $env:JIEJIAN_RUNTIME_FINGERPRINT = [string]$report.runtime_fingerprint
-    & $script:Python -B -c "from product.backend.infra.runtime.process.controlled.identity import require_python_environment; require_python_environment()" 2>$null
+    & $script:Python -B -c "from product.backend.infrastructure.runtime.process.controlled.identity import require_python_environment; require_python_environment()" 2>$null
     if ($LASTEXITCODE -ne 0) { Fail-Development "python-identity" "主进程环境指纹复核失败" "执行 .\scripts\dev.ps1 sync" }
     Set-StateValue "runtime_fingerprint" $env:JIEJIAN_RUNTIME_FINGERPRINT
 }

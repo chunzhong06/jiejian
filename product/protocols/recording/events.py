@@ -33,16 +33,16 @@ from pydantic import (
     model_validator,
 )
 
-from product.backend.core.identifiers import (
+from product.backend.domain.identifiers import (
     PROJECT_ID_PATTERN,
     RECORDING_ID_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
-from product.backend.core.recording.models import RecordingPurpose, RecordingState, RecordingStateEvent
+from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.domain.recording.models import RecordingPurpose, RecordingState, RecordingStateEvent
 from product.protocols.web.target import WebTargetScope
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.redaction import REDACTED
+from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.redaction import REDACTED
 
 RECORDING_REQUEST_MAX_BYTES = 1_048_576
 RECORDING_RESULT_MAX_BYTES = 4_194_304

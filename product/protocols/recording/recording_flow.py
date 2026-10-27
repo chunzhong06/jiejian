@@ -20,8 +20,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.boundaries.entities import ACTION_ID_PATTERN
+from product.backend.domain.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
+from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN
 from product.protocols.recording.created_resource import CREATED_RESOURCE_EXTRACTOR
 from product.protocols.web.workflow import (
     HttpOutcomeClassifier,
@@ -77,7 +77,8 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
-    schema_version: Literal["3", "4"] = "3"
+    document_type: Literal["jiejian.recorded-flow"] = "jiejian.recorded-flow"
+    schema_version: Literal["1"] = "1"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
@@ -105,7 +106,7 @@ class Flow(RecordingFlowModel):
         )
         created_sources = tuple((step, source) for step in self.steps
             for source in step.request_template.response_extractors if source.extractor_id == CREATED_RESOURCE_EXTRACTOR)
-        if self.schema_version == "4":
+        if created_sources:
             if (resource_slots or len(created_sources) != 1 or created_sources[0][0].id != self.target_step_id
                     or created_sources[0][1].secret or created_sources[0][1].kind.value not in {"JSON_PATH", "LOCATION"}):
                 raise ValueError("created resource flow requires one target response locator and no input resource")

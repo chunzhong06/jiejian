@@ -1,13 +1,13 @@
-# 验证当前构造器和历史夹具的分界，捕获默认字段新增及无效 wire 混入。
+# 验证当前任务构造器与非法跨边界输入。
 import ast
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from product.backend.infra.storage import JobRecord
-from tests.contracts.current import JOB_TARGET_FIELDS
-from tests.fixtures.runtime.current_jobs import current_job, invalid_job_payload
+from product.backend.infrastructure.storage.execution.jobs import JobRecord
+from tests.support.contracts import JOB_TARGET_FIELDS
+from tests.support.builders.runtime.current_jobs import current_job, invalid_job_payload
 
 
 @pytest.mark.parametrize("target,operation", [("run_id", "CHECK"), ("recording_id", "RECORDING"),
@@ -25,8 +25,4 @@ def test_invalid_wire_is_rejected_instead_of_bypassing_validation():
         current_job(target="preflight_id", operation_type="CHECK")
 
 
-def test_frozen_history_does_not_import_current_application_or_builders():
-    path = Path(__file__).resolve().parents[1] / "fixtures/preparation/legacy_recording.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-    assert not any(name and (name.startswith("product.") or name.startswith("tests.fixtures.preparation.action_preparation")) for name in imports)
+pytestmark = [pytest.mark.level2]

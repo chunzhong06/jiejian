@@ -38,5 +38,5 @@ export default defineConfig({
   cacheDir: process.env.JIEJIAN_FRONTEND_CACHE_DIR || '.vite',
   server: { port: 5173, strictPort: true },
   // 限制同时创建的 jsdom，避免整组并发挤占事件循环而让局部交互断言超时。
-  test: { environment: 'jsdom', setupFiles: './src/shared/testing/setup.ts', maxWorkers: 4 },
+  test: { environment: 'jsdom', setupFiles: './vitest.setup.ts', include:['src/**/*.test.{ts,tsx}'], maxWorkers: 4 },
 })

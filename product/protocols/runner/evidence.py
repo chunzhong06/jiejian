@@ -10,13 +10,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from product.backend.core.identifiers import RUN_ID_PATTERN
-from product.backend.core.lifecycle import CaseVerdict
-from product.backend.core.verification.differential import PermissionTwin, TwinExecutionRole
-from product.backend.core.verification.permissions.coverage import PermissionMutationCase
-from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, SecurityEffectFact
+from product.backend.domain.identifiers import RUN_ID_PATTERN
+from product.backend.domain.lifecycle import CaseVerdict
+from product.backend.domain.verification.differential import PermissionTwin, TwinExecutionRole
+from product.backend.domain.verification.permissions.coverage import PermissionMutationCase
+from product.backend.domain.verification.facts import ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, SecurityEffectFact
 from product.protocols.runner.execution import ObserverRequirementBinding, ObserverRequirementKind, ProtocolModel
-from product.protocols.observer import ObservationCompleteness, ObservationEnvelope, ObserverOutcome
+from product.protocols.observer.config import ObservationCompleteness
+from product.protocols.observer.result import ObservationEnvelope, ObserverOutcome
 from .input import _HEX, _validate_reason_codes
 
 def _jsonable(value: Any) -> Any:

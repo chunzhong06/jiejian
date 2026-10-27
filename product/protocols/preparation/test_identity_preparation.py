@@ -22,11 +22,11 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from product.backend.core.identifiers import (
+from product.backend.domain.identifiers import (
     PROJECT_ID_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.identities.models import TestIdentityAuthMethod
+from product.backend.domain.identities.models import TestIdentityAuthMethod
 from product.protocols.runner.execution import ProtocolModel
 from product.protocols.web.target import WebTargetScope
 

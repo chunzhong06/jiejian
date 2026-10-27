@@ -13,6 +13,7 @@ class CheckPublishedFile(WireModel):
 
 
 class CheckPublicationManifest(WireModel):
+    document_type: Literal["jiejian.check-publication"] = "jiejian.check-publication"
     schema_version: Literal["1"] = "1"
     project_id: LogicalId
     run_id: Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]

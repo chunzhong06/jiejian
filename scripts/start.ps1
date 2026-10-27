@@ -1,19 +1,5 @@
 ﻿#Requires -Version 5.1
-# =============================================================================
-# Windows 一键启动编排
-#
-# 定位
-#   start.cmd 与当前仓库 editable 源码、受控依赖及本地控制面之间的一键启动边界
-#
-# 职责
-#   准备 Conda/uv/editable 源码｜按指纹构建前端｜诊断并启动本地控制面
-#
-# 边界
-#   Wheel 不参与普通启动；固定开发工具复用仓库默认 var，本轮事实只进入 -VarDir。
-#
-# 调用链
-#   start.cmd / user shell → scripts/start.ps1 → scripts/dev.ps1 prepare → editable package CLI
-# =============================================================================
+# 源码启动入口：准备受控环境并将服务生命周期交给产品 CLI。
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -32,147 +18,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$script:ModeExplicit = $PSBoundParameters.ContainsKey("Mode")
-$script:FinalMode = $Mode
-$script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
-$script:DevelopmentRoot = [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot "var\development"))
-if ([string]::IsNullOrWhiteSpace($VarDir)) {
-    $VarDir = Join-Path $script:ProjectRoot "var"
-} elseif (-not [IO.Path]::IsPathRooted($VarDir)) {
-    $VarDir = Join-Path $script:ProjectRoot $VarDir
-}
-$script:VarDir = [IO.Path]::GetFullPath($VarDir)
-$script:LogDir = Join-Path $script:VarDir "logs\startup"
-$script:StartupDir = Join-Path $script:VarDir "runtime\startup"
-$script:StatePath = Join-Path $script:StartupDir "prepare-state.json"
-$script:LogPath = Join-Path $script:LogDir ("{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
-$script:ToolchainPath = Join-Path $script:ProjectRoot "product\config\toolchain.json"
-$script:StartupLogInitialized = $false
-$script:FailureStage = "startup"
-$script:FailureCode = 0
-$script:CondaExecutable = $null
-$script:UvExecutable = $null
-$script:PythonRunner = $null
-$script:PackageRunner = $null
-$script:PythonExecutable = $null
-$script:PythonEnvironmentType = $null
-$script:PythonEnvironmentPath = $null
-$script:UvVersion = $null
-$script:DownloadTemp = $null
-$script:NodeVersion = $null
-$script:PnpmVersion = $null
-$script:NodeExecutable = $null
-$script:PnpmExecutable = $null
-$script:PnpmRunner = $null
-$script:CorepackExecutable = $null
-$script:NodeArchitecture = $null
-$script:NodeRequirement = $null
-$script:PnpmRequirement = $null
-$script:ToolchainFingerprint = $null
-$script:NodeRuntimeDetail = $null
-$script:PnpmRuntimeDetail = $null
-$script:CondaVersion = $null
-$script:PythonVersion = $null
-$script:PythonFingerprint = $null
-$script:NodeDependenciesFingerprint = $null
-$script:PythonDependenciesDetail = $null
-$script:ChromiumDetail = $null
-$script:MigrationDetail = $null
-$script:FrontendDependenciesDetail = $null
-$script:FrontendBuildDetail = $null
-$script:ChromiumExecutable = $null
-$script:PythonEnvironmentReport = $null
-$script:ServeReadyObserved = $false
-$script:ServeStartupFailed = $false
-$script:CliEntryMode = "Shell"
-$script:PrepareLock = $null
-$script:FrontendDist = $null
-$script:PrepareState = [pscustomobject]@{
-    schema_version = "1"
-    phases = [pscustomobject]@{}
-}
-$script:SavedBytecode = $env:PYTHONDONTWRITEBYTECODE
-$script:SavedUvProjectEnvironment = $env:UV_PROJECT_ENVIRONMENT
-$script:SavedUvCacheDir = $env:UV_CACHE_DIR
-$script:SavedUvPythonInstallDir = $env:UV_PYTHON_INSTALL_DIR
-$script:SavedPythonUtf8 = $env:PYTHONUTF8
-$script:SavedPythonIoEncoding = $env:PYTHONIOENCODING
-$script:SavedPythonNoUserSite = $env:PYTHONNOUSERSITE
-$script:SavedPythonPath = $env:PYTHONPATH
-$script:SavedPythonHome = $env:PYTHONHOME
-$script:SavedJiejianPythonExecutable = $env:JIEJIAN_PYTHON_EXECUTABLE
-$script:SavedJiejianPythonEnvironmentPath = $env:JIEJIAN_PYTHON_ENVIRONMENT_PATH
-$script:SavedJiejianPythonEnvironmentType = $env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE
-$script:SavedJiejianNodeExecutable = $env:JIEJIAN_NODE_EXECUTABLE
-$script:SavedJiejianNodeVersion = $env:JIEJIAN_NODE_VERSION
-$script:SavedJiejianPnpmExecutable = $env:JIEJIAN_PNPM_EXECUTABLE
-$script:SavedJiejianPnpmVersion = $env:JIEJIAN_PNPM_VERSION
-$script:SavedJiejianPlaywrightExecutable = $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE
-$script:SavedJiejianFrontendDependencies = $env:JIEJIAN_FRONTEND_DEPENDENCIES
-$script:SavedPath = $env:PATH
-$script:SavedCorepackHome = $env:COREPACK_HOME
-$script:SavedCorepackDownloadPrompt = $env:COREPACK_ENABLE_DOWNLOAD_PROMPT
-$script:SavedJiejianCorepackExecutable = $env:JIEJIAN_COREPACK_EXECUTABLE
-$script:SavedPnpmHome = $env:PNPM_HOME
-$script:SavedNpmConfigCache = $env:npm_config_cache
-$script:SavedPlaywrightBrowsersPath = $env:PLAYWRIGHT_BROWSERS_PATH
-$script:OriginalLocation = (Get-Location).Path
-$script:DisplayStageName = $null
-$script:DisplayStageTimer = $null
-$script:DisplayStageSkipped = $false
-$script:DisplayStageIndex = 0
-$script:DisplayInteractive = $false
-$script:DisplayUnicode = $false
-$script:DisplayTrueColor = $false
-$script:WaitIndicatorProcess = $null
-$script:WaitIndicatorStopEvent = $null
-$script:WaitIndicatorFallbackActive = $false
-$script:PrepareStatusOrder = @("toolchain", "python", "browser", "frontend-dependencies", "frontend-build", "database")
-$script:PrepareStatusIndex = 0
-$script:PrepareStatusState = @{}
-
-$script:Utf8Encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
-[Console]::InputEncoding = $script:Utf8Encoding
-[Console]::OutputEncoding = $script:Utf8Encoding
-$OutputEncoding = [Console]::OutputEncoding
-
+. (Join-Path $PSScriptRoot "lib/session.ps1")
+Save-CallerEnvironment
 try {
-    $script:DisplayInteractive = -not [Console]::IsInputRedirected -and
-        -not [Console]::IsOutputRedirected
-    $supportsVirtualTerminal = $false
-    try { $supportsVirtualTerminal = [bool]$Host.UI.SupportsVirtualTerminal } catch { $supportsVirtualTerminal = $false }
-    $script:DisplayUnicode = $script:DisplayInteractive -and
-        [Console]::OutputEncoding.CodePage -eq 65001 -and
-        $Host.UI.RawUI.WindowSize.Width -ge 44 -and
-        $supportsVirtualTerminal
-    $hasTerminalHint = -not [string]::IsNullOrWhiteSpace([string]$env:WT_SESSION) -or
-        -not [string]::IsNullOrWhiteSpace([string]$env:COLORTERM) -or
-        -not [string]::IsNullOrWhiteSpace([string]$env:ANSICON) -or
-        [string]$env:ConEmuANSI -eq "ON" -or
-        [string]$env:TERM_PROGRAM -match "^(vscode|WezTerm|Hyper)$" -or
-        [string]$env:TERM -match "(xterm|ansi|cygwin|msys|vt100)"
-    $script:DisplayTrueColor = $script:DisplayUnicode -and (
-        $supportsVirtualTerminal -or $hasTerminalHint
-    )
-} catch {
-    $script:DisplayInteractive = $false
-    $script:DisplayUnicode = $false
-    $script:DisplayTrueColor = $false
-}
+    . (Join-Path $PSScriptRoot "startup/context.ps1")
+    Initialize-StartupContext (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path $VarDir $Mode
+    $OutputEncoding = [Console]::OutputEncoding
 
+    # 上下文变量初始化后再加载职责模块；源码准备由 dev.ps1 独占准备锁并返回可信回执。
+    foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.ps1")) {
+        . (Join-Path $PSScriptRoot "startup\$module")
+    }
 
-
-# 上下文变量初始化后再加载职责模块；源码准备由 dev.ps1 独占准备锁并返回可信回执。
-foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.ps1")) {
-    . (Join-Path $PSScriptRoot "startup\$module")
-}
-
-if ($DisplaySpinnerProcess) {
-    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent ([bool]$DisplaySpinnerPanel) } catch { }
-    exit 0
-}
-
-try {
+    if ($DisplaySpinnerProcess) {
+        try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent ([bool]$DisplaySpinnerPanel) } catch { }
+        exit 0
+    }
     if ($script:FinalMode -eq "Interactive" -and -not $script:DisplayInteractive) {
         Fail-Start 40 "mode" "Interactive 模式需要可交互的输入和输出；请显式使用 -Mode Gui、-Mode Cli 或 -Mode Prepare" "使用 -Mode Gui、-Mode Cli 或 -Mode Prepare"
     }
@@ -201,7 +62,7 @@ try {
     Confirm-SourceFrontend
     Write-DisplayResult "环境诊断" "完成" $false
     Write-DisplayResult "前端资源" "完成" $false $script:FrontendDist
-    Write-DisplayResult "本地数据" "完成" $false "已迁移并校验"
+    Write-DisplayResult "本地数据" "完成" $false "已初始化并校验"
     Write-DisplayResult "构建状态" "完成" $true $frontendStatus
     Complete-DisplayStage
 
@@ -246,38 +107,17 @@ try {
     if ($script:FailureCode -gt 0) {
         exit $script:FailureCode
     }
-    Fail-Start (Get-StageFailureCode $script:FailureStage) $script:FailureStage ("启动编排失败: " + $_.Exception.Message) (Get-RecoveryCommand)
+    if (Get-Command Fail-Start -ErrorAction SilentlyContinue) {
+        Fail-Start (Get-StageFailureCode $script:FailureStage) $script:FailureStage ("启动编排失败: " + $_.Exception.Message) (Get-RecoveryCommand)
+    } else {
+        [Console]::Error.WriteLine("启动组件加载失败：" + $_.Exception.Message)
+        exit 40
+    }
 } finally {
     # --- 阶段：恢复调用者环境并精确清理本轮临时资源 ---
-    Stop-WaitIndicator
-    Close-StartupPanel
-    if ($script:DownloadTemp -and (Test-Path -LiteralPath $script:DownloadTemp)) {
-        Remove-Item -LiteralPath $script:DownloadTemp -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if ($null -eq $script:SavedBytecode) { Remove-Item Env:PYTHONDONTWRITEBYTECODE -ErrorAction SilentlyContinue } else { $env:PYTHONDONTWRITEBYTECODE = $script:SavedBytecode }
-    if ($null -eq $script:SavedUvProjectEnvironment) { Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:UV_PROJECT_ENVIRONMENT = $script:SavedUvProjectEnvironment }
-    if ($null -eq $script:SavedUvCacheDir) { Remove-Item Env:UV_CACHE_DIR -ErrorAction SilentlyContinue } else { $env:UV_CACHE_DIR = $script:SavedUvCacheDir }
-    if ($null -eq $script:SavedUvPythonInstallDir) { Remove-Item Env:UV_PYTHON_INSTALL_DIR -ErrorAction SilentlyContinue } else { $env:UV_PYTHON_INSTALL_DIR = $script:SavedUvPythonInstallDir }
-    if ($null -eq $script:SavedPythonUtf8) { Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue } else { $env:PYTHONUTF8 = $script:SavedPythonUtf8 }
-    if ($null -eq $script:SavedPythonIoEncoding) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue } else { $env:PYTHONIOENCODING = $script:SavedPythonIoEncoding }
-    if ($null -eq $script:SavedPythonNoUserSite) { Remove-Item Env:PYTHONNOUSERSITE -ErrorAction SilentlyContinue } else { $env:PYTHONNOUSERSITE = $script:SavedPythonNoUserSite }
-    if ($null -eq $script:SavedPythonPath) { Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue } else { $env:PYTHONPATH = $script:SavedPythonPath }
-    if ($null -eq $script:SavedPythonHome) { Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue } else { $env:PYTHONHOME = $script:SavedPythonHome }
-    if ($null -eq $script:SavedJiejianPythonExecutable) { Remove-Item Env:JIEJIAN_PYTHON_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_EXECUTABLE = $script:SavedJiejianPythonExecutable }
-    if ($null -eq $script:SavedJiejianPythonEnvironmentPath) { Remove-Item Env:JIEJIAN_PYTHON_ENVIRONMENT_PATH -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_ENVIRONMENT_PATH = $script:SavedJiejianPythonEnvironmentPath }
-    if ($null -eq $script:SavedJiejianPythonEnvironmentType) { Remove-Item Env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE = $script:SavedJiejianPythonEnvironmentType }
-    if ($null -eq $script:SavedJiejianNodeExecutable) { Remove-Item Env:JIEJIAN_NODE_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_NODE_EXECUTABLE = $script:SavedJiejianNodeExecutable }
-    if ($null -eq $script:SavedJiejianNodeVersion) { Remove-Item Env:JIEJIAN_NODE_VERSION -ErrorAction SilentlyContinue } else { $env:JIEJIAN_NODE_VERSION = $script:SavedJiejianNodeVersion }
-    if ($null -eq $script:SavedJiejianPnpmExecutable) { Remove-Item Env:JIEJIAN_PNPM_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PNPM_EXECUTABLE = $script:SavedJiejianPnpmExecutable }
-    if ($null -eq $script:SavedJiejianPnpmVersion) { Remove-Item Env:JIEJIAN_PNPM_VERSION -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PNPM_VERSION = $script:SavedJiejianPnpmVersion }
-    if ($null -eq $script:SavedJiejianPlaywrightExecutable) { Remove-Item Env:JIEJIAN_PLAYWRIGHT_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = $script:SavedJiejianPlaywrightExecutable }
-    if ($null -eq $script:SavedJiejianFrontendDependencies) { Remove-Item Env:JIEJIAN_FRONTEND_DEPENDENCIES -ErrorAction SilentlyContinue } else { $env:JIEJIAN_FRONTEND_DEPENDENCIES = $script:SavedJiejianFrontendDependencies }
-    if ($null -eq $script:SavedPath) { Remove-Item Env:PATH -ErrorAction SilentlyContinue } else { $env:PATH = $script:SavedPath }
-    if ($null -eq $script:SavedCorepackHome) { Remove-Item Env:COREPACK_HOME -ErrorAction SilentlyContinue } else { $env:COREPACK_HOME = $script:SavedCorepackHome }
-    if ($null -eq $script:SavedCorepackDownloadPrompt) { Remove-Item Env:COREPACK_ENABLE_DOWNLOAD_PROMPT -ErrorAction SilentlyContinue } else { $env:COREPACK_ENABLE_DOWNLOAD_PROMPT = $script:SavedCorepackDownloadPrompt }
-    if ($null -eq $script:SavedJiejianCorepackExecutable) { Remove-Item Env:JIEJIAN_COREPACK_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_COREPACK_EXECUTABLE = $script:SavedJiejianCorepackExecutable }
-    if ($null -eq $script:SavedPnpmHome) { Remove-Item Env:PNPM_HOME -ErrorAction SilentlyContinue } else { $env:PNPM_HOME = $script:SavedPnpmHome }
-    if ($null -eq $script:SavedNpmConfigCache) { Remove-Item Env:npm_config_cache -ErrorAction SilentlyContinue } else { $env:npm_config_cache = $script:SavedNpmConfigCache }
-    if ($null -eq $script:SavedPlaywrightBrowsersPath) { Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue } else { $env:PLAYWRIGHT_BROWSERS_PATH = $script:SavedPlaywrightBrowsersPath }
-    Set-Location -LiteralPath $script:OriginalLocation
+    try {
+        if (Get-Command Stop-WaitIndicator -ErrorAction SilentlyContinue) { Stop-WaitIndicator }
+        if (Get-Command Close-StartupPanel -ErrorAction SilentlyContinue) { Close-StartupPanel }
+    } finally { Restore-CallerEnvironment }
+
 }

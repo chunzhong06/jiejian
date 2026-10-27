@@ -153,7 +153,7 @@ function Invoke-External(
                         if ($script:StartupPanelActive) { Write-StartupPanel }
                         Start-WaitIndicator $(if ($verifying) { "browser-verify" } else { "browser-download" })
                     }
-                    if ($line.StartsWith("__JIEJIAN_SERVE_STATUS__:")) {
+                    if ($line -in @("__JIEJIAN_SERVE_STATUS__:still-starting", "__JIEJIAN_SERVE_STATUS__:ready-browser-opened", "__JIEJIAN_SERVE_STATUS__:ready-browser-open-failed", "__JIEJIAN_SERVE_STATUS__:startup-failed")) {
                         if ($line.EndsWith("still-starting")) {
                             Set-StartupStatus "正在启动" "界鉴启动时间较长，仍在准备，请稍候" "尚未收到服务就绪确认；可以继续等待或退出。"
                             Start-WaitIndicator "serve"
@@ -174,9 +174,13 @@ function Invoke-External(
                     if ($Stage -eq "serve" -and $script:ServeReadyObserved) {
                         switch ($line) {
                             "__JIEJIAN_GUI_STATUS__:controls-ready" {
-                                $script:StartupPanelKeys = "Ctrl+C 退出    G 重新打开界面"
+                                $script:StartupPanelKeys = "Ctrl+C / Q 退出    G 重新打开界面"
                                 if ($script:StartupPanelActive) { Write-StartupPanel }
-                                else { Write-Host "[G] 重新打开 GUI    [Ctrl+C] 退出界鉴" -ForegroundColor Cyan }
+                                else { Write-Host "[G] 重新打开 GUI    [Ctrl+C / Q] 退出界鉴" -ForegroundColor Cyan }
+                            }
+                            "__JIEJIAN_GUI_STATUS__:stopping" {
+                                $script:StartupPanelKeys = ""
+                                Set-StartupStatus "正在退出" "正在关闭界鉴服务" "等待当前任务与所属进程完成清理。"
                             }
                             "__JIEJIAN_GUI_STATUS__:opened" { Set-StartupStatus "已就绪" "已发送界面打开请求" ("服务运行中 · http://127.0.0.1:{0}/" -f $Port) }
                             "__JIEJIAN_GUI_STATUS__:open-failed" { Set-StartupStatus "已就绪" "未能打开界面" ("可重试，或访问 http://127.0.0.1:{0}/" -f $Port) }

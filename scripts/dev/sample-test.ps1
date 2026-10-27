@@ -1,38 +1,26 @@
 ﻿#Requires -Version 5.1
-# 自动 L5 命令入口：创建独立运行目录并调用 Python Harness，不替 start.cmd 完成产品准备。
-
+# 准备受控工具后显式运行独立官方示例，不读取用户应用。
 function Invoke-SampleTest($Toolchain) {
-    $suite = "official"
-    if ($CommandArguments.Count -gt 1) {
-        Fail-Development "sample-test" "sample-test 最多接受一个 suite" "使用 .\scripts\dev.ps1 sample-test [official|ordinary|validation|competition|portable|windows|all]"
+    if ($CommandArguments.Count -gt 2 -or ($CommandArguments.Count -ge 1 -and $CommandArguments[0] -ne "official") -or ($CommandArguments.Count -eq 2 -and $CommandArguments[1] -notin @("baseline", "repair"))) {
+        Fail-Development "sample-test" "运行验收范围应为 official baseline 或 official repair" "使用 scripts/dev.ps1 sample-test official；仅验证修复链时追加 repair"
     }
-    if ($CommandArguments.Count -eq 1) {
-        $suite = [string]$CommandArguments[0]
+    Resolve-DevelopmentNode $Toolchain $true
+    Prepare-Chromium
+    Prepare-SourceFrontend $Toolchain
+    $previousAcceptance = $env:JIEJIAN_RUNTIME_ACCEPTANCE
+    $previousOutput = $env:JIEJIAN_ACCEPTANCE_OUTPUT
+    $previousArguments = $script:CommandArguments
+    $previousScope = $env:JIEJIAN_ACCEPTANCE_SCOPE
+    $env:JIEJIAN_ACCEPTANCE_SCOPE = if ($CommandArguments.Count -eq 2) { $CommandArguments[1] } else { "baseline" }
+    $env:JIEJIAN_RUNTIME_ACCEPTANCE = "1"
+    $env:JIEJIAN_ACCEPTANCE_OUTPUT = Join-Path $script:VarDir ("audit/runtime-tests/{0}" -f [guid]::NewGuid().ToString("N"))
+    $script:CommandArguments = @("tests/runtime", "-m", ("runtime and {0}" -f $env:JIEJIAN_ACCEPTANCE_SCOPE))
+    try { Invoke-DevelopmentTest }
+    finally {
+        Write-Host ("运行验收结果：{0}" -f $env:JIEJIAN_ACCEPTANCE_OUTPUT)
+        $script:CommandArguments = $previousArguments
+        $env:JIEJIAN_RUNTIME_ACCEPTANCE = $previousAcceptance
+        $env:JIEJIAN_ACCEPTANCE_OUTPUT = $previousOutput
+        $env:JIEJIAN_ACCEPTANCE_SCOPE = $previousScope
     }
-    if ($suite -notin @("official", "ordinary", "validation", "competition", "portable", "windows", "all")) {
-        Fail-Development "sample-test" ("未知 suite：{0}" -f $suite) "使用 official、ordinary、validation、competition、portable、windows 或 all"
-    }
-    if ($suite -in @("ordinary", "validation", "competition", "all")) {
-        # validation fixture 使用仓库受控的固定 Node，不依赖用户 PATH 中的偶然版本。
-        Resolve-DevelopmentNode $Toolchain $true
-    }
-    Exit-PrepareLock
-    $runRoot = Join-Path $script:VarDir ("test\sample-test\{0}" -f [guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
-    $arguments = @(
-        $script:Python,
-        "-B",
-        (Join-Path $script:ProjectRoot "tests\acceptance\sample_test\driver.py"),
-        "--root",
-        $script:ProjectRoot,
-        "--var-dir",
-        $runRoot,
-        "--suite",
-        $suite
-    )
-    if ($suite -in @("validation", "competition", "all")) {
-        $summaryPath = Join-Path $script:VarDir "audit\competition\latest-validation-summary.json"
-        $arguments += @("--publish-summary", $summaryPath)
-    }
-    Invoke-External "sample-test" $arguments
 }

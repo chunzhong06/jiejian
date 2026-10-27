@@ -62,7 +62,7 @@ function Invoke-Package($Toolchain) {
 
     $arguments = @(
         "-B",
-        (Join-Path $script:ProjectRoot "scripts\build\portable.py"),
+        "-m", "scripts.build.portable",
         "--project-root", $script:ProjectRoot,
         "--release-root", $releaseRoot,
         "--wheel", $wheels[0].FullName,
@@ -75,7 +75,9 @@ function Invoke-Package($Toolchain) {
         "--uv-cache", (Join-Path $script:DevelopmentRoot "cache\uv"),
         "--toolchain", $script:ToolchainPath
     )
-    Invoke-External "portable" (@($script:Python) + $arguments)
+    Push-Location -LiteralPath $script:ProjectRoot
+    try { Invoke-External "portable" (@($script:Python) + $arguments) }
+    finally { Pop-Location }
 
     $outputs = @(
         (Join-Path $artifactRoot ($releaseName + ".zip")),

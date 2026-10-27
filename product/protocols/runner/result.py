@@ -8,8 +8,8 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from product.backend.core.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
+from product.backend.domain.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
+from product.backend.domain.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
 from product.protocols.runner.execution import ProtocolModel
 from .input import (
     CleanupIssueCode,

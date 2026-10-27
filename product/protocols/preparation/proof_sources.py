@@ -5,10 +5,11 @@ import json
 import re
 from typing import Annotated,Literal
 from urllib.parse import unquote,urlsplit
-from pydantic import Field,TypeAdapter,field_validator,model_validator
+from product.protocols.codec import decode_document, encode_json
+from pydantic import Field,field_validator,model_validator
 from product.protocols.runtime.runtime_identity import RuntimeModel, Digest, RuntimeFile
 from product.protocols.runtime.node_runtime import NodeRuntimeReference, ProjectId
-from product.protocols.checks.check_runtime import CheckIdentity
+from product.protocols.checks.identity import CheckIdentity
 from product.protocols.web.target import WebTargetScope
 from product.protocols.checks.business_facts import ArtifactManifestReference
 
@@ -136,13 +137,11 @@ class ManagedProofSourceConfig(ProofSourceConfig):
         return self
 
 
-AnyProofSourceConfig=Annotated[ProofSourceConfig|ManagedProofSourceConfig,Field(discriminator='source_kind')]
-
 
 def source_identity_paths(config, identities=()):
     if isinstance(config,ManagedProofSourceConfig):
         return tuple(sorted({item.request_path for item in config.identity_claims}))
-    # 历史输入从自身冻结身份恢复路径；不在产品中继续保留某个应用的身份接口约定。
+    # JSON 来源的身份路径取自本次冻结身份，不约定某个应用的接口。
     return tuple(sorted({item.verification.request.path for item in identities if item.verification is not None}))
 
 
@@ -153,140 +152,10 @@ def source_read_paths(config, identities=()):
     return tuple(sorted(paths))
 
 
-class LegacyProofSourceRevision(RuntimeModel):
-    schema_version:Literal['1','2']='2'
-    project_id:ProjectId
-    source_id:SourceId
-    revision:int=Field(ge=1)
-    config:AnyProofSourceConfig
-    basis_id:str=Field(pattern=r'^pb_[0-9a-f]{64}$')
-    fingerprint:Digest
-    submitted_via:Literal['LOCAL_GUI','MCP']
-    client_name:str=Field(max_length=80)
-    created_at_us:int=Field(ge=0)
-
-    @model_validator(mode='after')
-    def content_identity(self):
-        if self.fingerprint!=proof_fingerprint(self.config):raise ValueError('source config fingerprint mismatch')
-        return self
-
-
-class LegacySourceReadScope(RuntimeModel):
-    schema_version:Literal['1','2']='2'
-    scope_id:ScopeId
-    project_id:ProjectId
-    origin:str
-    path_templates:tuple[str,...]=Field(min_length=1,max_length=16)
-    identity_ids:tuple[IdentityId,...]=Field(min_length=1,max_length=16)
-    resource_binding_ids:tuple[Annotated[str,Field(pattern=r'^res_[0-9a-f]{32}$')],...]=Field(min_length=1,max_length=16)
-    max_response_bytes:int=Field(ge=1024,le=262144)
-    timeout_us:int=Field(ge=1000,le=5_000_000)
-    created_at_us:int=Field(ge=0)
-
-    @field_validator('origin')
-    @classmethod
-    def loopback(cls,value):
-        parsed=urlsplit(value)
-        if parsed.hostname!='127.0.0.1' or parsed.scheme!='http' or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment or not parsed.port:
-            raise ValueError('exact IPv4 loopback origin required')
-        return value
-
-    @field_validator('path_templates')
-    @classmethod
-    def paths(cls,values,info):
-        for value in values:
-            if '{resource_id}' in value:safe_source_path(value)
-            else:safe_identity_path(value)
-        if len(set(values))!=len(values):raise ValueError('duplicate paths')
-        return values
-
-
-class LegacyProofContractAttestation(RuntimeModel):
-    contract_id:ContractId
-    implementation_profile:str=Field(pattern=r'^[A-Z][A-Z0-9_]{0,63}$')
-    fingerprint:Digest
-    approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE']
-
-
-class LegacyProofPreflightInput(RuntimeModel):
-    schema_version:Literal['1','2']='2'
-    preflight_id:PreflightId
-    project_id:ProjectId
-    source_id:SourceId
-    source_revision:int=Field(ge=1)
-    source_fingerprint:Digest
-    config:AnyProofSourceConfig
-    scope:LegacySourceReadScope
-    basis_id:str=Field(pattern=r'^pb_[0-9a-f]{64}$')
-    control_session_id:str=Field(pattern=r'^pcs_[0-9a-f]{32}$')
-    authority_id:str=Field(min_length=1,max_length=128)
-    target:WebTargetScope
-    identities:tuple[CheckIdentity,...]=Field(min_length=1,max_length=16)
-    identity_roles:dict[IdentityId,Annotated[str,Field(pattern=SAFE_SUBJECT)]]
-    resource_id:str=Field(pattern=r'^[\w.-]+$',min_length=1,max_length=256)
-    owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
-    runtime_reference:NodeRuntimeReference
-    contract:LegacyProofContractAttestation|None=None
-    created_at_us:int=Field(ge=0)
-
-    @model_validator(mode='after')
-    def association(self):
-        if (self.project_id!=self.scope.project_id or self.project_id!=self.runtime_reference.project_id
-            or self.target.base_url!=self.scope.origin or self.target.base_url!=f'http://127.0.0.1:{self.runtime_reference.port}'
-            or self.source_fingerprint!=proof_fingerprint(self.config) or self.config.read_scope_id not in (None,self.scope.scope_id)
-            or self.config.relative_path_template not in self.scope.path_templates
-            or not set(source_read_paths(self.config,self.identities))<=set(self.scope.path_templates)
-            or self.config.resource_binding_id not in self.scope.resource_binding_ids
-            or set(self.identity_roles)!={item.identity_id for item in self.identities}
-            or not set(self.identity_roles)<=set(self.scope.identity_ids)
-            or self.config.timeout_us>self.scope.timeout_us or self.config.max_response_bytes>self.scope.max_response_bytes
-            or self.target.timeout_seconds * 1_000_000>self.config.timeout_us
-            or self.target.max_response_bytes>self.config.max_response_bytes
-            or self.target.allowed_origins!=(self.scope.origin,)
-            or self.target.allowed_hosts!=('127.0.0.1',)
-            or self.target.allowed_ports!=(self.runtime_reference.port,)
-            or self.target.max_requests>len(self.identities)+1
-            or {item.identity_id for item in self.config.identity_claims}!=set(self.identity_roles)):
-            raise ValueError('preflight scope or source mismatch')
-        return self
-
-
 class ProofCheckItem(RuntimeModel):
     code:str=Field(pattern=r'^[A-Z][A-Z0-9_]{0,63}$')
     status:Literal['CONFIRMED','MISSING','UNAVAILABLE','UNSUPPORTED']
     mapping_key:MappingKey|None=None
-
-
-class LegacyProofPreflightReport(RuntimeModel):
-    schema_version:Literal['1']='1'
-    preflight_id:PreflightId
-    job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
-    request_fingerprint:Digest
-    source_fingerprint:Digest
-    attempt:int=Field(ge=1)
-    fencing_token:int=Field(ge=1)
-    lease_owner:str=Field(min_length=1,max_length=128)
-    assessment:Literal['USABLE','NEEDS_CHANGES','UNSUPPORTED']
-    checks:tuple[ProofCheckItem,...]=Field(min_length=1,max_length=48)
-    started_at_us:int=Field(ge=0)
-    completed_at_us:int=Field(ge=0)
-
-    @model_validator(mode='after')
-    def usable_requires_all_checks(self):
-        if self.completed_at_us<self.started_at_us:raise ValueError('time order invalid')
-        if self.assessment=='USABLE' and any(item.status!='CONFIRMED' for item in self.checks):
-            raise ValueError('usable requires confirmed checks')
-        return self
-
-
-class FrozenJsonProofSource(RuntimeModel):
-    source_id:SourceId
-    revision:int=Field(ge=1)
-    source_fingerprint:Digest
-    config:AnyProofSourceConfig
-    contract:LegacyProofContractAttestation
-    owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
-    identity_roles:dict[IdentityId,Annotated[str,Field(pattern=SAFE_SUBJECT)]]
 
 
 class ProofSourceAdoption(RuntimeModel):
@@ -298,21 +167,6 @@ class ProofSourceAdoption(RuntimeModel):
     preflight_id:PreflightId
     binding_fingerprint:Digest
     created_at_us:int=Field(ge=0)
-
-
-class LegacyProofRunnerInput(RuntimeModel):
-    schema_version:Literal['1']='1'
-    job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
-    attempt:int=Field(ge=1)
-    fencing_token:int=Field(ge=1)
-    lease_owner:str=Field(min_length=1,max_length=128)
-    request:LegacyProofPreflightInput
-    request_fingerprint:Digest
-
-    @model_validator(mode='after')
-    def input_hash(self):
-        if self.request_fingerprint!=proof_fingerprint(self.request):raise ValueError('preflight input hash mismatch')
-        return self
 
 
 class AtomicProofSourceConfig(ManagedProofSourceConfig):
@@ -353,9 +207,10 @@ class CreationProofSourceConfig(AtomicProofSourceConfig):
 CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig,Field(discriminator='source_kind')]
 
 
-class ProofContractAttestation(LegacyProofContractAttestation):
+class ProofContractAttestation(RuntimeModel):
     contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1']
     implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
+    fingerprint:Digest
     approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY','OBJECT_CREATION']
 
     @model_validator(mode='after')
@@ -369,43 +224,141 @@ class ProofContractAttestation(LegacyProofContractAttestation):
         return self
 
 
-class ProofSourceRevision(LegacyProofSourceRevision):
-    schema_version:Literal['3','4']='3'
+class ProofSourceRevision(RuntimeModel):
+    schema_version: Literal["1"] = "1"
+    project_id:ProjectId
+    source_id:SourceId
+    revision:int=Field(ge=1)
     config:CurrentProofSourceConfig
+    basis_id:str=Field(pattern=r'^pb_[0-9a-f]{64}$')
+    fingerprint:Digest
+    submitted_via:Literal['LOCAL_GUI','MCP']
+    client_name:str=Field(max_length=80)
+    created_at_us:int=Field(ge=0)
 
     @model_validator(mode='after')
-    def creation_version(self):
-        if (self.schema_version=='4') != isinstance(self.config,CreationProofSourceConfig):
-            raise ValueError('creation source requires format 4')
+    def content_identity(self):
+        if self.fingerprint!=proof_fingerprint(self.config):raise ValueError('source config fingerprint mismatch')
         return self
 
-
-class SourceReadScope(LegacySourceReadScope):
-    schema_version:Literal['3']='3'
+    document_type: Literal["jiejian.proof-source-revision"] = "jiejian.proof-source-revision"
 
 
-class ProofPreflightInput(LegacyProofPreflightInput):
-    schema_version:Literal['3','4']='3'
+class SourceReadScope(RuntimeModel):
+    schema_version: Literal["1"] = "1"
+    scope_id:ScopeId
+    project_id:ProjectId
+    origin:str
+    path_templates:tuple[str,...]=Field(min_length=1,max_length=16)
+    identity_ids:tuple[IdentityId,...]=Field(min_length=1,max_length=16)
+    resource_binding_ids:tuple[Annotated[str,Field(pattern=r'^res_[0-9a-f]{32}$')],...]=Field(min_length=1,max_length=16)
+    max_response_bytes:int=Field(ge=1024,le=262144)
+    timeout_us:int=Field(ge=1000,le=5_000_000)
+    created_at_us:int=Field(ge=0)
+
+    @field_validator('origin')
+    @classmethod
+    def loopback(cls,value):
+        parsed=urlsplit(value)
+        if parsed.hostname!='127.0.0.1' or parsed.scheme!='http' or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment or not parsed.port:
+            raise ValueError('exact IPv4 loopback origin required')
+        return value
+
+    @field_validator('path_templates')
+    @classmethod
+    def paths(cls,values,info):
+        for value in values:
+            if '{resource_id}' in value:safe_source_path(value)
+            else:safe_identity_path(value)
+        if len(set(values))!=len(values):raise ValueError('duplicate paths')
+        return values
+
+    document_type: Literal["jiejian.source-read-scope"] = "jiejian.source-read-scope"
+
+
+class ProofPreflightInput(RuntimeModel):
+    schema_version: Literal["1"] = "1"
+    preflight_id:PreflightId
+    project_id:ProjectId
+    source_id:SourceId
+    source_revision:int=Field(ge=1)
+    source_fingerprint:Digest
     config:CurrentProofSourceConfig
     scope:SourceReadScope
+    basis_id:str=Field(pattern=r'^pb_[0-9a-f]{64}$')
+    control_session_id:str=Field(pattern=r'^pcs_[0-9a-f]{32}$')
+    authority_id:str=Field(min_length=1,max_length=128)
+    target:WebTargetScope
+    identities:tuple[CheckIdentity,...]=Field(min_length=1,max_length=16)
+    identity_roles:dict[IdentityId,Annotated[str,Field(pattern=SAFE_SUBJECT)]]
+    resource_id:str=Field(pattern=r'^[\w.-]+$',min_length=1,max_length=256)
+    owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
+    runtime_reference:NodeRuntimeReference
     contract:ProofContractAttestation|None=None
+    created_at_us:int=Field(ge=0)
+
+    @model_validator(mode='after')
+    def association(self):
+        if (self.project_id!=self.scope.project_id or self.project_id!=self.runtime_reference.project_id
+            or self.target.base_url!=self.scope.origin or self.target.base_url!=f'http://127.0.0.1:{self.runtime_reference.port}'
+            or self.source_fingerprint!=proof_fingerprint(self.config) or self.config.read_scope_id not in (None,self.scope.scope_id)
+            or self.config.relative_path_template not in self.scope.path_templates
+            or not set(source_read_paths(self.config,self.identities))<=set(self.scope.path_templates)
+            or self.config.resource_binding_id not in self.scope.resource_binding_ids
+            or set(self.identity_roles)!={item.identity_id for item in self.identities}
+            or not set(self.identity_roles)<=set(self.scope.identity_ids)
+            or self.config.timeout_us>self.scope.timeout_us or self.config.max_response_bytes>self.scope.max_response_bytes
+            or self.target.timeout_seconds * 1_000_000>self.config.timeout_us
+            or self.target.max_response_bytes>self.config.max_response_bytes
+            or self.target.allowed_origins!=(self.scope.origin,)
+            or self.target.allowed_hosts!=('127.0.0.1',)
+            or self.target.allowed_ports!=(self.runtime_reference.port,)
+            or self.target.max_requests>len(self.identities)+1
+            or {item.identity_id for item in self.config.identity_claims}!=set(self.identity_roles)):
+            raise ValueError('preflight scope or source mismatch')
+        return self
 
     @model_validator(mode='after')
     def reference_ready(self):
-        if (self.schema_version=='4') != isinstance(self.config,CreationProofSourceConfig):
-            raise ValueError('creation preflight requires format 4')
         if isinstance(self.config,FileProofSourceConfig) and self.config.reference_artifact is None:
             raise ValueError('reference file must be prepared before preflight')
         return self
 
-
-class ProofPreflightReport(LegacyProofPreflightReport):
-    schema_version:Literal['2']='2'
+    document_type: Literal["jiejian.proof-preflight-input"] = "jiejian.proof-preflight-input"
 
 
-class FrozenProofSource(FrozenJsonProofSource):
+class ProofPreflightReport(RuntimeModel):
+    schema_version: Literal["1"] = "1"
+    preflight_id:PreflightId
+    job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
+    request_fingerprint:Digest
+    source_fingerprint:Digest
+    attempt:int=Field(ge=1)
+    fencing_token:int=Field(ge=1)
+    lease_owner:str=Field(min_length=1,max_length=128)
+    assessment:Literal['USABLE','NEEDS_CHANGES','UNSUPPORTED']
+    checks:tuple[ProofCheckItem,...]=Field(min_length=1,max_length=48)
+    started_at_us:int=Field(ge=0)
+    completed_at_us:int=Field(ge=0)
+
+    @model_validator(mode='after')
+    def usable_requires_all_checks(self):
+        if self.completed_at_us<self.started_at_us:raise ValueError('time order invalid')
+        if self.assessment=='USABLE' and any(item.status!='CONFIRMED' for item in self.checks):
+            raise ValueError('usable requires confirmed checks')
+        return self
+
+    document_type: Literal["jiejian.proof-preflight-report"] = "jiejian.proof-preflight-report"
+
+
+class FrozenProofSource(RuntimeModel):
+    source_id:SourceId
+    revision:int=Field(ge=1)
+    source_fingerprint:Digest
     config:CurrentProofSourceConfig
     contract:ProofContractAttestation
+    owner_subject_id:str=Field(pattern=SAFE_SUBJECT)
+    identity_roles:dict[IdentityId,Annotated[str,Field(pattern=SAFE_SUBJECT)]]
     adoption_preflight_id:PreflightId|None=None
 
     @model_validator(mode='after')
@@ -417,53 +370,53 @@ class FrozenProofSource(FrozenJsonProofSource):
         return self
 
 
-class ProofRunnerInput(LegacyProofRunnerInput):
-    schema_version:Literal['2','3']='2'
+class ProofRunnerInput(RuntimeModel):
+    schema_version: Literal["1"] = "1"
+    job_id:str=Field(pattern=r'^job_[0-9a-f]{32}$')
+    attempt:int=Field(ge=1)
+    fencing_token:int=Field(ge=1)
+    lease_owner:str=Field(min_length=1,max_length=128)
     request:ProofPreflightInput
+    request_fingerprint:Digest
 
     @model_validator(mode='after')
-    def creation_version(self):
-        if (self.schema_version=='3') != (self.request.schema_version=='4'):
-            raise ValueError('creation runner requires format 3')
+    def input_hash(self):
+        if self.request_fingerprint!=proof_fingerprint(self.request):raise ValueError('preflight input hash mismatch')
         return self
+
+    document_type: Literal["jiejian.proof-runner-input"] = "jiejian.proof-runner-input"
 
 
 def read_source_revision(raw):
-    return _read_proof_document(raw,Annotated[LegacyProofSourceRevision|ProofSourceRevision,Field(discriminator='schema_version')])
+    return _read_proof_document(raw,ProofSourceRevision)
 
 
 def read_source_scope(raw):
-    return _read_proof_document(raw,Annotated[LegacySourceReadScope|SourceReadScope,Field(discriminator='schema_version')])
+    return _read_proof_document(raw,SourceReadScope)
 
 
 def read_preflight_input(raw):
-    return _read_proof_document(raw,Annotated[LegacyProofPreflightInput|ProofPreflightInput,Field(discriminator='schema_version')])
+    return _read_proof_document(raw,ProofPreflightInput)
 
 
 def read_preflight_report(raw):
-    return _read_proof_document(raw,Annotated[LegacyProofPreflightReport|ProofPreflightReport,Field(discriminator='schema_version')])
+    return _read_proof_document(raw,ProofPreflightReport)
 
 
 def read_proof_runner(raw):
-    return _read_proof_document(raw,Annotated[LegacyProofRunnerInput|ProofRunnerInput,Field(discriminator='schema_version')])
+    return _read_proof_document(raw,ProofRunnerInput)
 
 
-def _read_proof_document(raw,model):
-    """按原根读取，拒绝重复字段和超限原文；不将旧根重新序列化为新版本。"""
-    if not isinstance(raw,(str,bytes)) or len(raw.encode('utf-8') if isinstance(raw,str) else raw)>262144:
-        raise ValueError('proof document exceeds limit')
-    def unique(pairs):
-        result={}
-        for key,value in pairs:
-            if key in result:raise ValueError('duplicate proof field')
-            result[key]=value
-        return result
-    json.loads(raw,object_pairs_hook=unique,parse_constant=lambda _:(_ for _ in ()).throw(ValueError('nonfinite proof value')))
-    return TypeAdapter(model).validate_json(raw)
+def _read_proof_document(raw, model):
+    data = raw.encode("utf-8") if isinstance(raw, str) else raw
+    decode_document(data, document_type=model.model_fields["document_type"].default,
+        version=model.model_fields["schema_version"].default, limit=262144)
+    return model.model_validate_json(data, strict=True)
 
 
 def proof_bytes(value:RuntimeModel)->bytes:
-    raw=json.dumps(value.model_dump(mode='json'),ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+    validated=type(value).model_validate_json(value.model_dump_json(), strict=True)
+    raw=encode_json(validated.model_dump(mode='json'))
     if len(raw)>262144:raise ValueError('proof document exceeds limit')
     return raw
 

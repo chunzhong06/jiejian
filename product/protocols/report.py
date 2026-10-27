@@ -22,7 +22,7 @@ from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-from product.backend.core.redaction import redact
+from product.backend.domain.redaction import redact
 
 REPORT_SCHEMA_VERSION = "5"
 REPORT_PACKAGE_SCHEMA_VERSION = "1"

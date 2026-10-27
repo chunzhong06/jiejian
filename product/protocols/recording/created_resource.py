@@ -5,7 +5,7 @@ import json
 import re
 from urllib.parse import unquote, urljoin, urlsplit
 
-from product.backend.core.redaction import REDACTED
+from product.backend.domain.redaction import REDACTED
 
 CREATED_RESOURCE_EXTRACTOR = "created_resource_id"
 _PRIVATE = re.compile(r"token|secret|password|passwd|cookie|authorization|credential|api.?key|id.?card|ssn|email|phone|address|full.?name", re.I)

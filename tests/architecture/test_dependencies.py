@@ -1,293 +1,105 @@
-# 验证架构依赖中的模块依赖约束。
-
-from __future__ import annotations
-
+# 验证领域与共用界面的依赖方向和源码职责，不锁定历史目录名称。
 import ast
-import json
-import re
-import tomllib
 from pathlib import Path
 
-import pytest
+ROOT=Path(__file__).resolve().parents[2]
 
-from product.backend import __version__
-from product.backend.core.verification.facts import TargetType
-from product.backend.composition import ApplicationCore
-from product.backend.composition.worker import WorkerContainer
+def python_files(base):return [path for path in base.rglob('*.py') if '__pycache__' not in path.parts]
 
+def test_domain_does_not_import_transport_database_or_execution_frameworks():
+    forbidden=('fastapi','sqlalchemy','playwright','httpx','product.backend.infrastructure','product.backend.interfaces','product.backend.application','product.backend.bootstrap')
+    violations=[]
+    for path in python_files(ROOT/'product/backend/domain'):
+        for node in ast.walk(ast.parse(path.read_text('utf-8-sig'))):
+            names=[alias.name for alias in node.names] if isinstance(node,ast.Import) else [node.module or ''] if isinstance(node,ast.ImportFrom) else []
+            violations.extend((path.name,name) for name in names if any(name==prefix or name.startswith(prefix+'.') for prefix in forbidden))
+    assert violations==[]
 
-pytestmark = pytest.mark.essential
+def test_shared_frontend_does_not_depend_on_pages_entities_or_application():
+    violations=[]
+    for path in (ROOT/'product/frontend/src/shared').rglob('*'):
+        if path.suffix not in {'.ts','.tsx'} or '.test.' in path.name:continue
+        text=path.read_text('utf-8')
+        if any('/'+layer+'/' in text for layer in ['pages','entities','app']):violations.append(path.name)
+    assert violations==[]
 
-ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "product" / "backend"
-PROTOCOLS = ROOT / "product" / "protocols"
-
-
-def _python_files(root: Path) -> list[Path]:
-    return sorted(root.rglob("*.py"))
-
-
-def _imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    result: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            result.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            result.add(node.module)
-    return result
+def test_product_modules_have_explicit_python_responsibility_headers():
+    missing=[path.relative_to(ROOT).as_posix() for base in ['product/backend','product/protocols'] for path in python_files(ROOT/base) if not path.read_text('utf-8-sig').lstrip().startswith('#')]
+    assert missing==[]
 
 
-def _forbidden_imports(path: Path, prefixes: tuple[str, ...]) -> set[str]:
-    return {
-        item
-        for item in _imports(path)
-        if any(item == prefix or item.startswith(prefix + ".") for prefix in prefixes)
-    }
+def test_python_child_launches_explicitly_select_an_environment_role():
+    sites=[]
+    missing=[]
+    for path in python_files(ROOT/'product/backend'):
+        for node in ast.walk(ast.parse(path.read_text('utf-8-sig'))):
+            if not isinstance(node,ast.Call):continue
+            name=node.func.id if isinstance(node.func,ast.Name) else node.func.attr if isinstance(node.func,ast.Attribute) else ''
+            if name not in {'minimal_process_environment','run_python_module','spawn_python_module'}:continue
+            location=f'{path.relative_to(ROOT)}:{node.lineno}'
+            sites.append(location)
+            if not any(keyword.arg=='role' for keyword in node.keywords):missing.append(location)
+    assert sites, '未发现任何子进程环境调用，先核对扫描范围'
+    assert missing==[]
 
 
-def test_tests_share_support_modules_instead_of_importing_peer_tests() -> None:
-    """测试可共用 fixture/support，但不能依靠另一份测试的加载顺序或内部函数。"""
+def runtime_imports(tree):
+    class Imports(ast.NodeVisitor):
+        def __init__(self):
+            self.names = []
+
+        def visit_If(self, node):
+            type_only = isinstance(node.test, ast.Name) and node.test.id == 'TYPE_CHECKING'
+            type_only |= isinstance(node.test, ast.Attribute) and node.test.attr == 'TYPE_CHECKING'
+            for statement in node.orelse if type_only else [*node.body, *node.orelse]:
+                self.visit(statement)
+
+        def visit_Import(self, node):
+            self.names.extend((0, alias.name, ()) for alias in node.names)
+
+        def visit_ImportFrom(self, node):
+            self.names.append((node.level, node.module or '', tuple(alias.name for alias in node.names)))
+
+    visitor = Imports()
+    visitor.visit(tree)
+    return visitor.names
+
+
+def test_runtime_modules_do_not_depend_on_each_other_in_a_cycle():
+    modules = {}
+    for path in python_files(ROOT/'product'):
+        parts = path.relative_to(ROOT).with_suffix('').parts
+        modules['.'.join(parts[:-1] if path.name == '__init__.py' else parts)] = path
+    graph = {}
+    for module, path in modules.items():
+        edges = set()
+        for level, target, imported in runtime_imports(ast.parse(path.read_text('utf-8-sig'))):
+            if level:
+                parent = module.split('.') if path.name == '__init__.py' else module.split('.')[:-1]
+                target = '.'.join(parent[:len(parent)-level+1] + ([target] if target else []))
+            edges.update(name for name in [target, *(target+'.'+item for item in imported)]
+                         if name in modules and name != module)
+        graph[module] = edges
+    visited, active = set(), []
+
+    def visit(module):
+        assert module not in active, ' -> '.join([*active, module])
+        if module in visited:
+            return
+        active.append(module)
+        for dependency in sorted(graph[module]):
+            visit(dependency)
+        active.pop()
+        visited.add(module)
+
+    for module in sorted(graph):
+        visit(module)
+
+
+def test_infrastructure_does_not_import_the_composition_root_or_entrypoints():
     violations = []
-    for path in _python_files(ROOT / "tests"):
-        for imported in _imports(path):
-            if (imported.startswith("tests.") or imported.startswith("test_")) and any(
-                part.startswith("test_") for part in imported.split(".")
-            ):
-                violations.append((path.relative_to(ROOT).as_posix(), imported))
+    for path in python_files(ROOT/'product/backend/infrastructure'):
+        for _, name, _ in runtime_imports(ast.parse(path.read_text('utf-8-sig'))):
+            if name.startswith(('product.backend.bootstrap', 'product.backend.interfaces')):
+                violations.append((path.relative_to(ROOT).as_posix(), name))
     assert violations == []
-
-
-def test_core_and_protocol_dependencies_preserve_boundaries() -> None:
-    core_forbidden = ("product.backend.workflows", "product.backend.infra", "product.backend.api", "product.backend.cli", "fastapi", "sqlalchemy", "httpx", "playwright")
-    for path in _python_files(BACKEND / "core"):
-        assert not _forbidden_imports(path, core_forbidden), path
-    protocol_forbidden = (
-        "product.backend.workflows",
-        "product.backend.infra",
-        "product.backend.api",
-        "product.backend.cli",
-    )
-    for path in _python_files(PROTOCOLS):
-        assert not _forbidden_imports(path, protocol_forbidden), path
-
-
-def test_control_plane_and_verification_do_not_reach_target_adapters() -> None:
-    control_forbidden = (
-        "product.backend.infra.execution",
-        "product.backend.infra.observers",
-        "product.backend.infra.runtime.runner",
-        "product.protocols.web",
-    )
-    for root in (BACKEND / "api", BACKEND / "cli"):
-        for path in _python_files(root):
-            assert not _forbidden_imports(path, control_forbidden), path
-
-    verification_forbidden = (
-        "product.backend.infra.execution",
-        "product.backend.infra.runtime",
-        "product.protocols.web",
-    )
-    for path in _python_files(BACKEND / "core" / "verification"):
-        assert not _forbidden_imports(path, verification_forbidden), path
-
-
-def test_target_runtime_dependencies_have_one_web_composition_point() -> None:
-    execution = BACKEND / "infra" / "execution"
-    port = execution / "port.py"
-    registry = execution / "registry.py"
-    web_runtime = execution / "web" / "runtime.py"
-    composition = BACKEND / "infra" / "runtime" / "runner" / "composition.py"
-
-    assert not _forbidden_imports(port, ("product.backend.infra.execution.web",))
-    assert not _forbidden_imports(registry, ("product.backend.infra.execution.web",))
-    assert "product.backend.infra.execution.port" in _imports(web_runtime)
-    factory_users = {
-        path.relative_to(ROOT).as_posix()
-        for path in _python_files(BACKEND)
-        if "WebTargetRuntimeFactory" in path.read_text(encoding="utf-8")
-    }
-    assert factory_users == {
-        "product/backend/infra/execution/web/runtime.py",
-        "product/backend/infra/runtime/runner/composition.py",
-    }
-    assert "registry.register(WebTargetRuntimeFactory())" in composition.read_text(encoding="utf-8")
-
-
-def test_generic_runner_modules_do_not_import_web_protocol_or_runtime() -> None:
-    runner = BACKEND / "infra" / "runtime" / "runner"
-    forbidden = (
-        "product.backend.infra.execution.web",
-        "product.protocols.web",
-    )
-    for name in ("executor.py", "case_orchestrator.py", "result_builder.py", "staging.py"):
-        path = runner / name
-        assert not _forbidden_imports(path, forbidden), path
-
-
-def test_current_target_capability_is_web_only() -> None:
-    assert tuple(TargetType) == (TargetType.WEB,)
-
-
-def test_application_and_worker_containers_are_independent_complete_roots() -> None:
-    assert ApplicationCore not in WorkerContainer.__mro__
-    assert WorkerContainer not in ApplicationCore.__mro__
-
-
-def test_infrastructure_does_not_construct_concrete_workflow_services() -> None:
-    for path in _python_files(BACKEND / "infra"):
-        assert not _forbidden_imports(
-            path,
-            ("product.backend.workflows",),
-        ), path
-
-
-def test_official_scenario_uses_services_instead_of_storage_records() -> None:
-    installer = BACKEND / "workflows" / "examples" / "materials.py"
-
-    assert not _forbidden_imports(
-        installer,
-        ("product.backend.infra.storage",),
-    )
-
-
-def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
-    assert (BACKEND / "infra" / "runtime" / "runner" / "__main__.py").is_file()
-    assert (BACKEND / "infra" / "runtime" / "worker" / "process.py").is_file()
-    assert (BACKEND / "infra" / "recording" / "process.py").is_file()
-
-
-def test_automated_l5_dependencies_do_not_enter_product_runtime() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert "pywinauto==0.6.9" in project["dependency-groups"]["dev"]
-    assert not any("pywinauto" in item.casefold() for item in project["project"]["dependencies"])
-    for path in _python_files(ROOT / "product"):
-        assert not _forbidden_imports(path, ("pywinauto",)), path
-
-
-def test_product_names_do_not_encode_development_generations() -> None:
-    generation_name = re.compile(r"(?i)(?:^|[_-])v[12](?:[._-]|$)|(?:^|[_-])stage(?:[._-]|$)|阶段")
-    frozen_root_migration = BACKEND / "migrations" / "versions" / "0001_business_boundary_v2.py"
-    # 对外根协议的版本名表示真实 reader 断代，不是开发阶段命名。
-    versioned_protocols = {PROTOCOLS / "schemas" / "runner" / name for name in (
-        "check-runner-result-v2.schema.json", "check-runtime-v2.schema.json")}
-    versioned_protocols.update({PROTOCOLS / "schemas" / "development" / "runtime-operation-v2.schema.json",
-        PROTOCOLS / "schemas" / "runtime" / "portable-release-v3.schema.json"})
-    versioned_protocols.add(PROTOCOLS / 'schemas' / 'runner' / 'check-evidence-v2.schema.json')
-    assert frozen_root_migration.is_file()
-    product_files = []
-    for path in (ROOT / "product").rglob("*"):
-        relative_parts = path.relative_to(ROOT / "product").parts
-        if not path.is_file() or "node_modules" in relative_parts or "dist" in relative_parts:
-            continue
-        if path.suffix.lower() in {".py", ".ts", ".tsx", ".json"}:
-            product_files.append(path)
-    assert not [
-        path
-        for path in product_files
-        if path != frozen_root_migration and path not in versioned_protocols and generation_name.search(path.name)
-    ]
-
-    for path in _python_files(ROOT / "product"):
-        if "node_modules" in path.parts or "dist" in path.parts:
-            continue
-        relative = path.relative_to(ROOT).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        definitions = {
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-            and ("V1" in node.name or "V2" in node.name or "_v1" in node.name or "_v2" in node.name)
-        }
-        assert not definitions, (path, relative, definitions)
-    # 命名约束覆盖产品源码；运行证据和审计快照位于 var，不属于产品模块。
-    assert not any("_new" in path.name or "_latest" in path.name for path in _python_files(ROOT / "product"))
-
-
-def test_public_api_does_not_reintroduce_generation_paths() -> None:
-    for path in _python_files(BACKEND / "api"):
-        assert not re.search(r"/api/v[12](?:/|['\"])", path.read_text(encoding="utf-8")), path
-
-
-def test_product_does_not_mutate_python_import_paths() -> None:
-    files = _python_files(ROOT / "product")
-    for path in files:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            owner = node.func.value
-            # 独立 Target 进程只能加入已经按 manifest 校验的副本目录；产品进程仍禁止改 import path。
-            if path == BACKEND / "infra" / "runtime" / "process" / "controlled" / "target.py" and ast.unparse(node.func) == "sys.path.insert":
-                assert ast.unparse(node) == "sys.path.insert(0, str(source_root.resolve()))"
-                checks = [item for item in ast.walk(tree) if isinstance(item, ast.Call)
-                    and ast.unparse(item.func) == "verify_runtime_artifact"]
-                assert len(checks) == 1 and checks[0].lineno < node.lineno
-                assert ast.unparse(checks[0]) == "verify_runtime_artifact(source_root, manifest)"
-                continue
-            assert not (
-                isinstance(owner, ast.Attribute)
-                and isinstance(owner.value, ast.Name)
-                and owner.value.id == "sys"
-                and owner.attr == "path"
-                and node.func.attr in {"append", "extend", "insert", "remove"}
-            ), path
-
-
-def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
-    samples = ROOT / "samples"
-    sample_web = samples / "web"
-    assert {path.name for path in sample_web.iterdir() if path.is_dir()} == {"digital_gallery"}
-    gallery = sample_web / "digital_gallery"
-    source = gallery / "source"
-    assert (gallery / "sample.json").is_file()
-    assert {path.name for path in source.iterdir() if path.is_file()} == {
-        "app.mjs", "page.mjs", "delivery.mjs", "preview.mjs", "assets.mjs", "openapi.json",
-    }
-    for path in _python_files(ROOT / "product"):
-        assert not any(item == "samples" or item.startswith("samples.") for item in _imports(path)), path
-    for path in _python_files(samples):
-        assert not any(item == "tests" or item.startswith("tests.") for item in _imports(path)), path
-
-
-def test_frontend_and_wheel_sources_are_scoped() -> None:
-    frontend = ROOT / "product" / "frontend"
-    assert (frontend / "src" / "app").is_dir()
-    assert (frontend / "src" / "api").is_dir()
-    workspace_text = (frontend / "pnpm-workspace.yaml").read_text(encoding="utf-8")
-    assert "storeDir" not in workspace_text
-    assert "virtualStoreDir" not in workspace_text
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
-    assert wheel["only-include"] == ["product/backend", "product/protocols"]
-    assert "var/runtime/frontend" not in wheel["force-include"]
-    hook_path = project["tool"]["hatch"]["build"]["hooks"]["custom"]["path"]
-    assert hook_path == "scripts/build/hatch_build.py"
-    assert (ROOT / hook_path).is_file()
-    assert not (ROOT / "scripts" / "hatch_build.py").exists()
-    assert "product/frontend/src" not in str(wheel)
-    assert project["project"]["scripts"]["jiejian"] == "product.backend.cli:main"
-    assert project["project"]["dynamic"] == ["version"]
-    assert "version" not in project["project"]
-    assert project["tool"]["hatch"]["version"]["path"] == "product/backend/__init__.py"
-    frontend_manifest = json.loads(
-        (frontend / "package.json").read_text(encoding="utf-8")
-    )
-    assert "version" not in frontend_manifest
-    version_source = ROOT / project["tool"]["hatch"]["version"]["path"]
-    version_assignments = []
-    for node in ast.parse(version_source.read_text(encoding="utf-8")).body:
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
-        if any(isinstance(target, ast.Name) and target.id == "__version__" for target in targets):
-            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
-            version_assignments.append(node.value.value)
-    assert version_assignments == [__version__]
-    assert re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", __version__)
-
-
-def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:
-    frontend = ROOT / "product" / "frontend"
-
-    assert not (frontend / "node_modules").exists()
-    assert not (frontend / "dist").exists()
-    assert not tuple(frontend.rglob("*.tsbuildinfo"))

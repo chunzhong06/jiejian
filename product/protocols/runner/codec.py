@@ -9,7 +9,7 @@ from typing import Any, TypeAlias, TypeVar
 
 from pydantic import ValidationError
 
-from product.backend.core.errors import JiejianError
+from product.backend.domain.errors import JiejianError
 
 from .input import (
     EVIDENCE_MAX_BYTES,

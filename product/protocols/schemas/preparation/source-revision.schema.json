@@ -791,6 +791,12 @@
       "title": "Created At Us",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.proof-source-revision",
+      "default": "jiejian.proof-source-revision",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fingerprint": {
       "pattern": "^[0-9a-f]{64}$",
       "title": "Fingerprint",
@@ -807,11 +813,8 @@
       "type": "integer"
     },
     "schema_version": {
-      "default": "3",
-      "enum": [
-        "3",
-        "4"
-      ],
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     },

@@ -82,11 +82,8 @@ function Import-SourceReceipt {
     $script:PythonExecutable = [IO.Path]::GetFullPath([string]$receipt.python.executable)
     $script:PythonEnvironmentPath = [IO.Path]::GetFullPath([string]$receipt.python.environment_path)
     $script:PythonEnvironmentType = [string]$receipt.python.environment_type
-    $script:PythonVersion = [string]$receipt.python.version
     $script:PythonFingerprint = [string]$receipt.python.runtime_fingerprint
-    $script:PythonEnvironmentReport = $identity
-    $script:PythonRunner = @($script:PythonExecutable, "-B")
-    $script:PackageRunner = @($script:PythonExecutable, "-B", "-m", "product.backend.cli")
+    $script:PackageRunner = @($script:PythonExecutable, "-B", "-m", "product.backend.interfaces.cli")
     $script:UvExecutable = [IO.Path]::GetFullPath([string]$receipt.uv.executable)
     $script:UvVersion = [string]$receipt.uv.version
     $script:NodeExecutable = [string]$receipt.node.executable
@@ -94,11 +91,9 @@ function Import-SourceReceipt {
     $script:PnpmExecutable = [string]$receipt.pnpm.executable
     $script:PnpmVersion = [string]$receipt.pnpm.version
     $script:ChromiumExecutable = [IO.Path]::GetFullPath([string]$receipt.playwright.executable)
-    $script:ChromiumDetail = "已确认 · $script:ChromiumExecutable"
     $script:FrontendDist = [IO.Path]::GetFullPath([string]$receipt.frontend.dist)
     $script:FrontendDependenciesDetail = [string]$receipt.frontend.dependencies
     $script:FrontendBuildDetail = [string]$receipt.frontend.build_state
-    $script:PythonDependenciesDetail = "uv.lock · editable 当前源码 · 已确认"
 
     $env:PYTHONDONTWRITEBYTECODE = "1"
     $env:PYTHONNOUSERSITE = "1"

@@ -41,7 +41,7 @@ function Invoke-CliShell([bool]$ShowStatus = $false) {
 `$showStatus = $statusLiteral
 function jiejian {
     param([Parameter(ValueFromRemainingArguments=`$true)][object[]]`$CommandArgs)
-    & $pythonLiteral -B -m product.backend.cli --var-dir `$varDir @(`$CommandArgs)
+    & $pythonLiteral -B -m product.backend.interfaces.cli --var-dir `$varDir @(`$CommandArgs)
 }
 Set-Location -LiteralPath `$projectRoot
 if (`$showStatus) {

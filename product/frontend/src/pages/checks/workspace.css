@@ -1,0 +1,4 @@
+.jj-verification-item { display: flex; align-items: start; gap: 10px; margin-top: 16px; }
+.jj-verification-item > span { color: var(--good); padding-top: 3px; }
+.jj-verification-item h4 { font-size: var(--text-meta); }
+.jj-verification-item p { font-size: var(--text-meta); color: var(--muted); margin-top: 5px; }

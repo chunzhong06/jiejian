@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 
-from product.backend.core.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN
+from product.backend.domain.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN
 
 
 from product.protocols.runner.execution import ExecutionBudget, ProtocolModel

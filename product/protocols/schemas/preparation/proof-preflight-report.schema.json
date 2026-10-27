@@ -87,6 +87,12 @@
       "title": "Completed At Us",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.proof-preflight-report",
+      "default": "jiejian.proof-preflight-report",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",
@@ -114,8 +120,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     },

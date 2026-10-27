@@ -21,9 +21,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from product.backend.infra.storage.base import Base
-from product.backend.infra.storage.db import configure_sqlite_engine
-from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
+from product.backend.infrastructure.storage.base import Base
+from product.backend.infrastructure.storage.db import configure_sqlite_engine
+from product.backend.infrastructure.storage.orm_registry import load_storage_orm_mappings
 
 config = context.config
 if config.config_file_name is not None and config.attributes.get(

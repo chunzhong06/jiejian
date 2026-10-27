@@ -25,16 +25,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.verification.differential import (
+from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.verification.differential import (
     DifferentialExperimentPlan,
     build_differential_experiment_plan,
 )
-from product.backend.core.verification.facts import TargetType
-from product.backend.core.verification.permissions.coverage import PermissionMutationPlan
-from product.backend.core.verification.permissions import PermissionContract, permission_model_sha256
+from product.backend.domain.verification.facts import TargetType
+from product.backend.domain.verification.permissions.coverage import PermissionMutationPlan
+from product.backend.domain.verification.permissions import PermissionContract, permission_model_sha256
 from product.protocols.runner.execution import EffectBinding, ObserverRequirementBinding, ObserverRequirementKind, ProtocolModel, SubjectExecutionBinding
-from product.protocols.observer import ObserverSpec, ObserverType, ObservationPhase
+from product.protocols.observer.config import ObserverSpec, ObserverType, ObservationPhase
 from product.protocols.web.identity import WebExecutionIdentity, binding_secret_refs
 from product.protocols.web.target import WebTargetDefinition
 from product.protocols.web.workflow import (
@@ -438,7 +438,7 @@ class WebExecutionProfile(BaseModel):
 
 
 def _contract_fingerprint(contract: PermissionContract) -> str:
-    from product.backend.core.verification.permissions import permission_model_sha256
+    from product.backend.domain.verification.permissions import permission_model_sha256
 
     return permission_model_sha256(contract)
 

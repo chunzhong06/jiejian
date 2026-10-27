@@ -1,0 +1,224 @@
+# =============================================================================
+# Storage Unit of Work
+#
+# 定位
+#   应用服务与具体 Repository 之间的显式事务及资源所有权边界
+#
+# 职责
+#   组合聚合仓储｜统一 commit/rollback｜关闭 Session 并映射持久化错误
+#
+# 边界
+#   每个实例独占一个 Session；未显式 commit 的工作在退出时回滚，Repository 不自行提交。
+#
+# 调用链
+#   Application / Execution services → StorageUnitOfWork → Repositories / Session
+# =============================================================================
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from types import TracebackType
+
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
+
+from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.infrastructure.storage.preparation.batches import PreparationBatchRepository
+from product.backend.infrastructure.storage.preparation.supplemental_materials import SupplementalMaterialRepository
+from product.backend.infrastructure.storage.changes.code_observations import CodeObservationRepository
+from product.backend.infrastructure.storage.runtime.environment_operations import EnvironmentOperationRepository
+from product.backend.infrastructure.storage.preparation.preparation_recovery import PreparationRecoveryRepository
+from product.backend.infrastructure.storage.changes.development import DevelopmentRepository
+from product.backend.infrastructure.storage.runtime.sample_workspaces import SampleWorkspaceRepository
+from product.backend.infrastructure.storage.execution.job_control import JobControlRepository
+from product.backend.infrastructure.storage.applications.application_understanding import ApplicationUnderstandingRepository
+from product.backend.infrastructure.storage.boundaries.business_boundaries import BusinessBoundaryRepository
+from product.backend.infrastructure.storage.boundaries.rule_candidates import RuleCandidateRepository
+from product.backend.infrastructure.storage.preparation.suggestions import PreparationSuggestionRepository
+from product.backend.infrastructure.storage.runtime.runtime_loads import RuntimeLoadRepository
+from product.backend.infrastructure.storage.preparation.proof_sources import ProofSourceRepository
+from product.backend.infrastructure.storage.preparation.proof_artifacts import ProofArtifactRepository
+from product.backend.infrastructure.storage.preparation.action_preparation import ActionPreparationRepository
+from product.backend.infrastructure.storage.results.evidence import EvidenceIndexRepository
+from product.backend.infrastructure.storage.results.check_publications import CheckPublicationRepository
+from product.backend.infrastructure.storage.results.rule_history import RuleHistoryRepository
+from product.backend.infrastructure.storage.execution.jobs import JobEventRepository, JobRepository
+from product.backend.infrastructure.storage.applications.projects import ProjectRepository
+from product.backend.infrastructure.storage.preparation.recordings import FlowDraftRevisionRepository, RecordingRepository
+from product.backend.infrastructure.storage.changes.source_changes import SourceChangeRepository
+from product.backend.infrastructure.storage.execution.runs import RunRepository
+from product.backend.infrastructure.storage.boundaries.permission_intents import PermissionIntentRepository
+from product.backend.infrastructure.storage.preparation.test_identities import TestIdentityRepository
+
+
+class StorageUnitOfWork:
+    """一个实例只承载一个显式事务；退出时不会隐式提交。"""
+
+    projects: ProjectRepository
+    application_understanding: ApplicationUnderstandingRepository
+    business_boundaries: BusinessBoundaryRepository
+    rule_candidates: RuleCandidateRepository
+    preparation_suggestions: PreparationSuggestionRepository
+    runtime_loads: RuntimeLoadRepository
+    proof_sources: ProofSourceRepository
+    proof_artifacts: ProofArtifactRepository
+    action_preparation: ActionPreparationRepository
+    runs: RunRepository
+    recordings: RecordingRepository
+    flow_drafts: FlowDraftRevisionRepository
+    jobs: JobRepository
+    job_events: JobEventRepository
+    job_control: JobControlRepository
+    evidence: EvidenceIndexRepository
+    check_publications: CheckPublicationRepository
+    rule_history: RuleHistoryRepository
+    test_identities: TestIdentityRepository
+    permission_intents: PermissionIntentRepository
+    source_changes: SourceChangeRepository
+    development: DevelopmentRepository
+
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> None:
+        self._session_factory = session_factory
+        self._known_secrets = tuple(secret for secret in known_secrets if secret)
+        self._session: Session | None = None
+        self._committed = False
+
+    def begin(self) -> StorageUnitOfWork:
+        """打开唯一事务并把全部 Repository 绑定到同一个 Session。"""
+
+        if self._session is not None:
+            raise JiejianError(ErrorCode.STORAGE_STATE, "事务已经开始")
+        session = self._session_factory()
+        session.begin()
+        self._session = session
+        self._committed = False
+        self.projects = ProjectRepository(session, self._known_secrets)
+        self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
+        self.application_understanding = ApplicationUnderstandingRepository(
+            session,
+            self._known_secrets,
+        )
+        self.business_boundaries = BusinessBoundaryRepository(
+            session,
+            self._known_secrets,
+        )
+        self.rule_candidates = RuleCandidateRepository(session, self._known_secrets)
+        self.preparation_suggestions = PreparationSuggestionRepository(session, self._known_secrets)
+        self.runtime_loads = RuntimeLoadRepository(session, self._known_secrets)
+        self.proof_sources = ProofSourceRepository(session, self._known_secrets)
+        self.proof_artifacts = ProofArtifactRepository(session,self._known_secrets)
+        self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
+        self.runs = RunRepository(session, self._known_secrets)
+        self.recordings = RecordingRepository(session, self._known_secrets)
+        self.flow_drafts = FlowDraftRevisionRepository(
+            session,
+            self._known_secrets,
+        )
+        self.jobs = JobRepository(session, self._known_secrets)
+        self.job_events = JobEventRepository(session, self._known_secrets)
+        self.job_control = JobControlRepository(session, self._known_secrets)
+        self.evidence = EvidenceIndexRepository(session, self._known_secrets)
+        self.check_publications = CheckPublicationRepository(session, self._known_secrets)
+        self.rule_history = RuleHistoryRepository(session,self._known_secrets)
+        self.test_identities = TestIdentityRepository(session, self._known_secrets)
+        self.permission_intents = PermissionIntentRepository(
+            session,
+            self._known_secrets,
+        )
+        self.source_changes = SourceChangeRepository(session, self._known_secrets)
+        self.development = DevelopmentRepository(session, self._known_secrets)
+        self.supplemental_materials = SupplementalMaterialRepository(session, self._known_secrets)
+        self.code_observations = CodeObservationRepository(session, self._known_secrets)
+        self.environment_operations = EnvironmentOperationRepository(session, self._known_secrets)
+        self.preparation_recovery = PreparationRecoveryRepository(session, self._known_secrets)
+        self.sample_workspaces = SampleWorkspaceRepository(session, self._known_secrets)
+        return self
+
+    def commit(self) -> None:
+        """显式提交事务；约束与数据库错误统一回滚并映射为脱敏错误。"""
+
+        session = self._require_session()
+        if self._committed:
+            raise JiejianError(ErrorCode.STORAGE_STATE, "事务已经提交")
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise JiejianError(
+                ErrorCode.STORAGE_CONSTRAINT,
+                "数据库约束拒绝写入",
+            ) from None
+        except SQLAlchemyError:
+            session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库操作失败") from None
+        self._committed = True
+
+    def acquire_write_lock(self) -> None:
+        """在读取乐观并发基线前取得 SQLite 写事务，避免 legacy SELECT 不开启事务的窗口。"""
+        session = self._require_session()
+        try:
+            connection = session.connection()
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+        except SQLAlchemyError:
+            session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前有其他写操作，请先核对状态") from None
+
+    def begin_read_snapshot(self) -> None:
+        """将关联的多次只读查询固定在同一快照；SQLite legacy SELECT 本身不会开启事务。"""
+        session=self._require_session()
+        try:
+            connection=session.connection()
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN")
+        except SQLAlchemyError:
+            session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE,"暂时无法读取一致的任务状态") from None
+
+    def rollback(self) -> None:
+        session = self._require_session()
+        try:
+            session.rollback()
+        except SQLAlchemyError:
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库回滚失败") from None
+
+    def close(self) -> None:
+        """回滚仍活跃的未提交事务并关闭 Session；重复关闭安全。"""
+
+        if self._session is None:
+            return
+        try:
+            if self._session.in_transaction():
+                self._session.rollback()
+            self._session.close()
+        except SQLAlchemyError:
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库关闭失败") from None
+        finally:
+            self._session = None
+            self._committed = False
+
+    def __enter__(self) -> StorageUnitOfWork:
+        return self.begin()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        try:
+            if self._session is not None and self._session.in_transaction():
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+    def _require_session(self) -> Session:
+        if self._session is None:
+            raise JiejianError(ErrorCode.STORAGE_STATE, "事务尚未开始")
+        return self._session

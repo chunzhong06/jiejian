@@ -1,0 +1,7 @@
+.jj-rule-editor-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 28px; }
+.jj-rule-editor-row { padding: 20px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.jj-rule-editor-row p { margin-top: 6px; }
+.jj-rule-editor-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.jj-rule-editor-controls > .jj-choice { width: 170px; }
+.jj-rule-editor-reason { margin-top: 24px; }
+@media(max-width:700px) { .jj-rule-editor-list { grid-template-columns: minmax(0,1fr); } }

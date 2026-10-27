@@ -1,0 +1,89 @@
+.jj-accounts-workspace, .jj-login-progress, .jj-proof-workspace, .jj-source-review, .jj-recording-workspace { border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; min-width: 0; }
+.jj-accounts-workspace > header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.jj-accounts-workspace > header > span { font-size: var(--text-meta); color: var(--muted); }
+.jj-account-row { display: grid; grid-template-columns: 34px minmax(0,1fr) minmax(0,1fr) auto; gap: 18px; align-items: center; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.jj-account-row:last-child { border: 0; }
+.jj-account-symbol { width: 34px; height: 34px; display: flex; justify-content: center; align-items: center; border-radius: 9px; background: var(--soft); color: var(--muted); }
+.jj-account-body { min-width: 0; }
+.jj-account-body > p { margin-top: 6px; }
+.jj-account-body .jj-item-heading { gap: 8px; }
+.jj-account-uses { font-size: var(--text-meta); color: var(--muted); }
+.jj-account-row > .jj-button { min-height: 34px; font-size: var(--text-meta); }
+.jj-account-note { padding: 18px 28px; border-top: 1px solid var(--line); background: var(--inset); color: var(--muted); font-size: var(--text-meta); }
+.jj-login-progress { padding: 26px 28px; }
+.jj-login-progress > header { display: flex; gap: 20px; align-items: center; margin-bottom: 22px; }
+.jj-proof-workspace { display: grid; grid-template-columns: 242px minmax(0,1fr); }
+.jj-proof-workspace.is-single-source { grid-template-columns: minmax(0,1fr); }
+.jj-source-index { padding: 24px 12px; background: var(--inset); border-right: 1px solid var(--line); }
+.jj-source-index h2 { font-size: var(--text-body); padding: 0 12px 16px; }
+.jj-source-index > button { width: 100%; display: grid; gap: 8px; padding: 15px 12px; margin-bottom: 5px; text-align: left; color: var(--ink); border: 1px solid transparent; border-radius: 10px; background: transparent; }
+.jj-source-index > button[aria-current=page] { background: var(--surface); border-color: var(--line); box-shadow: var(--selected-shadow); }
+.jj-source-index > button > span { font-weight: 500; }
+.jj-source-index small { color: var(--muted); }
+.jj-source-index small[data-tone=positive] { color: var(--good); }
+.jj-source-index small[data-tone=caution] { color: var(--warn); }
+.jj-proof-detail { min-width: 0; }
+.jj-proof-detail > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 28px 28px 24px; }
+.jj-proof-detail > header h2 { margin-top: 6px; }
+.jj-proof-stages { list-style: none; padding: 18px 24px; margin: 0 28px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; background: var(--inset); border: 1px solid var(--line); border-radius: 10px; }
+.jj-proof-stages > li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.jj-proof-stages > li > span { display: flex; justify-content: center; align-items: center; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 50%; font-size: var(--text-meta); color: var(--muted); flex: none; }
+.jj-proof-stages > li[data-complete=true] > span { color: var(--good); border-color: transparent; background: var(--good-soft); }
+.jj-proof-stages strong { display: block; font-size: var(--text-meta); font-weight: 550; }
+.jj-proof-stages small { display: block; margin-top: 2px; color: var(--muted); }
+.jj-proof-reading { display: grid; grid-template-columns: minmax(0,1fr); padding: 28px; gap: 24px; }
+.jj-proof-input { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 0 28px; align-content: start; }
+.jj-proof-input > h3 { grid-column: 1; }
+.jj-proof-input > .jj-facts { grid-column: 2; grid-row: 1/4; gap: 4px; }
+.jj-proof-input > .jj-reference-upload, .jj-proof-input > .jj-reference-choices { grid-column: 1/-1; }
+.jj-proof-method { color: var(--muted); font-size: var(--text-meta); margin: 10px 0 0; max-width: 65ch; }
+.jj-proof-input .jj-facts > div { grid-template-columns: 80px minmax(0,1fr); gap: 12px; padding-block: 8px; font-size: var(--text-meta); }
+.jj-source-verification { border-top: 1px solid var(--line); padding-top: 22px; min-width: 0; }
+.jj-source-verification > p { margin-top: 12px; }
+.jj-source-checks { margin-top: 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 28px; }
+.jj-source-checks > div { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: var(--text-meta); }
+.jj-source-checks > div { min-width: 0; }
+.jj-source-checks small { display: block; color: var(--muted); margin-top: 3px; }
+.jj-source-checks [data-confirmed=true] { color: var(--good); }
+.jj-source-checks [data-confirmed=false] { color: var(--warn); }
+.jj-source-verification > details { margin-top: 18px; }
+.jj-proof-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px 24px; border-top: 1px solid var(--line); background: var(--inset); }
+.jj-proof-actions > .jj-button:last-child { margin-left: auto; }
+.jj-reference-choices, .jj-reference-upload { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; }
+.jj-reference-upload > p { font-size: var(--text-meta); color: var(--muted); margin: 8px 0 16px; }
+.jj-reference-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 0; font-size: var(--text-meta); }
+.jj-reference-choice > span { display: inline-flex; align-items: center; gap: 8px; }
+.jj-reference-choice small { color: var(--muted); }
+.jj-reference-choice > .jj-button { font-size: var(--text-meta); min-height: 32px; padding: 6px 10px; }
+.jj-source-review > header { display: flex; align-items: center; gap: 18px; padding: 26px 28px; border-bottom: 1px solid var(--line); }
+.jj-source-review-body { padding: 24px 28px 28px; }
+.jj-source-review-body > .jj-proof-method { margin: 0 0 24px; }
+.jj-source-review-body .jj-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 32px; }
+.jj-source-review-body .jj-facts > div { grid-template-columns: 100px minmax(0,1fr); gap: 16px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.jj-source-consent { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 22px; background: var(--inset); border-top: 1px solid var(--line); padding: 24px 28px; }
+.jj-source-consent > .jj-inline-actions { margin-left: auto; }
+.jj-adoption-impact { margin-top: 28px; }
+.jj-adoption-impact > p, .jj-adoption-impact li { margin-top: 9px; color: var(--muted); font-size: var(--text-meta); }
+.jj-recording-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 28px; border-bottom: 1px solid var(--line); }
+.jj-recording-toolbar .jj-button { }
+.jj-recording-list { padding: 16px; margin: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
+.jj-recording-list > label { display: grid; grid-template-columns: 18px minmax(0,1fr) auto auto; align-items: center; gap: 18px; min-width: 0; padding: 18px 20px; border: 1px solid transparent; border-radius: var(--radius-control); cursor: pointer; }
+.jj-recording-list > label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.jj-recording-list > label:has(input:disabled) { cursor: default; }
+.jj-recording-list strong { font-weight: 550; }
+.jj-recording-list time { font-size: var(--text-meta); color: var(--muted); font-variant-numeric: tabular-nums; }
+.jj-recording-setup { padding: 28px; }
+.jj-recording-instruction { display: flex; align-items: center; gap: 14px; color: var(--muted); }
+.jj-recording-instruction > .anticon { font-size: var(--text-section); color: var(--accent-ink); flex: none; }
+.jj-recording-setup > .jj-checkbox, .jj-recording-setup > .jj-notice { margin-top: 24px; }
+.jj-recording-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 18px 28px; border-top: 1px solid var(--line); background: var(--inset); }
+.jj-recording-setup > .jj-recording-actions { margin: 28px -28px -28px; }
+.jj-recording-actions > .jj-notice { width: 100%; }
+.jj-material-impact { padding: 20px 28px; border-top: 1px solid var(--line); }
+.jj-material-impact ul { padding-left: 20px; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.jj-material-impact > p { margin-top: 12px; font-size: var(--text-meta); color: var(--muted); }
+.jj-recording-live > .jj-choice-field { margin-top: 24px; }
+@media(max-width:600px) { .jj-recording-toolbar, .jj-recording-setup, .jj-material-impact { padding: 20px; } .jj-recording-toolbar { gap: 12px; } .jj-recording-toolbar h2 { font-size: var(--text-body); } .jj-recording-list { padding: 10px; } .jj-recording-list > label { grid-template-columns: 18px minmax(0,1fr) auto; gap: 8px 12px; padding: 16px 12px; } .jj-recording-list time { grid-column: 2; grid-row: 2; } .jj-recording-list .jj-badge { grid-column: 3; grid-row: 1/3; } .jj-recording-actions { padding: 16px 20px; flex-wrap: wrap; } .jj-recording-setup > .jj-recording-actions { margin: 24px -20px -20px; } }
+@media(max-width:1200px) { .jj-account-row { grid-template-columns: 34px minmax(0,1fr) auto; gap: 10px 16px; } .jj-account-uses { grid-column: 2; grid-row: 2; } .jj-account-row > .jj-button { grid-column: 3; grid-row: 1/3; } .jj-account-symbol { grid-row: 1/3; } .jj-proof-input { grid-template-columns: minmax(0,1fr); } .jj-proof-input > .jj-facts { grid-column: 1; grid-row: auto; margin-top: 18px; } .jj-proof-stages { padding-inline: 16px; gap: 10px; } .jj-proof-stages > li { gap: 7px; } .jj-source-review-body .jj-facts { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:850px) { .jj-source-checks { grid-template-columns: minmax(0,1fr); } .jj-proof-workspace { grid-template-columns: minmax(0,1fr); } .jj-source-index { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); } .jj-source-index h2 { width: 100%; padding-bottom: 4px; } .jj-source-index > button { width: auto; flex: 1 1 180px; margin: 0; } }
+@media(max-width:600px) { .jj-accounts-workspace > header, .jj-account-row, .jj-account-note, .jj-login-progress, .jj-proof-detail > header, .jj-proof-reading, .jj-source-review > header, .jj-source-review-body, .jj-source-consent { padding: 22px 20px; } .jj-account-row { grid-template-columns: 28px minmax(0,1fr); } .jj-account-symbol { width: 28px; height: 28px; align-self: start; } .jj-account-uses { grid-column: 2; } .jj-account-row > .jj-button { grid-column: 2; grid-row: 3; justify-self: start; margin-top: 5px; } .jj-proof-detail > header { flex-wrap: wrap; gap: 10px; } .jj-proof-stages { margin-inline: 20px; padding: 14px 12px; gap: 12px; } .jj-proof-stages > li { flex-direction: column; align-items: flex-start; gap: 6px; } .jj-proof-stages small { font-size: var(--text-meta); } .jj-proof-actions { padding: 18px 16px; } .jj-source-review > header { flex-wrap: wrap; } .jj-source-review-body .jj-facts > div { grid-template-columns: 84px minmax(0,1fr); gap: 12px; } }

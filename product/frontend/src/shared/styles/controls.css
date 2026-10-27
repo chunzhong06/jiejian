@@ -1,123 +1,49 @@
-/* 页面与Portal共用控件语义；feature样式只安排布局，不重新定义按钮与状态外观。 */
-/* 有业务说明的同级单选卡沿用Radio行为，状态颜色、焦点及减少动效在共享层统一。 */
-[data-product=jiejian] .product-choice-cards .ant-radio-wrapper { margin:0;padding:var(--space-16);align-items:flex-start;border:1px solid var(--color-control-border);border-radius:var(--radius-medium);transition:background-color var(--motion-fast),border-color var(--motion-fast); }
-[data-product=jiejian] .product-choice-cards .ant-radio-wrapper:not(.ant-radio-wrapper-disabled):hover,
-[data-product=jiejian] .product-choice-cards .ant-radio-wrapper-checked { background:var(--color-primary-light);border-color:var(--color-primary); }
-[data-product=jiejian] .product-choice-cards .ant-radio-wrapper:focus-within { outline:2px solid var(--color-focus);outline-offset:3px; }
-[data-product=jiejian][data-motion=none] .product-choice-cards .ant-radio-wrapper { transition:none; }
-[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled) {
-  color: var(--color-primary-ink);
-  border-color: var(--color-control-border);
-  background: transparent;
-  border-radius: var(--radius-medium);
-  box-shadow: none;
-}
-[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb,var(--color-primary) 4%,transparent);
-}
-[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):active { background: var(--color-surface-hover); }
-[data-product=jiejian] .ant-btn-link:not(:disabled) { color: var(--color-primary-ink); }
-[data-product=jiejian] .ant-btn-link:not(:disabled):is(:hover,:active,:focus-visible) {
-  color: var(--color-primary-ink);
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-[data-product=jiejian] .ant-btn-link.ant-btn-dangerous:not(:disabled):is(:hover,:active,:focus) { color: var(--color-danger); }
-[data-product=jiejian] .ant-btn-link:focus:not(:focus-visible) { outline: none; }
-/* 路由标题用程序焦点供读屏定位；它不是可操作控件，不绘制浏览器默认黑框。 */
-[data-product=jiejian] .editorial-heading-row h1[tabindex="-1"]:focus { outline:none; }
-[data-product=jiejian] :is(button,a,input,textarea,[role=combobox],summary):focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 3px;
-}
-[data-product=jiejian] a:not(.ant-btn):is(:hover,:focus-visible) {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-[data-product=jiejian] a:not(.ant-btn) { color: var(--color-primary-ink); }
-/* 信息与状态不借用主按钮色；页面、通知和 body 浮层使用完全相同的成对值。 */
-[data-product=jiejian] .ant-alert-info { background: var(--color-info-light); --alert-ink: var(--color-evidence); }
-[data-product=jiejian] .ant-alert-success { background: var(--color-safe-light); --alert-ink: var(--color-safe); }
-[data-product=jiejian] .ant-alert-warning { background: var(--color-warning-light); --alert-ink: var(--color-warning); }
-[data-product=jiejian] .ant-alert-error { background: var(--color-danger-light); --alert-ink: var(--color-danger); }
-[data-product=jiejian] .ant-alert :is(.ant-alert-message,.ant-alert-description,.ant-alert-icon) { color: var(--alert-ink); }
-/* 状态横幅的轻量操作沿用所在横幅色相，避免通用文字按钮悬浮底色形成突兀深块。 */
-[data-product=jiejian] .work-receipt { --alert-ink: var(--color-safe); }
-[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous) {
-  color: var(--alert-ink);
-  background: transparent;
-}
-[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):hover {
-  color: var(--alert-ink);
-  background: color-mix(in srgb,var(--alert-ink) 10%,transparent);
-}
-[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):active {
-  background: color-mix(in srgb,var(--alert-ink) 16%,transparent);
-}
-[data-product=jiejian] :is(.ant-alert,.work-receipt) :is(.ant-btn-text,.ant-btn-link,.ant-alert-close-icon):not(:disabled):not(.ant-btn-dangerous):focus-visible {
-  outline-color: var(--alert-ink);
-}
-[data-product=jiejian] .ant-tag { border-color: transparent; }
-.product-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-4) var(--space-8);
-  border: var(--line-width) solid transparent;
-  border-radius: var(--radius-tag);
-  color: var(--color-neutral);
-  background: var(--color-neutral-light);
-  font-size: var(--font-secondary);
-  font-weight: var(--weight-strong);
-  line-height: 1.6;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.product-status[data-tone=success] { color: var(--color-safe); background: var(--color-safe-light); }
-.product-status[data-tone=danger] { color: var(--color-danger); background: var(--color-danger-light); }
-.product-status[data-tone=warning] { color: var(--color-warning); background: var(--color-warning-light); }
-.product-status[data-tone=info] { color: var(--color-evidence); background: var(--color-info-light); }
-.product-status > [aria-hidden=true] { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; flex: 0 0 1em; line-height: 1; }
-/* 多行提示以标题首行居中图标，不能沿用组件库零行高造成视觉上浮。 */
-[data-product=jiejian] .ant-alert { border-color: transparent; }
-[data-product=jiejian] .ant-alert-with-description .ant-alert-message {
-  font-size: var(--font-local);
-  line-height: 1.6;
-}
-[data-product=jiejian] .ant-alert-with-description > .ant-alert-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: var(--font-local);
-  height: 1.6em;
-  line-height: 1.6;
-  margin-inline-end: 0;
-}
-.permission-badge { flex-shrink: 0; align-self: start; }
-/* 权限选择与已确认规则共用语义颜色；文字仍明确表示允许或禁止。 */
-[data-product=jiejian] .permission-expectation[data-expectation=ALLOW] { --permission-ink:var(--color-safe);--permission-fill:var(--color-safe-light); }
-[data-product=jiejian] .permission-expectation[data-expectation=DENY] { --permission-ink:var(--color-danger);--permission-fill:var(--color-danger-light); }
-[data-product=jiejian] .permission-expectation :is(.ant-segmented-item-selected,.ant-segmented-thumb) { color:var(--permission-ink);background:var(--permission-fill); }
-.flow-number { display: inline-grid; place-items: center; flex: 0 0 var(--space-24); height: var(--space-24); border: var(--line-width) solid var(--color-border); border-radius: 50%; font-size: var(--font-label); color: var(--color-secondary); }
-.flow-number[aria-current=step] { color: var(--color-on-accent); background: var(--color-primary); border-color: var(--color-primary); }
-.editorial-heading-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); }
-.editorial-heading-row > .product-status { flex-shrink: 0; }
-.product-search.ant-input-affix-wrapper { width: var(--rhythm-searchWidth); max-width: 100%; flex: 0 1 var(--rhythm-searchWidth); min-height: var(--control-normal); }
-.product-search.ant-input-affix-wrapper input { margin: 0; min-height: 0; }
-.product-search .ant-input-prefix { color: var(--color-secondary); margin-inline-end: var(--space-8); }
-/* 平级内容和步骤入口保留原导航行为，选中使用下划线，不抢占实心主操作层级。 */
-[data-product=jiejian] .product-view-tabs { display: flex; flex-wrap: wrap; gap: var(--space-24); padding: 0; border: 0; border-bottom: var(--line-width) solid var(--color-border); }
-[data-product=jiejian] .product-view-tabs > .ant-btn { padding: var(--space-12) 0; height: auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-secondary); box-shadow: none; }
-[data-product=jiejian] .product-view-tabs > .ant-btn:not(:disabled):hover { color: var(--color-primary-ink); background: transparent; }
-[data-product=jiejian] .product-view-tabs > .ant-btn[aria-pressed=true] { color: var(--color-text); font-weight: var(--weight-strong); border-bottom-color: var(--color-primary); }
-[data-product=jiejian] .product-view-tabs > .ant-btn:disabled { color: var(--color-disabled); }
-@media(max-width:600px) {
-  .product-search.ant-input-affix-wrapper { width: 100%; flex-basis: 100%; min-height: var(--control-large); }
-  .editorial-heading-row { flex-wrap: wrap; gap: var(--space-8); }
-  [data-product=jiejian] .ant-btn:not(.ant-btn-sm) { min-height: var(--control-large); }
-}
+.jj-choice:where(.ant-select) { width: 100%; min-width: 0; height: 40px; font: inherit; }
+.jj-choice.ant-select .ant-select-selector { min-height: 40px; border-radius: var(--radius-control); border-color: var(--line-strong); background: var(--surface); color: var(--ink); padding-inline: 12px 34px; box-shadow: var(--control-shadow); }
+.jj-choice.ant-select .ant-select-selection-item { font-weight: 450; line-height: 38px; padding-inline-end: 0; }
+.jj-choice.ant-select-open .ant-select-selection-item { color: var(--ink); opacity: 1; }
+.jj-choice.ant-select .ant-select-arrow { color: var(--muted); font-size: var(--text-meta); }
+.jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { border-color: var(--accent); }
+.jj-choice.ant-select-focused .ant-select-selector { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.jj-choice:has(input:focus-visible) .ant-select-selector { outline: 2px solid var(--focus); outline-offset: 3px; box-shadow: none; }
+.jj-choice.ant-select-disabled .ant-select-selector { opacity: .5; cursor: default; }
+.jj-choice input.ant-select-selection-search-input { border: 0; min-height: 0; box-shadow: none; background: transparent; outline: 0; }
+.jj-choice-menu.ant-select-dropdown { padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--popover-shadow); }
+.jj-choice-menu .ant-select-item { border-radius: 7px; min-height: 38px; padding: 9px 11px; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.jj-choice-menu .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
+.jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { background: var(--hover); }
+.jj-choice-menu .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { background: var(--accent-soft); color: var(--accent-ink); }
+.jj-choice-menu .ant-select-item-option-state { color: var(--accent-ink); padding-left: 16px; }
+.jj-choice-menu .ant-select-item-option-disabled { opacity: .45; }
+.jj-hint .ant-tooltip-inner { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--popover-shadow); padding: 7px 10px; font-size: var(--text-meta); line-height: 1.5; }
+.jj-hint .ant-tooltip-arrow { --antd-arrow-background-color: var(--surface); }
+.jj-popover-anchor { display: inline-flex; }
+.jj-info-popover .ant-popover-inner { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--popover-shadow); }
+.jj-info-popover .ant-popover-arrow { --antd-arrow-background-color: var(--surface); }
+.jj-info-popover section { width: min(280px,calc(100vw - 72px)); outline: 0; }
+.jj-info-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.jj-info-heading h3 { margin: 0; }
+.jj-system-facts { display: grid; gap: 12px; }
+.jj-system-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: var(--text-body); }
+.jj-system-facts dt { color: var(--muted); }
+.jj-system-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.jj-system-facts > div + div { border-top: 1px solid var(--line); padding-top: 12px; }
+.jj-system-refresh { width: 32px; min-height: 32px; padding: 7px; flex: none; }
+.jj-info-popover .jj-notice { margin-top: 16px; }
+input[type=checkbox], input[type=radio] { appearance: none; width: 18px; height: 18px; min-height: 18px; margin: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); display: inline-grid; place-content: center; vertical-align: middle; cursor: pointer; }
+input[type=checkbox]::before { content: '✓'; color: var(--on-accent); font-size: var(--text-meta); font-weight: 650; line-height: 1; transform: scale(.3); opacity: 0; }
+input[type=radio] { border-radius: 50%; }
+input[type=radio]::before { content: ''; width: 6px; height: 6px; background: var(--on-accent); border-radius: 50%; transform: scale(.3); opacity: 0; }
+input:is([type=checkbox],[type=radio]):checked { background: var(--accent); border-color: var(--accent); }
+input:is([type=checkbox],[type=radio]):checked::before { transform: scale(1); opacity: 1; }
+input[type=checkbox]:indeterminate { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:indeterminate::before { content: ''; width: 9px; height: 2px; background: var(--on-accent); transform: none; opacity: 1; }
+input:is([type=checkbox],[type=radio]):not(:disabled):hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+input:is([type=checkbox],[type=radio]):not(:disabled):active { transform: scale(.92); }
+input:is([type=checkbox],[type=radio]):disabled { cursor: default; }
+.jj-field > label { font-weight: 550; }
+.jj-working-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); flex: none; }
+.jj-environment-progress { display: flex; align-items: center; gap: 18px; }
+.jj-environment-progress strong { font-size: var(--text-body); font-weight: 550; }
+.jj-environment-progress p { color: var(--muted); font-size: var(--text-meta); margin-top: 5px; }
+.jj-example-menu .ant-dropdown-menu,.jj-choice-menu,.jj-info-popover,.jj-hint { font-family:var(--font-ui); }

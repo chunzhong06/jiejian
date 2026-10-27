@@ -1429,6 +1429,12 @@
           "title": "Created At Us",
           "type": "integer"
         },
+        "document_type": {
+          "const": "jiejian.proof-preflight-input",
+          "default": "jiejian.proof-preflight-input",
+          "title": "Document Type",
+          "type": "string"
+        },
         "identities": {
           "items": {
             "$ref": "#/$defs/CheckIdentity"
@@ -1474,11 +1480,8 @@
           "$ref": "#/$defs/NodeRuntimeReference"
         },
         "schema_version": {
-          "default": "3",
-          "enum": [
-            "3",
-            "4"
-          ],
+          "const": "1",
+          "default": "1",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1642,6 +1645,12 @@
           "title": "Created At Us",
           "type": "integer"
         },
+        "document_type": {
+          "const": "jiejian.source-read-scope",
+          "default": "jiejian.source-read-scope",
+          "title": "Document Type",
+          "type": "string"
+        },
         "identity_ids": {
           "items": {
             "pattern": "^tid_[0-9a-f]{32}$",
@@ -1687,8 +1696,8 @@
           "type": "array"
         },
         "schema_version": {
-          "const": "3",
-          "default": "3",
+          "const": "1",
+          "default": "1",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1956,6 +1965,12 @@
       "title": "Attempt",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.proof-runner-input",
+      "default": "jiejian.proof-runner-input",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",
@@ -1981,11 +1996,8 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "2",
-      "enum": [
-        "2",
-        "3"
-      ],
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     }

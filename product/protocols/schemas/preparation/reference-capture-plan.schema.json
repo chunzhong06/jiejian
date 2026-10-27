@@ -39,6 +39,17 @@
           "title": "Action Semantic Fingerprint",
           "type": "string"
         },
+        "created_resource": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResponseExtractor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "display_name": {
           "maxLength": 256,
           "minLength": 1,
@@ -647,7 +658,8 @@
             "OBJECT_CREATION",
             "EXTERNAL_DISPATCH",
             "RESTRICTED_FUNCTION_INVOCATION",
-            "CREDENTIAL_ACCESS"
+            "CREDENTIAL_ACCESS",
+            "FILE_CONTENT_DELIVERY"
           ],
           "title": "Effect Kind",
           "type": "string"

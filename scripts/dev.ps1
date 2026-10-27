@@ -1,16 +1,5 @@
 ﻿#Requires -Version 5.1
-# =============================================================================
-# 界鉴仓库开发入口
-#
-# 定位
-#   全局项目专用 Conda 环境、冻结 uv 依赖与仓库源码之间的唯一开发编排入口
-#
-# 职责
-#   参数合同｜模块装配｜公开命令分派｜调用者环境快照与恢复
-#
-# 边界
-#   具体 Python、前端、准备、打包、自动 L5 和命令实现分别归属 scripts/dev 职责模块。
-# =============================================================================
+# 开发任务入口：装配工程模块、调度命令并恢复调用者环境。
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -25,32 +14,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
-$script:VarDir = if ([string]::IsNullOrWhiteSpace($VarDir)) { Join-Path $script:ProjectRoot "var" } elseif ([IO.Path]::IsPathRooted($VarDir)) { [IO.Path]::GetFullPath($VarDir) } else { [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot $VarDir)) }
-# 每轮产品事实由 -VarDir 隔离；跨实例共享的开发工具、构建与状态只进入固定 DevelopmentRoot。
-$script:DevelopmentRoot = [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot "var\development"))
-$script:ToolchainPath = Join-Path $script:ProjectRoot "product\config\toolchain.json"
-$script:EnvironmentPath = Join-Path $script:ProjectRoot "environment.yml"
-$script:StatePath = Join-Path $script:DevelopmentRoot "state\development-state.json"
-$script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$script:PrepareLock = $null
-$script:Python = $null
-$script:Conda = $null
-$script:CondaPrefix = $null
-$script:Uv = $null
-$script:UvVersion = $null
-$script:Node = $null
-$script:NodeVersion = $null
-$script:PnpmRunner = @()
-$script:PnpmVersion = $null
-$script:FrontendBuildState = $null
-$script:State = [pscustomobject]@{ schema_version = "1" }
-$script:CallerEnvironmentSnapshot = $null
+. (Join-Path $PSScriptRoot "lib/session.ps1")
+. (Join-Path $PSScriptRoot "lib/files.ps1")
+. (Join-Path $PSScriptRoot "dev/context.ps1")
+Initialize-DevelopmentContext (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path $VarDir
 
-# 只有总控入口装配模块；子模块共享本作用域的简单 $script: 状态，不互相加载。
+# 入口统一装配工程模块；共用库不依赖任务调度或产品业务。
 . (Join-Path $PSScriptRoot "dev\common.ps1")
 . (Join-Path $PSScriptRoot "dev\python.ps1")
-. (Join-Path $PSScriptRoot "dev\frontend.ps1")
+. (Join-Path $PSScriptRoot "dev/node.ps1")
+. (Join-Path $PSScriptRoot "editor/workspace.ps1")
+. (Join-Path $PSScriptRoot "dev/frontend-workspace.ps1")
+. (Join-Path $PSScriptRoot "dev/frontend.ps1")
 . (Join-Path $PSScriptRoot "dev\prepare.ps1")
 . (Join-Path $PSScriptRoot "dev\package.ps1")
 . (Join-Path $PSScriptRoot "dev\sample-test.ps1")

@@ -34,11 +34,11 @@ from pydantic import (
     model_validator,
 )
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
-from product.backend.core.recording.models import RecordingPurpose
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.redaction import REDACTED
+from product.backend.domain.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
+from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.domain.recording.models import RecordingPurpose
+from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.redaction import REDACTED
 from product.protocols.web.workflow import ValueSlotConsumer
 
 FLOW_DRAFT_MAX_BYTES = 4_194_304
@@ -214,7 +214,8 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
-    schema_version: Literal["3", "4"] = "3"
+    document_type: Literal["jiejian.flow-draft"] = "jiejian.flow-draft"
+    schema_version: Literal["1"] = "1"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
@@ -239,11 +240,6 @@ class FlowDraft(FlowDraftProtocolModel):
 
     @model_validator(mode="after")
     def validate_draft_graph(self) -> FlowDraft:
-        if self.schema_version == "3" and any(
-            str(candidate.consumer).startswith("RESPONSE_")
-            for step in self.steps for candidate in step.resource_candidates
-        ):
-            raise ValueError("response resource candidates require flow draft version 4")
         if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
             raise ValueError("supplemental draft requires its target recording parent")
         if self.parent_recording_id == self.recording_id:
@@ -387,7 +383,7 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    if parsed.get("schema_version") not in {"3", "4"}:
+    if parsed.get("schema_version") != "1" or parsed.get("document_type") != "jiejian.flow-draft":
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)

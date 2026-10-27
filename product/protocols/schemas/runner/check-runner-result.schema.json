@@ -158,6 +158,193 @@
       "title": "CheckPrimaryError",
       "type": "object"
     },
+    "CheckRuntimeCorrespondence": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "enum": [
+            "MATCHED",
+            "UNCONFIRMED"
+          ],
+          "title": "After",
+          "type": "string"
+        },
+        "before": {
+          "enum": [
+            "MATCHED",
+            "UNCONFIRMED"
+          ],
+          "title": "Before",
+          "type": "string"
+        },
+        "runtime": {
+          "discriminator": {
+            "mapping": {
+              "MANAGED_NODE": "#/$defs/NodeRuntime",
+              "MANAGED_PYTHON": "#/$defs/PythonRuntime"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PythonRuntime"
+            },
+            {
+              "$ref": "#/$defs/NodeRuntime"
+            }
+          ],
+          "title": "Runtime"
+        }
+      },
+      "required": [
+        "runtime",
+        "before",
+        "after"
+      ],
+      "title": "CheckRuntimeCorrespondence",
+      "type": "object"
+    },
+    "ControlledRuntimeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {
+          "pattern": "^rti_[0-9a-f]{32}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "manifest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Fingerprint",
+          "type": "string"
+        },
+        "owner_id": {
+          "pattern": "^exp_[0-9a-f]{32}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "process_created_at": {
+          "exclusiveMinimum": 0,
+          "title": "Process Created At",
+          "type": "integer"
+        },
+        "process_id": {
+          "exclusiveMinimum": 0,
+          "title": "Process Id",
+          "type": "integer"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance_id",
+        "manifest_fingerprint",
+        "source_fingerprint",
+        "process_id",
+        "process_created_at",
+        "owner_id"
+      ],
+      "title": "ControlledRuntimeReference",
+      "type": "object"
+    },
+    "NodeRuntime": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MANAGED_NODE",
+          "default": "MANAGED_NODE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/NodeRuntimeReference"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "title": "NodeRuntime",
+      "type": "object"
+    },
+    "NodeRuntimeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {
+          "pattern": "^rti_[0-9a-f]{32}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "manifest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Fingerprint",
+          "type": "string"
+        },
+        "mode": {
+          "const": "CONTROLLED_NODE_ESM",
+          "default": "CONTROLLED_NODE_ESM",
+          "title": "Mode",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1024,
+          "title": "Port",
+          "type": "integer"
+        },
+        "process_created_at": {
+          "exclusiveMinimum": 0,
+          "title": "Process Created At",
+          "type": "integer"
+        },
+        "process_id": {
+          "exclusiveMinimum": 0,
+          "title": "Process Id",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "instance_id",
+        "manifest_fingerprint",
+        "source_fingerprint",
+        "process_id",
+        "process_created_at",
+        "port"
+      ],
+      "title": "NodeRuntimeReference",
+      "type": "object"
+    },
+    "PythonRuntime": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MANAGED_PYTHON",
+          "default": "MANAGED_PYTHON",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/ControlledRuntimeReference"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "title": "PythonRuntime",
+      "type": "object"
+    },
     "RunLifecycle": {
       "enum": [
         "QUEUED",
@@ -215,6 +402,12 @@
       "title": "Config Hash",
       "type": "string"
     },
+    "document_type": {
+      "const": "jiejian.check-result",
+      "default": "jiejian.check-result",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",
@@ -263,6 +456,17 @@
       "pattern": "^run_[0-9a-f]{32}$",
       "title": "Run Id",
       "type": "string"
+    },
+    "runtime_correspondence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CheckRuntimeCorrespondence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "schema_version": {
       "const": "1",

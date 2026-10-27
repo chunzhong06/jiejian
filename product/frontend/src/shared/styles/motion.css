@@ -1,0 +1,103 @@
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a) {
+  position: relative;
+  isolation: isolate;
+  --state-fill: var(--hover);
+}
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--state-fill);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-hover-out) var(--ease-respond);
+}
+.jj-button.is-primary { --state-fill: var(--accent-hover); }
+.jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 16%,var(--surface)); }
+.jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--accent-soft)); }
+@media(hover:hover) and (pointer:fine) {
+  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a):not(:disabled):hover::before {
+    opacity: 1;
+    transition-duration: var(--motion-hover-in);
+  }
+}
+.jj-button { transition: transform var(--motion-press) var(--ease-respond), box-shadow var(--motion-press) var(--ease-respond); }
+.jj-button:not(:disabled):active { transform: translateY(1px); transition-duration: 0ms; }
+.jj-nav-item.jj-button:active { transform: none; }
+:is(.jj-button, .jj-home-cards > button, .jj-material-select, .jj-case-select, .jj-step-select):not(:disabled):active::before { opacity: 1; transition-duration: 0ms; }
+input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border-color var(--motion-hover-in) var(--ease-respond), box-shadow var(--motion-hover-in) var(--ease-respond); }
+.jj-app input:is([type=checkbox],[type=radio]) { transition: background-color var(--motion-hover-in) var(--ease-respond), border-color var(--motion-hover-in) var(--ease-respond), transform var(--motion-press) var(--ease-respond); }
+.jj-app input:is([type=checkbox],[type=radio])::before { transition: opacity var(--motion-press) var(--ease-respond), transform var(--motion-press) var(--ease-respond); }
+.jj-app input:is([type=checkbox],[type=radio]):not(:disabled):active { transition-duration: 0ms; }
+.jj-history-table tbody tr { transition: background-color var(--motion-hover-out) var(--ease-respond); }
+.jj-history-table tbody tr:hover { background: var(--hover); transition-duration: var(--motion-hover-in); }
+.jj-tabs { position: relative; }
+.jj-tabs > button::after { display: none; }
+.jj-tabs > button[aria-selected=true] { color: var(--accent-ink); }
+.jj-tab-indicator { position: absolute; left: 0; top: 0; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; transition: transform var(--motion-indicator) var(--ease-layout), width var(--motion-indicator) var(--ease-layout); }
+.jj-menu-chevron, .jj-choice.ant-select .ant-select-arrow, summary::before { transition: transform var(--motion-disclosure) var(--ease-layout); transform-origin: center; }
+.jj-menu-trigger[aria-expanded=true] > .jj-menu-chevron { transform: rotate(180deg); }
+.jj-choice.ant-select-open .ant-select-arrow { transform: rotate(180deg); }
+.jj-badge { transition: background-color var(--motion-hover-in) var(--ease-respond); }
+.jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item,
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option { position: relative; isolation: isolate; }
+.jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item::before,
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--hover); opacity: 0; pointer-events: none; transition: opacity var(--motion-hover-out) var(--ease-respond); }
+.jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:is(:hover,.ant-dropdown-menu-item-active),
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-selected) { background: transparent; }
+.jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:is(:hover,.ant-dropdown-menu-item-active)::before,
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-active::before { opacity: 1; transition-duration: var(--motion-hover-in); }
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-selected::before { background: color-mix(in srgb,var(--accent) 10%,var(--accent-soft)); }
+.jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-disabled::before,
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-disabled::before { display: none; }
+.jj-recording-list > label:has(input:disabled)::before { display: none; }
+.jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--surface); }
+.jj-example-menu, .jj-info-popover, .jj-choice-menu { --popup-shift: -4px; transform-origin: center top; }
+.jj-example-menu[class*='placement-top'], .jj-info-popover[class*='placement-top'], .jj-choice-menu[class*='placement-top'] { --popup-shift: 4px; transform-origin: center bottom; }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown) { opacity: 1; transform: none; animation: none; transition: opacity var(--motion-popup) var(--ease-enter), transform var(--motion-popup) var(--ease-enter); }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown):is([class*='-enter'],[class*='-appear']):not([class*='-active']):not([class*='-done']) { opacity: 0; transform: translateY(var(--popup-shift,-4px)) scale(.985); }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown)[class*='-leave-active'] { opacity: 0; transform: translateY(var(--popup-shift,-4px)) scale(.985); transition-duration: var(--motion-exit); transition-timing-function: var(--ease-exit); }
+.jj-hint.ant-tooltip:is([class*='-enter'],[class*='-appear']) { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
+.jj-hint.ant-tooltip[class*='-leave'] { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
+[role=menuitem]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.jj-dialog { width: min(480px,calc(100% - 32px)); animation: jj-dialog-enter var(--motion-dialog) var(--ease-enter) both; }
+.jj-dialog::backdrop { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
+.jj-dialog[data-closing=true] { animation: jj-dialog-exit var(--motion-exit) var(--ease-exit) both; pointer-events: none; }
+.jj-dialog[data-closing=true]::backdrop { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
+:is(.jj-material-detail, .jj-proof-detail, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-rule-submission, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-inspector-content .jj-step-reading { animation-name: jj-reader-enter; }
+.jj-notice:not([role=alert]) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; }
+.jj-report-layout { transition: grid-template-columns var(--motion-panel) var(--ease-layout), gap var(--motion-panel) var(--ease-layout); }
+.jj-inspector-slot { transition: opacity var(--motion-content) var(--ease-enter), transform var(--motion-panel) var(--ease-enter); }
+.jj-working-dot { animation: jj-working 1000ms ease-in-out infinite alternate; }
+progress::-webkit-progress-value { transition: width var(--motion-content) var(--ease-layout); }
+::view-transition { pointer-events: none; }
+::view-transition-old(root) { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; mix-blend-mode: normal; }
+::view-transition-new(root) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; mix-blend-mode: normal; }
+@supports(interpolate-size:allow-keywords) {
+  details::details-content { transition: height var(--motion-panel) var(--ease-layout), opacity var(--motion-content) var(--ease-enter), content-visibility var(--motion-panel) allow-discrete; }
+}
+@keyframes jj-fade-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes jj-fade-exit { to { opacity: 0; } }
+@keyframes jj-dialog-enter { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes jj-dialog-exit { to { opacity: 0; transform: translateY(6px) scale(.99); } }
+@keyframes jj-content-enter { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes jj-reader-enter { from { transform: translateY(4px); } to { transform: none; } }
+@keyframes jj-working { to { opacity: .45; } }
+@media(prefers-reduced-motion:reduce) {
+  *, *::before, *::after, *::backdrop, *::details-content { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  progress::-webkit-progress-value { transition: none !important; }
+}
+:root { view-transition-name:none; --page-offset:10px; }
+:root[data-page-direction=back] { --page-offset:-10px; }
+.jj-page { view-transition-name:jj-workspace; }
+:root[data-visual-transition=theme] { view-transition-name:root; }
+:root[data-visual-transition=theme] .jj-page { view-transition-name:none; }
+::view-transition-group(jj-workspace) { animation-duration:var(--motion-page); animation-timing-function:var(--ease-layout); }
+::view-transition-old(jj-workspace) { animation:jj-workspace-out var(--motion-exit) var(--ease-exit) both; }
+::view-transition-new(jj-workspace) { animation:jj-workspace-in var(--motion-page) var(--ease-layout) both; }
+@keyframes jj-workspace-in { from { opacity:.35; transform:translateY(var(--page-offset)); } to { opacity:1; transform:none; } }
+@keyframes jj-workspace-out { to { opacity:0; transform:translateY(calc(var(--page-offset) * -.4)); } }

@@ -41,6 +41,12 @@
       "title": "Config Hash",
       "type": "string"
     },
+    "document_type": {
+      "const": "jiejian.check-publication",
+      "default": "jiejian.check-publication",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",

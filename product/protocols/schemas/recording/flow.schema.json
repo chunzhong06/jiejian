@@ -877,6 +877,12 @@
       "title": "Business Action Id",
       "type": "string"
     },
+    "document_type": {
+      "const": "jiejian.recorded-flow",
+      "default": "jiejian.recorded-flow",
+      "title": "Document Type",
+      "type": "string"
+    },
     "id": {
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Id",
@@ -888,11 +894,8 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "3",
-      "enum": [
-        "3",
-        "4"
-      ],
+      "const": "1",
+      "default": "1",
       "title": "Schema Version",
       "type": "string"
     },

@@ -1,0 +1,43 @@
+.jj-storage-workspace, .jj-storage-review, .jj-storage-result, .jj-example-archives { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; }
+.jj-storage-workspace > header, .jj-storage-review > header, .jj-example-archives > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 28px; background: var(--inset); border-bottom: 1px solid var(--line); }
+.jj-storage-workspace > header h2, .jj-storage-review > header h2 { margin-top: 4px; font-variant-numeric: tabular-nums; }
+.jj-storage-summary-row, .jj-storage-category-heading { display: grid; grid-template-columns: minmax(0,1fr) 64px 112px; align-items: center; gap: 24px; padding: 18px 28px; }
+.jj-storage-summary-row + .jj-storage-summary-row { border-top: 1px solid var(--line); }
+.jj-storage-summary-row > span, .jj-storage-category-heading > span, .jj-storage-category-heading > strong { text-align: right; font-variant-numeric: tabular-nums; }
+.jj-storage-summary-row > span { color: var(--muted); }
+.jj-storage-workspace > footer, .jj-storage-review > footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 18px; padding: 20px 28px; background: var(--inset); border-top: 1px solid var(--line); }
+.jj-storage-workspace > footer p, .jj-storage-review > footer p { max-width: 55ch; color: var(--muted); font-size: var(--text-meta); }
+.jj-storage-workspace > footer .jj-button, .jj-storage-review > footer .jj-inline-actions { margin-left: auto; }
+.jj-storage-category { border: 0; padding: 0; margin: 0; }
+.jj-storage-category + .jj-storage-category { border-top: 1px solid var(--line); }
+.jj-storage-category-heading .jj-checkbox { align-items: center; }
+.jj-storage-category-heading input { margin: 0; }
+.jj-storage-category > details { border: 0; padding: 0 28px 18px; }
+.jj-storage-selection { padding-top: 10px; }
+.jj-storage-selection > label { display: grid; grid-template-columns: 18px minmax(0,1fr) 100px; gap: 12px; align-items: start; padding: 14px 0; border-top: 1px solid var(--line); }
+.jj-storage-selection input { margin-top: 3px; }
+.jj-storage-selection small, .jj-storage-file small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.jj-storage-selection > label > span:last-child { text-align: right; font-size: var(--text-meta); color: var(--muted); }
+.jj-storage-kept { padding: 0 4px; }
+.jj-storage-file { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 18px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.jj-storage-file small { grid-column: 1/-1; }
+.jj-storage-file > span { font-size: var(--text-meta); color: var(--muted); }
+.jj-storage-result { padding: 24px 28px; }
+.jj-storage-result > header { display: flex; align-items: center; gap: 12px; }
+.jj-storage-result > header .anticon { font-size: var(--text-section); color: var(--good); }
+.jj-storage-result > p { margin: 12px 0 20px; }
+.jj-example-archives > header h2 { font-size: var(--text-body); }
+.jj-example-archives > article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; }
+.jj-example-archives > article + article { border-top: 1px solid var(--line); }
+.jj-example-archives time { display: block; margin-top: 5px; }
+@media(max-width:600px) {
+  .jj-storage-summary-row, .jj-storage-category-heading { grid-template-columns: minmax(0,1fr) 36px 84px; gap: 10px; padding: 18px; }
+  .jj-storage-workspace > header, .jj-storage-review > header, .jj-example-archives > header, .jj-storage-workspace > footer, .jj-storage-review > footer { padding: 20px; }
+  .jj-storage-review > header, .jj-example-archives > header { align-items: start; flex-direction: column; gap: 8px; }
+  .jj-storage-category > details { padding-inline: 18px; }
+  .jj-storage-selection > label { grid-template-columns: 18px minmax(0,1fr); }
+  .jj-storage-selection > label > span:last-child { grid-column: 2; text-align: left; }
+  .jj-storage-result { padding: 20px; }
+  .jj-example-archives > article { flex-wrap: wrap; padding: 18px 20px; }
+  .jj-example-archives .jj-button { margin-left: auto; }
+}

@@ -12,6 +12,12 @@
       "title": "Completed Cases",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.runner-progress",
+      "default": "jiejian.runner-progress",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",

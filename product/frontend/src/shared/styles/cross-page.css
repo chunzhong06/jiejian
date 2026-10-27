@@ -1,0 +1,2 @@
+.jj-tool-configure > .jj-field { flex: 1; min-width: 150px; }
+@media(max-width:1150px) { .jj-tools-access > .jj-field { margin-top: 24px; } }

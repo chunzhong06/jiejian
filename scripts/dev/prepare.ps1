@@ -96,7 +96,7 @@ function Prepare-Chromium {
             foreach ($name in @("TEMP", "TMP")) {
                 $record = $temporaryEnvironment[$name]
                 if ($record.exists) { [Environment]::SetEnvironmentVariable($name, [string]$record.value, "Process") }
-                else { [Environment]::SetEnvironmentVariable($name, $null, "Process") }
+                else { Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue }
             }
         }
         [Console]::Out.WriteLine("__JIEJIAN_BROWSER_PHASE__:verify")
@@ -113,7 +113,7 @@ function Prepare-Database {
         $script:Python,
         "-B",
         "-c",
-        "import sys; from pathlib import Path; from product.backend.infra.storage import default_database_path, upgrade_database; upgrade_database(default_database_path(Path(sys.argv[1])))",
+        "import sys; from pathlib import Path; from product.backend.infrastructure.storage import default_database_path, prepare_database; prepare_database(default_database_path(Path(sys.argv[1])))",
         $script:VarDir
     )
     Write-PrepareStatus "database" "done"
@@ -141,7 +141,7 @@ function Write-SourceReceipt {
         [IO.File]::Move($temporary, $receiptPath)
     } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
     # prepare lock 仍持有；登记完成之前不能让清理器看见未受保护的新环境。
-    Invoke-External "source-assets" @($script:Python, "-B", "-c", "import sys; from pathlib import Path; from product.backend.infra.runtime.maintenance_assets import register_startup_assets; register_startup_assets(Path(sys.argv[1]), Path(sys.argv[2]))", $script:VarDir, $script:DevelopmentRoot)
+    Invoke-External "source-assets" @($script:Python, "-B", "-c", "import sys; from pathlib import Path; from product.backend.infrastructure.maintenance.inventory import register_startup_assets; register_startup_assets(Path(sys.argv[1]), Path(sys.argv[2]))", $script:VarDir, $script:DevelopmentRoot)
     Write-Host ("源码运行环境回执：{0}" -f $receiptPath) -ForegroundColor Green
 }
 

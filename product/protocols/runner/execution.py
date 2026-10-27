@@ -21,8 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN
-from product.protocols.observer import ObservationPhase, ObserverType
+from product.backend.domain.identifiers import PROJECT_ID_PATTERN
+from product.protocols.observer.config import ObservationPhase, ObserverType
 
 
 class ProtocolModel(BaseModel):

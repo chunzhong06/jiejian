@@ -51,6 +51,12 @@
       "title": "Created At Us",
       "type": "integer"
     },
+    "document_type": {
+      "const": "jiejian.runner-input",
+      "default": "jiejian.runner-input",
+      "title": "Document Type",
+      "type": "string"
+    },
     "fencing_token": {
       "minimum": 1,
       "title": "Fencing Token",
