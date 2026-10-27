@@ -7,10 +7,10 @@
   },
   "packageManager": "pnpm@11.21.0",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "dev": "vite --config tooling/vite.config.ts",
+    "build": "tsc -b && vite build --config tooling/vite.config.ts",
+    "test": "vitest run --config tooling/vite.config.ts",
+    "test:watch": "vitest --config tooling/vite.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",

@@ -11,7 +11,7 @@ $script:StartupPanelClock = $null
 $script:StartupPanelReadySeconds = $null
 $script:StartupPanelVersion = ""
 $script:StartupPanelArtRows = 0
-$startupBrand = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../product/launcher/windows/brand.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$startupBrand = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../product/launcher/windows/brand.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $script:StartupPanelArt = @($startupBrand.art)
 # 与网页的蓝紫强调色同源表达；文字按层级降亮度，错误仍保留语义色。
 $script:StartupPanelPalette = @{ Accent = "186;196;249"; Muted = "166;173;192"; Danger = "237;163;169" }

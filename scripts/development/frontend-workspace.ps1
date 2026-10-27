@@ -27,7 +27,7 @@ function Get-FrontendSourceInputs {
 
 function Get-FrontendDependencyDigest($Toolchain) {
     $lines = New-Object System.Collections.Generic.List[string]
-    foreach ($relative in @("package.json", "pnpm-lock.yaml")) {
+    foreach ($relative in @("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml")) {
         $path = Join-Path $script:ProjectRoot ("product\frontend\{0}" -f $relative)
         $null = $lines.Add(("{0}|{1}" -f $relative, (Get-FileDigest $path)))
     }
@@ -35,7 +35,7 @@ function Get-FrontendDependencyDigest($Toolchain) {
     $editorPrefix = $editorPlugin.TrimEnd("\") + "\"
     foreach ($file in Get-ChildItem -LiteralPath $editorPlugin -File -Recurse | Sort-Object FullName) {
         $relative = $file.FullName.Substring($editorPrefix.Length).Replace("\", "/")
-        $null = $lines.Add(("../editor/{0}|{1}" -f $relative, (Get-FileDigest $file.FullName)))
+        $null = $lines.Add(("tooling/editor-resolver/{0}|{1}" -f $relative, (Get-FileDigest $file.FullName)))
     }
     $null = $lines.Add(("node|{0}" -f [string]$Toolchain.node.build_version))
     $null = $lines.Add(("pnpm|{0}" -f [string]$Toolchain.pnpm.version))
@@ -93,4 +93,22 @@ function Prepare-FrontendWorkspace($Toolchain, $Inputs, [string]$DependencyDiges
         [IO.File]::WriteAllText((Join-Path $workspace ".invalid"), "frontend-workspace", $script:Utf8NoBom)
         throw
     } finally { Pop-Location }
+}
+
+function Get-FrontendEditorPluginRoot { return Join-Path $script:ProjectRoot "product\frontend\tooling\editor-resolver" }
+
+function Get-FrontendEditorPluginTarget([string]$Workspace) { return Join-Path $Workspace "node_modules\jiejian-controlled-workspace-resolver" }
+
+function Test-FrontendEditorPluginInstalled([string]$Workspace) {
+    $target = Get-FrontendEditorPluginTarget $Workspace
+    return (Test-Path -LiteralPath (Join-Path $target "package.json") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $target "index.cjs") -PathType Leaf)
+}
+
+function Install-FrontendEditorPlugin([string]$Workspace) {
+    $source = Get-FrontendEditorPluginRoot
+    $target = Get-FrontendEditorPluginTarget $Workspace
+    if (-not (Test-Path -LiteralPath (Join-Path $source "package.json") -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $source "index.cjs") -PathType Leaf)) { Fail-Development "frontend-editor" "编辑器解析插件源码不完整" "恢复 product/frontend/tooling/editor-resolver 后重试" }
+    Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
+    if (-not (Test-FrontendEditorPluginInstalled $Workspace)) { Fail-Development "frontend-editor" "编辑器解析插件未进入受控前端工作区" "删除 var/development/frontend/workspace 后重试" }
 }

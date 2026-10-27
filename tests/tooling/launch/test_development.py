@@ -16,7 +16,7 @@ ROOT = Path(__file__).parents[3]
 
 DEV = ROOT / "scripts" / "dev.ps1"
 
-MODULE_ROOT = ROOT / "scripts" / "dev"
+MODULE_ROOT = ROOT / "scripts" / "development"
 
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell") or r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
@@ -46,7 +46,7 @@ def test_python_sync_digest_tracks_editable_package_topology(tmp_path, powershel
     for relative in ['product/backend/__init__.py','product/protocols/__init__.py','pyproject.toml','uv.lock']:
         path=tmp_path/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('original',encoding='utf-8')
     package=tmp_path/'product/backend/new_package/__init__.py'
-    command=(f". {_powershell_literal(ROOT/'scripts/lib/files.ps1')};. {_powershell_literal(MODULE_ROOT/'common.ps1')};. {_powershell_literal(MODULE_ROOT/'python.ps1')};"
+    command=(f". {_powershell_literal(ROOT/'scripts/development/files.ps1')};. {_powershell_literal(MODULE_ROOT/'context.ps1')};. {_powershell_literal(MODULE_ROOT/'python.ps1')};"
         f"$script:ProjectRoot={_powershell_literal(tmp_path)};$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);"
         "$before=Get-PathSetDigest @(Get-ProjectPackageTopologyInputs);$sync=Get-CombinedDigest @(Get-ProjectSyncInputs);"
         f"Set-Content -LiteralPath {_powershell_literal(tmp_path/'product/backend/__init__.py')} -Value 'changed';"
@@ -63,7 +63,7 @@ def test_python_sync_digest_tracks_editable_package_topology(tmp_path, powershel
 def test_missing_cache_reuses_healthy_minimal_conda_but_not_changed_contract(tmp_path: Path) -> None:
     # 清空 var 不应触发外部环境更新；未来增加依赖或明确 bootstrap 仍须更新。
     definition = tmp_path / "environment.yml"
-    baseline = (ROOT / "environment.yml").read_text(encoding="utf-8")
+    baseline = (MODULE_ROOT / "environment.yml").read_text(encoding="utf-8")
     for content, mode, expected_updates in ((baseline, "auto", 0), (baseline + "  - pip\n", "auto", 1), (baseline, "force", 1)):
         definition.write_text(content, encoding="utf-8")
         command = (
@@ -90,7 +90,7 @@ def test_uv_archive_is_really_extracted_and_temporary_download_is_removed(tmp_pa
     archive=tmp_path/'local.zip'
     with zipfile.ZipFile(archive,'w') as bundle:bundle.writestr('bundle/uv.exe',b'local executable fixture')
     digest=hashlib.sha256(archive.read_bytes()).hexdigest()
-    command=(f". {_powershell_literal(ROOT/'scripts/lib/files.ps1')};. {_powershell_literal(MODULE_ROOT/'common.ps1')};. {_powershell_literal(MODULE_ROOT/'python.ps1')};"
+    command=(f". {_powershell_literal(ROOT/'scripts/development/files.ps1')};. {_powershell_literal(MODULE_ROOT/'context.ps1')};. {_powershell_literal(MODULE_ROOT/'python.ps1')};"
         f"$script:DevelopmentRoot={_powershell_literal(tmp_path/'development')};$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);"
         "function Register-StartupTemporary {};"
         f"function Invoke-WebRequest {{param($Uri,$OutFile,[switch]$UseBasicParsing) Microsoft.PowerShell.Management\\Copy-Item -LiteralPath {_powershell_literal(archive)} -Destination $OutFile}};"
@@ -120,7 +120,7 @@ def test_docs_uses_existing_python_without_full_prepare_or_uv(tmp_path, powershe
 
 
 def _run_environment_restore_probe(*, raise_after_mutation: bool) -> dict[str, object]:
-    common = ROOT / "scripts/lib/session.ps1"
+    common = ROOT / "scripts/development/session.ps1"
     sentinels = {
         "PATH": "sentinel-path",
         "PYTHONPATH": "sentinel-python",
@@ -216,12 +216,34 @@ def test_external_command_wrapper_preserves_arguments(tmp_path, powershell_recor
     import sys
     probe=tmp_path/'one argument.py';probe.write_text('import json,sys;print(json.dumps({"args":sys.argv[1:]}))',encoding='utf-8')
     values=','.join(_powershell_literal(value) for value in [sys.executable,str(probe),*arguments])
-    command=f". {_powershell_literal(MODULE_ROOT/'common.ps1')};Invoke-External 'probe' @({values})"
+    command=f". {_powershell_literal(MODULE_ROOT/'context.ps1')};Invoke-External 'probe' @({values})"
     assert powershell_record(command)=={'args':arguments}
 
 
+def test_frontend_workspace_scope_invalidates_dependency_identity(tmp_path, powershell_record):
+    frontend = tmp_path/'product/frontend'
+    plugin = frontend/'tooling/editor-resolver'
+    plugin.mkdir(parents=True)
+    for name in ('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'):
+        (frontend/name).write_text('{}', encoding='utf-8')
+    (plugin/'package.json').write_text('{}', encoding='utf-8')
+    (plugin/'index.cjs').write_text('module.exports={}', encoding='utf-8')
+    command = (
+        f". {_powershell_literal(MODULE_ROOT/'files.ps1')};"
+        f". {_powershell_literal(MODULE_ROOT/'frontend-workspace.ps1')};"
+        f"$script:ProjectRoot={_powershell_literal(tmp_path)};"
+        "$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);"
+        "$tools=[pscustomobject]@{node=[pscustomobject]@{build_version='24'};pnpm=[pscustomobject]@{version='11'}};"
+        "$first=Get-FrontendDependencyDigest $tools;"
+        f"[IO.File]::WriteAllText({_powershell_literal(frontend/'pnpm-workspace.yaml')},\"packages:`n  - .`n\");"
+        "$second=Get-FrontendDependencyDigest $tools;"
+        "[pscustomobject]@{changed=$first -ne $second}|ConvertTo-Json -Compress"
+    )
+    assert powershell_record(command)['changed'] is True
+
+
 def test_development_powershell_modules_parse_and_keep_utf8_bom() -> None:
-    files = (DEV, *sorted(MODULE_ROOT.glob("*.ps1")), *sorted((ROOT/"scripts/lib").glob("*.ps1")), ROOT/"scripts/editor/workspace.ps1")
+    files = (DEV, ROOT/"scripts/start.ps1", *sorted(MODULE_ROOT.rglob("*.ps1")))
     for path in files:
         literal = str(path).replace("'", "''")
         command = "$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseFile('{0}',[ref]$tokens,[ref]$errors)|Out-Null;if($errors.Count -gt 0){{exit 1}}".format(literal)

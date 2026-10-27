@@ -19,7 +19,7 @@ START = ROOT / "scripts" / "start.ps1"
 
 START_CMD = ROOT / "start.cmd"
 
-STARTUP = ROOT / "scripts" / "startup"
+STARTUP = ROOT / "scripts" / "development" / "startup"
 
 SOURCE = STARTUP / "source.ps1"
 
@@ -27,7 +27,7 @@ RUNTIME = STARTUP / "runtime.ps1"
 
 PRESENTATION = STARTUP / "presentation.ps1"
 
-PREPARE = ROOT / "scripts" / "dev" / "prepare.ps1"
+PREPARE = ROOT / "scripts" / "development" / "prepare.ps1"
 
 POWERSHELL = shutil.which("powershell") or r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 

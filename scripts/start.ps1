@@ -18,16 +18,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "lib/session.ps1")
+. (Join-Path $PSScriptRoot "development/session.ps1")
 Save-CallerEnvironment
 try {
-    . (Join-Path $PSScriptRoot "startup/context.ps1")
+    . (Join-Path $PSScriptRoot "development/startup/context.ps1")
     Initialize-StartupContext (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path $VarDir $Mode
     $OutputEncoding = [Console]::OutputEncoding
 
     # 上下文变量初始化后再加载职责模块；源码准备由 dev.ps1 独占准备锁并返回可信回执。
     foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.ps1")) {
-        . (Join-Path $PSScriptRoot "startup\$module")
+        . (Join-Path $PSScriptRoot "development/startup\$module")
     }
 
     if ($DisplaySpinnerProcess) {

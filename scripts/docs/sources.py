@@ -16,7 +16,7 @@ def literal(node):
 
 def modules(root):
     result=[]
-    for folder in ('product/backend','product/frontend/src','product/protocols','product/launcher','scripts'):
+    for folder in ('product/backend','product/frontend/src','product/frontend/tooling','product/protocols','product/launcher','scripts'):
         for path in sorted((root/folder).rglob('*')):
             if not path.is_file() or path.suffix not in SUFFIXES or set(path.parts)&IGNORED:continue
             if '.test.' in path.name or '.fixtures.' in path.name or 'testing' in path.parts:continue

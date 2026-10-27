@@ -14,22 +14,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "lib/session.ps1")
-. (Join-Path $PSScriptRoot "lib/files.ps1")
-. (Join-Path $PSScriptRoot "dev/context.ps1")
+. (Join-Path $PSScriptRoot "development/session.ps1")
+. (Join-Path $PSScriptRoot "development/files.ps1")
+. (Join-Path $PSScriptRoot "development/context.ps1")
 Initialize-DevelopmentContext (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path $VarDir
 
 # 入口统一装配工程模块；共用库不依赖任务调度或产品业务。
-. (Join-Path $PSScriptRoot "dev\common.ps1")
-. (Join-Path $PSScriptRoot "dev\python.ps1")
-. (Join-Path $PSScriptRoot "dev/node.ps1")
-. (Join-Path $PSScriptRoot "editor/workspace.ps1")
-. (Join-Path $PSScriptRoot "dev/frontend-workspace.ps1")
-. (Join-Path $PSScriptRoot "dev/frontend.ps1")
-. (Join-Path $PSScriptRoot "dev\prepare.ps1")
-. (Join-Path $PSScriptRoot "dev\package.ps1")
-. (Join-Path $PSScriptRoot "dev\sample-test.ps1")
-. (Join-Path $PSScriptRoot "dev\commands.ps1")
+. (Join-Path $PSScriptRoot "development\python.ps1")
+. (Join-Path $PSScriptRoot "development/node.ps1")
+. (Join-Path $PSScriptRoot "development/frontend-workspace.ps1")
+. (Join-Path $PSScriptRoot "development/frontend.ps1")
+. (Join-Path $PSScriptRoot "development\prepare.ps1")
+. (Join-Path $PSScriptRoot "development\package.ps1")
+. (Join-Path $PSScriptRoot "development\commands.ps1")
 
 function Test-CommandContract {
     if ($Update -and $Command -notin @("schema", "docs")) {

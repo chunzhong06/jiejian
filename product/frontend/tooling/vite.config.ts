@@ -14,7 +14,7 @@ function frontendBuildId() {
       return entry.isDirectory() ? collect(path) : [path]
     })
   }
-  for (const path of [...collect('src'), 'index.html', 'package.json', 'pnpm-lock.yaml', 'vite.config.ts'].sort()) {
+  for (const path of [...collect('src'), 'index.html', 'package.json', 'pnpm-lock.yaml', 'tooling/vite.config.ts'].sort()) {
     hash.update(path.replaceAll('\\','/')+'\0'); hash.update(readFileSync(path)); hash.update('\0')
   }
   return hash.digest('hex')
@@ -38,5 +38,5 @@ export default defineConfig({
   cacheDir: process.env.JIEJIAN_FRONTEND_CACHE_DIR || '.vite',
   server: { port: 5173, strictPort: true },
   // 限制同时创建的 jsdom，避免整组并发挤占事件循环而让局部交互断言超时。
-  test: { environment: 'jsdom', setupFiles: './vitest.setup.ts', include:['src/**/*.test.{ts,tsx}'], maxWorkers: 4 },
+  test: { environment: 'jsdom', setupFiles: './tooling/vitest.setup.ts', include:['src/**/*.test.{ts,tsx}'], maxWorkers: 4 },
 })
