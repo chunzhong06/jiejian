@@ -166,6 +166,7 @@ class ProofPreparationService:
                 **self._source_view(work, source, facts.basis_id, facts.runtime))
 
     def _operation(self, project_id, kind, command, execute):
+        # 回执与实际修改共用事务；响应丢失后复用原标识，同标识的另一份输入必须拒绝。
         fingerprint = proof_fingerprint(command)
         with self._uow() as work:
             work.acquire_write_lock()
@@ -346,6 +347,7 @@ class ProofPreparationService:
                 state=job.state.value, report=None if report is None else report.model_dump(mode='json'))
 
     def _adoptable(self, work, project_id, source, preflight_id, facts):
+        # USABLE 不是永久许可：来源修订、准备依据、运行实例、审计契约和读取范围都须仍匹配。
         request, job, report = self.jobs.read(work,project_id,preflight_id)
         if (request.schema_version != '1' or (report is not None and report.schema_version != '1')
                 or request.source_id != source.source_id or request.source_revision != source.revision
@@ -359,6 +361,7 @@ class ProofPreparationService:
         return request
 
     def adoption_preview(self, project_id, source_id, preflight_id):
+        # 这里只解释将替换的材料；adopt 在写事务内重新核验，预览结果不能直接充当采用凭据。
         with self._uow() as work:
             facts = self._facts(work,project_id)
             source = work.proof_sources.source(project_id,source_id)
@@ -377,6 +380,7 @@ class ProofPreparationService:
                 gui_url=f'#/tests?materials=1&proof_sources=1&project_id={project_id}&source={source_id}&action_id={action.action_id}')
 
     def adopt(self, project_id, command):
+        # 采用的是已独立预检查的精确来源，不修改业务权限；绑定与采用记录随操作回执一起保存。
         def execute(work):
             from product.backend.domain.preparation.bindings import ActionEvidenceBinding,ActionEvidenceKind,RegisteredObserverReference,seal_binding
             from product.backend.application.preparation.bindings.sources import binding_source_fields

@@ -9,7 +9,8 @@ import pytest
 from product.backend.infrastructure.recording.browser import BrowserRecordingAdapter
 from product.backend.infrastructure.recording.transport import BoundedRouteTransport
 from product.protocols.recording.events import RecordingEventKind, RecordingRunnerResultType, canonical_recording_json_bytes
-from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, TEST_IDENTITY_ID, recording_request
+from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, recording_request
+from tests.support.builders.preparation.recording_facts import TEST_IDENTITY_ID
 
 PAYLOAD = b"PK\x03\x04private-test-file-body\x00\xff"
 

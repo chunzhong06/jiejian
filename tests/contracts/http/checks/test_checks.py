@@ -6,14 +6,14 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient as RawTestClient
 
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
 from tests.support.builders.control_plane import create_app, TestClient, TEST_CONTROL_ORIGIN
 
 
 @pytest.fixture
 def check_api(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     with TestClient(app) as client:
         yield app, harness, client

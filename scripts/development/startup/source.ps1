@@ -1,15 +1,6 @@
-﻿# =============================================================================
-# 源码仓库运行环境接入
-#
-# 定位
-#   start.cmd 与 scripts/dev.ps1 生成的受控源码运行回执之间的信任边界
-#
-# 职责
-#   触发 Conda/uv/editable 源码准备｜校验回执绝对路径｜恢复主进程与子进程环境
-#
-# 边界
-#   不安装 Wheel，不从源码目录读取运行产物；开发工具复用 var/development，前端副本只来自本轮 VarDir。
-# =============================================================================
+﻿# 源码仓库运行环境接入
+# 触发 Conda/uv/editable 源码准备、校验回执绝对路径、恢复主进程与子进程环境
+# 不安装 Wheel，不从源码目录读取运行产物；开发工具复用 var/development，前端副本只来自本轮 VarDir。
 
 function Get-SourceReceiptPath {
     return [IO.Path]::GetFullPath((Join-Path $script:VarDir "runtime\source\receipt.json"))

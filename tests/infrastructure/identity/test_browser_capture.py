@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.secrets import MemorySecrets
 import pytest
 
 from product.backend.infrastructure.identity.browser import IdentityPreparationBrowserAdapter
@@ -38,29 +39,12 @@ class FakeContext:
         return list(self._cookies)
 
 
-class FakeSecretStore:
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        self.values[secret_ref] = secret
-
-    def read(self, secret_ref: str) -> str | None:
-        return self.values.get(secret_ref)
-
-    def delete(self, secret_ref: str) -> None:
-        self.values.pop(secret_ref, None)
-
-    def configured(self, secret_ref: str | None) -> bool:
-        return secret_ref in self.values
-
-
-class FailingSecretStore(FakeSecretStore):
+class FailingSecretStore(MemorySecrets):
     def write(self, secret_ref: str, secret: str) -> None:
         raise OSError(1312, "credential store unavailable")
 
 
-class PartiallyFailingSecretStore(FakeSecretStore):
+class PartiallyFailingSecretStore(MemorySecrets):
     def write(self, secret_ref: str, secret: str) -> None:
         if self.values:
             raise OSError(5, "second credential write failed")
@@ -81,7 +65,7 @@ def test_capture_keeps_only_current_target_cookie_and_writes_plan_first() -> Non
             allow_private_network=True,
         ),
     )
-    store = FakeSecretStore()
+    store = MemorySecrets()
     planned: list[tuple[str, ...]] = []
 
     result = IdentityPreparationBrowserAdapter()._capture_login_state(
@@ -165,7 +149,7 @@ def test_capture_validates_all_cookies_before_writing_any_secret() -> None:
             },
         ]
     )
-    store = FakeSecretStore()
+    store = MemorySecrets()
     plans: list[tuple[str, ...]] = []
 
     result = IdentityPreparationBrowserAdapter()._capture_login_state(
@@ -222,7 +206,7 @@ def test_capture_compensates_partial_write_and_rejects_mixed_auth_state() -> Non
         request,
         FakeContext(cookies[:1]),  # type: ignore[arg-type]
         {"bearer-secret"},
-        FakeSecretStore(),
+        MemorySecrets(),
         prepared_at_us=12,
         before_secret_write=lambda _refs: None,
     )

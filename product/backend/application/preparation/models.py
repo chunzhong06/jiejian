@@ -70,6 +70,21 @@ class PreparationView(BoundaryModel):
     actions: tuple[ActionPreparationView, ...]
     preparation_complete: bool
     recommended_action_id: str | None = None
+    basis_fingerprint: str | None = None
+    policy_epoch: int = 0
+    source_fingerprint: str | None = None
+    impacts: tuple['MaterialImpactView', ...] = ()
+
+
+class MaterialImpactView(BoundaryModel):
+    action_id: str
+    action_label: str
+    kind: Literal['identity','execution','resource','evidence','recovery']
+    status: PreparationStatus
+    reason_codes: tuple[str, ...]
+    permission_ids: tuple[str, ...]
+    member_id: str | None = None
+    member_label: str = ''
 
 
 __all__ = [

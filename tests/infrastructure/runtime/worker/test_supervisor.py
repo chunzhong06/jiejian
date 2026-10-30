@@ -18,7 +18,7 @@ from product.backend.infrastructure.runtime.jobs.attempts import JobAttempts
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, RequestCancellation, WaitingFatalFailure
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
 from product.backend.infrastructure.runtime.jobs.models import SubmitJob
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from tests.support.builders.checks.check_execution import execution_pair
 from product.backend.domain.lifecycle import ProjectStatus
 from product.backend.infrastructure.storage.applications.projects import ProjectRecord

@@ -8,12 +8,13 @@ from unittest.mock import Mock
 
 from sqlalchemy import event
 
-from tests.support.builders.preparation.action_preparation import MemorySecretStore, build_preparation_harness
+from tests.support.builders.preparation.action_preparation import build_preparation_harness
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import TestClient, create_app
 
 
 def test_preparation_get_matches_source_without_writes_or_external_calls(tmp_path, monkeypatch):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     h = build_preparation_harness(tmp_path, core=core)
     expected = core.preparation.get(h.project_id).model_dump(mode="json")

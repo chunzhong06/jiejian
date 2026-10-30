@@ -11,13 +11,14 @@ from product.protocols.recording.events import RecordingEventKind, RecordingRunn
 from product.backend.application.recording.submission import SubmitRecording
 from product.backend.infrastructure.recording.control import control_paths_for_attempt, write_control_marker
 from product.backend.infrastructure.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
-from product.backend.infrastructure.runtime.jobs.target_handlers.recording import RecordingJobHandler
+from product.backend.infrastructure.runtime.jobs.recording import RecordingJobHandler
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
 from product.backend.infrastructure.artifacts.run_packages import attempt_paths_for
 from product.backend.application.recording.lifecycle import RecordingLifecycle
-from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, browser_server, recording_request, RecordingContext as _Context, runner_request as _request
+from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, browser_server, recording_request, RecordingContext as _Context
+from tests.support.builders.preparation.recording_facts import runner_request as _request
 pytestmark = [pytest.mark.level4, pytest.mark.database]
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "recording-project"

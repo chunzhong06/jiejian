@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试身份准备子进程入口
-#
-# 定位
-#   受控 Python 子进程协议、headed browser 与 Windows SecretStore 的组合边界。
-#
-# 职责
-#   读取唯一请求｜等待显式保存/取消控制｜写入非秘密结果和可恢复引用日志。
-#
-# 边界
-#   stdout 只承载结果协议；stderr 只输出稳定代码；密码、Cookie/Token 正文不落盘。
-#
-# 调用链
-#   IdentityPreparationManager → process bootstrap → browser adapter → result
-# =============================================================================
+# 读取唯一请求、等待显式保存/取消控制、写入非秘密结果和可恢复引用日志。
+# stdout 只承载结果协议；stderr 只输出稳定代码；密码、Cookie/Token 正文不落盘。
 
 from __future__ import annotations
 

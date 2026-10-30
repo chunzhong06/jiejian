@@ -224,16 +224,29 @@ class DevelopmentService:
             policy_epoch=boundary.policy_epoch, permission_count=len(refs)), task, boundary
 
     def registration_preview(self, project_id):
-        """只读当前登记条件；不创建任务、不扫描源码、不确认 Agent 接收。"""
+        """只读扫描真实文件变化，供登记前核对；不新增任务、快照或权限事实。"""
         with self._uow() as work:
-            return self._registration_state(work, project_id)[0]
+            preview, task, _ = self._registration_state(work, project_id)
+            deliveries = () if task is None else work.development.deliveries(project_id, task.task_id, limit=1)
+            understanding = work.application_understanding.get(project_id)
+            baseline = work.source_changes.snapshot(deliveries[0].current_snapshot_id) if deliveries else work.source_changes.snapshot_for_fingerprint(project_id, understanding.source_fingerprint)
+        if baseline is None:
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, '修改比较起点缺失')
+        _, analysis = self._understanding.scan_source(project_id, revision=understanding.revision)
+        before = {item.relative_path: item.content_sha256 for item in baseline.files}
+        after = {item.relative_path: item.content_sha256 for item in analysis.files}
+        files = [dict(path=path, status='ADDED' if path not in before else 'REMOVED' if path not in after else 'MODIFIED')
+            for path in sorted(before.keys() | after.keys()) if before.get(path) != after.get(path)]
+        return preview | dict(source_fingerprint=analysis.source_fingerprint, files=files)
 
-    def register_change(self, project_id, *, operation_id, expected_registration_fingerprint,
+    def register_change(self, project_id, *, operation_id, expected_registration_fingerprint, expected_source_fingerprint=None,
                         reason="本地源码修改", claimed_paths=(), submitted_by="LOCAL_GUI", repair_reference=None, rule_targets=()):
         """凭稳定操作键登记一次修改；最小关联与变化一起提交，失败不留下半个任务。"""
         payload = dict(mode="LIGHTWEIGHT_REGISTRATION", expected_registration_fingerprint=expected_registration_fingerprint,
             reason=reason, claimed_paths=list(claimed_paths), submitted_by=submitted_by,
             repair_reference=None if repair_reference is None else repair_reference.model_dump(mode="json"))
+        if expected_source_fingerprint is not None:
+            payload['expected_source_fingerprint'] = expected_source_fingerprint
         if rule_targets:
             payload['rule_targets'] = [item.model_dump(mode='json') for item in rule_targets]
         fingerprint = operation_fingerprint(project_id, "DELIVER", operation_id, payload)
@@ -245,6 +258,8 @@ class DevelopmentService:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "登记范围已变化，请重新核对")
         prepared = self._changes.prepare_change(project_id, reason=reason, claimed_paths=claimed_paths,
             repair_reference=repair_reference, submitted_by=submitted_by, rule_targets=rule_targets)
+        if expected_source_fingerprint is not None and prepared.analysis.source_fingerprint != expected_source_fingerprint:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '预览后源码已有变化，请重新核对文件')
         with self._uow() as work:
             work.acquire_write_lock()
             replay = self._replay(work, project_id, "DELIVER", operation_id, fingerprint)

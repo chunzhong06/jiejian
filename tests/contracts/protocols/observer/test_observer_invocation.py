@@ -1,16 +1,10 @@
 # 验证 Observer invocation 的关联、游标与窗口 canonical 边界。
 
 from __future__ import annotations
-import hashlib
-import json
-from pathlib import Path
 import pytest
-from product.protocols.observer.config import CausalityStatus, ObservationCompleteness, ObservationPhase, ObserverBudget, ObserverOutcomeStatus, ObserverSpec, ObserverTarget, ObserverType, AuditLogScanBudget, OwnerApiLocator, ProvenanceType, SqliteQueryLocator, StructuredAuditLogLocator, AzureBlobObjectLocator, AzureQueuePeekLocator, BlobObjectScanBudget, QueuePeekBudget
-from product.protocols.observer.invocation import Correlation, ObservationWindow, ObserverInvocation, AuditLogObserverInvocation, AuditLogStartCursor, AsyncTaskObserverInvocation
-from product.protocols.observer.result import NormalizedState, ObservationEnvelope, ObservationProvenance, ObserverOutcome, build_normalized_state, evaluate_observer_outcome
-from product.protocols.observer.codec import canonical_json_bytes, observer_canonical_sha256, parse_observer_json
-from product.backend.infrastructure.observers.adapters.owner_api import OwnerApiObserverAdapter
-from product.backend.domain.redaction import redact_known_secrets
+from product.protocols.observer.config import ObservationPhase, ObserverBudget, ObserverSpec, ObserverTarget, ObserverType, AuditLogScanBudget, OwnerApiLocator, SqliteQueryLocator, StructuredAuditLogLocator
+from product.protocols.observer.invocation import Correlation, ObserverInvocation, AuditLogObserverInvocation, AuditLogStartCursor
+from product.protocols.observer.codec import canonical_json_bytes, observer_canonical_sha256
 pytestmark = pytest.mark.level2
 
 def test_observer_spec_and_invocation_canonical_sentinels_remain_unchanged() -> None:

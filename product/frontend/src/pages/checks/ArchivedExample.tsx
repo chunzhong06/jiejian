@@ -13,8 +13,8 @@ export function ArchivedExample({ route, onError }: {
 }) {
     const id = route.query.get('project_id') ?? '';
     const state = useRead('archived-example:' + id, async (signal) => { if (!id)
-        throw new Error('未指定归档示例。'); const value = (await projectsApi.archivedProjects(signal)).find(item => item.project_id === id); if (!value || !value.official_sample || value.status !== 'ARCHIVED')
-        throw new Error('指定项目不属于已归档示例。'); assertProject(value.project_id, id); return value; });
+        throw new Error('未指定归档项目。'); const value = (await projectsApi.archivedProjects(signal)).find(item => item.project_id === id); if (!value || value.status !== 'ARCHIVED')
+        throw new Error('指定项目不属于已归档项目。'); assertProject(value.project_id, id); return value; });
     if (state.loading)
         return <PageSkeleton view="/archive"/>;
     if (!state.data || state.error)

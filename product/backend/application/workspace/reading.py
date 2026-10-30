@@ -15,7 +15,7 @@ from product.backend.domain.recording.models import RecordingPurpose, RecordingS
 from product.backend.application.recording.source import require_persisted_recording_source
 from product.backend.application.preparation.models import PreparationStatus
 from product.backend.application.workspace.models import WorkspaceLatestResult, WorkspaceSourceChange
-from product.backend.application.checks.reading.story_text import JUDGEMENTS
+from product.backend.application.checks.reading.story import JUDGEMENTS
 
 
 @dataclass(frozen=True, slots=True)

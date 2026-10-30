@@ -14,7 +14,8 @@ from product.backend.infrastructure.recording.browser import BrowserRecordingAda
 
 pytestmark = [pytest.mark.level4, pytest.mark.browser, pytest.mark.slow]
 
-from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, TEST_IDENTITY_ID, browser_server, recording_request
+from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, browser_server, recording_request
+from tests.support.builders.preparation.recording_facts import TEST_IDENTITY_ID
 
 
 def test_preparation_request_finished_never_reads_response_or_body():

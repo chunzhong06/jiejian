@@ -15,7 +15,7 @@ from pydantic import Field
 
 from product.backend.domain.checks.plan import CheckPlanGap
 from product.backend.domain.checks.repair import CurrentRepairReference
-from product.backend.domain.changes.rules import RuleChangeTarget
+from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.changes.models import CurrentActionChangeImpact, CurrentChangeAssessment, CurrentChangeAssessmentPayload, CurrentChangeManifest, SourceChangeSet, build_current_change_set, change_impact_fingerprint, normalize_relative_source_path
 from product.protocols.checks.execution_request import ChangeContext, LogicalId, PermissionReference, WireModel, content_hash

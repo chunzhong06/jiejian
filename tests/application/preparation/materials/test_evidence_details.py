@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from product.backend.domain.preparation.bindings import ActionEvidenceKind
 from product.backend.application.preparation.bindings.service import PreparationBindingService
-from product.backend.application.preparation.materials.evidence_models import EffectMaterialSummary
+from product.backend.application.preparation.materials.evidence import EffectMaterialSummary
 from product.backend.application.preparation.models import EffectEvidencePreparationView, PreparationStatus
 from tests.support.builders.checks.assurance import action
 

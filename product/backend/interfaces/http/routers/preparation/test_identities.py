@@ -17,14 +17,24 @@ class TestIdentityCreateRequest(ApiModel):
     actor_id: str = Field(pattern=r"^bar_[0-9a-f]{32}$")
     actor_revision: int = Field(ge=1)
     label: str = Field(min_length=1, max_length=128)
+    operation_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
 
 
 class TestIdentityResetRequest(ApiModel):
     schema_version: Literal["1"]
 
 
+class TestIdentityLoginRequest(TestIdentityResetRequest):
+    operation_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+
+
 def build_test_identities_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
+
+    @router.get('/api/projects/{project_id}/identity-preparations', response_model=ApiResponse)
+    def preparations(project_id: str):
+        context.projects.get(project_id)
+        return data_response([item.model_dump(mode='json') for item in context.identity_preparations.list(project_id)])
 
     @router.get(
         "/api/projects/{project_id}/test-identities",
@@ -52,8 +62,24 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
             actor_id=body.actor_id,
             actor_revision=body.actor_revision,
             label=body.label,
+            operation_id=body.operation_id,
         )
         return data_response(created.model_dump(mode="json"), status_code=201)
+
+    @router.get('/api/projects/{project_id}/test-identity-requests/{operation_id}', response_model=ApiResponse)
+    def identity_request(project_id: str, operation_id: str):
+        value = context.test_identities.created(project_id, operation_id)
+        return data_response(None if value is None else value.model_dump(mode='json'))
+
+    @router.get('/api/test-identities/{identity_id}/preparations/latest', response_model=ApiResponse)
+    def latest_preparation(identity_id: str):
+        value = context.identity_preparations.latest(identity_id)
+        return data_response(None if value is None else value.model_dump(mode='json'))
+
+    @router.get('/api/test-identities/{identity_id}/preparation-requests/{operation_id}', response_model=ApiResponse)
+    def requested_preparation(identity_id: str, operation_id: str):
+        value = context.identity_preparations.requested(identity_id, operation_id)
+        return data_response(None if value is None else value.model_dump(mode='json'))
 
     @router.get(
         "/api/test-identities/{identity_id}",
@@ -86,8 +112,8 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
         return data_response({"deleted": True, "identity_id": identity_id})
 
     @router.post("/api/test-identities/{identity_id}/preparations", response_model=ApiResponse)
-    def start_preparation(identity_id: str, body: TestIdentityResetRequest):
-        return data_response(context.identity_preparations.start(identity_id).model_dump(mode="json"))
+    def start_preparation(identity_id: str, body: TestIdentityLoginRequest):
+        return data_response(context.identity_preparations.start(identity_id, operation_id=body.operation_id).model_dump(mode="json"))
 
     @router.get("/api/identity-preparations/{preparation_id}", response_model=ApiResponse)
     def get_preparation(preparation_id: str):
@@ -100,5 +126,9 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
     @router.post("/api/identity-preparations/{preparation_id}/cancel", response_model=ApiResponse)
     def cancel_preparation(preparation_id: str, body: TestIdentityResetRequest):
         return data_response(context.identity_preparations.cancel(preparation_id).model_dump(mode="json"))
+
+    @router.post('/api/identity-preparations/{preparation_id}/cleanup', response_model=ApiResponse)
+    def cleanup_preparation(preparation_id: str, body: TestIdentityResetRequest):
+        return data_response(context.identity_preparations.retry_cleanup(preparation_id).model_dump(mode='json'))
 
     return router

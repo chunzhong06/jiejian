@@ -1,16 +1,13 @@
-# =============================================================================
 # 测试账号应用服务
-#
-# 职责
-#   以稳定 BusinessActor revision 创建和读取账号，并安全保存、重置或删除受控登录状态。
-#
-# 边界
-#   不读取 Candidate/endpoint/source binding；API 视图不返回 secret_ref 或秘密正文。
-# =============================================================================
+# 以稳定 BusinessActor revision 创建和读取账号，并安全保存、重置或删除受控登录状态。
+# 不读取 Candidate/endpoint/source binding；API 视图不返回 secret_ref 或秘密正文。
 
 from __future__ import annotations
+from contextlib import nullcontext
 
 import time
+import hashlib
+import re
 from collections.abc import Callable
 from enum import StrEnum
 from uuid import uuid4
@@ -38,6 +35,7 @@ class _IdentityModel(BaseModel):
 
 
 class PreparedLoginState(_IdentityModel):
+    # 内部采用输入只携带 SecretStore 引用；页面使用不含引用的 TestIdentityView。
     auth_method: TestIdentityAuthMethod
     cookies: tuple[TestIdentityCookie, ...] = Field(default=(), max_length=32)
     bearer_secret_ref: str | None = Field(default=None, max_length=512)
@@ -82,13 +80,22 @@ class TestIdentityService:
         actor_id: str,
         actor_revision: int,
         label: str,
+        operation_id: str | None = None,
     ) -> TestIdentityView:
+        # 同一项目内，同一操作标识只允许同一角色修订和标签；同角色仍可有多个真实账号。
         clean_label = self._label(label)
+        identity_id = self._operation_identity(project_id, operation_id) if operation_id else f"tid_{uuid4().hex}"
         with self._uow_factory() as work:
+            work.acquire_write_lock()
             actor = self._active_actor(work, project_id, actor_id, actor_revision)
+            prior = work.test_identities.get(identity_id)
+            if prior is not None:
+                if (prior.project_id, prior.actor_id, prior.actor_revision, prior.label) != (project_id, actor_id, actor_revision, clean_label):
+                    raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "这个账号请求已用于其他内容")
+                return self._view(prior, actor)
             now_us = self._clock_us()
             record = TestIdentity(
-                identity_id=f"tid_{uuid4().hex}",
+                identity_id=identity_id,
                 project_id=project_id,
                 actor_id=actor_id,
                 actor_revision=actor_revision,
@@ -100,63 +107,91 @@ class TestIdentityService:
             work.commit()
         return self._view(record, actor)
 
-    def list(self, project_id: str) -> tuple[TestIdentityView, ...]:
+    @staticmethod
+    def _operation_identity(project_id: str, operation_id: str) -> str:
+        if re.fullmatch(r'[0-9a-f]{32}', operation_id) is None:
+            raise JiejianError(ErrorCode.INPUT_INVALID, '账号操作标识无效')
+        return 'tid_' + hashlib.sha256(f'{project_id}:{operation_id}'.encode()).hexdigest()[:32]
+
+    def created(self, project_id: str, operation_id: str) -> TestIdentityView | None:
         with self._uow_factory() as work:
+            record = work.test_identities.get(self._operation_identity(project_id, operation_id))
+            return None if record is None else self._view(record, self._actor_for_record(work, record))
+
+    def list(self, project_id: str, *, work=None) -> tuple[TestIdentityView, ...]:
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
             records = work.test_identities.list_for_project(project_id)
             actors = tuple(self._actor_for_record(work, record) for record in records)
         return tuple(self._view(record, actor) for record, actor in zip(records, actors, strict=True))
 
-    def get(self, identity_id: str) -> TestIdentityView:
+    def get(self, identity_id: str, *, work=None) -> TestIdentityView:
+        if work is not None:
+            record = work.test_identities.get(identity_id)
+            if record is None:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
+            return self._view(record, self._actor_for_record(work, record))
         record, actor = self._load(identity_id)
         return self._view(record, actor)
 
     def get_record(self, identity_id: str) -> TestIdentity:
+        # 供运行时凭据解析和清理使用；返回记录含受控引用，不应直接成为 HTTP 响应。
         record, _ = self._load(identity_id)
         return record
 
-    def save_prepared_state(self, identity_id: str, state: PreparedLoginState) -> TestIdentityView:
-        with self._uow_factory() as work:
-            current = work.test_identities.get(identity_id)
-            if current is None:
-                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "测试账号不存在")
-            actor = self._actor_for_record(work, current)
-            if current.auth_method is not None:
-                raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "测试账号已有登录状态，请先重置")
-            refs = tuple(cookie.value_secret_ref for cookie in state.cookies)
-            if state.bearer_secret_ref:
-                refs += (state.bearer_secret_ref,)
-            expected_prefix = f"cred:jiejian/test-identity/{current.project_id}/{identity_id}/"
-            if not refs or any(not ref.startswith(expected_prefix) for ref in refs):
-                raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "登录状态秘密引用与测试账号不匹配")
-            try:
-                missing = tuple(ref for ref in refs if not self._secret_store.configured(ref))
-            except (JiejianError, OSError, RuntimeError, ValueError):
-                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "无法确认测试账号登录状态") from None
-            if missing:
-                raise JiejianError(
-                    ErrorCode.TEST_IDENTITY_NOT_READY,
-                    "测试账号登录状态尚未完整写入安全存储",
-                    details={"missing_count": len(missing)},
-                )
-            prepared = TestIdentity(
-                **(
-                    current.model_dump()
-                    | {
-                        "auth_method": state.auth_method,
-                        "cookies": state.cookies,
-                        "bearer_secret_ref": state.bearer_secret_ref,
-                        "prepared_at_us": state.prepared_at_us,
-                        "refreshed_at_us": state.prepared_at_us,
-                        "updated_at_us": max(self._clock_us(), state.prepared_at_us),
-                    }
-                )
+    def save_prepared_state(self, identity_id: str, state: PreparedLoginState, *, work=None) -> TestIdentityView:
+        # 注入 work 时由外层提交，用于将账号状态与登录 Job 的完成纳入同一事务。
+        # SecretStore 写入发生在此之前，此处核对引用归属与存在性，不复制秘密值。
+        if work is not None:
+            return self._save_prepared_state(work, identity_id, state)
+        with self._uow_factory() as owned:
+            value = self._save_prepared_state(owned, identity_id, state)
+            owned.commit()
+            return value
+
+    def _save_prepared_state(self, work, identity_id, state):
+        current = work.test_identities.get(identity_id)
+        if current is None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "测试账号不存在")
+        actor = self._actor_for_record(work, current)
+        if current.auth_method is not None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "测试账号已有登录状态，请先重置")
+        refs = tuple(cookie.value_secret_ref for cookie in state.cookies)
+        if state.bearer_secret_ref:
+            refs += (state.bearer_secret_ref,)
+        expected_prefix = f"cred:jiejian/test-identity/{current.project_id}/{identity_id}/"
+        if not refs or any(not ref.startswith(expected_prefix) for ref in refs):
+            raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "登录状态秘密引用与测试账号不匹配")
+        try:
+            missing = tuple(ref for ref in refs if not self._secret_store.configured(ref))
+        except (JiejianError, OSError, RuntimeError, ValueError):
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "无法确认测试账号登录状态") from None
+        if missing:
+            raise JiejianError(
+                ErrorCode.TEST_IDENTITY_NOT_READY,
+                "测试账号登录状态尚未完整写入安全存储",
+                details={"missing_count": len(missing)},
             )
-            work.test_identities.replace(prepared)
-            work.commit()
+        prepared = TestIdentity(
+            **(
+                current.model_dump()
+                | {
+                    "auth_method": state.auth_method,
+                    "cookies": state.cookies,
+                    "bearer_secret_ref": state.bearer_secret_ref,
+                    "prepared_at_us": state.prepared_at_us,
+                    "refreshed_at_us": state.prepared_at_us,
+                    "updated_at_us": max(self._clock_us(), state.prepared_at_us),
+                }
+            )
+        )
+        work.test_identities.replace(prepared)
         return self._view(prepared, actor)
 
     def reset(self, identity_id: str) -> TestIdentityView:
+        # 先拒绝活动或未清理的准备任务，再删除已知引用；不得让迟到结果复活刚重置的会话。
         with self._uow_factory() as work:
+            work.acquire_write_lock()
+            self._require_preparation_closed(work, identity_id)
             current = work.test_identities.get(identity_id)
             if current is None:
                 raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "测试账号不存在")
@@ -181,6 +216,8 @@ class TestIdentityService:
 
     def delete(self, identity_id: str) -> None:
         with self._uow_factory() as work:
+            work.acquire_write_lock()
+            self._require_preparation_closed(work, identity_id)
             current = work.test_identities.get(identity_id)
             if current is None:
                 raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "测试账号不存在")
@@ -188,6 +225,17 @@ class TestIdentityService:
             work.test_identities.delete(identity_id)
             self._delete_secrets(current)
             work.commit()
+
+    @staticmethod
+    def _require_preparation_closed(work, identity_id):
+        # Job 终态不等于凭据清理完成，CLEANUP_REQUIRED 同样阻止账号重置或删除。
+        from product.backend.domain.lifecycle import JobState
+        for row in work.identity_preparations.list(identity_id=identity_id, limit=1):
+            job = work.jobs.get(row['job_id'])
+            if job is not None and job.state in {JobState.PENDING, JobState.RUNNING, JobState.RETRY_WAIT}:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先取消当前登录并等待清理完成')
+            if row['phase'] == 'CLEANUP_REQUIRED':
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '上次登录仍需完成清理，账号暂时保留')
 
     def remove_project_credentials(self, project_id: str) -> int:
         with self._uow_factory() as work:

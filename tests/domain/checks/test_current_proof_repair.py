@@ -25,7 +25,7 @@ def current_standard(*,file=False,disclosure=False):
     source=FrozenProofSource(source_id='psr_'+'1'*32,revision=1,source_fingerprint=proof_fingerprint(config),config=config,contract=contract,
         owner_subject_id='owner',identity_roles={claim.identity_id:claim.application_role for claim in config.identity_claims},adoption_preflight_id='ppf_'+'1'*32 if file else None)
     proof=bundle.actions[0].proofs[0].model_copy(update={'descriptor_fingerprint':source.source_fingerprint,'effect_kind':contract.approved_effect_kind})
-    current=NS(schema_version='6',proof_sources=(source,),identities=bundle.identities,observers=(),actions=(bundle.actions[0].model_copy(update={'proofs':(proof,)}),))
+    current=NS(schema_version=bundle.schema_version,proof_sources=(source,),identities=bundle.identities,observers=(),actions=(bundle.actions[0].model_copy(update={'proofs':(proof,)}),))
     return action,case,current
 
 

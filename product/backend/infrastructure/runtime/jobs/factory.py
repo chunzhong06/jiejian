@@ -1,15 +1,5 @@
-# =============================================================================
-# Worker Handler Factory
-#
-# 定位
-#   WorkerContainer 内的 Job Handler 组合边界。
-#
-# 职责
-#   显式注册真实 CHECK/Recording Handler，并注入各自的窄依赖。
-#
-# 边界
-#   不创建 ApplicationCore，不拥有 GUI/Onboarding/LLM/Cache 服务。
-# =============================================================================
+# 按任务类型和租约所有者惰性装配执行器，依赖由 WorkerContainer 显式提供。
+# 只在对应任务被选择时构造其服务，不创建控制面的 ApplicationCore。
 
 from __future__ import annotations
 
@@ -19,7 +9,7 @@ from pathlib import Path
 from product.backend.infrastructure.artifacts.run_packages import attempt_paths_for
 from product.backend.infrastructure.runtime.jobs.attempts import JobAttempts
 from product.backend.infrastructure.runtime.jobs.handlers import JobHandlerRegistry
-from product.backend.infrastructure.runtime.jobs.target_handlers.recording import RecordingJobHandler, RecordingSubmissionPort
+from product.backend.infrastructure.runtime.jobs.recording import RecordingJobHandler, RecordingSubmissionPort
 from product.backend.infrastructure.runtime.jobs.targets import JobTargetType
 from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.backend.infrastructure.storage import StorageUnitOfWork
@@ -51,9 +41,16 @@ class WorkerHandlerFactory:
         lease_owner: str,
         environ: Mapping[str, str],
     ) -> JobHandlerRegistry:
-        """创建当前检查和录制 Handler；只在对应 Job 被选择时装配。"""
+        """按任务类型惰性装配执行器，不提前构造未选中的能力。"""
 
         registry = JobHandlerRegistry()
+        def build_identity_handler():
+            from product.backend.application.test_identities.login_execution import IdentityPreparationHandler
+            return IdentityPreparationHandler(self._var_dir, lease_owner=lease_owner,
+                uow_factory=self._uow_factory, attempts=self._attempts, environ=environ)
+        registry.register(JobTargetType.IDENTITY_PREPARATION, build_identity_handler,
+            operation_types=frozenset({'IDENTITY_PREPARATION'}))
+
 
         def build_recording_handler() -> RecordingJobHandler:
             return RecordingJobHandler(

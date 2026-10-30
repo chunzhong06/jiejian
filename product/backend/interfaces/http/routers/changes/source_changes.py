@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import Field
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
 from product.backend.domain.checks.repair import CurrentRepairReference
-from product.backend.domain.changes.rules import RuleChangeTarget
+from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.development import ContextId, OperationId, TaskId
 from product.protocols.checks.execution_request import Hash
 from product.backend.bootstrap import ApplicationCore
@@ -29,6 +29,7 @@ class SourceChangeRegistrationRequest(ApiModel):
     schema_version: Literal["1"]
     operation_id: OperationId
     expected_registration_fingerprint: Hash
+    expected_source_fingerprint: Hash | None = None
     reason: str = Field(default="本地源码修改", min_length=1, max_length=512)
     claimed_paths: list[str] = Field(default_factory=list, max_length=128)
     repair_reference: CurrentRepairReference | None = None
@@ -51,7 +52,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
     @router.post("/api/projects/{project_id}/source-changes/register", response_model=ApiResponse, status_code=201)
     def register_change(project_id: str, body: SourceChangeRegistrationRequest):
         receipt = context.development.register_change(project_id, operation_id=body.operation_id,
-            expected_registration_fingerprint=body.expected_registration_fingerprint, reason=body.reason,
+            expected_registration_fingerprint=body.expected_registration_fingerprint, expected_source_fingerprint=body.expected_source_fingerprint, reason=body.reason,
             claimed_paths=body.claimed_paths, repair_reference=body.repair_reference, submitted_by="LOCAL_GUI", rule_targets=body.rule_targets)
         return data_response(receipt.model_dump(mode="json"), status_code=201)
 

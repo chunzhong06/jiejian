@@ -22,7 +22,7 @@ def execute(check_target, tmp_path, **changes):
 @pytest.mark.parametrize("failure", ["model", "file"])
 def test_runner_progress_failure_does_not_change_published_result(check_target, tmp_path, monkeypatch, failure):
     from product.backend.infrastructure.runtime.check_runner import executor as runner
-    from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+    from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
     from product.backend.infrastructure.runtime.paths import RuntimePaths
     from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerResult
     request, bundle, input, environment = execution_configuration(check_target, deny_effect=True)
@@ -121,7 +121,7 @@ def test_independent_worker_runner_real_http_and_fenced_publication(check_target
     from product.backend.bootstrap.worker import WorkerContainer
     from product.backend.domain.lifecycle import JobState, ProjectStatus
     from product.backend.infrastructure.artifacts.checks.check_packages import check_final_directory, validate_check_package
-    from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+    from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
     from product.backend.infrastructure.runtime.jobs.models import SubmitJob
     from product.backend.infrastructure.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
     from product.backend.infrastructure.runtime.process.tree import release_process_tree, terminate_process_tree

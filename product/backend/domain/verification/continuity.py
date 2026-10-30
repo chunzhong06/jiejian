@@ -1,16 +1,6 @@
-# =============================================================================
 # 业务后果授权连续性
-#
-# 定位
-#   只凭冻结权限契约、差分孪生和已形成的安全效果事实，判断受保护后果
-#   是否仍具有符合原权限要求的合法来源。
-#
-# 职责
-#   统一孤儿后果判断｜对缺失或不可靠事实保持 UNKNOWN｜证明闭合 ABSENT 的连续性
-#
-# 边界
-#   不读取 Ledger、目标现场、Trace 或源码，不执行请求，也不形成或改变 Verdict。
-# =============================================================================
+# 统一孤儿后果判断、对缺失或不可靠事实保持 UNKNOWN、证明闭合 ABSENT 的连续性
+# 不读取 Ledger、目标现场、Trace 或源码，不执行请求，也不形成或改变 Verdict。
 
 from __future__ import annotations
 
@@ -187,6 +177,7 @@ def assess_authorization_continuity(
         if (fact := by_key.get((reference.effect_id, reference.resource_id))) is not None
         and fact.state is ObservedEffect.CONFIRMED
     )
+    # 任一受保护后果被确认就已形成孤儿后果，不因其他后果缺证而抹掉这个已知事实。
     if confirmed:
         return AuthorizationContinuityAssessment(
             case_id=twin.deny_case.case_id,
@@ -197,6 +188,7 @@ def assess_authorization_continuity(
             reason_codes=("DENY_PROTECTED_EFFECT_CONFIRMED",),
         )
 
+    # “未观察到”不足以证明不存在；只有全部后果都有可靠闭合的 ABSENT 才能判为连续。
     unknown = tuple(
         reference
         for reference in protected

@@ -1,18 +1,6 @@
-# =============================================================================
 # 运行目录唯一物理路径
-#
-# 定位
-#   为产品实例、Worker、Storage 和控制面提供同一套 VarDir 分区。
-#
-# 职责
-#   规范 data/runtime/cache/logs/temp/test 路径｜拒绝旧布局回退｜集中创建安全目录
-#
-# 边界
-#   只定位和创建当前实例目录；共享开发资产固定在仓库 var/development，不进入本对象。
-#
-# 调用链
-#   Settings / ApplicationCore / Worker / CLI → RuntimePaths → 各基础设施
-# =============================================================================
+# 规范 data/runtime/cache/logs/temp/test 路径、拒绝旧布局回退、集中创建安全目录
+# 只定位和创建当前实例目录；共享开发资产固定在仓库 var/development，不进入本对象。
 
 from __future__ import annotations
 

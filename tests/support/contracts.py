@@ -1,6 +1,6 @@
 # 经产品设计接受的当前合同；独立列出预期，不从被测实现复制答案。
-WORKER_CAPABILITIES = ("CHECK", "PROOF_PREFLIGHT", "RECORDING", "REFERENCE_CAPTURE")
-JOB_TARGET_FIELDS = frozenset({"run_id", "recording_id", "runtime_load_id", "preflight_id", "reference_capture_id"})
+WORKER_CAPABILITIES = ("CHECK", "IDENTITY_PREPARATION", "PROOF_PREFLIGHT", "RECORDING", "REFERENCE_CAPTURE")
+JOB_TARGET_FIELDS = frozenset({"run_id", "recording_id", "runtime_load_id", "preflight_id", "reference_capture_id", "identity_preparation_id"})
 
 # 已公开的 Agent 工具与最低授权；架构和 SDK 验证共用同一独立合同。
 MCP_TOOL_LEVELS = dict.fromkeys((

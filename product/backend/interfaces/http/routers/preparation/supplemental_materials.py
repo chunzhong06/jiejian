@@ -31,11 +31,12 @@ def build_supplemental_material_router(context):
 
     @router.post(path + "/preview", response_model=ApiResponse)
     def preview(project_id: str, action_id: str, body: MaterialPreviewRequest):
-        return data_response(context.supplemental_materials.preview(project_id, action_id, body.document.model_dump(mode="json")))
+        return data_response(context.supplemental_materials.preview(project_id, action_id, body.document))
 
     @router.post(path, response_model=ApiResponse)
     def create(project_id: str, action_id: str, body: MaterialCreateRequest):
-        return data_response(context.supplemental_materials.create(project_id, action_id, **body.model_dump(mode="json")))
+        return data_response(context.supplemental_materials.create(project_id, action_id, document=body.document,
+            expected_fingerprint=body.expected_fingerprint, request_id=body.request_id))
 
     @router.get(path, response_model=ApiResponse)
     def listing(project_id: str, action_id: str, limit: int = Query(100, ge=1, le=100)):

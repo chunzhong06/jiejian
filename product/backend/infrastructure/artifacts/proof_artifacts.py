@@ -2,6 +2,7 @@
 import hashlib
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 from product.backend.domain.errors import ErrorCode,JiejianError
@@ -9,6 +10,12 @@ from product.backend.infrastructure.artifacts.checks.check_packages import rejec
 from product.protocols.checks.business_facts import ArtifactManifestReference
 from product.protocols.preparation.proof_sources import proof_bytes
 from product.protocols.preparation.reference_capture import ReferenceCaptureReport
+
+
+@dataclass(frozen=True)
+class ProofArtifactContent:
+    raw: bytes
+    sha256: str
 
 
 class ProofArtifactStore:
@@ -22,16 +29,17 @@ class ProofArtifactStore:
         return path
 
     @staticmethod
-    def checked_bytes(raw,known_secrets=()):
+    def accept(raw,known_secrets=()) -> ProofArtifactContent:
         if type(raw) is not bytes or not 0<len(raw)<=4194304:raise JiejianError(ErrorCode.STATE_PRECONDITION,'参照文件须非空且不超过4MiB')
         if any(secret and secret.encode() in raw for secret in known_secrets) or re.search(
             rb'(?i)(?:\bBearer\s+\S+|\b(?:password|passwd|token|secret|api[_-]?key)\s*[:=]\s*\S+)',raw):
             raise JiejianError(ErrorCode.STORAGE_SECRET,'参照文件含敏感内容，未保存')
-        return raw
+        return ProofArtifactContent(raw=raw,sha256=hashlib.sha256(raw).hexdigest())
 
-    def save(self,project_id,asset_id,raw,*,known_secrets=()):
-        raw=self.checked_bytes(raw,known_secrets)
-        manifest=ArtifactManifestReference(asset_id=asset_id,size=len(raw),sha256=hashlib.sha256(raw).hexdigest())
+    def save(self,project_id,asset_id,content: ProofArtifactContent):
+        # 接受结果仅在本次调用中传递；独立读盘仍核对当时的字节与秘密边界。
+        raw=content.raw
+        manifest=ArtifactManifestReference(asset_id=asset_id,size=len(raw),sha256=content.sha256)
         directory=self.directory(project_id,asset_id)
         directory.mkdir(parents=True,exist_ok=True)
         destination=directory/'artifact.bin'
@@ -41,7 +49,12 @@ class ProofArtifactStore:
                 stream.write(raw);stream.flush();os.fsync(stream.fileno())
             try:os.link(temporary,destination)
             except FileExistsError:
-                if self.read(project_id,manifest,known_secrets=known_secrets)!=raw:
+                reject_check_links(self.root,destination)
+                try:
+                    with destination.open('rb') as stream:existing=stream.read(len(raw)+1)
+                except OSError:
+                    raise JiejianError(ErrorCode.ARTIFACT_MANIFEST,'参照文件无法核对') from None
+                if existing!=raw:
                     raise JiejianError(ErrorCode.ARTIFACT_MANIFEST,'参照文件不可覆盖') from None
         finally:
             temporary.unlink(missing_ok=True)
@@ -53,8 +66,8 @@ class ProofArtifactStore:
         try:
             if path.stat().st_size!=manifest.size:raise ValueError('size mismatch')
             with path.open('rb') as stream:raw=stream.read(4194305)
-            self.checked_bytes(raw,known_secrets)
-            if len(raw)!=manifest.size or hashlib.sha256(raw).hexdigest()!=manifest.sha256:raise ValueError('digest mismatch')
+            content=self.accept(raw,known_secrets)
+            if len(raw)!=manifest.size or content.sha256!=manifest.sha256:raise ValueError('digest mismatch')
             return raw
         except (OSError,ValueError):raise JiejianError(ErrorCode.ARTIFACT_MANIFEST,'参照文件无法核对') from None
 

@@ -23,7 +23,7 @@ from product.backend.domain.boundaries.candidate_reviews import BoundaryReviewGa
 from product.backend.application.business_boundaries.candidates.reviews import project_review_gaps
 from product.backend.application.business_boundaries.candidates.coverage import frozen_requirement_scope
 from product.backend.infrastructure.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import SubmitJob
 from product.protocols.checks.check_runtime import check_runtime_fingerprint
 from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, FrozenRequirementScope, canonical_execution_request_bytes, content_hash
@@ -92,10 +92,12 @@ class CheckService:
         return self._queue.request_cancellation(RequestCancellation(job_id=job.job_id,now_us=self._clock()))
 
     def preview(self, project_id: str, *, change_id=None) -> CheckPreview:
+        # 预览只反映本次读取的现场；提交会重新冻结，页面不能直接复用旧请求作为执行授权。
         preview, _request, _bundle = self._freeze(project_id,change_id=change_id)
         return preview
 
     def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None):
+        # 本地锁只避免同实例交错；跨进程的请求唯一性和事务前置条件仍由 JobQueue 核对。
         with self._submission_lock:
             return self._submit(project_id, expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,change_id=change_id)
 
@@ -116,10 +118,10 @@ class CheckService:
             engine_version=request.engine_version, max_attempts=1, available_at_us=now, now_us=now,
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
-            current, current_request, current_bundle = self._freeze(project_id, work=work,change_id=change_id)
+            # 文件准备期间材料仍可能变化；在创建 Run/Job 的同一工作单元内重建计划并比较完整输入。
+            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id)
             if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
-            validate_check_inputs(current_request, current_bundle)
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
             if self._source_inspector(project_id) != current_request.source_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"提交期间源码已变化")
@@ -148,6 +150,7 @@ class CheckService:
                     logging.getLogger(__name__).warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
 
     def _freeze(self, project_id, *, work=None, change_id=None):
+        # 同次读取共享注册快照，防止计划与运行配置取到两代事实；作用域结束后不缓存授权。
         if work is None:
             with self._uow_factory() as current:
                 return self._freeze(project_id, work=current,change_id=change_id)
@@ -187,6 +190,7 @@ class CheckService:
                     review_url=f'#/permissions?project_id={project_id}&candidate={scope.candidate_id}&revision={scope.revision}',
                     next_url=f'#/tests?materials=1&project_id={project_id}', next_label='核对检查材料'),)
         scope_payload = tuple(item.model_dump(mode='json') for item in requirement_scope)
+        # 预览指纹还覆盖人工确认的要求范围，避免执行计划相同却漏掉新确认的业务要求。
         preview_fingerprint = content_hash('ScopedCheckPreview', {'plan': plan.plan_fingerprint, 'scope': scope_payload}) if scope_payload else plan.plan_fingerprint
         # 未纳入正式权限的真实要求没有action_id，不伪造Case；完整检查在冻结前阻塞。
         can_execute = bundle is not None and not gaps and not boundary_gaps and bool(plan.actions) and count > 0
@@ -197,14 +201,13 @@ class CheckService:
             from product.protocols.checks.execution_request import ExecutionRequest
             request = ExecutionRequest(**request.model_dump(exclude={"requirement_scope"}),
                 requirement_scope=requirement_scope)
-            validate_check_inputs(request, bundle)
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
         if change_id is not None:
             from product.backend.domain.checks.repair import repair_context
             if self._changes is None or self._repairs is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"变化复验服务未就绪")
-            # 当前冻结已完成材料与运行核验；变化检查复用它，仅重核源码、权限和映射。
+            # 复用当前材料预览，变化检查仅重核源码、权限和映射。
             inspection = self._changes.inspect_revalidation(project_id,change_id,
                 preparation_preview=CheckPreview(project_id=project_id,can_execute=can_execute,
                     boundary_review_gaps=boundary_gaps,
@@ -226,6 +229,8 @@ class CheckService:
                         raise JiejianError(ErrorCode.STATE_PRECONDITION,"原权限已变化，修复要求已失效")
                     values["repair_context"] = repair_context(contract).model_dump(mode="json")
                 request = type(request).model_validate_json(json.dumps(values))
+        if request is not None:
+            validate_check_inputs(request, bundle)
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),
             boundary_review_gaps=boundary_gaps,
             requirement_scope=requirement_scope,

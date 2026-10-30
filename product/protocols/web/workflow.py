@@ -42,8 +42,8 @@ from .response import (
     ResponseExtractorKind,
 )
 
-# HttpRequestTemplate 在 request.py 中先声明了对响应提取器的前向引用；
-# 在请求/响应模块均完成装载后重建，保持原有严格模型而不引入旧兼容模块。
+# 请求模板先声明响应提取器的前向引用，两个模块加载后再解析类型，
+# 避免运行时导入循环，同时保留严格字段校验。
 HttpRequestTemplate.model_rebuild(_types_namespace={"ResponseExtractor": ResponseExtractor})
 
 class WorkflowStepPurpose(StrEnum):

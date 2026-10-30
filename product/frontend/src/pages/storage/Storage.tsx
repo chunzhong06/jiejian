@@ -185,16 +185,16 @@ export function Storage() {
           <footer><p>应用、权限、材料和报告保留。重新被使用或发生变化的文件会跳过。</p><div className="jj-inline-actions"><Button disabled={busy || Boolean(pending)} onClick={() => void preview()}>重新预览</Button><Button kind="primary" busy={busy} disabled={!selected.length || Boolean(pending)} icon={<DeleteOutlined aria-hidden="true"/>} onClick={() => void execute()}>清理所选</Button></div></footer>
         </>}
       </section> : <>
-        <section className="jj-storage-workspace">
+        <div className="jj-storage-layout"><section className="jj-storage-workspace">
           <header><div><p className="jj-eyebrow">可清理的闲置文件</p><h2>{size(cleanable.reduce((total, item) => total + (item.bytes ?? 0), 0))}</h2></div><Badge>{cleanable.length} 项</Badge></header>
           {Object.entries(categories).map(([category, name]) => { const items = cleanable.filter(item => item.category === category); if (!items.length)
                 return null; return <div className="jj-storage-summary-row" key={category}><strong>{name}</strong><span>{items.length} 项</span><span>{size(items.reduce((total, item) => total + (item.bytes ?? 0), 0))}</span></div>; })}
           {!cleanable.length && <Empty title="暂未发现可确认清理的文件"/>}
           <footer><p>文件大小仅供参考，实际释放空间可能不同。</p><Button kind="primary" disabled={!cleanable.length || reading || failed || Boolean(pending)} busy={busy} onClick={() => void preview()}>预览清理</Button></footer>
-        </section>
+        </section><aside className="jj-storage-kept"><h2>保留与排除</h2><p>应用、权限、材料和报告不参与清理。正在使用或归属未明的文件保留。</p><details><summary>当前保留，{retained.length} 项</summary><p className="jj-small jj-muted">当前依赖、在用文件、应用资料、正式证据、报告、凭据和界面偏好均保留。</p><Inventory items={retained}/></details>{unknown.length > 0 && <details><summary>暂无法确认，{unknown.length} 项</summary><Inventory items={unknown}/></details>}</aside></div>
         {failed && <Notice>当前为上次扫描结果，请重新扫描后再清理。</Notice>}
         {result && <section className="jj-storage-result"><header><CheckCircleOutlined aria-hidden="true"/><h2>本次清理已完成</h2></header><p>已清理 {result.counts.DELETED} 项，跳过 {result.counts.ALREADY_MISSING + result.counts.SKIPPED_CHANGED + result.counts.SKIPPED_IN_USE} 项，失败 {result.counts.FAILED} 项。</p>{result.requires_restart && <Notice>运行环境调整将在重新启动界鉴后生效。</Notice>}<details><summary>查看处理明细</summary>{result.results.map(item => <div className="jj-storage-file" key={item.item_id}><strong>{item.label}</strong><span>{({ DELETED: '已清理', ALREADY_MISSING: '文件已不存在', SKIPPED_CHANGED: '文件已变化，已保留', SKIPPED_IN_USE: '正在使用，已保留', FAILED: '未能清理' } as const)[item.status]}</span><small>{item.relative_path}</small><small>{item.reason}</small></div>)}</details></section>}
-        <section className="jj-storage-kept"><details><summary>当前保留，{retained.length} 项</summary><p className="jj-small jj-muted">当前依赖、在用文件、应用资料、正式证据、报告、凭据和界面偏好均保留。</p><Inventory items={retained}/></details>{unknown.length > 0 && <details><summary>暂无法确认，{unknown.length} 项</summary><Inventory items={unknown}/></details>}</section>
+
       </>}
     </>}
   </>;

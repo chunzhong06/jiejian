@@ -9,6 +9,8 @@ import { useRead } from '../../../shared/lib/useRead';
 import { Badge, Empty, ErrorNote, Notice } from "../../../shared/ui/feedback";
 import { Button } from "../../../shared/ui/actions";
 import { Heading } from "../../../shared/ui/layout";
+import { Dialog } from "../../../shared/ui/Dialog";
+import { go } from '../../../shared/lib/navigation';
 function sourceState(source: ProofSource): {
     label: string;
     tone: 'positive' | 'caution' | 'neutral' | 'accent';
@@ -47,6 +49,7 @@ export function Sources({ projectId, actionId, requestedSource, onLocate, onBack
         return undefined;
     } });
     const lock = useRef(false), context = state.data;
+    const [revoke, setRevoke] = useState(false);
     useEffect(() => { if (requestedSource)
         setSelected(requestedSource); }, [requestedSource]);
     const sources = context?.sources.filter(item => Boolean(requestedSource) || !actionId || item.config.action_id === actionId) ?? [];
@@ -161,7 +164,7 @@ export function Sources({ projectId, actionId, requestedSource, onLocate, onBack
     {state.error && <ErrorNote error={state.error}/>}
     {notice && <Notice tone="positive">{notice}</Notice>}
     {pending && <Notice>上次操作的结果尚未确认。<Button busy={busy} onClick={() => void recover()}>查询这次操作</Button></Notice>}
-    {!sources.length ? <Empty title="尚未提供可核对的材料">让开发 Agent 保存与当前规则对应的文件或业务记录来源，再读取最新来源。</Empty> : <section className={'jj-proof-workspace' + (sources.length === 1 ? ' is-single-source' : '')}>
+    {!sources.length ? <Empty title="尚未提供可核对的材料" action={<Button onClick={() => go('/tools', projectId)}>连接开发工具</Button>}>在开发工具中提供当前业务结果的记录位置及账号、资源对应，再回到这里核对读取范围。</Empty> : <section className={'jj-proof-workspace' + (sources.length === 1 ? ' is-single-source' : '')}>
       {sources.length > 1 && <nav className="jj-source-index" aria-label="证明来源"><h2>业务结果</h2>{sources.map(item => { const label = context.actions.find(action => action.action_id === item.config.action_id)?.effects.find(effect => effect.effect_id === item.config.effect_id)?.label ?? '业务结果', status = sourceState(item); return <button aria-current={source?.source_id === item.source_id ? 'page' : undefined} disabled={busy || Boolean(pending)} key={item.source_id} onClick={() => { setSelected(item.source_id); onLocate?.(item.source_id); }}><span>{text(label)}</span><small data-tone={status.tone}>{status.label}</small></button>; })}</nav>}
       {source && <div className="jj-proof-detail" key={source.source_id}>
         <header><div><p className="jj-eyebrow">{text(action?.label ?? '当前业务操作')}</p><h2>{text(title)}</h2></div><Badge tone={sourceState(source).tone}>{sourceState(source).label}</Badge></header>
@@ -184,9 +187,12 @@ export function Sources({ projectId, actionId, requestedSource, onLocate, onBack
           </section>
         </div>
         <footer className="jj-proof-actions"><Button kind={scope ? 'quiet' : 'primary'} disabled={busy || Boolean(pending)} onClick={() => { setAck(false); setReview('scope'); }}>{scope ? '查看读取范围' : '核对读取范围'}</Button>
+          {scope && <Button kind="quiet" disabled={busy || Boolean(pending)} onClick={() => setRevoke(true)}>撤销读取授权</Button>}
+          {checking && source.preflight && <Button disabled={busy || Boolean(pending)} onClick={() => void write('CANCEL_PREFLIGHT', { preflight_id: source.preflight!.preflight_id })}>停止本次核对</Button>}
           {scope && (!usable ? <Button kind="primary" busy={busy} disabled={checking || Boolean(pending) || !resource || !context.runtime_available || source.config.source_kind === 'REFERENCE_FILE' && !source.config.reference_artifact} onClick={() => void write('START_PREFLIGHT', common!)}>{checking ? '正在预检查' : '预检查来源'}</Button> : !source.adopted ? <Button kind="primary" busy={busy} disabled={Boolean(pending)} onClick={() => void openAdoption()}>核对采用影响</Button> : <Button onClick={onBack}>返回检查准备</Button>)}
         </footer>
       </div>}
     </section>}
+    {revoke && source?.matching_read_scope_id && <Dialog title="撤销这份读取授权" onClose={() => setRevoke(false)} actions={dismiss => <><Button onClick={dismiss}>保留授权</Button><Button kind="danger" busy={busy} onClick={() => void write('REVOKE_SCOPE', { scope_id: source.matching_read_scope_id }).then(() => setRevoke(false))}>撤销授权</Button></>}><p>使用同一授权的证明来源将无法继续读取，需要重新核对材料。已发布报告保留。</p></Dialog>}
   </>;
 }

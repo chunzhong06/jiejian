@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from product.backend.bootstrap.application import ApplicationCore
 from product.backend.domain.lifecycle import ProjectStatus
-from tests.support.secrets import MemorySecrets as InMemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 
 
@@ -14,7 +14,7 @@ def test_stop_restart_creates_clean_project_and_archives_history(tmp_path):
     var_dir = tmp_path / "var"
     def create():
         return ApplicationCore(var_dir, official_sample_root=root / "samples/web/digital_gallery",
-            secret_store=InMemorySecretStore(), environ=runtime_identity_environment(var_dir))
+            secret_store=MemorySecrets(), environ=runtime_identity_environment(var_dir))
     core = create()
     try:
         first = core.official_experience.start(consent=True)
@@ -91,7 +91,7 @@ def test_restarted_sample_requires_fresh_approval_and_materials(tmp_path):
     root = Path(__file__).resolve().parents[3]
     var_dir = tmp_path / "var"
     core = ApplicationCore(var_dir, official_sample_root=root / "samples/web/digital_gallery",
-        secret_store=InMemorySecretStore(), environ=runtime_identity_environment(var_dir))
+        secret_store=MemorySecrets(), environ=runtime_identity_environment(var_dir))
     try:
         project = prepare_sample(core)
         with core.uow_factory() as work:

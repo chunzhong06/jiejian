@@ -2,58 +2,31 @@
 
 from __future__ import annotations
 
+from tests.support.builders.identities import ACTOR_ID, PROJECT_ID, FakeSecretStore, application_understanding, boundary_reader, build_identity_service
 import io
 import json
 import subprocess
-from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from product.backend.domain.applications.models import ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.domain.lifecycle import ProjectStatus
-from product.backend.domain.boundaries.entities import BusinessActor, BusinessRevisionState, boundary_sha256
-from tests.support.builders.checks.assurance import actor
+from product.backend.domain.boundaries.entities import BusinessRevisionState
 from product.backend.domain.identities.models import TestIdentityAuthMethod as IdentityAuthMethod, TestIdentityCookie as IdentityCookie
 from product.backend.infrastructure.secrets.refs import credential_ref
 from product.backend.infrastructure.runtime.paths import RuntimePaths
-from product.backend.infrastructure.storage.applications.projects import ProjectRecord
 from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWork
-from product.backend.infrastructure.storage.db import create_session_factory, create_sqlite_engine, prepare_database
 from product.backend.application.test_identities.service import PreparedLoginState, TestIdentityService as IdentityService, TestIdentityStatus as IdentityStatus
-from product.backend.application.test_identities.preparation import IdentityPreparationManager, IdentityPreparationStatus
-import product.backend.application.test_identities.preparation as preparation_module
+from product.backend.application.test_identities.login_execution import IdentityLoginSupervisor
+from product.backend.application.test_identities.models import IdentityPreparationStatus
+import product.backend.application.test_identities.login_execution as preparation_module
 from product.protocols.preparation.test_identity_preparation import IdentityPreparationResult, IdentityPreparationResultType, PreparedCookieRef, canonical_identity_preparation_json_bytes, parse_identity_preparation_request
 
 
-PROJECT_ID = "sample-project"
-ROLE_ID = candidate_id("role", "owner")
-ACTOR_ID = "bar_" + "1" * 32
-ENDPOINT = "http://127.0.0.1:8865"
-FINGERPRINT = "a" * 64
 
 
-class FakeSecretStore:
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-        self.fail_delete = False
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        self.values[secret_ref] = secret
-
-    def read(self, secret_ref: str) -> str | None:
-        return self.values.get(secret_ref)
-
-    def delete(self, secret_ref: str) -> None:
-        if self.fail_delete:
-            raise OSError("blocked")
-        self.values.pop(secret_ref, None)
-
-    def configured(self, secret_ref: str | None) -> bool:
-        return secret_ref is not None and secret_ref in self.values
 
 
 class RetainedBytesIO(io.BytesIO):
@@ -76,59 +49,8 @@ class FakePreparationProcess:
         return self.returncode
 
 
-def _understanding(*, endpoint: str = ENDPOINT, revision: int = 3) -> ApplicationUnderstanding:
-    return ApplicationUnderstanding(
-        project_id=PROJECT_ID,
-        source_root="D:/sample",
-        confirmed_endpoint=endpoint,
-        endpoint_source_fingerprint=FINGERPRINT,
-        endpoint_confirmed_at_us=2,
-        endpoint_last_checked_at_us=2,
-        endpoint_reachable=True,
-        role_candidates=(
-            RoleCandidate(
-                candidate_id=ROLE_ID,
-                canonical_key="owner",
-                display_name="所有者",
-                confidence=CandidateConfidence.HIGH,
-                decision=CandidateDecision.CONFIRMED,
-                origin=CandidateOrigin.MANUAL,
-            ),
-        ),
-        revision=revision,
-        created_at_us=1,
-        updated_at_us=2,
-    )
 
 
-def _service(tmp_path: Path) -> tuple[IdentityService, FakeSecretStore, object]:
-    database = tmp_path / "var" / "data" / "jiejian.db"
-    prepare_database(database)
-    factory = create_session_factory(create_sqlite_engine(database))
-    with StorageUnitOfWork(factory) as work:
-        work.projects.add(
-            ProjectRecord(
-                project_id=PROJECT_ID,
-                name="样例应用",
-                status=ProjectStatus.DRAFT,
-                created_at_us=1,
-                updated_at_us=1,
-            )
-        )
-        work.application_understanding.add(_understanding())
-        revision = actor().model_copy(update={"project_id": PROJECT_ID, "display_name": "所有者"})
-        revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})
-        work.business_boundaries.add_actor_revision(revision)
-        work.business_boundaries.add_actor(BusinessActor(actor_id=ACTOR_ID, project_id=PROJECT_ID,
-            current_revision=1, created_at_us=1, updated_at_us=1))
-        work.commit()
-    store = FakeSecretStore()
-    service = IdentityService(
-        partial(StorageUnitOfWork, factory),
-        secret_store=store,
-        clock_us=lambda: 10,
-    )
-    return service, store, factory
 
 
 def _prepare(
@@ -162,17 +84,10 @@ def _prepare(
     return created.identity_id, secret_ref
 
 
-def _boundary_reader(factory):
-    def view(project_id):
-        with StorageUnitOfWork(factory) as work:
-            root = work.business_boundaries.actor(ACTOR_ID)
-            current = work.business_boundaries.actor_revision(ACTOR_ID, root.current_revision)
-            return SimpleNamespace(actors=(current,))
-    return SimpleNamespace(view=view)
 
 
 def test_login_secret_never_enters_sqlite_or_public_view(tmp_path: Path) -> None:
-    service, store, _ = _service(tmp_path)
+    service, store, _ = build_identity_service(tmp_path)
     identity_id, secret_ref = _prepare(service, store)
 
     view_payload = service.get(identity_id).model_dump_json()
@@ -184,11 +99,11 @@ def test_login_secret_never_enters_sqlite_or_public_view(tmp_path: Path) -> None
 
 
 def test_endpoint_change_preserves_actor_bound_identity(tmp_path: Path) -> None:
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     identity_id, _ = _prepare(service, store)
     with StorageUnitOfWork(factory) as work:
         work.application_understanding.replace(
-            _understanding(endpoint="http://127.0.0.1:8877", revision=4)
+            application_understanding(endpoint="http://127.0.0.1:8877", revision=4)
         )
         work.commit()
 
@@ -204,9 +119,9 @@ def test_endpoint_change_preserves_actor_bound_identity(tmp_path: Path) -> None:
 
 
 def test_candidate_role_name_change_does_not_rewrite_frozen_actor_identity(tmp_path: Path) -> None:
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     identity_id, _ = _prepare(service, store)
-    changed_understanding = _understanding(revision=4)
+    changed_understanding = application_understanding(revision=4)
     changed_role = changed_understanding.role_candidates[0].model_copy(
         update={"display_name": "项目所有者"}
     )
@@ -227,7 +142,7 @@ def test_candidate_role_name_change_does_not_rewrite_frozen_actor_identity(tmp_p
 def test_delete_failure_keeps_metadata_then_success_removes_exact_secret(
     tmp_path: Path,
 ) -> None:
-    service, store, _ = _service(tmp_path)
+    service, store, _ = build_identity_service(tmp_path)
     identity_id, secret_ref = _prepare(service, store)
     store.fail_delete = True
 
@@ -246,7 +161,7 @@ def test_delete_failure_keeps_metadata_then_success_removes_exact_secret(
 
 
 def test_repository_delete_rejection_keeps_metadata_and_never_deletes_secret(tmp_path, monkeypatch):
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     identity_id, secret_ref = _prepare(service, store)
     with StorageUnitOfWork(factory) as work:
         repository_type = type(work.test_identities)
@@ -267,23 +182,25 @@ def test_repository_delete_rejection_keeps_metadata_and_never_deletes_secret(tmp
 
 
 def test_preparation_manager_commits_only_non_secret_child_result(tmp_path: Path) -> None:
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     fake_process = FakePreparationProcess()
 
     def launch(*_args, **_kwargs):
         return fake_process
 
-    manager = IdentityPreparationManager(
+    manager = IdentityLoginSupervisor(
         tmp_path / "var",
         service,
         store,
         {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
         process_launcher=launch,
-        application_understanding=SimpleNamespace(get=lambda _project_id: _understanding()),
-        business_boundaries=_boundary_reader(factory),
+        application_understanding=SimpleNamespace(get=lambda _project_id: application_understanding()),
+        business_boundaries=boundary_reader(factory),
     )
-    started = manager.start(created.identity_id)
+    started = manager.start(created.identity_id, operation_id='a' * 32)
+    assert manager.start(created.identity_id, operation_id='a' * 32).preparation_id == started.preparation_id
+    assert manager.latest(created.identity_id).preparation_id == started.preparation_id
     active_paths = manager.active_runtime_paths()
     assert active_paths == (
         RuntimePaths(tmp_path / "var").identity_preparations / started.preparation_id,
@@ -329,7 +246,7 @@ def test_preparation_manager_commits_only_non_secret_child_result(tmp_path: Path
 def test_preparation_manager_retries_orphaned_secret_cleanup_on_next_start(
     tmp_path: Path,
 ) -> None:
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     secret_ref = credential_ref(
         "test-identity",
@@ -358,25 +275,25 @@ def test_preparation_manager_retries_orphaned_secret_cleanup_on_next_start(
     )
     store.fail_delete = True
 
-    IdentityPreparationManager(
+    IdentityLoginSupervisor(
         tmp_path / "var",
         service,
         store,
         {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
-        application_understanding=SimpleNamespace(get=lambda _project_id: _understanding()),
-        business_boundaries=_boundary_reader(factory),
+        application_understanding=SimpleNamespace(get=lambda _project_id: application_understanding()),
+        business_boundaries=boundary_reader(factory),
     )
     assert attempt_dir.is_dir()
     assert store.read(secret_ref) == "orphaned-session-secret"
 
     store.fail_delete = False
-    IdentityPreparationManager(
+    IdentityLoginSupervisor(
         tmp_path / "var",
         service,
         store,
         {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
-        application_understanding=SimpleNamespace(get=lambda _project_id: _understanding()),
-        business_boundaries=_boundary_reader(factory),
+        application_understanding=SimpleNamespace(get=lambda _project_id: application_understanding()),
+        business_boundaries=boundary_reader(factory),
     )
     assert not attempt_dir.exists()
     assert store.read(secret_ref) is None
@@ -384,7 +301,7 @@ def test_preparation_manager_retries_orphaned_secret_cleanup_on_next_start(
 
 @pytest.mark.parametrize("change", ["endpoint", "reset", "delete", "actor_revision"])
 def test_preparation_result_rejects_changed_login_source(tmp_path: Path, change: str) -> None:
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     process = FakePreparationProcess()
 
@@ -392,16 +309,16 @@ def test_preparation_result_rejects_changed_login_source(tmp_path: Path, change:
         with StorageUnitOfWork(factory) as work:
             return work.application_understanding.get(PROJECT_ID)
 
-    manager = IdentityPreparationManager(
+    manager = IdentityLoginSupervisor(
         tmp_path / "var", service, store, {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
         process_launcher=lambda *_args, **_kwargs: process,
         application_understanding=SimpleNamespace(get=understanding),
-        business_boundaries=_boundary_reader(factory),
+        business_boundaries=boundary_reader(factory),
     )
     started = manager.start(created.identity_id)
     if change == "endpoint":
         with StorageUnitOfWork(factory) as work:
-            work.application_understanding.replace(_understanding(endpoint="http://127.0.0.1:8877", revision=4))
+            work.application_understanding.replace(application_understanding(endpoint="http://127.0.0.1:8877", revision=4))
             work.commit()
     elif change == "reset":
         service._clock_us = lambda: 20
@@ -439,18 +356,18 @@ def test_preparation_result_rejects_changed_login_source(tmp_path: Path, change:
 
 @pytest.mark.parametrize("reason", ["new_revision", "retired", "unconfirmed_endpoint"])
 def test_preparation_start_rejects_unusable_source_before_launch(tmp_path, reason):
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
-    current = _boundary_reader(factory).view(PROJECT_ID).actors[0]
+    current = boundary_reader(factory).view(PROJECT_ID).actors[0]
     if reason == "new_revision":
         current = current.model_copy(update={"revision": 2})
     elif reason == "retired":
         current = current.model_copy(update={"effective_state": BusinessRevisionState.RETIRED})
-    understanding = _understanding()
+    understanding = application_understanding()
     if reason == "unconfirmed_endpoint":
         understanding = understanding.model_copy(update={"endpoint_reachable": False})
     launch = Mock()
-    manager = IdentityPreparationManager(
+    manager = IdentityLoginSupervisor(
         tmp_path / "var", service, store, {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
         process_launcher=launch, application_understanding=SimpleNamespace(get=lambda _: understanding),
         business_boundaries=SimpleNamespace(view=lambda _: SimpleNamespace(actors=(current,))),
@@ -462,14 +379,14 @@ def test_preparation_start_rejects_unusable_source_before_launch(tmp_path, reaso
 
 
 def _manager_attempt(tmp_path):
-    service, store, factory = _service(tmp_path)
+    service, store, factory = build_identity_service(tmp_path)
     created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     process = FakePreparationProcess()
-    manager = IdentityPreparationManager(
+    manager = IdentityLoginSupervisor(
         tmp_path / "var", service, store, {"JIEJIAN_PROJECT_ROOT": str(tmp_path)},
         process_launcher=lambda *_args, **_kwargs: process,
-        application_understanding=SimpleNamespace(get=lambda _: _understanding()),
-        business_boundaries=_boundary_reader(factory),
+        application_understanding=SimpleNamespace(get=lambda _: application_understanding()),
+        business_boundaries=boundary_reader(factory),
     )
     return manager, process, service, store, created
 

@@ -11,7 +11,7 @@ from product.backend.domain.lifecycle import JobState, RunLifecycle, RunVerdict
 from product.backend.domain.identifiers import RUN_ID_PATTERN
 from product.backend.infrastructure.artifacts.checks.check_packages import CheckPackage, check_final_directory, validate_check_package, read_check_bytes, reject_check_links
 from product.backend.infrastructure.artifacts.checks.check_validation import validate_check_inputs
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
 from product.protocols.checks.execution_request import WireModel
@@ -33,6 +33,9 @@ class CheckJobView(WireModel):
     state: JobState
     attempt: int = Field(ge=0)
     cancel_requested: bool
+    error_code: str | None = None
+    failure_phase: str | None = None
+    cause_code: str | None = None
 
 
 class CheckProgressCaseView(WireModel):
@@ -208,6 +211,7 @@ class CheckResultReader:
 
     def _status_and_package(self, work, run):
         job = work.jobs.get_by_run(run.run_id)
+        failure = next((event.metadata for event in reversed(work.job_events.list_for_job(job.job_id)) if event.event_type == 'JOB_FAILED'), {}) if job is not None and job.state is JobState.FAILED else {}
         integrity, package = "NOT_PUBLISHED", None
         if work.check_publications.get(run.run_id) is not None or run.verdict is not None:
             try:
@@ -223,7 +227,8 @@ class CheckResultReader:
             plan_fingerprint=run.plan_fingerprint, policy_epoch=run.policy_epoch,
             created_at_us=run.created_at_us, finished_at_us=run.finished_at_us),
             job=None if job is None else CheckJobView(job_id=job.job_id, state=job.state,
-                attempt=job.attempt, cancel_requested=job.cancel_requested_at_us is not None),
+                attempt=job.attempt, cancel_requested=job.cancel_requested_at_us is not None,
+                error_code=failure.get('error_code'), failure_phase=failure.get('phase'), cause_code=failure.get('cause_code')),
             progress=self._progress(run, job) if package is None else CheckProgressView(phase="FINALIZING",
                 completed_cases=len(package.result.case_results),
                 planned_cases=sum(len(action.cases) for action in package.request.actions)),

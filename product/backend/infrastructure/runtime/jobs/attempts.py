@@ -1,18 +1,6 @@
-# =============================================================================
 # Execution attempt 与租约
-#
-# 定位
-#   Handler 与 Storage 原子 Job 控制之间的应用服务
-#
-# 职责
-#   claim 当前 attempt｜续租与 fencing 校验｜完成、重试、取消和恢复
-#
-# 边界
-#   所有变更通过原子仓储执行；owner/token 不匹配时不得提交任何终态。
-#
-# 调用链
-#   RunnerSupervisor / RecordingJobHandler → JobAttempts → Storage job_control
-# =============================================================================
+# claim 当前 attempt、续租与 fencing 校验、完成、重试、取消和恢复
+# 所有变更通过原子仓储执行；owner/token 不匹配时不得提交任何终态。
 
 from __future__ import annotations
 
@@ -64,6 +52,7 @@ class JobAttempts:
         self, work: StorageUnitOfWork, request: ClaimJob, *, known_secrets: Sequence[str] = (),
     ) -> ClaimedJob | None:
         """复用调用方事务执行完整 CAS 与事件写入，不提交或关闭事务。"""
+        # 领取负责推进 attempt/fence；后续完成必须携带本次所有权，不能仅凭 Job ID 更新状态。
         validate_control_request(request, known_secrets)
         lease_expires_at_us = checked_time_add(request.now_us, request.lease_duration_us)
         job = work.job_control.claim(

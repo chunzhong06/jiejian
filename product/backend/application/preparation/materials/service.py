@@ -105,6 +105,7 @@ class PreparationMaterialService:
             raise
 
     def _apply_once(self, project_id, command):
+        # 预览只告知影响；真正采用时在写锁内重算指纹与绑定，并将修改和原请求回执一起提交。
         request_fingerprint = boundary_sha256(command.model_dump(mode="json"))
         with self._uow_factory() as work:
             work.acquire_write_lock()

@@ -17,6 +17,14 @@ from product.backend.interfaces.http.envelope import ApiModel
 def build_projects_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
+    @router.get('/api/projects/{project_id}/readiness', response_model=ApiResponse)
+    def readiness(project_id: str):
+        return data_response(context.application_progress.readiness(project_id))
+
+    @router.get('/api/projects/{project_id}/activity', response_model=ApiResponse)
+    def activity(project_id: str):
+        return data_response(context.application_progress.activity(project_id))
+
     @router.post('/api/projects/{project_id}/controlled-runtime/preview', response_model=ApiResponse)
     def runtime_preview(project_id: str, body: RuntimePreviewRequest):
         return data_response(context.node_runtime.preview(project_id,**body.model_dump()).model_dump(mode='json'))

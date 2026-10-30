@@ -10,7 +10,7 @@ from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.artifacts.checks.check_packages import read_check_bytes, reject_check_links
 from product.backend.infrastructure.execution.check_executor import CheckExecutor
 from product.backend.infrastructure.execution.web.check_runtime import check_secret_names
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import CheckRunnerInput, CheckRunnerProgress, canonical_check_document, parse_check_document
 from product.protocols.checks.check_runtime import canonical_check_runtime_bytes, check_payload_contains_secret

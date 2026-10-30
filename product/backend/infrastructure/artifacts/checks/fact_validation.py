@@ -2,16 +2,17 @@
 from product.backend.domain.verification.business_facts import reduce_record_facts,reduce_disclosure_facts,reduce_file_facts,reduce_creation_facts
 from product.protocols.preparation.proof_sources import FileProofSourceConfig
 from product.protocols.checks.business_facts import ReferenceArtifactFact, CreationFactReference
-from product.protocols.checks.check_result import CheckEvidence
 
 
 def validate_frozen_facts(evidence,bundle,started_at_us,completed_at_us):
+    # 发布和读取都从封存事实重做有限归约，核对观察声明；不访问当前应用，也不重算安全结论。
     sources={source.source_id:source for source in bundle.proof_sources}
     configured=next(action for action in bundle.actions if action.action_id==evidence.action_id)
     runtime_proofs={proof.binding_fingerprint:proof for proof in configured.proofs}
     case_proofs={proof.proof_fingerprint:proof for proof in evidence.case.proof_requirements}
     observations={(item.proof_fingerprint,item.observer_id,item.phase):item for item in evidence.observations}
     references={(item.proof_fingerprint,item.observer_id,item.phase):item for item in evidence.fact_references}
+    # 时间、来源修订和已采用参照共同限定归属；摘要有效也不能接受超出运行窗口或来源不符的事实。
     for fact in evidence.business_facts:
         if not started_at_us<=fact.observed_at_us<=completed_at_us:raise ValueError('fact outside run window')
         for ref in fact.proofs:
@@ -58,5 +59,6 @@ def validate_frozen_facts(evidence,bundle,started_at_us,completed_at_us):
             if reference.method!=('FIELD_SNAPSHOT' if snapshot else 'FIELD_DISCLOSURE') or window is None or window.protected_paths!=proof.protected_projection:
                 raise ValueError('disclosure method differs from adopted source')
             state,closure,complete=reduce_disclosure_facts(reference,evidence.business_facts,case=evidence.case)
+        # 标志位必须与证据归约一致，不能直接相信文件中自称 complete 或 authoritative 的值。
         if (observation.state,observation.closure,observation.complete,observation.reliable,observation.correlated,observation.authoritative)!=(
             state,closure,complete,complete,complete,complete):raise ValueError('observation differs from sealed facts')

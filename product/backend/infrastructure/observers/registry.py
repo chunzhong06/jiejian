@@ -1,16 +1,7 @@
-# =============================================================================
 # 共享 Observer 注册表
-#
-# 定位
-#   Runner 组合根与共享 Observer Adapter 之间的显式注册边界。
-#
-# 职责
-#   保存 Observer 执行器｜拒绝重复注册｜提供稳定查找。
-#
-# 边界
-#   不导入 Web、HTTP、Cookie、OAuth 或 Target Runtime；OWNER_API 由 Case
-#   Session 通过 Target Runtime Port 处理。
-# =============================================================================
+# 保存 Observer 执行器、拒绝重复注册、提供稳定查找。
+# 不导入 Web、HTTP、Cookie、OAuth 或 Target Runtime；OWNER_API 由 Case
+# Session 通过 Target Runtime Port 处理。
 
 from __future__ import annotations
 

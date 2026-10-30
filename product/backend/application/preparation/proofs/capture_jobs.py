@@ -2,7 +2,7 @@
 import time
 from uuid import uuid4
 from product.backend.domain.errors import ErrorCode,JiejianError
-from product.backend.domain.lifecycle import JobState,ProjectStatus
+from product.backend.domain.lifecycle import JobState
 from product.backend.infrastructure.storage import JobRecord
 from product.backend.infrastructure.runtime.jobs.events import append_job_event
 from product.backend.infrastructure.runtime.jobs.models import JobEventType
@@ -101,7 +101,8 @@ class ReferenceCaptureJobs:
             if report.state=='CANDIDATE':
                 if report.manifest.asset_id!=request.asset_id:raise JiejianError(ErrorCode.ARTIFACT_MANIFEST,'取样文件归属不一致')
                 if candidate is not None:
-                    manifest=self.artifacts.save(job.project_id,request.asset_id,candidate,known_secrets=known_secrets)
+                    content=self.artifacts.accept(candidate,known_secrets)
+                    manifest=self.artifacts.save(job.project_id,request.asset_id,content)
                     if manifest!=report.manifest:raise JiejianError(ErrorCode.ARTIFACT_MANIFEST,'取样文件内容与报告不同')
                 self.artifacts.read(job.project_id,report.manifest,known_secrets=known_secrets)
             digest=self.reports.save(report,known_secrets)

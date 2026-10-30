@@ -45,6 +45,12 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
             return data_response([] if active is None else [active.model_dump(mode="json")])
         return data_response([item.model_dump(mode="json") for item in context.check_results.list_for_project(project_id)])
 
+    @router.get('/api/projects/{project_id}/check-requests/{operation_id}', response_model=ApiResponse)
+    def check_request(project_id: str, operation_id: str):
+        with context.uow_factory() as work:
+            job = work.jobs.get_by_idempotency(project_id, 'CHECK', operation_id)
+        return data_response(None if job is None else context.check_results.status(job.run_id, project_id=project_id).model_dump(mode='json'))
+
     @router.get("/api/projects/{project_id}/check-history", response_model=ApiResponse)
     def check_history(project_id: str, limit: int = Query(25, ge=1, le=50),
                       before_created_at_us: int | None = Query(None, ge=0),

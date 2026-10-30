@@ -13,7 +13,7 @@ from product.backend.application.agent_access.connection_files import Connection
 from product.backend.application.agent_access.connections import AgentConnections
 from product.backend.application.agent_access.connector import relay
 from product.backend.application.agent_access.service import MCPAccessController, MCP_PAIRING_SECRET_REF
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import TestClient, create_app, TEST_CONTROL_ORIGIN
 
 
@@ -36,7 +36,7 @@ def test_install_is_private_idempotent_and_reversible(tmp_path,client,path):
     home=tmp_path/'home'; target=home/path;target.parent.mkdir(parents=True)
     before='theme="dark"\n[mcp_servers.other]\ncommand="other"\n' if client=='codex' else '[]\n' if client=='dsh' else '{"mcpServers":{"other":{"command":"other"}},"theme":"dark"}\n'
     target.write_text(before,encoding='utf-8')
-    secrets=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',secrets)
+    secrets=MemorySecrets();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',secrets)
     service=AgentConnections(tmp_path/'var',access,home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
     first=service.install(client)
     assert first['state']=='AWAITING_CLIENT',first
@@ -61,7 +61,7 @@ def test_install_is_private_idempotent_and_reversible(tmp_path,client,path):
 
 def test_restore_does_not_overwrite_later_client_edits(tmp_path):
     home=tmp_path/'home';target=home/'.qoder/settings.json';target.parent.mkdir(parents=True);target.write_text('{}')
-    service=AgentConnections(tmp_path/'var',MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',MemorySecretStore()),home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
+    service=AgentConnections(tmp_path/'var',MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',MemorySecrets()),home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
     service.install('qoder');target.write_text('{"changed":true}')
     assert service.restore('qoder')['code']=='CONFIG_CHANGED'
     assert target.read_text()=='{"changed":true}'
@@ -69,7 +69,7 @@ def test_restore_does_not_overwrite_later_client_edits(tmp_path):
 
 def test_old_dsh_policy_requires_explicit_update_and_reuses_credentials(tmp_path):
     home=tmp_path/'home';target=home/'.dsh/profiles/desktop/cordis.patch.yml';target.parent.mkdir(parents=True)
-    store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
+    store=MemorySecrets();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
     service=AgentConnections(tmp_path/'var',access,home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
     service.install('dsh');token=store.read(MCP_PAIRING_SECRET_REF)
     target.write_text(target.read_text().replace('failOnStartupError: false','failOnStartupError: true'))
@@ -85,7 +85,7 @@ def test_old_dsh_policy_requires_explicit_update_and_reuses_credentials(tmp_path
 def test_zcode_compatible_protocol_update_is_explicit_and_preserves_other_settings(tmp_path):
     home=tmp_path/'home';target=home/'.zcode/cli/config.json';target.parent.mkdir(parents=True)
     target.write_text(json.dumps({'theme':'dark','mcp':{'servers':{'other':{'command':'other','enable':False}}}}))
-    store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
+    store=MemorySecrets();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
     service=AgentConnections(tmp_path/'var',access,home=home,environ={},protector=lambda x:x,unprotector=lambda x:x)
     service.install('zcode');token=store.read(MCP_PAIRING_SECRET_REF)
     configured=json.loads(target.read_text())
@@ -105,7 +105,7 @@ def test_zcode_compatible_protocol_update_is_explicit_and_preserves_other_settin
 
 
 def test_sixth_client_uses_confirmation_link_without_secret(tmp_path):
-    store=MemorySecretStore();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
+    store=MemorySecrets();access=MCPAccessController(TEST_CONTROL_ORIGIN+'/mcp',store)
     service=AgentConnections(tmp_path/'var',access,home=tmp_path,environ={},protector=lambda x:x,unprotector=lambda x:x)
     value=service.install('trae')
     assert value['state']=='AWAITING_CLIENT'
@@ -124,7 +124,7 @@ def test_protected_document_and_loopback_boundary():
 @pytest.mark.parametrize('protocol',['2025-03-26','2026-07-28'])
 def test_stdio_relay_reads_real_server_tools_and_read_only_tool(tmp_path, protocol):
     from mcp_types import PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY
-    store=MemorySecretStore();app=create_app(tmp_path/'var',start_worker=False,secret_store=store,environ={})
+    store=MemorySecrets();app=create_app(tmp_path/'var',start_worker=False,secret_store=store,environ={})
     app.state.mcp_access.pair()
     # DSH 通过自动协商选择请求/响应协议；其他客户端仍保留新版显式请求转交。
     profile=ConnectionProfile(client='dsh' if protocol=='2025-03-26' else 'codex',endpoint=TEST_CONTROL_ORIGIN+'/mcp',generation='a'*32)
@@ -146,7 +146,7 @@ def test_stdio_relay_reads_real_server_tools_and_read_only_tool(tmp_path, protoc
 
 
 def test_api_rejects_external_origin_and_unknown_client(tmp_path):
-    app=create_app(tmp_path/'var',start_worker=False,secret_store=MemorySecretStore(),environ={})
+    app=create_app(tmp_path/'var',start_worker=False,secret_store=MemorySecrets(),environ={})
     with TestClient(app) as http:
         assert http.post('/api/mcp/clients/dsh/connect',json={},headers={'Origin':'http://external.invalid'}).status_code==403
         assert http.post('/api/mcp/clients/unknown/connect',json={}).status_code==422
@@ -159,7 +159,7 @@ def test_existing_connector_survives_restart_without_replaying_requests(tmp_path
     import httpx
     from mcp_types import PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY
     from product.backend.application.agent_access.service import MCPAccessLevel
-    store=MemorySecretStore()
+    store=MemorySecrets()
     old=create_app(tmp_path/'old',start_worker=False,secret_store=store,environ={})
     old.state.mcp_access.pair();old.state.mcp_access.set_level('test-project',MCPAccessLevel.EXECUTE)
     new=create_app(tmp_path/'new',start_worker=False,secret_store=store,environ={})
@@ -206,7 +206,7 @@ def test_existing_connector_survives_restart_without_replaying_requests(tmp_path
 
 def test_idle_protocol_recovers_without_business_call_and_respects_pause(tmp_path):
     from product.backend.application.agent_access.service import MCPAccessLevel
-    store=MemorySecretStore()
+    store=MemorySecrets()
     old=create_app(tmp_path/'old',start_worker=False,secret_store=store,environ={})
     old.state.mcp_access.pair();old.state.mcp_access.set_level('project',MCPAccessLevel.EXECUTE)
     new=create_app(tmp_path/'new',start_worker=False,secret_store=store,environ={})
@@ -256,7 +256,7 @@ def test_connector_process_uses_protected_store_with_scrubbed_environment(tmp_pa
     import time
     import uvicorn
     from product.backend.interfaces.http.app import create_app as production_app
-    store=MemorySecretStore()
+    store=MemorySecrets()
     sock=socket.socket();sock.bind(('127.0.0.1',0))
     origin=f'http://127.0.0.1:{sock.getsockname()[1]}'
     app=production_app(tmp_path/'runtime',control_origin=origin,control_session_token='isolated-control-'+'x'*44,start_worker=False,secret_store=store,environ={})

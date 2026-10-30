@@ -48,7 +48,7 @@ def validate_material_payload(value, known_secrets=()):
 
 
 def material_fingerprint(value):
-    return hashlib.sha256(validate_material_payload(value).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def request_uuid(value):

@@ -72,7 +72,19 @@ def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_pa
         assert first.status_code == 200
         assert first.json() == client.get(prefix + "/editor").json()
         assert first.json()["data"]["pending_proposals"] == []
-        created = client.post(prefix + "/proposals", json=_proposal_payload()).json()["data"]
+        draft = client.get(prefix + "/maintenance-draft")
+        assert draft.status_code == 200
+        assert draft.json()["data"]["actors"] == []
+        assert draft.json()["data"]["permissions"] == []
+        assert client.get(prefix).json()["data"]["policy_epoch"] == 0
+        payload = _proposal_payload()
+        command = {"schema_version": "1", "expected_boundary_state_fingerprint": draft.json()["data"]["boundary_state_fingerprint"], "provenance": payload["provenance"]}
+        for destination, origin in (("actors", "proposed_actors"), ("actions", "proposed_actions"), ("permissions", "proposed_permissions")):
+            command[destination] = [{key: value for key, value in item.items() if key != "write_mode"} for item in payload[origin]]
+        command["actions"][0]["effects"] = command["actions"][0].pop("effect_catalog")
+        response = client.post(prefix + "/maintenance-proposals", json=command)
+        assert response.status_code == 201, response.text
+        created = response.json()["data"]
         view = client.get(prefix + "/editor").json()["data"]
         assert view["pending_proposals"][0]["proposal_id"] == created["proposal"]["proposal_id"]
         assert "proposal" not in view["pending_proposals"][0]

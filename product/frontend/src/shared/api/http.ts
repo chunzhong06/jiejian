@@ -1,16 +1,4 @@
-/* =============================================================================
- * 前端 HTTP 边界
- *
- * 定位
- *   浏览器 fetch 与后端统一 schema_version envelope 之间的共享适配器
- *
- * 职责
- *   注入 JSON header｜解包成功响应｜把脱敏错误映射为 ApiError
- *
- * 调用链
- *   feature API clients → request → FastAPI control plane
- * ============================================================================= */
-
+// 共享 HTTP 传输：解包响应、映射脱敏错误，并按读取代次合并并发请求。
 export type ApiEnvelope<T> = { schema_version: '1'; data: T }
 
 export type ErrorDiagnosis = {
@@ -47,8 +35,12 @@ export function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!read) {
     // 写入开始后，新的读取不得合并到写入前仍在途的旧请求。
     readGeneration += 1; pendingReads.clear()
-    return send<T>(path, init)
+    return send<T>(path, init).finally(() => {
+      if (typeof window !== 'undefined' && /runs|preparations|recordings|preparation-batches|controlled-runtime/.test(path))
+        window.dispatchEvent(new Event('jiejian:activity-changed'))
+    })
   }
+  // 独立取消或自定义头的请求不共享 Promise，避免一个消费者中止或改变另一个消费者的读取。
   if (init?.signal || init?.headers) return send<T>(path, init)
   const key = `${readGeneration}:${path}`
   const existing = pendingReads.get(key)
@@ -66,6 +58,7 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   const cancel = () => controller?.abort(init?.signal?.reason)
   if (init?.signal?.aborted) cancel()
   else init?.signal?.addEventListener('abort', cancel, {once:true})
+  // 自动超时只施加于读取；写入结果未知时由用例查询原回执，传输层不自动重放副作用。
   const timer = controller ? setTimeout(() => controller.abort(), 30_000) : undefined
   try {
   const response = await fetch(path, {
@@ -84,6 +77,7 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
     // 只读取明确的执行门禁布尔值，不向页面透传任意错误 details。
     throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis, body.error?.details?.execution_started)
   }
+  // 这里只识别 envelope 版本；具体字段与项目归属仍由对应 API 和页面消费者核对。
   return body.data as T
   } catch (error) {
     if (controller?.signal.aborted && !init?.signal?.aborted) throw new ApiError('READ_TIMEOUT', '读取尚未完成，可以返回或稍后重试；已提交的操作请查询原回执。')

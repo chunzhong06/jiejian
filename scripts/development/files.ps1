@@ -5,6 +5,7 @@ function Get-FileDigest([string]$Path) {
 }
 
 function Get-CombinedDigest([string[]]$Paths) {
+    # 路径与内容共同标识输入集合；移动同内容文件也会改变身份，不能只拼接内容摘要。
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($path in ($Paths | Sort-Object)) {
         if (Test-Path -LiteralPath $path -PathType Leaf) {
@@ -18,6 +19,7 @@ function Get-CombinedDigest([string[]]$Paths) {
 }
 
 function Get-PathSetDigest([string[]]$Paths) {
+    # 此摘要只表示路径集合，用于区分工作区身份；文件更新须另用内容摘要检测。
     $lines = @(
         $Paths |
             Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |

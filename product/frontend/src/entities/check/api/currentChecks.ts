@@ -10,16 +10,16 @@ export type CheckProgressCase = {
 }
 export type CheckStatus = {
   run: { run_id: string; project_id: string; lifecycle: string; verdict: CheckVerdict | null; plan_fingerprint: string; policy_epoch: number; created_at_us: number; finished_at_us: number | null }
-  job: { job_id: string; state: string; attempt: number; cancel_requested: boolean } | null
+  job: { job_id: string; state: string; attempt: number; cancel_requested: boolean; error_code?: string | null; failure_phase?: string | null; cause_code?: string | null } | null
   progress: { phase: 'PREPARING' | 'EXECUTING' | 'FINALIZING'; completed_cases: number; planned_cases: number; current_case?: CheckProgressCase | null } | null
   result_integrity: 'VALID' | 'INVALID' | 'NOT_PUBLISHED'
 }
 export type CheckPreview = {
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
-  gaps: Array<{ action_id: string; action_revision: number; reason: string }>
+  gaps: Array<{ action_id: string; action_revision: number; reason: string; intent_id?: string | null; effect_id?: string | null }>
   boundary_review_gaps?: BoundaryReviewGap[]
   requirement_scope?: RequirementScope[]
-  actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string }> }>
+  actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string; subject_test_identity_id: string; resource_owner_test_identity_id: string; resource_id: string; permission: { expectation: 'ALLOW' | 'DENY'; relation: string } }> }>
 }
 export type RequirementScope={candidate_id:string;revision:number;requirements:Array<{requirement_id:string;requirement:string;disposition:'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE';time_scope:'CHECK_WINDOW'|'HISTORY'|'NOT_APPLICABLE';permissions:Array<{intent_id:string;revision:number;intent_hash:string}>}>}
 export type CheckObservation = {
@@ -121,6 +121,7 @@ export const currentChecksApi = {
   maintainHistory:(projectId:string,body:{operation_id:string;expected_checkpoint:number;limit:number})=>request<HistoryMaintenanceReceipt>(`${projectPath(projectId)}/check-history/index-maintenance`,{method:'POST',body:JSON.stringify(body)}),
   historyReceipt:(projectId:string,operationId:string)=>request<{status:'FOUND'|'NOT_FOUND';receipt?:HistoryMaintenanceReceipt}>(`${projectPath(projectId)}/check-history/index-maintenance/${encodeURIComponent(operationId)}`),
   preview: (id: string, changeId?: string | null) => request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
+  receipt: (id: string, operationId: string) => request<CheckStatus | null>(`${projectPath(id)}/check-requests/${encodeURIComponent(operationId)}`),
   list: (id: string, activeOnly = false) => request<CheckStatus[]>(`${projectPath(id)}/runs${activeOnly ? '?active_only=true' : ''}`),
   submit: (id: string, fingerprint: string, key: string, changeId?: string | null) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
     method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}) }),

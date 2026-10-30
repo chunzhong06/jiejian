@@ -1,18 +1,6 @@
-# =============================================================================
 # Execution 过期 lease 恢复
-#
-# 定位
-#   Worker 循环在领取新任务前收敛失联 attempt 的审计服务
-#
-# 职责
-#   有界扫描过期租约｜依据恢复证明分类｜转入 retry、cancel 或 fatal 状态
-#
-# 边界
-#   没有持久证明时不得宣告成功；恢复只处理已确认过期的当前 attempt。
-#
-# 调用链
-#   Worker runtime → JobRecovery → JobAttempts / Storage job_control
-# =============================================================================
+# 有界扫描过期租约、依据恢复证明分类、转入 retry、cancel 或 fatal 状态
+# 没有持久证明时不得宣告成功；恢复只处理已确认过期的当前 attempt。
 
 from __future__ import annotations
 
@@ -58,6 +46,7 @@ class JobRecovery:
     ) -> tuple[RecoveryCandidate, ...]:
         """只枚举租约已经过期的运行中任务，不在扫描阶段改变任何状态。"""
 
+        # 租约过期只产生恢复候选，不证明旧进程已经退出，也不授权重复执行目标操作。
         validate_control_request(request, known_secrets)
         with self._new_uow(known_secrets) as work:
             jobs = work.job_control.list_expired_running(
@@ -71,6 +60,7 @@ class JobRecovery:
                     runtime_load_id=job.runtime_load_id,
                     preflight_id=job.preflight_id,
                     reference_capture_id=job.reference_capture_id,
+                    identity_preparation_id=job.identity_preparation_id,
                     attempt=job.attempt,
                     max_attempts=job.max_attempts,
                     lease_owner=job.lease_owner,
@@ -89,6 +79,7 @@ class JobRecovery:
     ) -> JobMutationResult:
         """在再次核对原 fence 后确认恢复，防止复活已被其他 Worker 接管的任务。"""
 
+        # 调用者先取得其声明类型的退出证明；本服务核对原租约并记录证明类型，不探测进程树。
         validate_control_request(request, known_secrets)
         with self._new_uow(known_secrets) as work:
             current = self._require_recovery_fence(work, request)

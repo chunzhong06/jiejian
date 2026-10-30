@@ -1,18 +1,6 @@
-# =============================================================================
 # Storage Unit of Work
-#
-# 定位
-#   应用服务与具体 Repository 之间的显式事务及资源所有权边界
-#
-# 职责
-#   组合聚合仓储｜统一 commit/rollback｜关闭 Session 并映射持久化错误
-#
-# 边界
-#   每个实例独占一个 Session；未显式 commit 的工作在退出时回滚，Repository 不自行提交。
-#
-# 调用链
-#   Application / Execution services → StorageUnitOfWork → Repositories / Session
-# =============================================================================
+# 组合聚合仓储、统一 commit/rollback、关闭 Session 并映射持久化错误
+# 每个实例独占一个 Session；未显式 commit 的工作在退出时回滚，Repository 不自行提交。
 
 from __future__ import annotations
 
@@ -24,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.storage.preparation.batches import PreparationBatchRepository
+from product.backend.infrastructure.storage.preparation.identity_preparations import IdentityPreparationRepository
 from product.backend.infrastructure.storage.preparation.supplemental_materials import SupplementalMaterialRepository
 from product.backend.infrastructure.storage.changes.code_observations import CodeObservationRepository
 from product.backend.infrastructure.storage.runtime.environment_operations import EnvironmentOperationRepository
@@ -73,6 +62,7 @@ class StorageUnitOfWork:
     check_publications: CheckPublicationRepository
     rule_history: RuleHistoryRepository
     test_identities: TestIdentityRepository
+    identity_preparations: IdentityPreparationRepository
     permission_intents: PermissionIntentRepository
     source_changes: SourceChangeRepository
     development: DevelopmentRepository
@@ -126,6 +116,7 @@ class StorageUnitOfWork:
         self.check_publications = CheckPublicationRepository(session, self._known_secrets)
         self.rule_history = RuleHistoryRepository(session,self._known_secrets)
         self.test_identities = TestIdentityRepository(session, self._known_secrets)
+        self.identity_preparations = IdentityPreparationRepository(session, self._known_secrets)
         self.permission_intents = PermissionIntentRepository(
             session,
             self._known_secrets,
@@ -142,6 +133,7 @@ class StorageUnitOfWork:
     def commit(self) -> None:
         """显式提交事务；约束与数据库错误统一回滚并映射为脱敏错误。"""
 
+        # 只提交数据库事实；文件、进程和 SecretStore 的副作用不在此事务内，须由各自所有者补偿。
         session = self._require_session()
         if self._committed:
             raise JiejianError(ErrorCode.STORAGE_STATE, "事务已经提交")

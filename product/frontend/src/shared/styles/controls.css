@@ -47,3 +47,8 @@ input:is([type=checkbox],[type=radio]):disabled { cursor: default; }
 .jj-environment-progress strong { font-size: var(--text-body); font-weight: 550; }
 .jj-environment-progress p { color: var(--muted); font-size: var(--text-meta); margin-top: 5px; }
 .jj-example-menu .ant-dropdown-menu,.jj-choice-menu,.jj-info-popover,.jj-hint { font-family:var(--font-ui); }
+.jj-action-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px; background: color-mix(in srgb,var(--surface) 55%,transparent); border: 1px solid var(--line); border-radius: 12px; width: fit-content; max-width: 100%; }
+.jj-action-tabs > button { display: inline-flex; align-items: center; gap: 9px; padding: 10px 16px; border: 0; background: none; border-radius: 8px; color: var(--muted); }
+.jj-action-tabs > button:hover { color: var(--ink); }
+.jj-action-tabs > button:is([aria-current=page],[aria-selected=true]) { color: var(--ink); background: var(--surface); box-shadow: var(--control-shadow); font-weight: 550; }
+.jj-action-tabs .anticon { color: var(--good); font-size: var(--text-meta); }

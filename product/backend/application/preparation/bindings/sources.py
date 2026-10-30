@@ -25,12 +25,14 @@ class BindingSourceInspector:
         self._registered_observers = registered_observers
 
     def reasons(self, work, binding, action, understanding):
+        # 无缺口返回空元组；来源、角色、账号和具体材料逐层核对，不据“绑定仍在库中”推断可复用。
         if understanding is None or (
             binding.project_id, binding.business_action_id, binding.action_revision, binding.action_semantic_fingerprint,
         ) != (action.project_id, action.action_id, action.revision, action.semantic_fingerprint):
             return ("ACTION_BINDING_SOURCE_STALE",)
         source_reused = False
         if binding.source_fingerprint != understanding.source_fingerprint:
+            # 整体源码变化不自动销毁材料；只有独立复用检查成立才允许保留其原来源指纹。
             from product.backend.application.preparation.bindings.reuse import recorded_material_reusable
             source_reused = recorded_material_reusable(work,binding,understanding,self._var_dir)
         identity = work.test_identities.get(binding.subject_test_identity_id)
@@ -103,6 +105,7 @@ class BindingSourceInspector:
                 return ("EFFECT_REFERENCE_STALE",)
             if isinstance(binding, ActionRecoveryBinding) and not action.state_changing:
                 return ("RECOVERY_NOT_REQUIRED",)
+            # 补录继承原 TARGET 的具体资源；父资源变化时，观察或恢复模板不能单独继续采用。
             resource = work.action_preparation.resource(action.action_id, action.revision, binding.resource_owner_test_identity_id)
             if (resource is None or resource.source_recording_id != recording.parent_recording_id
                     or self.reasons(work, resource, action, understanding)):

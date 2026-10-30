@@ -1,18 +1,6 @@
-# =============================================================================
 # 跨 Target 执行协议
-#
-# 定位
-#   Web V1 与未来 Target 均可复用的预算、绑定和严格协议基类。
-#
-# 职责
-#   约束执行预算｜绑定主体、效果与观察要求｜提供统一严格模型配置
-#
-# 边界
-#   不包含 Web Target、HTTP Workflow、Cookie/OAuth 身份或未来 Target 占位。
-#
-# 调用链
-#   WebExecutionProfile / RunnerInput → Target Runtime / Observer / Verification
-# =============================================================================
+# 约束执行预算、绑定主体、效果与观察要求、提供统一严格模型配置
+# 不包含 Web Target、HTTP Workflow、Cookie/OAuth 身份或未来 Target 占位。
 
 from __future__ import annotations
 

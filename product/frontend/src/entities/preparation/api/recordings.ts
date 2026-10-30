@@ -59,6 +59,8 @@ export type FlowDraftDto = {
   variables?: FlowDraftVariableDto[]
 }
 export type RecordingDto = {
+  business_action_id?: string
+  action_revision?: number
   reason_codes?: string[]
   subject_test_identity_id?: string
   resource_owner_test_identity_id?: string
@@ -110,15 +112,17 @@ export type RecordingCreateInput = {
 export const recordingsApi = {
   setup: (projectId: string) =>
     request<RecordingSetupDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings/setup`),
-  createRecording: (projectId: string, input: RecordingCreateInput) =>
+  createRecording: (projectId: string, input: RecordingCreateInput, operationId = `gui-recording-${crypto.randomUUID()}`) =>
     request<RecordingViewDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings`, {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '2',
         ...input,
-        idempotency_key: `gui-recording-${crypto.randomUUID()}`,
+        idempotency_key: operationId,
       }),
     }),
+  receipt: (projectId: string, operationId: string) => request<RecordingViewDto | null>(`/api/projects/${encodeURIComponent(projectId)}/recording-requests/${encodeURIComponent(operationId)}`),
+  cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   recordings: (id: string) => request<RecordingDto[]>(`/api/projects/${encodeURIComponent(id)}/recordings`),
   recording: (id: string) => request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}`),
   discard: (id: string) => request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}/discard`, {

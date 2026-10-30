@@ -7,6 +7,7 @@ from importlib import import_module
 
 _STORAGE_ORM_MODULES = (
     "product.backend.infrastructure.storage.workspace",
+    "product.backend.infrastructure.storage.preparation.identity_preparations",
     "product.backend.infrastructure.storage.preparation.batches",
     "product.backend.infrastructure.storage.preparation.proof_artifacts",
     "product.backend.infrastructure.storage.preparation.suggestions",

@@ -1,9 +1,6 @@
-# =============================================================================
 # Runner 隔离域异步任务状态观察器
-#
 # 只通过显式 IPv4 origin 和固定 request_marker 路径读取权威任务状态；
 # 观察器只解释关联、状态机、预算和完整性，不决定安全结论。
-# =============================================================================
 
 from __future__ import annotations
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
@@ -263,6 +260,7 @@ def _run_child(invocation: AsyncTaskObserverInvocation, *, utc_now_us: Callable[
                 break
             current = AsyncTaskStatus(response["state"])
             current_task = response["task_id"]
+            # 整次轮询必须跟随同一任务且状态不倒退；终态后变化保留冲突，不能只采用最后一次响应。
             if task_id is not None and current_task != task_id:
                 reason = ASYNC_TASK_STATE_CONFLICT
                 break

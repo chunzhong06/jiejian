@@ -1,6 +1,7 @@
 # 验证当前两个组合根的空库装配与惰性 CHECK/Recording/预检查注册，不启动任务进程。
 from __future__ import annotations
 
+from tests.support.secrets import MemorySecrets
 from contextlib import ExitStack, closing
 from tests.support.builders.runtime.current_jobs import current_job
 from unittest.mock import Mock
@@ -71,3 +72,36 @@ def test_worker_registry_only_allows_current_targets_without_constructing_handle
             registry.resolve(current_job(operation_type="RUN"))
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_connected_services_share_readers_and_reject_replacement(tmp_path):
+    core = ApplicationCore(tmp_path / "var", secret_store=MemorySecrets(), environ={})
+    try:
+        assert core.preparation_bindings.source_inspector is core.binding_sources
+        assert core.preparation_materials._source_inspector is core.binding_sources
+        assert core.check_runtime_builder._source_inspector is core.binding_sources
+        core.checks.bind_delivery_recorder(core.development.attach_check_run)
+        core.check_runtime_builder.bind_runtime_readers(reference_reader=core.runtime_ports.reference,
+            sources_reader=core.proof_preparation.frozen_sources)
+        core._validate_connections()
+        replacement = Mock(side_effect=AssertionError("装配核对不得调用能力"))
+        with pytest.raises(ValueError):
+            core.checks.bind_delivery_recorder(replacement)
+        with pytest.raises(ValueError):
+            core.check_runtime_builder.bind_runtime_readers(reference_reader=replacement,
+                sources_reader=core.proof_preparation.frozen_sources)
+        replacement.assert_not_called()
+    finally:
+        core.close()
+
+
+def test_missing_production_connection_is_rejected_before_a_use_case(tmp_path, monkeypatch):
+    core = ApplicationCore(tmp_path / "var", secret_store=MemorySecrets(), environ={})
+    try:
+        monkeypatch.setattr(core.checks, "_delivery_run_attacher", None)
+        with pytest.raises(ValueError, match="尚未连接"):
+            core._validate_connections()
+        with core.uow_factory() as work:
+            assert work.projects.list_all() == ()
+    finally:
+        core.close()

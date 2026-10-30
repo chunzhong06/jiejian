@@ -1,4 +1,4 @@
-# 验证待审录制明确放弃的事务边界、幂等性与历史技术资产保留。
+# 验证录制审阅的修订、来源核对、明确放弃和历史资产保留。
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +13,10 @@ from product.backend.domain.recording.models import RecordingPurpose, RecordingS
 from product.backend.infrastructure.storage.execution.jobs import JobRecord
 from tests.support.builders.preparation.action_preparation import add_recording, build_preparation_harness
 from product.backend.infrastructure.recording.flows import read_recorded_flow
+from product.protocols.recording.flow_draft import RefreshFlowDraftResources
+from tests.application.recording._support_project_submission import _arguments
+from tests.support.builders.preparation.recording import RecordingContext
+from tests.support.builders.preparation.recording_facts import captured_result
 
 
 @pytest.fixture
@@ -32,6 +36,38 @@ def _job(h, recording, state):
         job = work.jobs.get_by_recording(recording.recording_id)
         assert job is not None
     return job
+
+
+@pytest.mark.parametrize('stale_revision', [False, True])
+def test_resource_refresh_uses_saved_events_and_preserves_the_original_revision(tmp_path, stale_revision):
+    # 先持久化受控事件，再只走审阅刷新；保护原事实和修订，不以重新发目标请求补齐候选。
+    context = RecordingContext(tmp_path)
+    core = context.harness.core
+    try:
+        events = tuple(event.model_copy(update={'identity_id': context.harness.identities[0].identity_id})
+            for event in captured_result('rec_' + 'a' * 32, project_id=context.project_id).events)
+        submitted = core.project_recordings.submit_captured(context.project_id, events=events, **_arguments(context))
+        recording_id = submitted.result.recording.recording_id
+        before = core.recording_lifecycle.status(recording_id)
+        command = RefreshFlowDraftResources(operation='REFRESH_RESOURCE_CANDIDATES',
+            expected_revision=before.draft.revision + int(stale_revision))
+        if stale_revision:
+            with pytest.raises(JiejianError) as rejected:
+                core.recording_lifecycle.review(recording_id, command)
+            assert rejected.value.code == 'RECORD_REVIEW_STATE'
+            assert core.recording_lifecycle.status(recording_id) == before
+        else:
+            after = core.recording_lifecycle.review(recording_id, command)
+            assert after.draft.revision == before.draft.revision + 1
+            assert after.recording == before.recording
+            assert after.draft.target_step_id == before.draft.target_step_id
+        with context.uow_factory() as work:
+            revisions = work.flow_drafts.list_for_recording(recording_id)
+            original = next(item for item in revisions if item.revision == before.draft.revision)
+            assert original.draft == before.draft
+            assert len(work.jobs.list_for_project(context.project_id)) == 1
+    finally:
+        context.harness.close()
 
 
 @pytest.mark.parametrize("job_state", [JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED])

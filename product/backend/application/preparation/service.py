@@ -2,10 +2,14 @@
 # 缺少技术事实时只返回 NEEDS_USER；不调用模型、目标、浏览器或旧准备编译链。
 
 from __future__ import annotations
+from contextlib import nullcontext
+from product.backend.domain.boundaries.entities import boundary_sha256
 
-from typing import Protocol
+from typing import Literal, Protocol
+from collections.abc import Sequence
+from product.backend.domain.checks.plan import PreparedActionInput, PreparedIdentityAssignment, compile_project_check_plan
+from product.backend.domain.identities.models import identity_source_fingerprint
 from product.backend.application.reading import projected_once
-from product.backend.application.preparation.selection import preparation_recommendation
 
 from product.backend.domain.preparation.requirements import ActionAssuranceContract, AssuranceStatus, compile_action_assurance, ActionAllowControlBinding, PermissionIdentity
 from product.backend.domain.boundaries.entities import BusinessActionRevision
@@ -19,11 +23,32 @@ from product.backend.application.preparation.models import (
     PreparationItemView,
     PreparationStatus,
     PreparationView,
+    MaterialImpactView,
     ResourcePreparationView,
 )
 from product.backend.application.test_identities.service import TestIdentityStatus, TestIdentityView
 from product.backend.domain.errors import ErrorCode, JiejianError
 import time
+
+
+def preparation_recommendation(actions: Sequence[ActionPreparationView]) -> tuple[str | None, Literal['identity','execution','resource','evidence','recovery'] | None]:
+    if not actions:
+        return None,None
+    for action in actions:
+        if action.preparation_complete:
+            continue
+        groups=(
+            ('identity',action.identity_requirements.slots),
+            ('execution',(action.execution,)),
+            ('resource',action.resources),
+            ('evidence',action.effect_evidence),
+            ('recovery',(action.recovery,)),
+        )
+        for kind,items in groups:
+            if any(item.status not in {PreparationStatus.SATISFIED,PreparationStatus.NOT_REQUIRED} for item in items):
+                return action.action_id,kind
+        return action.action_id,None
+    return actions[0].action_id,None
 
 
 class BoundaryReader(Protocol):
@@ -63,13 +88,67 @@ class PreparationService:
     def evidence_details(self, project_id: str, action_id: str):
         """只解释已保存材料及能力声明；不改变准备状态或创建执行计划。"""
         from product.backend.application.preparation.materials.evidence import evidence_details
-        return evidence_details(self, project_id, action_id)
+        prepared = next((item for item in self.get(project_id).actions if item.action_id == action_id), None)
+        boundary = self._business_boundaries.view(project_id)
+        action = next((item for item in boundary.actions
+                       if item.action_id == action_id and item.project_id == project_id), None)
+        return evidence_details(project_id, prepared, action, self._bindings)
 
     def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str):
-        """由已检查的技术绑定装配纯编译输入；缺少受控能力时保留具名缺口。"""
-        from product.backend.application.preparation.planning import current_plan
-        return current_plan(self, project_id, engine_version=engine_version,
-                            config_fingerprint=config_fingerprint)
+        """在装配事务内重读来源和绑定，再编译本次检查计划。"""
+        if self._uow_factory is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配")
+        view = self.get(project_id)
+        prepared = {item.action_id: item for item in view.actions}
+        inputs = []
+        with self._uow_factory() as work:
+            boundary = self._business_boundaries.view(project_id, work=work)
+            understanding = work.application_understanding.get(project_id)
+            if understanding is None or understanding.source_fingerprint is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+            repository = work.action_preparation
+            for action in boundary.actions:
+                item = prepared.get(action.action_id)
+                if item is None or item.action_revision != action.revision:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+                # 再次读取正式事实，防止前一个只读检查与快照装配之间权限发生漂移。
+                permissions = tuple(p for p in boundary.permission_intents if p.business_action_id == action.action_id)
+                contract = compile_action_assurance(action, permissions, repository.allow_controls(project_id))
+                if contract.fingerprint != item.assurance_contract_fingerprint:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+                # 在装配事务内重新检查技术来源，避免将先前 GET 的 SATISFIED 与新源码事实混用。
+                technical = (self._bindings.inspect(action, contract, item.identity_requirements, work=work)
+                             if self._bindings is not None else item)
+                identities = []
+                for slot in item.identity_requirements.slots:
+                    if slot.status is not PreparationStatus.SATISFIED:
+                        continue
+                    record = work.test_identities.get(slot.test_identity_id)
+                    if record is not None and record.prepared_at_us is not None:
+                        identities.append(PreparedIdentityAssignment(slot_id=slot.requirement.slot_id,
+                            identity_id=record.identity_id, actor_id=record.actor_id, actor_revision=record.actor_revision,
+                            identity_fingerprint=identity_source_fingerprint(record)))
+
+                def checked(binding, status):
+                    return binding if (binding is not None and status.status is PreparationStatus.SATISFIED
+                        and binding.binding_fingerprint == status.binding_fingerprint) else None
+
+                execution = checked(repository.execution(action.action_id, action.revision), technical.execution)
+                resources = tuple(binding for status in technical.resources if status.owner_test_identity_id is not None
+                    if (binding := checked(repository.resource(action.action_id, action.revision,
+                        status.owner_test_identity_id), status)) is not None)
+                evidence = tuple(binding for status in technical.effect_evidence
+                    if (binding := checked(repository.evidence(action.action_id, action.revision, status.effect_id), status)) is not None)
+                recovery = checked(repository.recovery(action.action_id, action.revision), technical.recovery)
+                capabilities = () if self._bindings is None else self._bindings.proof_capabilities(project_id, evidence)
+                inputs.append(PreparedActionInput(action=action, permissions=permissions, assurance=contract,
+                    identities=tuple(identities), execution=execution, resources=resources, evidence=evidence,
+                    recovery=recovery, observer_capabilities=capabilities, reason_codes=tuple(dict.fromkeys((
+                        *item.reason_codes, *(reason for status in (technical.execution, *technical.resources,
+                            *technical.effect_evidence, technical.recovery) for reason in status.reason_codes))))))
+            return compile_project_check_plan(project_id, source_fingerprint=understanding.source_fingerprint,
+                policy_epoch=boundary.policy_epoch, engine_version=engine_version,
+                config_fingerprint=config_fingerprint, actions=tuple(inputs))
 
     def build_execution_request(self, project_id: str, *, engine_version: str,
                                    config_fingerprint: str, budget_fingerprint: str,
@@ -130,15 +209,19 @@ class PreparationService:
         return projected_once(self,project_id,lambda:self._project(project_id))
 
     def _project(self, project_id: str) -> PreparationView:
-        boundary = self._business_boundaries.view(project_id)
+        with (self._uow_factory() if self._uow_factory is not None else nullcontext()) as work:
+            return self._project_current(project_id, work)
+
+    def _project_current(self, project_id, work):
+        boundary = self._business_boundaries.view(project_id, work=work) if work is not None else self._business_boundaries.view(project_id)
         interruptions=() if self._interruption_reader is None else self._interruption_reader(project_id)
-        identities = tuple(item for item in self._test_identities.list(project_id)
+        identity_records = self._test_identities.list(project_id, work=work) if work is not None else self._test_identities.list(project_id)
+        identities = tuple(item for item in identity_records
                            if item.project_id == project_id)
         actor_names = {(item.actor_id, item.revision): item.display_name for item in boundary.actors}
         selections = ()
-        if self._uow_factory is not None:
-            with self._uow_factory() as work:
-                selections = work.action_preparation.allow_controls(project_id)
+        if work is not None:
+            selections = work.action_preparation.allow_controls(project_id)
         actions = []
         for action in boundary.actions:
             contract = compile_action_assurance(action, boundary.permission_intents, selections)
@@ -148,7 +231,7 @@ class PreparationService:
             missing_legal_owners = {item.owner_slot_id for item in contract.resources} - {
                 item.resource_owner_slot_id for item in demonstrations}
             technical = (
-                self._bindings.inspect(action, contract, identity_view)
+                (self._bindings.inspect(action, contract, identity_view, work=work) if work is not None else self._bindings.inspect(action, contract, identity_view))
                 if self._bindings is not None else self._missing_technical(contract, identity_view)
             )
             labels={item.effect_id:item.business_label for item in action.effect_catalog}
@@ -203,10 +286,26 @@ class PreparationService:
             _,next_material=preparation_recommendation((prepared_action,))
             actions.append(prepared_action.model_copy(update={'next_material':next_material}))
         recommended_action,_=preparation_recommendation(actions)
+        understanding = None if work is None else work.application_understanding.get(project_id)
+        source = None if understanding is None else understanding.source_fingerprint
         return PreparationView(
             project_id=project_id, actions=tuple(actions),
             preparation_complete=bool(actions) and all(item.preparation_complete for item in actions),
             recommended_action_id=recommended_action,
+            policy_epoch=boundary.policy_epoch, source_fingerprint=source,
+            basis_fingerprint=boundary_sha256({'project_id':project_id,'policy_epoch':boundary.policy_epoch,
+                'source_fingerprint':source,'actions':[item.model_dump(mode='json') for item in actions]}),
+            impacts=tuple(MaterialImpactView(action_id=action.action_id, action_label=action.display_name,
+                kind=kind, status=item.status, reason_codes=item.reason_codes,
+                member_id=getattr(item,'owner_test_identity_id',None) or getattr(item,'effect_id',None) or getattr(item,'test_identity_id',None),
+                member_label=getattr(item,'actor_display_name','') or getattr(item,'business_label',''),
+                permission_ids=tuple(rule.intent_id for rule in action.permissions
+                    if (kind != 'identity' or item.requirement.actor_id in (rule.subject_actor_id,rule.resource_owner_actor_id))
+                    and (kind != 'evidence' or item.effect_id in rule.protected_effect_ids)))
+                for action in actions for kind, items in (
+                    ('identity',action.identity_requirements.slots), ('execution',(action.execution,)),
+                    ('resource',action.resources), ('evidence',action.effect_evidence), ('recovery',(action.recovery,)))
+                for item in items if item.status is not PreparationStatus.NOT_REQUIRED),
         )
 
     @staticmethod

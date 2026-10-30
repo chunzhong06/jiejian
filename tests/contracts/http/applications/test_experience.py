@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 import pytest
 from product.backend.domain.lifecycle import ProjectStatus
-from tests.support.secrets import MemorySecrets as InMemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import TestClient, create_app
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 
@@ -11,7 +11,7 @@ _SAMPLE_ROOT=Path(__file__).resolve().parents[4]/'samples/web/digital_gallery'
 pytestmark = [pytest.mark.level4, pytest.mark.process, pytest.mark.slow]
 
 def _app(tmp_path,*,sample_root=_SAMPLE_ROOT):
-    var=tmp_path/'var';store=InMemorySecretStore()
+    var=tmp_path/'var';store=MemorySecrets()
     return create_app(var,start_worker=False,official_sample_root=sample_root,secret_store=store,environ=runtime_identity_environment(var)),store
 
 def _completed(client,response):

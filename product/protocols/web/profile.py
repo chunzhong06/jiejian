@@ -1,21 +1,10 @@
-# =============================================================================
 # 内部生成的 Web 执行输入协议
-#
-# 定位
-# 用户治理源文件进入冻结执行快照前的无秘密高级配置真源。
-#
-# 职责
-# 校验目标与身份绑定｜约束预算和 Observer｜规范化加载并生成确定性摘要
-#
-# 边界
+# 校验目标与身份绑定、约束预算和 Observer、规范化加载并生成确定性摘要
 # 完整 Profile 只存在受控源文件，数据库只保存治理元数据；协议不读取秘密或执行目标。
-#
-# 调用链
-# Profile source → ExecutionWorkflow → WebExecutionSnapshot / ExecutionRequest
-# =============================================================================
 
 from __future__ import annotations
 
+from product.protocols.codec import decode_json
 import hashlib
 import json
 import math
@@ -524,26 +513,10 @@ def parse_web_execution_profile(
     if raw.startswith(b"\xef\xbb\xbf"):
         raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "Profile 不接受 BOM")
 
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate JSON key")
-            result[key] = value
-        return result
-
     try:
-        data = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=reject_duplicate_keys,
-            parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)),
-        )
-        if not isinstance(data, dict):
-            raise ValueError("profile root must be an object")
+        data = decode_json(raw, limit=WEB_EXECUTION_PROFILE_MAX_BYTES)
         if data.get("schema_version") != "1":
             raise ValueError("profile schema_version is missing or unsupported")
-        # 先用 json.loads 只做重复键/根类型检查，再由 Pydantic 的 JSON
-        # strict parser 保留 tuple 等 JSON 数组到严格模型的合法转换。
         profile = WebExecutionProfile.model_validate_json(raw, strict=True)
         _reject_secret_values(profile.model_dump(mode="json"), known_secrets)
         return profile

@@ -1,16 +1,4 @@
-/* =============================================================================
- * 应用与项目 API 客户端
- *
- * 定位
- *   接入页面与 Project HTTP 路由之间的前端能力适配器
- *
- * 职责
- *   建立应用连接｜确认 endpoint｜授权源码分析｜读取当前 ApplicationUnderstanding
- *
- * 调用链
- *   Access / ControlShell → projectsApi → api/http
- * ============================================================================= */
-
+// 应用接入 API：读取项目与连接事实，提交地址确认和源码分析授权。
 import { request } from '../../../shared/api/http'
 import type { DiscoveryResult } from './onboarding'
 
@@ -95,10 +83,22 @@ export type ApplicationConnectionDto = {
 }
 export type ConnectionPreview = {source_root:string;snapshot:string;projects:ProjectDto[]}
 export type ConnectionChoice = {mode:'RESUME'|'NEW';existing_project_id?:string;expected_snapshot:string;operation_id?:string}
+export type RuntimePreview = { project_id: string; revision: number; entry: string; port: number; preview_fingerprint: string; files: Array<{ relative_path: string }> }
+export type RuntimeOperation = { project_id: string; operation_id: string; instance_id: string; state: string }
+export type RuntimeState = { project_id: string; running: boolean; source_matches: boolean; configuration: { entry: string; port: number } | null; operation: RuntimeOperation | null }
+const runtimePath = (id: string) => `/api/projects/${encodeURIComponent(id)}/controlled-runtime`
 
 export type CandidateSelection = { kind: 'ROLE' | 'ACTION'; candidate_id: string; decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED'; display_name: string }
 
 export const projectsApi = {
+  readiness: (id: string, signal?: AbortSignal) => request<ApplicationReadiness>(`/api/projects/${id}/readiness`, {signal}),
+  activity: (id: string, signal?: AbortSignal) => request<ApplicationActivity>(`/api/projects/${id}/activity`, {signal}),
+  runtime: (id: string) => request<RuntimeState>(runtimePath(id)),
+  runtimePreview: (id: string, body: { entry: string; port: number; revision: number }) => request<RuntimePreview>(runtimePath(id) + '/preview', { method: 'POST', body: JSON.stringify(body) }),
+  runtimeStart: (id: string, body: { entry: string; port: number; revision: number; preview_fingerprint: string; operation_id: string; consent_execute: true }) => request<RuntimeOperation>(runtimePath(id) + '/start', { method: 'POST', body: JSON.stringify(body) }),
+  runtimeOperation: (id: string, operation: string) => request<RuntimeOperation | null>(runtimePath(id) + '/operations/' + operation),
+  runtimeCancel: (id: string, operation: string) => request<RuntimeOperation>(runtimePath(id) + '/operations/' + operation + '/cancel', { method: 'POST' }),
+  runtimeStop: (id: string, instance: string) => request<RuntimeState>(runtimePath(id) + '/stop', { method: 'POST', body: JSON.stringify({ instance_id: instance }) }),
   decideCandidates: (id: string, revision: number, decisions: CandidateSelection[]) =>
     request<ApplicationUnderstandingDto>(`/api/projects/${id}/candidate-decisions`, {
       method: 'PUT', body: JSON.stringify({ schema_version: '1', revision, decisions }),
@@ -151,3 +151,6 @@ export const projectsApi = {
       body: JSON.stringify({ schema_version: '1', display_name: displayName, risk_hint: riskHint, revision }),
     }),
 }
+
+export type ApplicationActivity = {project_id: string; revision: number; items: Array<{id: string; kind: string; label: string; phase: string; destination: string; updated_at_us: number}>}
+export type ApplicationReadiness = {project_id: string; revision: number; basis_fingerprint: string; endpoint: string | null; endpoint_checked_at_us: number | null; analysis_completed_at_us: number | null; items: Array<{key: string; label: string; state: string; detail: string; destination: string}>}

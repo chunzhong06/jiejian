@@ -231,6 +231,8 @@ class NodeOfficialSampleExperience:
     def development_journey(self):
         current=self._active(lightweight=True);workspace=self._workspace();project=current.project_id
         fingerprint=self.understanding.inspect_source_fingerprint(project)
+        change_id=self._change_id(project,(workspace['scenario_version'],))
+        delivery_run_id=None
         with self._uow() as work:
             if workspace['scenario_version']=='BASELINE':
                 initial=work.runtime_loads.operation(project,self._key(workspace['workspace_id'],'start'))
@@ -240,22 +242,24 @@ class NodeOfficialSampleExperience:
                 delivery=None if saved is None else work.development.delivery(project,saved.delivery_id)
                 snapshot=None if delivery is None else work.source_changes.snapshot(delivery.current_snapshot_id)
                 expected=None if snapshot is None else snapshot.source_fingerprint
+            if change_id:
+                delivery=work.development.delivery_for_change(project,change_id)
+                if delivery is None:raise JiejianError(ErrorCode.STORAGE_FAILURE,'示例交付记录缺失')
+                delivery_run_id=work.development.latest_check_run(project,delivery.delivery_id)
         external=fingerprint!=expected
-        state=self.repairs.evaluate(project)
+        # 项目修复状态需要历史原问题；进度与修复状态共用本轮核验，不再通过交付详情重读包。
+        readings=self.reader.project_readings(project)
+        state=self.repairs.evaluate(project,readings=readings)
         verified=bool(state.tasks) and all(item.status=='VERIFIED' for item in state.tasks)
         verdict=None;run_id=None
-        # 已有精确交付时只读其检查，不能先遍历并校验全部历史发布包。
-        change_id=self._change_id(project,(workspace['scenario_version'],))
-        if change_id:
-            detail=self.changes.delivery_details(project,change_id)
-            verification=detail['verification']
-            records=[] if verification is None or verification['run_id'] is None else [self.reader.status(verification['run_id'],project_id=project)]
-        else:
-            records=self.reader.list_for_project(project)
+        records=readings if change_id is None else tuple(item for item in readings if item[0].run.run_id==delivery_run_id)
+        if delivery_run_id is not None and not records:
+            raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'记录不存在')
         policy_epoch=self.boundaries.view(project).policy_epoch
-        for item in records:
+        for item,package in records:
             if item.result_integrity!='VALID':continue
-            package=self.reader.package(item.run.run_id,project_id=project)
+            if change_id and (package.request.change_context is None or package.request.change_context.change_id!=change_id):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'交付检查关联不完整')
             if package.request.source_fingerprint==fingerprint and package.request.policy_epoch==policy_epoch:
                 run_id=item.run.run_id;verdict=item.run.verdict.value;break
         return OfficialDevelopmentJourney(project_id=project,implementation='CUSTOM' if external else workspace['scenario_version'],delivery_source='EXTERNAL_CODE' if external else 'PRESET_DEMONSTRATION',

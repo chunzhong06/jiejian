@@ -1,15 +1,6 @@
-# =============================================================================
 # Worker 生存期锁
-#
-# 定位
-#   Worker 执行进程与控制面异常恢复之间的系统级退出证明
-#
-# 职责
-#   约束锁文件路径｜拒绝同任务重复进程｜形成旧 Worker 已退出的恢复证明
-#
-# 边界
-#   PID 和诊断 JSON 不决定锁是否有效；只有内核锁可重新获取才允许恢复任务。
-# =============================================================================
+# 约束锁文件路径、拒绝同任务重复进程、形成旧 Worker 已退出的恢复证明
+# PID 和诊断 JSON 不决定锁是否有效；只有内核锁可重新获取才允许恢复任务。
 
 from __future__ import annotations
 
@@ -156,3 +147,16 @@ class WorkerLifetimeLock:
         finally:
             self._stream.close()
             self.acquired = False
+
+    @staticmethod
+    def completed_execution_has_exited(var_dir: Path, job_id: str) -> bool:
+        """终态已释放数据库租约时，从原树收据取所有者，再核验内核退出事实。"""
+        import re
+        try:
+            value = json.loads(worker_tree_identity_path(var_dir, job_id).read_text(encoding='utf-8'))
+            owner = value['lease_owner']
+            if not isinstance(owner, str) or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,127}', owner) is None:
+                return False
+            return WorkerLifetimeLock.execution_has_exited(var_dir, job_id, owner)
+        except (OSError, ValueError, KeyError, TypeError):
+            return False

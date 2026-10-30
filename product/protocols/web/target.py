@@ -1,15 +1,6 @@
-# =============================================================================
 # Web Target 协议
-#
-# 定位
-#   Web Runtime 的业务目标与授权 scope wire 模型。
-#
-# 职责
-#   规范化 Web origin/host/port｜约束私网、请求和响应预算｜冻结 reset 入口
-#
-# 边界
-#   不包含身份、HTTP Workflow、Verification 或未来 Target 定义。
-# =============================================================================
+# 规范化 Web origin/host/port、约束私网、请求和响应预算、冻结 reset 入口
+# 不包含身份、HTTP Workflow、Verification 或未来 Target 定义。
 
 from __future__ import annotations
 

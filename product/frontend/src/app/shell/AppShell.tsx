@@ -1,14 +1,16 @@
 import {useEffect,useState,type ReactNode} from 'react'
-import {DatabaseOutlined,MenuOutlined,MoonOutlined,SunOutlined} from '@ant-design/icons'
+import {ApiOutlined,DatabaseOutlined,MenuOutlined,MoonOutlined,SunOutlined} from '@ant-design/icons'
 import type {ProjectDto} from '../../entities/application/api/projects'
-import type {Route} from '../../shared/lib/navigation'
-import {Button} from '../../shared/ui/actions'
+import {scopedPath,type Route} from '../../shared/lib/navigation'
+import {ActionLink,Button} from '../../shared/ui/actions'
+import {Hint} from '../../shared/ui/Hint'
 import {Choice} from '../../shared/ui/Choice'
 import {Dialog} from '../../shared/ui/Dialog'
 import {Breadcrumbs,NavigationLinks} from '../Navigation'
 import {preloadRoute} from '../Router'
 import {Shutdown} from '../Shutdown'
 import {RuntimeStatus} from './RuntimeStatus'
+import {Activity} from './Activity'
 
 type Props={route:Route;current:string;project?:ProjectDto;projects?:ProjectDto[];choose:(id:string)=>void;appearance:'light'|'dark';toggleAppearance:()=>void;children:ReactNode}
 
@@ -22,9 +24,9 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
       {!project&&<option value="">尚未连接应用</option>}
       {projects?.map(item=><option value={item.project_id} key={item.project_id}>{item.name??'未命名应用'}</option>)}
     </Choice></div>
-    <NavigationLinks current={current} hasProject={Boolean(project)} onNavigate={close}/>
+    <NavigationLinks current={current} hasProject={Boolean(project)} projectId={project?.project_id} onNavigate={close}/>
+    {project&&<Activity key={project.project_id} projectId={project.project_id}/>}
     <nav className="jj-sidebar-bottom" aria-label="本地维护">
-      <a className="jj-nav-item" href="#/storage" onPointerEnter={()=>preloadRoute('/storage')} onFocus={()=>preloadRoute('/storage')} aria-current={current==='/storage'?'page':undefined} onClick={close}><DatabaseOutlined aria-hidden="true"/><span>本地存储</span></a>
       <Shutdown/>
     </nav>
   </>
@@ -36,7 +38,11 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
       <header className="jj-topbar">
         <Button kind="quiet" className="jj-mobile-toggle" aria-label="打开导航" icon={<MenuOutlined aria-hidden="true"/>} onClick={()=>setMobile(true)}/>
         <Breadcrumbs route={route} projectName={project?.name} projectId={project?.project_id}/>
-        <div className="jj-toolbar"><Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/><span className="jj-toolbar-divider" aria-hidden="true"/><RuntimeStatus/></div>
+        <nav className="jj-toolbar" aria-label="全局工具">
+          <Hint label="开发工具"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/tools',project?.project_id)} aria-label="开发工具" aria-current={current==='/tools'?'page':undefined} onPointerEnter={()=>preloadRoute('/tools')} onFocus={()=>preloadRoute('/tools')}><ApiOutlined aria-hidden="true"/></ActionLink></Hint>
+          <Hint label="本地存储"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/storage',project?.project_id)} aria-label="本地存储" aria-current={current==='/storage'?'page':undefined} onPointerEnter={()=>preloadRoute('/storage')} onFocus={()=>preloadRoute('/storage')}><DatabaseOutlined aria-hidden="true"/></ActionLink></Hint>
+          <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/><span className="jj-toolbar-divider" aria-hidden="true"/><RuntimeStatus/>
+        </nav>
       </header>
       <main id="jj-content" tabIndex={-1} className="jj-content">{children}</main>
     </div>

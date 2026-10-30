@@ -32,10 +32,12 @@ def write_zip(destination: Path, base: Path, samples: Path | None) -> None:
                     for path in iter_files(samples)
                 )
             for source, relative in sorted(entries, key=lambda pair: pair[1].as_posix()):
+                # 固定顺序、时间和权限，避免同一输入因本机文件元数据不同而生成不同归档。
                 info = zipfile.ZipInfo(relative.as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o100644 << 16
                 archive.writestr(info, source.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+        # ZIP 完整关闭后再替换正式文件，构建中断时不把半个归档当作可分发产物。
         os.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)

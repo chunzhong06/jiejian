@@ -7,7 +7,7 @@ import httpx
 import pytest
 from product.backend.bootstrap.application import ApplicationCore
 from product.backend.domain.errors import JiejianError
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 
 ROOT=Path(__file__).resolve().parents[3]
@@ -18,7 +18,7 @@ SAMPLE=ROOT/'samples/web/digital_gallery'
 @pytest.mark.slow
 def test_node_sample_start_human_choice_real_assets_and_exit(tmp_path):
     var=tmp_path/'var'
-    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     try:
         key=str(uuid4());started=core.official_experience.start(consent=True,operation_id=key)
         assert started.active and started.runtime_kind=='NODE_ESM'

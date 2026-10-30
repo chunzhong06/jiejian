@@ -8,7 +8,8 @@ import pytest
 from product.backend.domain.lifecycle import JobState
 from product.backend.domain.recording.models import RecordingState
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob
-from tests.support.builders.preparation.recording import RecordingContext, captured_result
+from tests.support.builders.preparation.recording import RecordingContext
+from tests.support.builders.preparation.recording_facts import captured_result
 from tests.application.recording._support_project_submission import _arguments
 
 
@@ -76,8 +77,8 @@ def test_simultaneous_fixed_submissions_consume_once(tmp_path, monkeypatch):
     core = context.harness.core
     barrier = Barrier(2)
     original = core.recording_submission.captured_existing
-    def synchronize(*args):
-        result = original(*args)
+    def synchronize(*args, **kwargs):
+        result = original(*args, **kwargs)
         if result is None:
             barrier.wait(timeout=10)
         return result
@@ -144,3 +145,22 @@ def test_fixed_key_conflicts_with_changed_business_input_before_new_session(tmp_
         context.harness.close()
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_ordinary_recording_reuses_pending_request_without_second_session(tmp_path):
+    context = RecordingContext(tmp_path)
+    core = context.harness.core
+    try:
+        arguments = _arguments(context)
+        first = core.project_recordings.submit(context.project_id, **arguments)
+        sessions = core.runtime_secrets.model_dump()["session_count"]
+        second = core.project_recordings.submit(context.project_id, **arguments)
+        assert second.result.recording.recording_id == first.result.recording.recording_id
+        assert second.result.job.job_id == first.result.job.job_id
+        assert core.runtime_secrets.model_dump()["session_count"] == sessions
+        from product.backend.domain.errors import JiejianError
+        with pytest.raises(JiejianError) as rejected:
+            core.project_recordings.submit(context.project_id, **(arguments | {'duration_seconds': 59}))
+        assert getattr(rejected.value, 'code', None) == 'JOB_IDEMPOTENCY_CONFLICT'
+    finally:
+        context.harness.close()

@@ -8,7 +8,7 @@ from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
 from product.backend.application.agent_access.service import MCPAccessLevel
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
 from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN
 from tests.contracts.http.system._support_current_mcp import TOOLS, start_task
@@ -20,7 +20,7 @@ def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
     from jsonschema import Draft202012Validator
     from tests.support.builders.boundary_candidates import _content
 
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     source = tmp_path / "source"
     source.mkdir()
     core = app.state.context
@@ -113,7 +113,7 @@ def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
 
 @pytest.mark.parametrize("fault,expected", [("token", 401), ("origin", 403), ("host", 421), ("paused", 403), ("rotated", 401), ("closed", 403)])
 def test_sdk_transport_rejects_invalid_or_revoked_connection(tmp_path, fault, expected):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     access = app.state.mcp_access
     token = access.pair().access_token
     headers = {"Authorization": "Bearer " + token, "Origin": TEST_CONTROL_ORIGIN}
@@ -146,7 +146,7 @@ def test_sdk_transport_rejects_invalid_or_revoked_connection(tmp_path, fault, ex
 
 @pytest.mark.parametrize("reset", ["pause", "resume", "rotate", "forget", "close"])
 def test_connection_reset_clears_all_project_grants(tmp_path, reset):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     access = app.state.mcp_access
     access.pair()
     access.set_level("project-a", MCPAccessLevel.EXECUTE)
@@ -164,7 +164,7 @@ def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(
     from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
     from tests.support.builders.runtime.official_preparation import prepare_sample, prepare_changed_sample
     var_dir = tmp_path / "var"
-    app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(),
+    app = create_app(var_dir, start_worker=False, secret_store=MemorySecrets(),
         environ=runtime_identity_environment(var_dir),
         official_sample_root=Path(__file__).resolve().parents[4] / "samples/web/digital_gallery")
     core = app.state.context
@@ -222,7 +222,7 @@ def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(
 
 
 def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_path):
-    app = create_app(tmp_path/"var",start_worker=False,secret_store=MemorySecretStore(),environ={})
+    app = create_app(tmp_path/"var",start_worker=False,secret_store=MemorySecrets(),environ={})
     harness = ready_check_harness(tmp_path,core=app.state.context)
     access = app.state.mcp_access
     token = access.pair().access_token
@@ -310,7 +310,7 @@ def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_p
 
 def test_lightweight_mcp_registration_requires_prepare_without_task_handshake(tmp_path):
     from uuid import uuid4
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     core, project, access = app.state.context, harness.project_id, app.state.mcp_access
     current = core.application_understanding.get(project)
@@ -340,7 +340,7 @@ def test_lightweight_mcp_registration_requires_prepare_without_task_handshake(tm
 def test_lightweight_http_registration_contract_and_local_guard(tmp_path):
     from uuid import uuid4
     from tests.support.builders.control_plane import TestClient
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     core, project = app.state.context, harness.project_id
     current = core.application_understanding.get(project)

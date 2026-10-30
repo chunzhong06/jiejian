@@ -1,18 +1,6 @@
-# =============================================================================
 # Execution 持久 Job 队列
-#
-# 定位
-#   API/CLI 提交与 Worker claim 之间的持久生命周期入口
-#
-# 职责
-#   幂等创建 Job｜请求取消｜协调 Job target、Run/Recording 与审计事件
-#
-# 边界
-#   只持久化生命周期意图，不启动 Runner，也不把 JobState 当作安全 Verdict。
-#
-# 调用链
-#   Submission / API → JobQueue → StorageUnitOfWork / JobTargetRegistry
-# =============================================================================
+# 幂等创建 Job、请求取消、协调 Job target、Run/Recording 与审计事件
+# 只持久化生命周期意图，不启动 Runner，也不把 JobState 当作安全 Verdict。
 
 from __future__ import annotations
 
@@ -56,6 +44,8 @@ class JobQueue:
     ) -> JobSubmissionResult:
         """幂等地创建排队任务及其执行目标；重复键返回原提交而不复制副作用。"""
 
+        # precondition 与 on_created 使用本次 UoW，只应检查或写入事务内事实；
+        # 不能在回调中发请求、启动进程或提交自己的事务，否则无法随本次提交回滚。
         validate_control_request(request, known_secrets)
         run_id = request.run_id or f"run_{uuid4().hex}"
         job_id = request.job_id or f"job_{uuid4().hex}"
@@ -136,6 +126,8 @@ class JobQueue:
     ) -> CancellationResult:
         """请求取消任务，并按当前状态选择立即终止或留给 Worker 协作清理。"""
 
+        # completed=False 表示已记录意图，实际执行仍由 Worker 停止；不能据此释放运行材料。
+        # 传入 work 时提交权归外层，本方法不提前提交取消事件或目标状态。
         validate_control_request(request, known_secrets)
         from contextlib import nullcontext
         owns_transaction = work is None

@@ -3,7 +3,8 @@
 import pytest
 from tests.support.builders.control_plane import TestClient, create_app
 from product.backend.application.preparation.bindings.sources import binding_source_fields
-from tests.support.builders.preparation.action_preparation import MemorySecretStore, build_preparation_harness
+from tests.support.builders.preparation.action_preparation import build_preparation_harness
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.assurance import permission
 from product.backend.domain.boundaries.permissions import PermissionIntentRelation
 from product.backend.domain.boundaries.semantics import PermissionExpectation
@@ -17,7 +18,7 @@ def test_old_prepare_safe_writer_remains_absent(tmp_path):
 
 
 def test_finite_allow_selection_preserves_permissions_epoch_and_rejects_stale_input(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     harness = build_preparation_harness(tmp_path, core=core)
     with core.uow_factory() as work:
@@ -57,7 +58,7 @@ def test_evidence_details_get_is_guarded_read_only_and_has_no_write_routes(tmp_p
     from product.backend.infrastructure.storage.base import Base
     from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWork
 
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     harness = build_preparation_harness(tmp_path, core=core)
     route = f"/api/projects/{harness.project_id}/preparation/evidence/{harness.action.action_id}"
@@ -94,7 +95,7 @@ def test_evidence_details_get_is_guarded_read_only_and_has_no_write_routes(tmp_p
 
 def test_evidence_details_exception_does_not_leak_reader_message(tmp_path, monkeypatch):
     from unittest.mock import Mock
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     harness = build_preparation_harness(tmp_path, core=core)
     monkeypatch.setattr(core.preparation_bindings, "describe_evidence",
@@ -107,7 +108,7 @@ def test_evidence_details_exception_does_not_leak_reader_message(tmp_path, monke
 
 def test_existing_registered_binding_missing_runtime_is_described_without_repair(tmp_path):
     from product.backend.domain.preparation.bindings import ActionEvidenceBinding, ActionEvidenceKind, RegisteredObserverReference, seal_binding
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     harness = build_preparation_harness(tmp_path, core=core)
     with core.uow_factory() as work:

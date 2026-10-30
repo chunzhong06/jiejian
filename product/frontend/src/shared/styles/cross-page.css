@@ -1,2 +1,6 @@
-.jj-tool-configure > .jj-field { flex: 1; min-width: 150px; }
-@media(max-width:1150px) { .jj-tools-access > .jj-field { margin-top: 24px; } }
+.jj-workspace-header { display:flex; align-items:center; gap:16px; padding:26px 28px; }
+.jj-workspace-header > .jj-badge { margin-left:auto; }
+.jj-workspace-header .jj-eyebrow { margin-bottom:5px; }
+.jj-workspace-symbol { display:inline-flex; justify-content:center; align-items:center; width:42px; height:42px; border-radius:12px; background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); flex:none; }
+.jj-path { overflow-wrap:anywhere; font-size:var(--text-meta); color:var(--muted); }
+@media(max-width:700px) { .jj-workspace-header { padding:22px 20px; flex-wrap:wrap; } .jj-workspace-header > .jj-badge { margin-left:58px; } }

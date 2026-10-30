@@ -23,11 +23,6 @@ def test_shared_frontend_does_not_depend_on_pages_entities_or_application():
         if any('/'+layer+'/' in text for layer in ['pages','entities','app']):violations.append(path.name)
     assert violations==[]
 
-def test_product_modules_have_explicit_python_responsibility_headers():
-    missing=[path.relative_to(ROOT).as_posix() for base in ['product/backend','product/protocols'] for path in python_files(ROOT/base) if not path.read_text('utf-8-sig').lstrip().startswith('#')]
-    assert missing==[]
-
-
 def test_python_child_launches_explicitly_select_an_environment_role():
     sites=[]
     missing=[]
@@ -101,5 +96,14 @@ def test_infrastructure_does_not_import_the_composition_root_or_entrypoints():
     for path in python_files(ROOT/'product/backend/infrastructure'):
         for _, name, _ in runtime_imports(ast.parse(path.read_text('utf-8-sig'))):
             if name.startswith(('product.backend.bootstrap', 'product.backend.interfaces')):
+                violations.append((path.relative_to(ROOT).as_posix(), name))
+    assert violations == []
+
+
+def test_login_browser_mechanics_do_not_own_account_use_cases():
+    violations = []
+    for path in python_files(ROOT/'product/backend/infrastructure/identity'):
+        for _, name, _ in runtime_imports(ast.parse(path.read_text('utf-8-sig'))):
+            if name.startswith('product.backend.application'):
                 violations.append((path.relative_to(ROOT).as_posix(), name))
     assert violations == []

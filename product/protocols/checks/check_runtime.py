@@ -377,8 +377,7 @@ def canonical_check_runtime_bytes(bundle: CheckRuntimeBundle) -> bytes:
     try:
         if type(bundle) is not CheckRuntimeBundle:
             raise ValueError("unsupported runtime document")
-        parsed = CheckRuntimeBundle.model_validate_json(bundle.model_dump_json(), strict=True)
-        raw = encode_json(parsed.model_dump(mode="json"))
+        raw = encode_json(bundle.model_dump(mode="json"))
         if len(raw) > CHECK_DOCUMENT_MAX_BYTES or _SECRET.search(raw.decode()):
             raise ValueError("unsafe or oversized check runtime")
         return raw

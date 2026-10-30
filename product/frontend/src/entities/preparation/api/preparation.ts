@@ -33,7 +33,7 @@ export type ActionPreparation = {
   recovery: PreparationItem
   reason_codes: string[]
 }
-export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean; recommended_action_id: string | null }
+export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean; recommended_action_id: string | null; basis_fingerprint: string | null; policy_epoch: number; source_fingerprint: string | null; impacts: Array<{action_id:string;action_label:string;kind:'identity'|'execution'|'resource'|'evidence'|'recovery';status:PreparationStatus;reason_codes:string[];permission_ids:string[];member_id:string|null;member_label:string}> }
 export type EffectMaterialSummary = {
   effect_id: string; business_label: string; resource_concept: string
   material_status: PreparationStatus; binding_fingerprint: string | null

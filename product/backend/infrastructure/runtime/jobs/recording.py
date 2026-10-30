@@ -1,18 +1,6 @@
-# =============================================================================
 # Recording JobHandler
-#
-# 定位
-#   Execution 通用 Handler 端口的 Recording 实现
-#
-# 职责
-#   领取 fenced attempt｜监督 Recording Runner｜校验并交给 Recording 应用服务完成
-#
-# 边界
-#   Handler 不在 Worker 进程执行浏览器动作，只接受当前 fencing token 的结果。
-#
-# 调用链
-#   JobHandlerRegistry → RecordingJobHandler → recording process / RecordingSubmission
-# =============================================================================
+# 领取 fenced attempt、监督 Recording Runner、校验并交给 Recording 应用服务完成
+# Handler 不在 Worker 进程执行浏览器动作，只接受当前 fencing token 的结果。
 
 from __future__ import annotations
 

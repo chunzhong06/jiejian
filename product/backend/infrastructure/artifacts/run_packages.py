@@ -1,7 +1,6 @@
 # 当前录制共享的 attempt 路径与工件定位。
 from dataclasses import dataclass
 from pathlib import Path
-import os
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.infrastructure.storage import JobRecord
 from product.backend.infrastructure.runtime.paths import RuntimePaths

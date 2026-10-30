@@ -1,18 +1,6 @@
-# =============================================================================
 # Project 归档生命周期服务
-#
-# 定位
-#   普通用户“移除应用”与既有 Project 历史之间的业务编排边界。
-#
-# 职责
-#   拒绝活动任务｜清理当前测试身份秘密｜将 Project 置为 ARCHIVED。
-#
-# 边界
-#   不删除源码、Project、Run、Evidence、Finding、Report 或历史准备元数据；再次接入同源目录时须明确选择恢复；也可建立独立空项目。
-#
-# 调用链
-#   GUI / CLI / API → ProjectLifecycleService → UoW + TestIdentityService
-# =============================================================================
+# 拒绝活动任务、清理当前测试身份秘密、将 Project 置为 ARCHIVED。
+# 不删除源码、Project、Run、Evidence、Finding、Report 或历史准备元数据；再次接入同源目录时须明确选择恢复；也可建立独立空项目。
 
 from __future__ import annotations
 

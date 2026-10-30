@@ -1,18 +1,6 @@
-# =============================================================================
 # Windows Credential Manager 秘密存储
-#
-# 定位
-#   共享 SecretStore 端口的 Windows 平台实现。
-#
-# 职责
-#   按严格引用读写泛型凭据｜精确删除单条凭据｜隐藏平台 ctypes 细节。
-#
-# 边界
-#   不枚举凭据；正文只在调用栈和 Credential Manager 中短暂出现。
-#
-# 调用链
-#   SecretStore consumers → WindowsCredentialManagerSecretStore → Advapi32
-# =============================================================================
+# 按严格引用读写泛型凭据、精确删除单条凭据、隐藏平台 ctypes 细节。
+# 不枚举凭据；正文只在调用栈和 Credential Manager 中短暂出现。
 
 from __future__ import annotations
 

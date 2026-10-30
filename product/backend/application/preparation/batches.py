@@ -1,7 +1,9 @@
 # 执行GUI确认的有限材料批次；目标访问仍交由原Worker，关页可续查，未知写入不重放。
 import hashlib
 import json
+import logging
 import time
+import traceback
 from threading import Lock, Event
 from typing import Literal
 
@@ -141,8 +143,16 @@ class PreparationBatchService:
                 for _ in range(8):
                     before=json.dumps(value,sort_keys=True)
                     try:self._step(value)
-                    except JiejianError as exc:self._finish(value,'BLOCKED',exc.to_dict()['message'])
-                    except Exception:self._finish(value,'BLOCKED','准备未能继续，请查看已有材料与原操作回执后重新核对计划')
+                    except JiejianError as exc:
+                        self._finish(value,'BLOCKED',exc.to_dict()['message'],error=dict(code=exc.code))
+                    except Exception as exc:
+                        # 只保留代码位置和异常类别；异常正文、源码行和局部变量可能携带目标秘密。
+                        error=dict(code='PREPARATION_INTERNAL_ERROR',exception_type=type(exc).__name__,
+                            frames=[dict(module=frame.f_globals['__name__'],function=frame.f_code.co_name,line=line)
+                                for frame,line in traceback.walk_tb(exc.__traceback__)])
+                        logging.getLogger('jiejian.preparation').error('材料批次 %s 内部故障：%s',
+                            value['operation_id'],json.dumps(error,ensure_ascii=False),extra=dict(event_code=error['code']))
+                        self._finish(value,'BLOCKED','材料准备发生内部错误，已停止后续步骤；已完成材料和原操作回执保留',error=error)
                     if value['state'] not in ('RUNNING','CANCELLING') or before==json.dumps(value,sort_keys=True):break
                     # 取消决定每次从存储读取，不能连续推进旧快照越过用户取消。
                     with self._uow() as work:value=work.preparation_batches.get(value['project_id'],value['operation_id'])
@@ -168,16 +178,15 @@ class PreparationBatchService:
             work.commit()
         self.wake.set()
 
-    def _finish(self, value, state, message):
+    def _finish(self, value, state, message, *, error=None):
         value['state'], value['payload']['message'] = state, message
+        if error is not None:value['payload']['error']=error
         self._save(value)
 
     def _step(self, value):
         project,data=value['project_id'],value['payload']
         if data.get('schema_version')!='2':
             return self._finish(value,'BLOCKED','旧材料批次已保留，请核对原回执后重新确认剩余计划')
-        if value['control_session_id']!=self._proofs.control_session_id:
-            return self._finish(value,'BLOCKED','界鉴已重启，已完成材料保留，请重新确认剩余计划')
         for index,item in enumerate(data['items']):
             if item.get('pending'):
                 pending=item['pending']
@@ -196,6 +205,9 @@ class PreparationBatchService:
                     if not item.get('cancel_sent'):self._write(value,index,'CANCEL_PREFLIGHT',dict(preflight_id=item['preflight_id']))
             if not waiting:self._finish(value,'CANCELLED','已停止后续准备，已经完成的材料保留')
             return
+        # 取消只收口本批已拥有的任务；重启不能撤销取消意图，也不能授权继续创建材料。
+        if value['control_session_id']!=self._proofs.control_session_id:
+            return self._finish(value,'BLOCKED','界鉴已重启，已完成材料保留，请重新确认剩余计划')
         plan=PreparationBatchPlan.model_validate_json(json.dumps(data['plan']))
         if _digest(self._guard(project))!=plan.guard:
             return self._finish(value,'BLOCKED','权限、源码或运行实例已变化，请重新核对计划')
@@ -334,4 +346,5 @@ class PreparationBatchService:
             total=len(data['plan']['sources']),preflight_id=next((i['preflight_id'] for i in items if i['state']=='CHECKING'),data.get('preflight_id')),
             phase=data['stage'],items=[dict(label=i['label'],state=i['state']) for i in items],
             identities=[dict(account=i['account'],state=i['state']) for i in data.get('recipe',{}).get('identities',[])],
+            error_code=data.get('error',{}).get('code'),
             created_at_us=value['created_at_us'],updated_at_us=value['updated_at_us'])

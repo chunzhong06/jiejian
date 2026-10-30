@@ -50,23 +50,31 @@ export type IdentityPreparationDto = {
   message: string
   error_code: string | null
   log_path: string
+  project_id: string | null
+  job_id: string | null
+  cleanup_required: boolean
 }
 
 const command = { schema_version: '1' as const }
 
 export const testIdentitiesApi = {
+  cleanupPreparation: (id:string) => request<IdentityPreparationDto>(`/api/identity-preparations/${id}/cleanup`, {method:'POST',body:JSON.stringify(command)}),
+  preparations: (projectId: string, signal?: AbortSignal) => request<IdentityPreparationDto[]>(`/api/projects/${projectId}/identity-preparations`, {signal}),
+  requestedPreparation: (identity: string, operation: string) => request<IdentityPreparationDto | null>(`/api/test-identities/${identity}/preparation-requests/${operation}`),
   list: (projectId: string, signal?:AbortSignal) => request<TestIdentityDto[]>(`/api/projects/${projectId}/test-identities`,{signal}),
-  create: (projectId: string, actorId: string, actorRevision: number, label: string) =>
+  create: (projectId: string, actorId: string, actorRevision: number, label: string, operationId?: string) =>
     request<TestIdentityDto>(`/api/projects/${projectId}/test-identities`, {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', actor_id: actorId, actor_revision: actorRevision, label }),
+      body: JSON.stringify({ schema_version: '1', actor_id: actorId, actor_revision: actorRevision, label, operation_id: operationId }),
     }),
+  created: (projectId: string, operationId: string) => request<TestIdentityDto | null>(`/api/projects/${projectId}/test-identity-requests/${operationId}`),
+  latestPreparation: (identityId: string) => request<IdentityPreparationDto | null>(`/api/test-identities/${identityId}/preparations/latest`),
   reset: (identityId: string) => request<TestIdentityDto>(`/api/test-identities/${identityId}/reset`, {
     method: 'POST', body: JSON.stringify(command),
   }),
   delete: (identityId: string) => request<{ deleted: true; identity_id: string }>(`/api/test-identities/${identityId}`, { method: 'DELETE' }),
-  startPreparation: (identityId: string) => request<IdentityPreparationDto>(`/api/test-identities/${identityId}/preparations`, {
-    method: 'POST', body: JSON.stringify(command),
+  startPreparation: (identityId: string, operationId?: string) => request<IdentityPreparationDto>(`/api/test-identities/${identityId}/preparations`, {
+    method: 'POST', body: JSON.stringify({ ...command, operation_id: operationId }),
   }),
   preparation: (preparationId: string) => request<IdentityPreparationDto>(`/api/identity-preparations/${preparationId}`),
   confirmPreparation: (preparationId: string) => request<IdentityPreparationDto>(`/api/identity-preparations/${preparationId}/confirm`, {

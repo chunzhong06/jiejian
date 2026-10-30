@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.secrets import MemorySecrets
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -26,25 +27,8 @@ ROLE_ID = candidate_id("role", "owner")
 ACTOR_ID = "bar_" + "1" * 32
 
 
-class FakeSecretStore:
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        self.values[secret_ref] = secret
-
-    def read(self, secret_ref: str) -> str | None:
-        return self.values.get(secret_ref)
-
-    def delete(self, secret_ref: str) -> None:
-        self.values.pop(secret_ref, None)
-
-    def configured(self, secret_ref: str | None) -> bool:
-        return secret_ref is not None and secret_ref in self.values
-
-
 def test_test_identity_crud_api_excludes_secret_references(tmp_path: Path) -> None:
-    store = FakeSecretStore()
+    store = MemorySecrets()
     app = create_app(
         tmp_path / "var",
         start_worker=False,
@@ -100,12 +84,19 @@ def test_test_identity_crud_api_excludes_secret_references(tmp_path: Path) -> No
                 "actor_id": ACTOR_ID,
                 "actor_revision": 1,
                 "label": "所有者账号",
+                "operation_id": "a" * 32,
             },
         )
         assert created.status_code == 201
         payload = created.json()["data"]
         assert payload["status"] == "NOT_PREPARED"
         assert "secret_ref" not in created.text
+        assert client.post(f'/api/projects/{PROJECT_ID}/test-identities', json={
+            'schema_version': '1', 'actor_id': ACTOR_ID, 'actor_revision': 1,
+            'label': '所有者账号', 'operation_id': 'a' * 32,
+        }).json()['data'] == payload
+        assert client.get(f'/api/projects/{PROJECT_ID}/test-identity-requests/' + 'a' * 32).json()['data'] == payload
+        assert client.get('/api/projects/foreign/test-identity-requests/' + 'a' * 32).json()['data'] is None
 
         listed = client.get(f"/api/projects/{PROJECT_ID}/test-identities")
         assert listed.status_code == 200
@@ -166,7 +157,7 @@ def _login_view():
 
 
 def test_identity_login_routes_delegate_exact_ids_and_get_does_not_launch(tmp_path, monkeypatch):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=FakeSecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     manager = app.state.context.identity_preparations
     view = _login_view()
     mocks = {name: Mock(return_value=view) for name in ("start", "status", "confirm", "cancel")}
@@ -184,14 +175,17 @@ def test_identity_login_routes_delegate_exact_ids_and_get_does_not_launch(tmp_pa
         ):
             response = client.post(path, json={"schema_version": "1"})
             assert response.status_code == 200 and response.json()["data"] == view.model_dump(mode="json")
-            mocks[name].assert_called_once_with(argument)
+            if name == 'start':
+                mocks[name].assert_called_once_with(argument, operation_id=None)
+            else:
+                mocks[name].assert_called_once_with(argument)
 
 
 @pytest.mark.parametrize("suffix", ["start", "confirm", "cancel"])
 @pytest.mark.parametrize("body", [{}, {"schema_version": 1}, {"schema_version": "2"},
     {"schema_version": "1", "secret_ref": "forbidden"}, {"schema_version": "1", "scope": {}}])
 def test_identity_login_posts_reject_non_strict_input(tmp_path, monkeypatch, suffix, body):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=FakeSecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     called = Mock()
     monkeypatch.setattr(app.state.context.identity_preparations, suffix, called)
     view = _login_view()
@@ -204,7 +198,7 @@ def test_identity_login_posts_reject_non_strict_input(tmp_path, monkeypatch, suf
 @pytest.mark.parametrize("suffix", ["start", "status", "confirm", "cancel"])
 @pytest.mark.parametrize("authorization", ["no_session", "wrong_origin"])
 def test_identity_login_routes_keep_local_control(tmp_path, monkeypatch, suffix, authorization):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=FakeSecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     called = Mock(return_value=_login_view())
     monkeypatch.setattr(app.state.context.identity_preparations, suffix, called)
     view = _login_view()

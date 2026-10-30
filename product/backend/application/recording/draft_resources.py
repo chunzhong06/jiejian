@@ -67,7 +67,7 @@ def _resource_candidate(step_id: str, consumer: ValueSlotConsumer | str, locatio
 def _business_candidate_label(value: Any, meaning: str) -> str:
     """只把可读业务值放进标签，内部编号仍留在确定性候选结构。"""
     if isinstance(value, str) and (not _OPAQUE_BUSINESS_VALUE.fullmatch(value)):
-        return f'{value} · {meaning}'
+        return f'{value}（{meaning}）'
     return meaning
 
 def _recommend_target(steps: tuple[FlowDraftStep, ...], directly_triggered_requests: frozenset[str]) -> str | None:

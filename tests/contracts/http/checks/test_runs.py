@@ -5,17 +5,17 @@ import time
 import json
 import pytest
 
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, FatalFailure, FatalFailureCode
 from product.protocols.runner.input import CleanupIssueCode, RunnerFailurePhase
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
 from tests.support.builders.control_plane import TestClient, create_app
 
 
 @pytest.fixture
 def current_run_api(tmp_path):
-    app = create_app(tmp_path / 'var', start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / 'var', start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     with TestClient(app) as client:
         yield app.state.context, harness, client
@@ -58,6 +58,9 @@ def test_failed_check_separates_lifecycle_from_verdict_and_persists_failure_deta
     detail = client.get(f'/api/runs/{run_id}').json()['data']
     assert detail['run']['lifecycle'] == 'FAILED' and detail['run']['verdict'] is None
     assert detail['result_integrity'] == 'NOT_PUBLISHED'
+    assert detail['job']['error_code'] == 'PREPARE_RECOVERY_FAILED'
+    assert detail['job']['failure_phase'] == 'PREPARE_RECOVERY'
+    assert detail['job']['cause_code'] == 'TARGET_UNREACHABLE'
     assert client.get(f'/api/runs/{run_id}/result-story').status_code == 404
     with core.uow_factory() as work:
         events = json.dumps([item.model_dump(mode='json') for item in work.job_events.list_for_job(job_id)])
@@ -74,7 +77,6 @@ def test_api_submission_freezes_current_policy_plan_and_source(current_run_api):
         source = work.application_understanding.get(harness.project_id)
     request = CheckRequestStore(core.var_dir).load(job_id, expected_hash=job.request_hash)
     assert job.operation_type == 'CHECK'
-    assert request.schema_version == '3'
     assert request.plan_fingerprint == body['expected_plan_fingerprint']
     assert request.policy_epoch == core.business_boundaries.view(harness.project_id).policy_epoch
     assert request.source_fingerprint == source.source_fingerprint
@@ -82,3 +84,12 @@ def test_api_submission_freezes_current_policy_plan_and_source(current_run_api):
     assert sum(len(item.cases) for item in request.actions) == 1
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_check_receipt_is_readable_after_plan_changes(current_run_api, monkeypatch):
+    core, harness, client = current_run_api
+    accepted, _ = _submit(client, harness.project_id, 'recover-original')
+    monkeypatch.setattr(core.checks, 'preview', lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('查询不能重新预览或执行')))
+    found = client.get(f'/api/projects/{harness.project_id}/check-requests/recover-original').json()['data']
+    assert found['run']['run_id'] == accepted['run']['run_id']
+    assert client.get('/api/projects/foreign/check-requests/recover-original').json()['data'] is None

@@ -6,14 +6,14 @@ from mcp import MCPError
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 from product.backend.application.agent_access.service import MCPAccessLevel
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
 from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN
 
 
 @pytest.mark.parametrize("level", list(MCPAccessLevel))
 def test_current_sdk_grants_cannot_mutate_permission_or_select_cases(tmp_path, level):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     core, project = harness.core, harness.project_id
     before = core.business_boundaries.view(project)

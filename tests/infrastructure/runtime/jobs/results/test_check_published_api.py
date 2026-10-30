@@ -21,7 +21,7 @@ from product.protocols.checks.check_result import CheckCaseOutcome, CheckCaseRes
 from product.protocols.checks.check_runtime import canonical_check_runtime_bytes, parse_check_runtime
 from product.protocols.checks.execution_request import ChangeContext, ExecutionRequest, canonical_execution_request_bytes
 from tests.support.builders.checks.check_publication import package_parts, NOW
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import create_app, TestClient
 
 
@@ -74,7 +74,7 @@ def test_published_api_story_evidence_without_assistant_and_tamper(package_parts
     (var_dir / "data").mkdir(exist_ok=True)
     with sqlite3.connect(worker_services.database_path) as source, sqlite3.connect(var_dir / "data/jiejian.db") as destination:
         source.backup(destination)
-    app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(var_dir, start_worker=False, secret_store=MemorySecrets(), environ={})
     with TestClient(app) as client:
         forbidden = Mock(side_effect=AssertionError("published API must not execute target or recompute verdict"))
         monkeypatch.setattr(socket.socket, "connect", forbidden)
@@ -166,7 +166,7 @@ def test_published_story_and_project_repair_share_read_only_comparison(package_p
     current = CheckPublisher(var_dir, factory, clock_us=lambda: NOW + 40).publish(directory)
     with sqlite3.connect(worker_services.database_path) as source_db, sqlite3.connect(var_dir / "data/jiejian.db") as destination:
         source_db.backup(destination)
-    app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(var_dir, start_worker=False, secret_store=MemorySecrets(), environ={})
     context = app.state.context
     monkeypatch.setattr(context.business_boundaries, "view", lambda _: N(policy_epoch=contract.original_policy_epoch,
         permission_intents=contract.original_intents))

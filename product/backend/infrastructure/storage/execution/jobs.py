@@ -20,6 +20,7 @@ class JobRow(Base):
     __tablename__ = "jobs"
     __table_args__ = (
         UniqueConstraint("run_id", name="uq_jobs_run_id"),
+        UniqueConstraint("identity_preparation_id", name="uq_jobs_identity_preparation"),
         UniqueConstraint("recording_id", name="uq_jobs_recording_id"),
         UniqueConstraint("runtime_load_id", name="uq_jobs_runtime_load_id"),
         UniqueConstraint("preflight_id", name="uq_jobs_preflight_id"),
@@ -41,13 +42,15 @@ class JobRow(Base):
             name="operation_type_format",
         ),
         CheckConstraint(
-            "(run_id IS NOT NULL) + (recording_id IS NOT NULL) + (runtime_load_id IS NOT NULL) + (preflight_id IS NOT NULL) + (reference_capture_id IS NOT NULL) = 1",
+            "(run_id IS NOT NULL) + (recording_id IS NOT NULL) + (runtime_load_id IS NOT NULL) + (preflight_id IS NOT NULL) + (reference_capture_id IS NOT NULL) + (identity_preparation_id IS NOT NULL) = 1",
             name="exactly_one_target",
         ),
         CheckConstraint("runtime_load_id IS NULL OR operation_type = 'RUNTIME_LOAD'", name="runtime_operation_type"),
         CheckConstraint("preflight_id IS NULL OR operation_type = 'PROOF_PREFLIGHT'", name="preflight_operation_type"),
         CheckConstraint("(reference_capture_id IS NOT NULL) = (operation_type = 'REFERENCE_CAPTURE')", name="capture_operation_type"),
         CheckConstraint("reference_capture_id IS NULL OR max_attempts = 1", name="capture_single_attempt"),
+        CheckConstraint("(identity_preparation_id IS NOT NULL) = (operation_type = 'IDENTITY_PREPARATION')", name="identity_operation_type"),
+        CheckConstraint("identity_preparation_id IS NULL OR max_attempts = 1", name="identity_single_attempt"),
         CheckConstraint(
             "state IN ('PENDING', 'RUNNING', 'RETRY_WAIT', 'SUCCEEDED', "
             "'FAILED', 'CANCELLED')",
@@ -137,6 +140,8 @@ class JobRow(Base):
         ForeignKey("reference_captures.capture_id",ondelete="RESTRICT"),nullable=True,
     )
 
+    identity_preparation_id: Mapped[str | None] = mapped_column(String(37), nullable=True)
+
 class JobEventRow(Base):
     __tablename__ = "job_events"
     __table_args__ = (
@@ -211,6 +216,7 @@ class JobRecord(StorageRecord):
     runtime_load_id: str | None = Field(default=None, pattern=r"^rld_[0-9a-f]{32}$")
     preflight_id: str | None = Field(default=None, pattern=r"^ppf_[0-9a-f]{32}$")
     reference_capture_id:str|None=Field(default=None,pattern=r'^rpc_[0-9a-f]{32}$')
+    identity_preparation_id: str | None = Field(default=None, pattern=r'^prep_[0-9a-f]{32}$')
     operation_type: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
     state: JobState
     idempotency_key: str = Field(min_length=1, max_length=128)
@@ -230,7 +236,7 @@ class JobRecord(StorageRecord):
 
     @model_validator(mode="after")
     def validate_job_fields(self) -> JobRecord:
-        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id,self.reference_capture_id)) != 1:
+        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id,self.reference_capture_id,self.identity_preparation_id)) != 1:
             raise ValueError("job must reference exactly one execution target")
         if self.runtime_load_id is not None and self.operation_type != "RUNTIME_LOAD":
             raise ValueError("runtime load target requires its own operation")
@@ -238,6 +244,8 @@ class JobRecord(StorageRecord):
             raise ValueError("preflight target requires its own operation")
         if (self.reference_capture_id is not None)!=(self.operation_type=='REFERENCE_CAPTURE') or self.reference_capture_id is not None and self.max_attempts!=1:
             raise ValueError('capture requires its own target and one attempt')
+        if (self.identity_preparation_id is not None) != (self.operation_type == 'IDENTITY_PREPARATION') or self.identity_preparation_id is not None and self.max_attempts != 1:
+            raise ValueError('identity preparation requires its own target and one attempt')
         if self.attempt > self.max_attempts:
             raise ValueError("job attempt exceeds maximum")
         if self.attempt == 0 and (
@@ -319,6 +327,7 @@ class JobRepository:
                 runtime_load_id=record.runtime_load_id,
                 preflight_id=record.preflight_id,
                 reference_capture_id=record.reference_capture_id,
+                identity_preparation_id=record.identity_preparation_id,
                 operation_type=record.operation_type,
                 state=record.state.value,
                 idempotency_key=record.idempotency_key,
@@ -351,6 +360,7 @@ class JobRepository:
             runtime_load_id=row.runtime_load_id,
             preflight_id=row.preflight_id,
             reference_capture_id=row.reference_capture_id,
+            identity_preparation_id=row.identity_preparation_id,
             operation_type=row.operation_type,
             state=JobState(row.state),
             idempotency_key=row.idempotency_key,
@@ -413,6 +423,12 @@ class JobRepository:
         )
         return tuple(self._record(row) for row in rows)
 
+    def active_for_project(self, project_id: str, *, limit=32) -> tuple[JobRecord, ...]:
+        rows = _scalars(self._session, select(JobRow).where(JobRow.project_id == project_id,
+            JobRow.state.in_((JobState.PENDING.value, JobState.RUNNING.value, JobState.RETRY_WAIT.value)))
+            .order_by(JobRow.created_at_us.desc(), JobRow.job_id).limit(limit))
+        return tuple(self._record(row) for row in rows)
+
     def next_pending(
         self, now_us: int | None = None, *, target_types: Sequence[str] = ("RUN", "RECORDING"), exclude_job_ids: Sequence[str] = (),
     ) -> JobRecord | None:
@@ -432,7 +448,8 @@ class JobRepository:
                     and_("RECORDING" in target_types, JobRow.recording_id.is_not(None)),
                     and_("RUNTIME_LOAD" in target_types, JobRow.runtime_load_id.is_not(None)),
                     and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None)),
-                    and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None))),
+                    and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None)),
+                    and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None))),
             )
             .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(1),
@@ -451,6 +468,7 @@ class JobRepository:
             runtime_load_id=row.runtime_load_id,
             preflight_id=row.preflight_id,
             reference_capture_id=row.reference_capture_id,
+            identity_preparation_id=row.identity_preparation_id,
             operation_type=row.operation_type,
             state=JobState(row.state),
             idempotency_key=row.idempotency_key,

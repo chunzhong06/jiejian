@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 from product.backend.application.reading import projected_once, projection_read
-from product.backend.application.preparation.selection import preparation_recommendation
+from product.backend.application.preparation.service import preparation_recommendation
 from product.backend.application.preparation.bindings.service import PreparationBindingService
 
 

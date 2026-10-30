@@ -1,18 +1,6 @@
-# =============================================================================
 # 应用连接与理解服务
-#
-# 定位
-#   普通用户选择目录之后，Project、应用理解持久状态和 endpoint 发现之间的应用编排层
-#
-# 职责
-#   幂等建立 DRAFT Project｜确认 loopback endpoint｜授权并编排受控源码分析
-#
-# 边界
-#   不创建 ExecutionProfile、PermissionContract 或检查计划；网络访问仅委托受预算约束的地址发现服务。
-#
-# 调用链
-#   Projects API / Readiness → ApplicationUnderstandingService → UoW / TargetEndpointDiscovery
-# =============================================================================
+# 幂等建立 DRAFT Project、确认 loopback endpoint、授权并编排受控源码分析
+# 不创建 ExecutionProfile、PermissionContract 或检查计划；网络访问仅委托受预算约束的地址发现服务。
 
 from __future__ import annotations
 

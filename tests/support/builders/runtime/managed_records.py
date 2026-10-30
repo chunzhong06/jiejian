@@ -12,7 +12,8 @@ from product.backend.domain.recording.models import RecordingPurpose
 from product.backend.application.business_boundaries.models import BoundaryProposalCommand
 from product.backend.application.test_identities.service import PreparedLoginState
 from product.protocols.preparation.proof_sources import AtomicProofSourceConfig
-from tests.support.builders.preparation.action_preparation import MemorySecretStore, PreparationHarness, add_recording
+from tests.support.builders.preparation.action_preparation import PreparationHarness, add_recording
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 
 
@@ -51,7 +52,7 @@ def ordinary_application(tmp_path, *, regression=False, read_only=False, core=No
         assert name in {'policy.mjs','response.mjs','transition.mjs','projection.mjs'}
         (source/name).write_text(content,encoding='utf8')
     var = tmp_path/'var' if core is None else core.var_dir
-    core = core or ApplicationCore(var,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core = core or ApplicationCore(var,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     try:
         connection = core.application_understanding.connect(source)
         project = connection.project.project_id

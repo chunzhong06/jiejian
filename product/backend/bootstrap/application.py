@@ -1,12 +1,5 @@
-# =============================================================================
-# ApplicationCore 组合根
-#
-# 职责
-#   组装 当前启动、项目接入、动作级 Workspace、Business Boundary 与 TestIdentity。
-#
-# 边界
-#   显式装配业务准备、当前 CHECK 与 Recording；不恢复旧 Contract/Profile 或 SourceChange writer。
-# =============================================================================
+# 装配 Web 控制面的用例、存储、工作区与后台任务监督，统一持有本进程资源。
+# 目标操作交给独立 Worker；关闭时先确认受监督进程停止，再释放共享资源。
 
 from __future__ import annotations
 
@@ -218,6 +211,7 @@ class ApplicationCore:
             self.var_dir, self.test_identities, self.secret_store, self._base_environment,
             application_understanding=self.application_understanding,
             business_boundaries=self.business_boundaries,
+            uow_factory=factory, job_queue=self.job_queue, clock_us=clock_us,
         )
         self.runtime_secrets = RuntimeSecretVault()
         self.recording_credentials = RecordingCredentialProvider(
@@ -243,8 +237,12 @@ class ApplicationCore:
             targets=self.job_targets, environment_provider=self.environment_for_secret_names,
             clock_us=clock_us,
             job_authorized=lambda job:self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job),
+            identity_cleanup=self.identity_preparations.reconcile_exited,
             capture_publisher=self.reference_captures.jobs,
         )
+        self.identity_preparations.bind_worker(self.worker.start)
+        from product.backend.application.workspace.progress import ApplicationProgress
+        self.application_progress = ApplicationProgress(factory, self.identity_preparations)
 
     def _configure_product_services(self, factory, clock_us, folder_selector) -> None:
         """连接项目退出、维护、接入，复用已经建立的业务服务。"""

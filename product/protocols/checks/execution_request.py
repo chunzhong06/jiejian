@@ -359,7 +359,8 @@ def canonical_execution_request_bytes(request: ExecutionRequest) -> bytes:
     try:
         if type(request) is not ExecutionRequest:
             raise ValueError("unsupported execution root")
-        payload = ExecutionRequest.model_validate_json(request.model_dump_json(), strict=True).model_dump(mode="json")
+        # 模型由构造或入口 reader 接受；编码只确定字节与顺序，不再次解析同一对象。
+        payload = request.model_dump(mode="json")
         payload["actions"].sort(key=lambda item: item["action_id"])
         for action in payload["actions"]:
             action["cases"].sort(key=lambda item: item["case_id"])

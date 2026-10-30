@@ -1,11 +1,11 @@
-# 验证 v3 请求资产的并发非覆盖、哈希绑定与旧格式拒绝。
+# 验证检查请求资产的并发非覆盖、哈希绑定与未知格式拒绝。
 import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from product.backend.domain.errors import JiejianError
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.protocols.checks.execution_request import ExecutionRequest
 from tests.support.builders.checks.check_plan import plan
 from tests.support.builders.checks.check_runtime import runtime_bundle
@@ -60,7 +60,11 @@ def test_current_reader_rejects_old_format_and_tampering(tmp_path):
     job_id = "job_" + "1" * 32
     digest, _ = store.write(job_id, frozen_request())
     path = store.path_for(job_id)
-    raw = path.read_bytes().replace(b'"schema_version":"3"', b'"schema_version":"2"')
+    original = path.read_bytes()
+    payload = json.loads(original)
+    payload["schema_version"] = "unsupported"
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    assert raw != original
     path.write_bytes(raw)
     with pytest.raises(JiejianError):
         store.load(job_id, expected_hash=digest)

@@ -1,19 +1,7 @@
-# =============================================================================
 # HTTP 身份运行时
-#
-# 定位
-#   受控 HTTP Adapter 内的单身份、单 case 认证状态边界。
-#
-# 职责
-#   解析受控 secret ref｜隔离内存 Cookie｜注入认证头｜限制 Bootstrap/Refresh
-#
-# 边界
-#   不写 Profile、Evidence 或日志，不读取浏览器/系统代理，不把 Bootstrap
-#   当作业务请求；身份准备失败时禁止匿名继续。
-#
-# 调用链
-#   Runner → HttpIdentityRuntime → HttpExecutionAdapter / httpx.Client
-# =============================================================================
+# 解析受控 secret ref、隔离内存 Cookie、注入认证头、限制 Bootstrap/Refresh
+# 不写 Profile、Evidence 或日志，不读取浏览器/系统代理，不把 Bootstrap
+# 当作业务请求；身份准备失败时禁止匿名继续。
 
 from __future__ import annotations
 

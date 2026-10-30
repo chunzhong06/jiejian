@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
+from product.protocols.codec import decode_json
 
 from .config import OBSERVER_JSON_MAX_BYTES
 from .invocation import (
@@ -39,27 +39,7 @@ def parse_observer_json(
     *,
     known_secrets: tuple[str, ...] = (),
 ) -> T:
-    if len(payload) > OBSERVER_JSON_MAX_BYTES or payload.startswith(b"\xef\xbb\xbf"):
-        raise ValueError("observer JSON is oversized or contains a BOM")
-
-    def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("observer JSON contains duplicate keys")
-            result[key] = value
-        return result
-
-    def reject_nonfinite(value: str) -> None:
-        raise ValueError(f"observer JSON contains non-finite number: {value}")
-
-    parsed = json.loads(
-        payload.decode("utf-8"),
-        object_pairs_hook=reject_duplicate_pairs,
-        parse_constant=reject_nonfinite,
-    )
-    if not isinstance(parsed, dict):
-        raise ValueError("observer JSON root must be an object")
+    parsed = decode_json(payload, limit=OBSERVER_JSON_MAX_BYTES)
     expected_version = {
         ObserverInvocation: "1",
         AsyncTaskObserverInvocation: "1",
@@ -69,6 +49,5 @@ def parse_observer_json(
     if expected_version is None or parsed.get("schema_version") != expected_version:
         raise ValueError("observer root schema_version is missing or unsupported")
     _reject_secret_values(parsed, known_secrets)
-    # 上方先在解码树中拒绝重复键、非有限数与 BOM；随后仍经 Pydantic JSON 入口
-    # 解析 enum 和 tuple wire 值，以保留严格模型语义。
+    # 保留 JSON 模式对 enum、tuple 的严格转换。
     return model_type.model_validate_json(payload)

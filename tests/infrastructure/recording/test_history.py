@@ -3,7 +3,7 @@ import hashlib
 import pytest
 from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.recording.request_store import RecordingRequestStore
-from tests.support.builders.preparation.recording import runner_request
+from tests.support.builders.preparation.recording_facts import runner_request
 
 
 def test_history_nonobject_root_fails_with_stable_protocol_error(tmp_path):

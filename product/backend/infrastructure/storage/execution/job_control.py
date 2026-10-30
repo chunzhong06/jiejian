@@ -1,18 +1,6 @@
-# =============================================================================
 # Job 原子控制仓储
-#
-# 定位
-#   attempt、lease、fencing、cancel、recovery 状态竞争的数据库原子边界
-#
-# 职责
-#   执行条件状态更新｜验证 owner 与 fencing token｜保持 Job 和 Run 完成态一致
-#
-# 边界
-#   运行态更新必须匹配 lease_owner 与 fencing token；过期执行者不得完成新状态。
-#
-# 调用链
-#   Execution services → JobControlRepository → SQLAlchemy conditional SQL
-# =============================================================================
+# 执行条件状态更新、验证 owner 与 fencing token、保持 Job 和 Run 完成态一致
+# 运行态更新必须匹配 lease_owner 与 fencing token；过期执行者不得完成新状态。
 
 from __future__ import annotations
 
@@ -92,6 +80,8 @@ class JobControlRepository:
                         JobRow.operation_type == "PROOF_PREFLIGHT"),
                     and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None),
                         JobRow.operation_type=='REFERENCE_CAPTURE'),
+                    and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None),
+                         JobRow.operation_type == 'IDENTITY_PREPARATION'),
                 ),
             )
             .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
@@ -291,7 +281,8 @@ class JobControlRepository:
                     and_("RECORDING" in target_types, JobRow.recording_id.is_not(None)),
                     and_("RUNTIME_LOAD" in target_types, JobRow.runtime_load_id.is_not(None)),
                     and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None)),
-                    and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None))),
+                    and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None)),
+                    and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None))),
             )
             .order_by(JobRow.lease_expires_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(limit),
@@ -492,6 +483,20 @@ class JobControlRepository:
         changed_id = _scalar_value(self._session, update(JobRow).where(
             JobRow.job_id == job_id, JobRow.preflight_id == preflight_id,
             JobRow.operation_type == "PROOF_PREFLIGHT", JobRow.request_hash == request_hash,
+            JobRow.state == JobState.RUNNING.value, JobRow.attempt == attempt,
+            JobRow.lease_owner == lease_owner, JobRow.fencing_token == fencing_token,
+            JobRow.lease_expires_at_us > now_us, JobRow.updated_at_us <= now_us,
+            JobRow.cancel_requested_at_us.is_(None),
+        ).values(state=JobState.SUCCEEDED.value, lease_owner=None,
+            lease_expires_at_us=None, updated_at_us=now_us).returning(JobRow.job_id))
+        return None if changed_id is None else self._jobs.get(changed_id)
+
+    def complete_identity_preparation(self, *, job_id: str, identity_preparation_id: str, request_hash: str,
+            attempt: int, lease_owner: str, fencing_token: int, now_us: int) -> JobRecord | None:
+        """登录资料仅在当前未取消的有效租约中提交。"""
+        changed_id = _scalar_value(self._session, update(JobRow).where(
+            JobRow.job_id == job_id, JobRow.identity_preparation_id == identity_preparation_id,
+            JobRow.operation_type == "IDENTITY_PREPARATION", JobRow.request_hash == request_hash,
             JobRow.state == JobState.RUNNING.value, JobRow.attempt == attempt,
             JobRow.lease_owner == lease_owner, JobRow.fencing_token == fencing_token,
             JobRow.lease_expires_at_us > now_us, JobRow.updated_at_us <= now_us,

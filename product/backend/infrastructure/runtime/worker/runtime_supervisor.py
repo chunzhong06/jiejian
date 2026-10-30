@@ -17,7 +17,7 @@ from product.backend.infrastructure.runtime.jobs.models import (
     RecoveryReasonCode, RecoveryScan, WaitingFatalFailure,
 )
 from product.backend.infrastructure.runtime.jobs.recovery import JobRecovery
-from product.backend.infrastructure.runtime.jobs.target_handlers.runtime_load import runtime_load_targets
+from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
 from product.backend.infrastructure.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.backend.infrastructure.runtime.process.tree import release_process_tree, terminate_process_tree
 from product.backend.infrastructure.runtime.worker.lifetime import WorkerLifetimeLock, worker_tree_name, write_worker_tree_identity

@@ -56,7 +56,6 @@ class ProjectRow(Base):
 # =============================================================================
 
 import json
-import time
 from collections.abc import Sequence
 
 from pydantic import Field, model_validator

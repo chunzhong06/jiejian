@@ -7,7 +7,7 @@ import pytest
 from product.backend.application.agent_access.dsh_schema import DshSchemaError, DshToolSchemas, project_schema
 from product.backend.application.agent_access.connector import relay
 from product.backend.application.agent_access.connection_files import ConnectionProfile
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 
 
 SCHEMA = {'type':'object', 'properties': {
@@ -45,7 +45,7 @@ def test_unsupported_shapes_fail_closed(schema):
 
 def test_dsh_negotiation_declines_streaming_era_without_hitting_http():
     from product.backend.application.agent_access.service import MCP_PAIRING_SECRET_REF
-    store=MemorySecretStore();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
+    store=MemorySecrets();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
     output=io.StringIO();observed=[]
     with httpx.Client(transport=httpx.MockTransport(lambda request:pytest.fail('discovery must not advertise an unsupported SSE transport'))) as http:
         relay(ConnectionProfile(client='dsh',endpoint='http://127.0.0.1:8765/mcp',generation='f'*32),
@@ -55,7 +55,7 @@ def test_dsh_negotiation_declines_streaming_era_without_hitting_http():
 
 def test_invalid_dsh_arguments_never_reach_the_business_request():
     from product.backend.application.agent_access.service import MCP_PAIRING_SECRET_REF
-    store=MemorySecretStore();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
+    store=MemorySecrets();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
     methods=[]
     def respond(request):
         value=json.loads(request.content);methods.append(value['method'])
@@ -84,7 +84,7 @@ def test_dsh_field_errors_never_echo_unknown_names_or_values():
 @pytest.mark.parametrize('error,code',[(httpx.ConnectTimeout,'CONNECT_TIMEOUT'),(httpx.ReadTimeout,'RESPONSE_TIMEOUT'),(httpx.ConnectError,'SERVICE_UNAVAILABLE')])
 def test_transport_failure_records_the_specific_stage_without_retry(error,code):
     from product.backend.application.agent_access.service import MCP_PAIRING_SECRET_REF
-    store=MemorySecretStore();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
+    store=MemorySecrets();store.write(MCP_PAIRING_SECRET_REF,'synthetic')
     methods=[];observed=[];phases=[]
     def fail(request):
         methods.append(json.loads(request.content)['method'])

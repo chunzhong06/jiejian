@@ -46,6 +46,11 @@ def test_missing_materials_never_become_complete_and_read_only_needs_no_recovery
         assert item.resources[0].status is PreparationStatus.NEEDS_USER
         assert item.effect_evidence[0].status is PreparationStatus.NEEDS_USER
         assert item.recovery.status is (PreparationStatus.NEEDS_USER if changes else PreparationStatus.NOT_REQUIRED)
+        assert result.basis_fingerprint
+        assert all(impact.permission_ids for impact in result.impacts)
+        if not changes:
+            assert not any(impact.kind == 'recovery' for impact in result.impacts)
+        assert all(impact.member_label for impact in result.impacts if impact.kind == 'identity')
 
 
 def test_prepared_priority_stable_older_identity_and_live_reinspection():

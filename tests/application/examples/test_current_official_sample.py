@@ -5,7 +5,7 @@ from product.backend.bootstrap.application import ApplicationCore
 from product.backend.domain.errors import JiejianError
 from product.backend.application.examples.environment import OfficialScenarioVersion
 from product.backend.application.examples.materials import OfficialScenarioInstaller
-from tests.support.secrets import MemorySecrets as InMemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 from tests.support.builders.runtime.official_preparation import prepare_sample, use_memory_sample_login
 from product.backend.infrastructure.recording.flows import recorded_flow_path
@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.level4, pytest.mark.process, pytest.mark.slow]
 def current_sample(tmp_path):
     var=tmp_path/'var'
     core=ApplicationCore(var,official_sample_root=Path(__file__).resolve().parents[3]/'samples/web/digital_gallery',
-        secret_store=InMemorySecretStore(),environ=runtime_identity_environment(var))
+        secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     use_memory_sample_login(core)
     try:yield core
     finally:core.close()
@@ -71,6 +71,35 @@ def test_external_source_change_cannot_be_overwritten_by_preset(current_sample):
     assert journey.implementation=='CUSTOM' and not journey.can_optimize
     with pytest.raises(JiejianError,match='外部修改'):core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
     assert source.read_text(encoding='utf-8')==changed
+
+
+def test_generic_runtime_reload_requires_new_sample_sessions(current_sample):
+    import time
+    from uuid import uuid4
+    from product.backend.application.examples.gallery_materials import gallery_identities
+    core=current_sample;experience=core.official_experience
+    project=experience.start(consent=True).project_id
+    proposal=experience.boundary_proposal(exhibition_download=True).proposal
+    core.business_boundaries.approve(project,proposal.proposal_id,expected_fingerprint=proposal.proposal_fingerprint,reason='确认示例权限')
+    experience.prepare()
+    original=core.test_identities.list(project)
+    state=core.node_runtime.state(project)
+    preview=core.node_runtime.preview(project,entry=state['configuration']['entry'],port=state['configuration']['port'],revision=core.application_understanding.get(project).revision)
+    operation=uuid4().hex
+    core.node_runtime.start(project,entry=preview.entry,port=preview.port,revision=preview.revision,preview_fingerprint=preview.preview_fingerprint,operation_id=operation,consent_execute=True)
+    deadline=time.monotonic()+25
+    while time.monotonic()<deadline:
+        receipt=core.node_runtime.operation(project,operation)
+        if receipt['state'] in {'SUCCEEDED','FAILED','CANCELLED'}:break
+        time.sleep(.1)
+    assert receipt['state']=='SUCCEEDED'
+    stale=gallery_identities(experience,project)
+    assert {item.identity_id for item in stale}=={item.identity_id for item in original}
+    assert all(item.auth_method is None for item in stale)
+    experience.prepare()
+    current=core.test_identities.list(project)
+    assert all(item.status.value=='PREPARED' for item in current)
+    assert gallery_identities(experience,project)==list(current)
 
 
 def test_corrupted_flow_is_rejected_without_overwriting_frozen_material(current_sample):

@@ -29,6 +29,7 @@ def sqlite_schema_signature(
 def normalize_table_sql(statement: str) -> str:
     """只消除具名表约束排列差异；列序、约束正文及表选项仍逐项比较。"""
 
+    statement = re.sub(r'^CREATE TABLE "([A-Za-z_][A-Za-z_0-9]*)"', r'CREATE TABLE \1', statement)
     start = statement.find("(")
     if start < 0:
         return normalize_sql(statement)

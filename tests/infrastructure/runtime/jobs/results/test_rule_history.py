@@ -124,12 +124,12 @@ def test_rule_catalog_pages_exact_revisions_and_never_borrows_old_result(tmp_pat
 def test_history_maintenance_api_requires_local_session_and_exact_filter(package_parts,worker_services):
     import sqlite3
     from tests.support.builders.control_plane import create_app, TestClient
-    from tests.support.builders.preparation.action_preparation import MemorySecretStore
+    from tests.support.builders.preparation.action_preparation import MemorySecrets
     from fastapi.testclient import TestClient as RawClient
     package,_,_,_=services(package_parts);var=package_parts[0];project=package.request.project_id
     (var/'data').mkdir(exist_ok=True)
     with sqlite3.connect(worker_services.database_path) as source,sqlite3.connect(var/'data/jiejian.db') as target:source.backup(target)
-    app=create_app(var,start_worker=False,secret_store=MemorySecretStore(),environ={});base=f'/api/projects/{project}/check-history'
+    app=create_app(var,start_worker=False,secret_store=MemorySecrets(),environ={});base=f'/api/projects/{project}/check-history'
     with TestClient(app) as client:
         assert client.get(base,params=dict(intent_id='incomplete')).status_code==400
         payload=dict(operation_id=uuid4().hex,expected_checkpoint=0,limit=1)

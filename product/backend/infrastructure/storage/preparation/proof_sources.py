@@ -3,7 +3,7 @@ from sqlalchemy import BigInteger,CheckConstraint,ForeignKey,ForeignKeyConstrain
 from sqlalchemy.orm import Mapped,mapped_column
 from product.backend.infrastructure.storage.base import Base,_flush,ensure_storage_payload_safe
 from product.backend.domain.errors import ErrorCode,JiejianError
-from product.protocols.preparation.proof_sources import ProofSourceRevision, SourceReadScope, ProofPreflightInput, ProofSourceAdoption, proof_fingerprint, proof_bytes
+from product.protocols.preparation.proof_sources import ProofSourceAdoption, proof_fingerprint, proof_bytes
 from product.protocols.preparation.proof_sources import read_source_revision, read_source_scope, read_preflight_input
 
 

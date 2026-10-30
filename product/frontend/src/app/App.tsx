@@ -4,6 +4,7 @@ import {Button} from '../shared/ui/actions'
 import {ErrorNote} from '../shared/ui/feedback'
 import {commitPageTransition} from '../shared/lib/pageTransition'
 import {PageSurface} from '../shared/ui/PageSurface'
+import {PageSkeleton} from '../shared/ui/PageSkeleton'
 import {readRoute} from '../shared/lib/navigation'
 import {trackInputMode} from '../shared/lib/inputMode'
 import {normalizedPath,pageTransitionKey,navigationDirection} from './Navigation'
@@ -20,7 +21,7 @@ export default function App(){
   const [route,setRoute]=useState(readRoute),[error,setError]=useState<unknown>()
   const previousRoute=useRef(route)
   const current=normalizedPath(route)
-  const application=useApplication(current)
+  const application=useApplication(current,route)
   const {appearance,toggle}=useAppearance()
   const {project,projects,environment,workspace}=application
   useEffect(()=>{
@@ -45,7 +46,7 @@ export default function App(){
       {projects.error&&<ErrorNote error={projects.error} onRetry={projects.reload}/>}
       <PageSurface transitionKey={key} view={current+(route.query.has('proposal_id')?'/review':route.query.get('view')==='plan'?'/plan':route.query.has('run_id')?'/result':'')}>
         <RouteBoundary key={key}>
-          <RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} environment={environment.data} onConnected={application.connected} onError={setError}/>
+          {application.resolutionError?<ErrorNote error={application.resolutionError}/>:application.resolving?<PageSkeleton view={current}/>:<RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} environment={environment.data} onConnected={application.connected} onError={setError}/>}
         </RouteBoundary>
       </PageSurface>
     </AppShell>

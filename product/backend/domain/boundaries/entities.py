@@ -1,12 +1,6 @@
-# =============================================================================
 # 稳定业务边界领域事实
-#
-# 职责
-#   定义 Actor/Action revision、内嵌 EffectCatalog 与实现绑定的不可变语义。
-#
-# 边界
-#   不依赖 discovery Candidate；候选只由 Proposal/Binding workflow 作为来源事实读取。
-# =============================================================================
+# 定义 Actor/Action revision、内嵌 EffectCatalog 与实现绑定的不可变语义。
+# 不依赖 discovery Candidate；候选只由 Proposal/Binding workflow 作为来源事实读取。
 
 from __future__ import annotations
 

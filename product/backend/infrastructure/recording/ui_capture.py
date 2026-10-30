@@ -1,15 +1,5 @@
-# =============================================================================
 # Recording UI 动作采集
-#
-# 定位
-#   浏览器页面脚本与 Recording EventCollector 之间的最小元数据桥接
-#
-# 职责
-#   初始化动作监听｜提取稳定定位信息｜阻止输入值和 secret 回传
-#
-# 调用链
-#   RecordingEventCollector → install_ui_capture → browser binding / UI action callback
-# =============================================================================
+# 初始化动作监听、提取稳定定位信息、阻止输入值和 secret 回传
 
 from __future__ import annotations
 

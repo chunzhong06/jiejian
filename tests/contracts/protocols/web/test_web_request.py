@@ -1,12 +1,10 @@
 # 验证 Web request 模板、请求体预算与秘密字段边界。
 
 from __future__ import annotations
-import json
-from pathlib import Path
 import pytest
 from pydantic import ValidationError
-from product.protocols.web.request import EmptyBody, HttpParameter, HttpRequestTemplate, JsonBody, MultipartBody, MultipartPart, ValueSlot, ValueSlotConsumer, ValueSlotSource
-from product.protocols.web.response import HttpOutcome, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, ResponseExtractor, ResponseExtractorKind
+from product.protocols.web.request import HttpParameter, HttpRequestTemplate, JsonBody, MultipartBody, MultipartPart, ValueSlot, ValueSlotConsumer, ValueSlotSource
+from product.protocols.web.response import ResponseExtractor, ResponseExtractorKind
 from product.protocols.web.identity import StaticHeaderCredential, StaticHeadersIdentityBinding
 
 def test_request_template_is_bounded_and_rejects_reserved_headers() -> None:

@@ -1,18 +1,6 @@
-# =============================================================================
 # Execution JobHandler 端口
-#
-# 定位
-#   Worker 调度壳与 Verification/Recording 实现之间的依赖反转边界
-#
-# 职责
-#   定义 JobHandler｜按 Job target 惰性注册 Handler
-#
-# 边界
-#   Registry 只做显式类型分派，不提供隐式 fallback 或跨 target 结果转换。
-#
-# 调用链
-#   ApplicationCore → JobHandlerRegistry → VerificationRunJobHandler / RecordingJobHandler
-# =============================================================================
+# 定义 JobHandler、按 Job target 惰性注册 Handler
+# Registry 只做显式类型分派，不提供隐式 fallback 或跨 target 结果转换。
 
 from __future__ import annotations
 

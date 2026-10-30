@@ -9,7 +9,7 @@ it('准备页不读取完整工作区，返回概览后才读取',async()=>{
   vi.spyOn(projectsApi,'projects').mockResolvedValue([{project_id:'a',name:'展馆'}] as never)
   vi.spyOn(experienceApi,'status').mockResolvedValue({} as never)
   const workspace=vi.spyOn(workspaceApi,'current').mockResolvedValue({project:{project_id:'a'}} as never)
-  const view=renderHook(({path})=>useApplication(path),{initialProps:{path:'/preparation'}})
+  const view=renderHook(({path})=>useApplication(path,{path,query:new URLSearchParams()}),{initialProps:{path:'/preparation'}})
   await waitFor(()=>expect(view.result.current.project?.project_id).toBe('a'))
   expect(workspace).not.toHaveBeenCalled()
   view.rerender({path:'/workspace'})

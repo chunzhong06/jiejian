@@ -1,5 +1,10 @@
 # 从已经选定的工作区事实生成展示模型；文案不进入任务身份，不重新判断权限或准备状态。
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from product.backend.application.business_boundaries.models import BusinessBoundaryView
+
 from product.backend.domain.applications.models import ApplicationUnderstanding
 from product.backend.domain.boundaries.entities import ImplementationBindingStatus, boundary_sha256
 from product.backend.application.workspace.models import ActionWorkspaceView, ActorWorkspaceView, PrimaryTaskKind, PrimaryTaskView, WorkspaceAreaView, WorkspaceJourney, WorkspaceJourneyStep

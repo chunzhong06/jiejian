@@ -1,18 +1,6 @@
-# =============================================================================
 # 源码变化事实仓储
-#
-# 定位
-#   受控源码快照、Agent 变更声明、真实 diff 与权限影响评估的 SQLite 聚合。
-#
-# 职责
-#   幂等保存不可变源码快照｜按精确 ID 回读既有变更声明、差异和影响评估。
-#
-# 边界
-#   不保存源码正文、文本 diff、完整 RepairContract 或 Git 凭据；Repository 不提交事务。
-#
-# 调用链
-#   SourceChangeService → SourceChangeRepository → SQLAlchemy / SQLite
-# =============================================================================
+# 幂等保存不可变源码快照、按精确 ID 回读既有变更声明、差异和影响评估。
+# 不保存源码正文、文本 diff、完整 RepairContract 或 Git 凭据；Repository 不提交事务。
 
 from __future__ import annotations
 
@@ -271,7 +259,7 @@ class SourceChangeRepository:
         _flush(self._session)
 
     def rule_targets(self, project_id, change_id):
-        from product.backend.domain.changes.rules import RuleChangeTarget
+        from product.backend.domain.changes.models import RuleChangeTarget
         rows = self._session.scalars(select(RuleChangeTargetRow).where(
             RuleChangeTargetRow.project_id == project_id, RuleChangeTargetRow.change_id == change_id)
             .order_by(RuleChangeTargetRow.target_key)).all()

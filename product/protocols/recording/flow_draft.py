@@ -1,21 +1,10 @@
-# =============================================================================
 # FlowDraft 协议
-#
-# 定位
-#   脱敏 Recording Event 与可执行 Verification Flow 之间的审阅数据边界
-#
-# 职责
-#   表达 action/步骤/变量｜约束 TARGET 与资源确认｜提供规范 JSON 与稳定摘要
-#
-# 边界
-#   推荐保持未确认状态；协议不执行 Flow，也不接受任意资源脚本或敏感值。
-#
-# 调用链
-#   Recording processing / review ↔ FlowDraft → confirmed Verification Flow
-# =============================================================================
+# 表达 action/步骤/变量、约束 TARGET 与资源确认、提供规范 JSON 与稳定摘要
+# 推荐保持未确认状态；协议不执行 Flow，也不接受任意资源脚本或敏感值。
 
 from __future__ import annotations
 
+from product.protocols.codec import decode_json
 import hashlib
 import json
 import re
@@ -61,7 +50,6 @@ class FlowDraftProtocolModel(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
-
 
 
 class FlowDraftVariableStatus(StrEnum):
@@ -409,14 +397,6 @@ def flow_draft_review_command_schema() -> dict[str, Any]:
     return _COMMAND_ADAPTER.json_schema()
 
 
-class _DuplicateKey(ValueError):
-    pass
-
-
-class _NonFinite(ValueError):
-    pass
-
-
 def _strict_json(raw: bytes, maximum: int, known_secrets: Sequence[str]) -> Any:
     if not isinstance(raw, bytes):
         raise TypeError("flow draft parser requires bytes")
@@ -425,24 +405,11 @@ def _strict_json(raw: bytes, maximum: int, known_secrets: Sequence[str]) -> Any:
     if raw.startswith(b"\xef\xbb\xbf"):
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿协议不得包含 BOM")
     try:
-        parsed = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_unique_object,
-            parse_constant=lambda _: (_ for _ in ()).throw(_NonFinite()),
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateKey, _NonFinite):
+        parsed = decode_json(raw, limit=maximum)
+    except ValueError:
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿协议不是严格 JSON") from None
     _reject_known_secrets(parsed, known_secrets)
     return parsed
-
-
-def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _DuplicateKey
-        result[key] = value
-    return result
 
 
 def _reject_known_secrets(value: Any, known_secrets: Sequence[str]) -> None:

@@ -243,7 +243,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     @router.get(f"{prefix}/maintenance-draft", response_model=ApiResponse)
     def maintenance_draft(project_id: str):
         return data_response(
-            context.business_boundaries.maintenance_draft(project_id).model_dump(
+            context.business_boundaries.maintenance_draft(project_id, allow_empty=True).model_dump(
                 mode="json"
             )
         )
@@ -261,6 +261,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
             context.business_boundaries.create_maintenance_proposal(
                 project_id,
                 body.to_command(),
+                allow_initial=True,
             ).model_dump(mode="json"),
             status_code=201,
         )

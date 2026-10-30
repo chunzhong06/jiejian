@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试身份准备控制标记
-#
-# 定位
-#   控制面与独立 headed browser 进程之间的无秘密本地控制事实。
-#
-# 职责
-#   固定 ready/save/cancel 标记｜原子写入｜校验路径和固定内容。
-#
-# 边界
-#   不保存用户输入、登录状态或秘密；每个目录只属于一个随机 preparation id。
-#
-# 调用链
-#   IdentityPreparationManager ↔ control markers ↔ identity_preparation_process
-# =============================================================================
+# 固定 ready/save/cancel 标记、原子写入、校验路径和固定内容。
+# 不保存用户输入、登录状态或秘密；每个目录只属于一个随机 preparation id。
 
 from __future__ import annotations
 

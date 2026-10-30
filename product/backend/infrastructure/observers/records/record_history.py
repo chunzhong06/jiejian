@@ -1,9 +1,7 @@
 # 校验独占记录日志的完整哈希链，拒绝不支持的格式和截断记录。
 from __future__ import annotations
 import hashlib
-import json
 import os
-import sqlite3
 import struct
 
 

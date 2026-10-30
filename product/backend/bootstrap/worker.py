@@ -1,15 +1,5 @@
-# =============================================================================
-# WorkerContainer 组合根
-#
-# 定位
-#   独立 Worker 进程的完整应用服务与基础设施装配边界。
-#
-# 职责
-#   只读核验数据库，装配当前 CHECK/Recording Job、请求与结果接受服务。
-#
-# 边界
-#   不继承 ApplicationCore，不创建 Cache、Onboarding、LLM 或 GUI 能力。
-# =============================================================================
+# 装配独立 Worker 的任务领取、请求读取、执行器和结果发布服务。
+# 复用当前数据库，不继承 Web 控制面的 ApplicationCore 或组装界面能力。
 
 from __future__ import annotations
 
@@ -61,7 +51,7 @@ class WorkerContainer:
         self.job_targets = current_check_and_recording_targets()
         self.job_attempts = JobAttempts(self.uow_factory, targets=self.job_targets)
         self.job_queue = JobQueue(self.uow_factory, targets=self.job_targets)
-        from product.backend.infrastructure.runtime.jobs.target_handlers.runtime_load import runtime_load_targets
+        from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
         from product.backend.application.runtime.load_jobs import RuntimeLoadJobs
         self.runtime_attempts = JobAttempts(self.uow_factory,targets=runtime_load_targets())
         self.runtime_load_jobs = RuntimeLoadJobs(self.uow_factory)

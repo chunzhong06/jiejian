@@ -1,17 +1,38 @@
-.jj-accounts-workspace, .jj-login-progress, .jj-proof-workspace, .jj-source-review, .jj-recording-workspace { border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; min-width: 0; }
-.jj-accounts-workspace > header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.jj-accounts-workspace, .jj-proof-workspace, .jj-source-review, .jj-recording-workspace { border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; min-width: 0; }
+.jj-accounts-workspace { container: account-workspace / inline-size; }
+.jj-accounts-workspace > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); background: var(--inset); }
+.jj-accounts-workspace > header h2 { font-size: var(--text-body); }
 .jj-accounts-workspace > header > span { font-size: var(--text-meta); color: var(--muted); }
-.jj-account-row { display: grid; grid-template-columns: 34px minmax(0,1fr) minmax(0,1fr) auto; gap: 18px; align-items: center; padding: 24px 28px; border-bottom: 1px solid var(--line); }
-.jj-account-row:last-child { border: 0; }
-.jj-account-symbol { width: 34px; height: 34px; display: flex; justify-content: center; align-items: center; border-radius: 9px; background: var(--soft); color: var(--muted); }
+.jj-account-list { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); }
+.jj-account-row { display: grid; flex: 1 1 340px; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); align-items: center; gap: 24px; min-width: 0; padding: 24px; background: var(--surface); }
+.jj-account-row[data-current=true] { background: var(--inset); box-shadow: inset 3px 0 var(--accent); }
+.jj-account-row > header { display: flex; align-items: flex-start; gap: 14px; }
+.jj-account-row > footer { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; }
+.jj-account-symbol { width: 28px; height: 28px; display: grid; place-items: center; flex: none; color: var(--muted); }
 .jj-account-body { min-width: 0; }
 .jj-account-body > p { margin-top: 6px; }
 .jj-account-body .jj-item-heading { gap: 8px; }
 .jj-account-uses { font-size: var(--text-meta); color: var(--muted); }
-.jj-account-row > .jj-button { min-height: 34px; font-size: var(--text-meta); }
+.jj-account-row > footer > .jj-button { min-height: 34px; font-size: var(--text-meta); }
 .jj-account-note { padding: 18px 28px; border-top: 1px solid var(--line); background: var(--inset); color: var(--muted); font-size: var(--text-meta); }
-.jj-login-progress { padding: 26px 28px; }
-.jj-login-progress > header { display: flex; gap: 20px; align-items: center; margin-bottom: 22px; }
+.jj-login-progress { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); min-width:0; border-top:1px solid var(--line); }
+.jj-login-progress > header { grid-column:1; grid-row:1/3; display:flex; gap:18px; align-items:flex-start; padding:28px; }
+.jj-login-symbol { display:grid; place-items:center; width:48px; height:48px; flex:none; border-radius:var(--radius-control); background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); }
+.jj-login-progress > header > div { min-width:0; padding-top:2px; }
+.jj-login-heading { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
+.jj-login-heading h2 { font-size:var(--text-section); }
+.jj-login-progress > header p { margin-top:10px; color:var(--muted); line-height:1.8; }
+.jj-login-stages { grid-column:2; margin:28px 28px 0 0; padding:18px; list-style:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; border-radius:var(--radius-control); background:var(--inset); }
+.jj-login-stages > li { display:flex; align-items:center; gap:10px; min-width:0; color:var(--muted); font-size:var(--text-meta); }
+.jj-login-stages > li > span:first-child { width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--line); border-radius:50%; flex:none; font-size:var(--text-meta); font-variant-numeric:tabular-nums; }
+.jj-login-stages > li[data-state=complete] > span:first-child { background:var(--good-soft); border-color:transparent; color:var(--good); }
+.jj-login-stages > li[data-state=current] { color:var(--ink); font-weight:550; }
+.jj-login-stages > li[data-state=current] > span:first-child { background:var(--accent); border-color:transparent; color:var(--on-accent); }
+.jj-login-actions { grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; align-self:center; gap:12px; padding:20px 28px 24px 0; }
+.jj-login-progress[data-terminal=true] > header { grid-row:1; }
+.jj-login-resolution { grid-column:2; display:grid; justify-items:start; align-content:center; gap:16px; min-width:0; padding:28px; border-left:1px solid var(--line); }
+.jj-login-resolution > p { color:var(--muted); line-height:1.8; }
+.jj-login-progress > .jj-notice { grid-column:1/-1; margin:0 28px 24px; }
 .jj-proof-workspace { display: grid; grid-template-columns: 242px minmax(0,1fr); }
 .jj-proof-workspace.is-single-source { grid-template-columns: minmax(0,1fr); }
 .jj-source-index { padding: 24px 12px; background: var(--inset); border-right: 1px solid var(--line); }
@@ -84,6 +105,12 @@
 .jj-material-impact > p { margin-top: 12px; font-size: var(--text-meta); color: var(--muted); }
 .jj-recording-live > .jj-choice-field { margin-top: 24px; }
 @media(max-width:600px) { .jj-recording-toolbar, .jj-recording-setup, .jj-material-impact { padding: 20px; } .jj-recording-toolbar { gap: 12px; } .jj-recording-toolbar h2 { font-size: var(--text-body); } .jj-recording-list { padding: 10px; } .jj-recording-list > label { grid-template-columns: 18px minmax(0,1fr) auto; gap: 8px 12px; padding: 16px 12px; } .jj-recording-list time { grid-column: 2; grid-row: 2; } .jj-recording-list .jj-badge { grid-column: 3; grid-row: 1/3; } .jj-recording-actions { padding: 16px 20px; flex-wrap: wrap; } .jj-recording-setup > .jj-recording-actions { margin: 24px -20px -20px; } }
-@media(max-width:1200px) { .jj-account-row { grid-template-columns: 34px minmax(0,1fr) auto; gap: 10px 16px; } .jj-account-uses { grid-column: 2; grid-row: 2; } .jj-account-row > .jj-button { grid-column: 3; grid-row: 1/3; } .jj-account-symbol { grid-row: 1/3; } .jj-proof-input { grid-template-columns: minmax(0,1fr); } .jj-proof-input > .jj-facts { grid-column: 1; grid-row: auto; margin-top: 18px; } .jj-proof-stages { padding-inline: 16px; gap: 10px; } .jj-proof-stages > li { gap: 7px; } .jj-source-review-body .jj-facts { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:1200px) { .jj-proof-input { grid-template-columns: minmax(0,1fr); } .jj-proof-input > .jj-facts { grid-column: 1; grid-row: auto; margin-top: 18px; } .jj-proof-stages { padding-inline: 16px; gap: 10px; } .jj-proof-stages > li { gap: 7px; } .jj-source-review-body .jj-facts { grid-template-columns: minmax(0,1fr); } }
 @media(max-width:850px) { .jj-source-checks { grid-template-columns: minmax(0,1fr); } .jj-proof-workspace { grid-template-columns: minmax(0,1fr); } .jj-source-index { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); } .jj-source-index h2 { width: 100%; padding-bottom: 4px; } .jj-source-index > button { width: auto; flex: 1 1 180px; margin: 0; } }
-@media(max-width:600px) { .jj-accounts-workspace > header, .jj-account-row, .jj-account-note, .jj-login-progress, .jj-proof-detail > header, .jj-proof-reading, .jj-source-review > header, .jj-source-review-body, .jj-source-consent { padding: 22px 20px; } .jj-account-row { grid-template-columns: 28px minmax(0,1fr); } .jj-account-symbol { width: 28px; height: 28px; align-self: start; } .jj-account-uses { grid-column: 2; } .jj-account-row > .jj-button { grid-column: 2; grid-row: 3; justify-self: start; margin-top: 5px; } .jj-proof-detail > header { flex-wrap: wrap; gap: 10px; } .jj-proof-stages { margin-inline: 20px; padding: 14px 12px; gap: 12px; } .jj-proof-stages > li { flex-direction: column; align-items: flex-start; gap: 6px; } .jj-proof-stages small { font-size: var(--text-meta); } .jj-proof-actions { padding: 18px 16px; } .jj-source-review > header { flex-wrap: wrap; } .jj-source-review-body .jj-facts > div { grid-template-columns: 84px minmax(0,1fr); gap: 12px; } }
+@media(max-width:600px) { .jj-account-note, .jj-proof-detail > header, .jj-proof-reading, .jj-source-review > header, .jj-source-review-body, .jj-source-consent { padding: 22px 20px; } .jj-proof-detail > header { flex-wrap: wrap; gap: 10px; } .jj-proof-stages { margin-inline: 20px; padding: 14px 12px; gap: 12px; } .jj-proof-stages > li { flex-direction: column; align-items: flex-start; gap: 6px; } .jj-proof-stages small { font-size: var(--text-meta); } .jj-proof-actions { padding: 18px 16px; } .jj-source-review > header { flex-wrap: wrap; } .jj-source-review-body .jj-facts > div { grid-template-columns: 84px minmax(0,1fr); gap: 12px; } }
+.jj-recording-participants { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 16px 24px; margin-block: 20px; padding: 18px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-control); }
+.jj-recording-participants dt { color: var(--muted); font-size: var(--text-meta); }
+.jj-recording-participants dd { margin: 6px 0 0; }
+
+@container account-workspace (max-width:820px) { .jj-login-resolution { grid-column:1; padding:24px; border-left:0; border-top:1px solid var(--line); } .jj-login-progress { grid-template-columns:minmax(0,1fr); } .jj-login-progress > header { grid-column:1; grid-row:auto; padding:24px; } .jj-login-stages { grid-column:1; margin:0 24px 20px; } .jj-login-actions { grid-column:1; padding:18px 24px; border-top:1px solid var(--line); background:var(--inset); } }
+@container account-workspace (max-width:420px) { .jj-account-row { padding:20px; } .jj-login-progress > header { padding:22px 20px; } .jj-login-symbol { width:36px; height:36px; } .jj-login-stages { grid-template-columns:minmax(0,1fr); margin-inline:20px; } .jj-login-actions { padding:18px 20px; } }

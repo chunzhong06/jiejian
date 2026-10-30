@@ -4,7 +4,7 @@ from product.backend.infrastructure.storage.execution.jobs import JobRecord
 
 
 def current_job(*, ordinal: int = 1, target: str = "run_id", operation_type: str = "CHECK", **changes) -> JobRecord:
-    prefixes = {"run_id": "run", "recording_id": "rec", "runtime_load_id": "rld", "preflight_id": "ppf", "reference_capture_id": "rpc"}
+    prefixes = {"run_id": "run", "recording_id": "rec", "runtime_load_id": "rld", "preflight_id": "ppf", "reference_capture_id": "rpc", "identity_preparation_id": "prep"}
     if target not in prefixes:
         raise ValueError("UNKNOWN_JOB_TARGET")
     payload = dict(job_id=f"job_{ordinal:032x}", project_id="fixture-project", operation_type=operation_type,

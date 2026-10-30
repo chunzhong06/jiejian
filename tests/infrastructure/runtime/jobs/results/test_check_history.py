@@ -8,13 +8,14 @@ from unittest.mock import Mock
 import pytest
 from sqlalchemy import event
 
+from product.backend.domain.errors import JiejianError
 from product.backend.domain.lifecycle import RunLifecycle, RunVerdict
 from product.backend.infrastructure.storage.execution.runs import RunRecord
 from product.backend.infrastructure.artifacts.checks.check_publication import CheckPublisher
 from product.backend.application.checks.reading.results import CheckResultReader
 from tests.support.builders.checks.check_publication import build_package_parts, package_parts, NOW
 from tests.support.builders.checks.check_execution import execution_pair
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import create_app, TestClient
 
 
@@ -99,6 +100,23 @@ def test_real_publication_labels_search_and_corruption_never_use_db_verdict(pack
     assert reader.history(job.project_id, verdict=RunVerdict.PASS).items == ()
 
 
+def test_combined_reading_keeps_integrity_and_rechecks_files_on_next_request(package_parts):
+    var_dir, factory, job, directory, _ = package_parts
+    published = CheckPublisher(var_dir, factory, clock_us=lambda: NOW+20).publish(directory)
+    reader = CheckResultReader(var_dir=var_dir, uow_factory=factory)
+    ((status, package),) = reader.project_readings(job.project_id)
+    assert status.result_integrity == 'VALID'
+    assert status.run.verdict == package.result.verdict
+    assert package.directory == published.directory
+    with pytest.raises(JiejianError) as error:
+        reader.project_readings('other-project')
+    assert error.value.code == 'PROJECT_NOT_FOUND'
+    (package.directory / 'result.json').write_bytes(b'{}')
+    ((invalid, package),) = reader.project_readings(job.project_id)
+    assert invalid.result_integrity == 'INVALID' and invalid.run.verdict is None
+    assert package is None
+
+
 @pytest.mark.parametrize("context_kind", ["change", "repair"])
 def test_history_copies_references_only_from_verified_request(worker_services, tmp_path, context_kind):
     from product.protocols.checks.execution_request import ExecutionRequest
@@ -169,7 +187,7 @@ def test_history_api_rejects_invalid_queries(package_parts, worker_services, par
     var_dir, _, job, _, _ = package_parts
     with sqlite3.connect(worker_services.database_path) as source, sqlite3.connect(var_dir / "data/jiejian.db") as destination:
         source.backup(destination)
-    app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(var_dir, start_worker=False, secret_store=MemorySecrets(), environ={})
     with TestClient(app) as client:
         response = client.get(f"/api/projects/{job.project_id}/check-history", params=params)
         assert response.status_code in (400, 422)
@@ -181,7 +199,7 @@ def test_history_api_keeps_runs_shape_and_is_read_only(package_parts, worker_ser
     CheckPublisher(var_dir, factory, clock_us=lambda: NOW+20).publish(staging)
     with sqlite3.connect(worker_services.database_path) as source, sqlite3.connect(var_dir / "data/jiejian.db") as destination:
         source.backup(destination)
-    app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(var_dir, start_worker=False, secret_store=MemorySecrets(), environ={})
     with TestClient(app) as client:
         forbidden = Mock(side_effect=AssertionError("history is read only"))
         monkeypatch.setattr(socket.socket, "connect", forbidden)

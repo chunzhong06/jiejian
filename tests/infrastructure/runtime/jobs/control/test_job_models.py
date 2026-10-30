@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from tests.support.builders.runtime.current_jobs import current_job, invalid_job_payload
+from tests.support.contracts import JOB_TARGET_FIELDS, WORKER_CAPABILITIES
+from product.backend.infrastructure.storage.execution.jobs import JobRecord
 import pytest
 from pydantic import ValidationError
 
@@ -99,4 +102,29 @@ def test_retry_policy_rejects_inverted_or_unbounded_values() -> None:
     with pytest.raises(ValidationError):
         RetryPolicy(base_delay_us=1, max_delay_us=10, max_jitter_us=11)
 
-pytestmark = [pytest.mark.level3]
+pytestmark = [pytest.mark.level2]
+
+
+def test_job_fixture_contract_contains_every_target():
+    assert JOB_TARGET_FIELDS <= set(JobRecord.model_fields)
+
+
+def test_current_worker_registry_is_explicit():
+    from product.backend.infrastructure.runtime.jobs.registration import current_check_and_recording_targets
+    targets = current_check_and_recording_targets().target_types
+    assert tuple(sorted('CHECK' if item.value == 'RUN' else item.value for item in targets)) == WORKER_CAPABILITIES
+
+
+@pytest.mark.parametrize("target,operation", [("run_id", "CHECK"), ("recording_id", "RECORDING"),
+                                           ("runtime_load_id", "RUNTIME_LOAD"), ("preflight_id", "PROOF_PREFLIGHT"), ("reference_capture_id", "REFERENCE_CAPTURE"), ("identity_preparation_id", "IDENTITY_PREPARATION")])
+def test_current_jobs_are_valid_and_carry_all_target_fields(target, operation):
+    job = current_job(target=target, operation_type=operation)
+    assert all(hasattr(job, name) for name in JOB_TARGET_FIELDS)
+    assert sum(getattr(job, name) is not None for name in JOB_TARGET_FIELDS) == 1
+
+
+def test_invalid_wire_is_rejected_instead_of_bypassing_validation():
+    with pytest.raises(ValidationError):
+        JobRecord.model_validate(invalid_job_payload(run_id=None))
+    with pytest.raises(ValidationError):
+        current_job(target="preflight_id", operation_type="CHECK")

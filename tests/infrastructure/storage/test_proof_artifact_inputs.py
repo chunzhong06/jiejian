@@ -1,5 +1,6 @@
 # 验证私有参照的不可覆盖、归属与容量边界；不创建目标进程或读取真实凭据。
 from functools import partial
+import hashlib
 from uuid import uuid4
 import pytest
 from product.backend.domain.errors import JiejianError
@@ -9,21 +10,36 @@ from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWor
 from product.backend.infrastructure.storage.applications.projects import ProjectRecord
 from product.backend.infrastructure.storage.db import prepare_database, create_sqlite_engine, create_session_factory
 from product.protocols.preparation.proof_artifacts import ProofArtifactInput
+from product.backend.application.preparation.proofs.artifact_inputs import UploadProofArtifact
+from tests.support.builders.checks.check_service import ready_check_harness
 
 
 def test_private_bytes_are_immutable_scoped_and_bounded(tmp_path):
     store=ProofArtifactStore(tmp_path)
     asset='pai_'+uuid4().hex
-    value=store.save('project_a',asset,b'controlled fixture bytes')
-    assert store.save('project_a',asset,b'controlled fixture bytes')==value
+    content=store.accept(b'controlled fixture bytes')
+    value=store.save('project_a',asset,content)
+    assert store.save('project_a',asset,content)==value
     assert store.read('project_a',value)==b'controlled fixture bytes'
-    with pytest.raises(JiejianError):store.save('project_a',asset,b'different content')
+    with pytest.raises(JiejianError):store.save('project_a',asset,store.accept(b'different content'))
     with pytest.raises(JiejianError):store.read('project_b',value)
     with pytest.raises(JiejianError):store.directory('../escape',asset)
     for raw in (b'',b'x'*4194305,b'password:forbidden',b'session-test-value'):
-        with pytest.raises(JiejianError):store.save('project_a','pai_'+uuid4().hex,raw,known_secrets=('session-test-value',))
+        with pytest.raises(JiejianError):store.accept(raw,known_secrets=('session-test-value',))
     (store.directory('project_a',asset)/'artifact.bin').write_bytes(b'corrupted')
     with pytest.raises(JiejianError):store.read('project_a',value)
+
+
+def test_reference_replay_accepts_full_capacity_and_read_uses_current_secret_scope(tmp_path):
+    store=ProofArtifactStore(tmp_path)
+    content=store.accept(b'x'*4194304)
+    asset='pai_'+uuid4().hex
+    manifest=store.save('project_a',asset,content)
+    assert store.save('project_a',asset,content)==manifest
+    assert store.read('project_a',manifest)==content.raw
+    with pytest.raises(JiejianError) as error:
+        store.read('project_a',manifest,known_secrets=('xxxx',))
+    assert error.value.code=='STORAGE_SECRET'
 
 
 def test_pending_capture_reserves_project_capacity_and_cancel_releases_it(tmp_path):
@@ -47,5 +63,28 @@ def test_pending_capture_reserves_project_capacity_and_cancel_releases_it(tmp_pa
             assert work.proof_artifacts.input('project_b',extra.asset_id) is None
             work.commit()
     finally:engine.dispose()
+
+
+def test_upload_replay_checks_declared_content_and_stale_basis_without_publishing(tmp_path):
+    harness=ready_check_harness(tmp_path)
+    try:
+        core,project=harness.core,harness.project_id
+        context=core.proof_preparation.context(project)
+        resource=context['resources'][0]
+        raw=b'controlled upload fixture'
+        command=UploadProofArtifact(operation_id=uuid4().hex,basis_id=context['basis_id'],
+            action_id=harness.action.action_id,action_revision=1,resource_binding_id=resource['resource_binding_id'],
+            size=len(raw),sha256=hashlib.sha256(raw).hexdigest(),confirmed=True)
+        receipt=core.proof_artifacts.upload(project,command,raw)
+        assert core.proof_artifacts.upload(project,command,raw)==receipt
+        assert core.proof_artifacts.read(project,receipt['result']['asset_id'])==raw
+        with pytest.raises(JiejianError,match='上传内容'):
+            core.proof_artifacts.upload(project,command,b'different content')
+        stale=command.model_copy(update=dict(operation_id=uuid4().hex,basis_id='pb_'+'0'*64))
+        with pytest.raises(JiejianError):core.proof_artifacts.upload(project,stale,raw)
+        with core.uow_factory() as work:
+            assert work.proof_artifacts.input(project,'pai_'+stale.operation_id) is None
+        assert not core.proof_artifacts.store.directory(project,'pai_'+stale.operation_id).exists()
+    finally:harness.close()
 
 pytestmark = [pytest.mark.level3]

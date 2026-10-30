@@ -1,12 +1,6 @@
-# =============================================================================
 # MCP Streamable HTTP 当前检查与变化控制入口
-#
-# 职责
-#   复用 ApplicationCore 读取事实、登记变化和提交或取消完整检查。
-#
-# 边界
-#   临时项目授权不能变成权限 writer，不构造 LOCAL_GUI approval 或允许客户端裁剪考题。
-# =============================================================================
+# 复用 ApplicationCore 读取事实、登记变化和提交或取消完整检查。
+# 临时项目授权不能变成权限 writer，不构造 LOCAL_GUI approval 或允许客户端裁剪考题。
 
 from __future__ import annotations
 
@@ -29,7 +23,7 @@ from product.backend.domain.boundaries.rule_candidates import RuleCandidateSave
 from product.backend.domain.boundaries.rule_preview import RulePreviewCommand
 import json
 from product.backend.domain.development import OperationId, OperationKind
-from product.backend.domain.changes.rules import RuleChangeTarget
+from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.checks.repair import CurrentRepairReference
 from product.backend.infrastructure.runtime.diagnostics import runtime_environment_details
 from product.backend.application.agent_access.service import MCPAccessController, MCPAccessLevel

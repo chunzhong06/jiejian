@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.secrets import MemorySecrets
 import base64
 import json
 from pathlib import Path
@@ -50,25 +51,6 @@ class _StubRepairContract(BaseModel):
 from tests.contracts.http.system._support_current_mcp import TOOLS as EXPECTED_MCP_TOOLS
 
 
-class _MemorySecretStore:
-    """在 MCP 直接测试内模拟跨 controller 共享的精确秘密引用。"""
-
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        self.values[secret_ref] = secret
-
-    def read(self, secret_ref: str) -> str | None:
-        return self.values.get(secret_ref)
-
-    def delete(self, secret_ref: str) -> None:
-        self.values.pop(secret_ref, None)
-
-    def configured(self, secret_ref: str | None) -> bool:
-        return secret_ref is not None and secret_ref in self.values
-
-
 def _source(root: Path) -> Path:
     source = root / "source"
     source.mkdir()
@@ -95,7 +77,7 @@ def test_mcp_server_instructions_register_one_change_without_manual_task_setup(
     app = create_app(
         tmp_path / "var",
         start_worker=False,
-        secret_store=_MemorySecretStore(),
+        secret_store=MemorySecrets(),
     )
     instructions = app.state.mcp_server.instructions
 
@@ -108,9 +90,8 @@ def test_mcp_server_instructions_register_one_change_without_manual_task_setup(
     app.state.context.close()
 
 
-
 def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> None:
-    store = _MemorySecretStore()
+    store = MemorySecrets()
     access = MCPAccessController("http://127.0.0.1:8765/mcp", store)
     assert access.view().paired is False
     assert access.view().connection_state is MCPConnectionState.DISABLED
@@ -164,7 +145,7 @@ def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> No
 def test_mcp_gui_access_api_controls_credentials_and_restores_after_shutdown(
     tmp_path: Path,
 ) -> None:
-    store = _MemorySecretStore()
+    store = MemorySecrets()
     app = create_app(tmp_path / "var", start_worker=False, secret_store=store)
     with TestClient(app) as client:
         initial = client.get("/api/mcp/access").json()["data"]
@@ -249,7 +230,7 @@ def test_mcp_transport_rejects_disabled_wrong_token_and_wrong_origin(
     app = create_app(
         tmp_path / "var",
         start_worker=False,
-        secret_store=_MemorySecretStore(),
+        secret_store=MemorySecrets(),
     )
 
     async def scenario() -> None:
@@ -320,7 +301,7 @@ def test_mcp_transport_rejects_disabled_wrong_token_and_wrong_origin(
 
 
 def test_official_sdk_never_exposes_old_or_permission_writer_tools(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=_MemorySecretStore())
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets())
     token = app.state.mcp_access.pair().access_token
     async def scenario():
         async with app.router.lifespan_context(app):
@@ -337,7 +318,7 @@ def test_official_sdk_never_exposes_old_or_permission_writer_tools(tmp_path):
 
 
 def test_preparation_guidance_is_identical_over_gui_and_official_mcp_sdk(tmp_path):
-    app = create_app(tmp_path/'var', start_worker=False, secret_store=_MemorySecretStore())
+    app = create_app(tmp_path/'var', start_worker=False, secret_store=MemorySecrets())
     project = app.state.context.application_understanding.connect(_source(tmp_path)).project.project_id
     token = app.state.mcp_access.pair().access_token
     async def scenario():
@@ -364,7 +345,7 @@ def test_preparation_guidance_is_identical_over_gui_and_official_mcp_sdk(tmp_pat
 
 
 def test_rule_candidate_sdk_requires_prepare_and_never_approves(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=_MemorySecretStore())
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets())
     project_id = app.state.context.application_understanding.connect(_source(tmp_path)).project.project_id
     token = app.state.mcp_access.pair().access_token
 
@@ -403,7 +384,7 @@ def test_mcp_application_projection_omits_source_and_log_or_body_fields(
     app = create_app(
         tmp_path / "var",
         start_worker=False,
-        secret_store=_MemorySecretStore(),
+        secret_store=MemorySecrets(),
     )
     connection = app.state.context.application_understanding.connect(_source(tmp_path))
     project_id = connection.project.project_id

@@ -9,7 +9,8 @@ from sqlalchemy import func,select
 from product.backend.bootstrap.application import ApplicationCore
 from product.backend.infrastructure.storage.changes.development import DevelopmentRepository
 from product.backend.infrastructure.storage.runtime.runtime_loads import RuntimeLoadRow
-from tests.support.builders.preparation.action_preparation import build_preparation_harness, MemorySecretStore
+from tests.support.builders.preparation.action_preparation import build_preparation_harness
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
 
 
@@ -26,7 +27,7 @@ def _wait(runtime,project,key):
 
 def test_two_node_deliveries_and_atomic_runtime_receipt(tmp_path,monkeypatch):
     var=tmp_path/'var'
-    core=ApplicationCore(var,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core=ApplicationCore(var,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     harness=build_preparation_harness(tmp_path,core=core)
     project=harness.project_id
     # 替换测试自建目录中的Python占位源码，以生产扫描和受控Node链核对真实修改。

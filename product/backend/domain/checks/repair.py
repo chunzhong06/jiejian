@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from product.backend.domain.lifecycle import CaseVerdict, RunVerdict
+from product.backend.domain.lifecycle import CaseVerdict
 from product.backend.domain.verification.breakpoints import BreakpointResult
 from product.backend.domain.verification.checks import project_check_effect_facts
 from product.protocols.checks.execution_request import ActorId, EffectId, FrozenPermission, Hash, IdentityId, LogicalId, PermissionReference, RepairContext, WireModel, content_hash
@@ -69,7 +69,7 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
         verification = identity.verification
         if verification is None or proof.rule == "RECORDED_SUPPORT":
             raise ValueError("repair requires independently verified decisive standard")
-        if bundle.schema_version in {'6','7'}:
+        if bundle.proof_sources:
             sources=[source for source in bundle.proof_sources if (source.config.action_id,source.config.effect_id)==(action.action_id,requirement.effect_id)]
             if len(sources)!=1:raise ValueError('repair requires one frozen current source')
             source=sources[0]

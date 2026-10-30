@@ -6,7 +6,7 @@ from sqlalchemy import event
 
 from product.backend.domain.applications.models import CandidateDecision
 from product.backend.domain.errors import JiejianError
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.execution_request import canonical_execution_request_bytes
 from tests.support.builders.preparation.action_preparation import build_preparation_harness

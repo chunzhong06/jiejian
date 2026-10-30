@@ -10,7 +10,7 @@ from product.backend.infrastructure.artifacts.checks.check_publication import Ch
 from product.backend.application.agent_access.service import MCPAccessLevel
 from tests.support.builders.checks.check_publication import package_parts, NOW
 from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 
 
 def test_evidence_sdk_read_uses_exact_project_case_and_bounded_fragment(package_parts,worker_services):
@@ -18,7 +18,7 @@ def test_evidence_sdk_read_uses_exact_project_case_and_bounded_fragment(package_
     package=CheckPublisher(var_dir,factory,clock_us=lambda:NOW+20).publish(staging)
     (var_dir/'data').mkdir(exist_ok=True)
     with sqlite3.connect(worker_services.database_path) as source,sqlite3.connect(var_dir/'data/jiejian.db') as target:source.backup(target)
-    app=create_app(var_dir,start_worker=False,secret_store=MemorySecretStore(),environ={})
+    app=create_app(var_dir,start_worker=False,secret_store=MemorySecrets(),environ={})
     access=app.state.mcp_access;token=access.pair().access_token;project=package.request.project_id
     document=package.evidence[0]
     arguments=dict(project_id=project,run_id=job.run_id,case_id=document.case.case_id,evidence_id=document.evidence_id)

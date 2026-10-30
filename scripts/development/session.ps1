@@ -15,6 +15,7 @@ function Save-CallerEnvironment {
     $values = @{}
     $processEnvironment = [Environment]::GetEnvironmentVariables("Process")
     foreach ($name in $names) {
+        # 必须区分“不存在”和已有字符串值，恢复时不能把本轮引导变量遗留给调用者。
         $exists = $processEnvironment.Contains($name)
         $values[$name] = [pscustomobject]@{
             exists = $exists
@@ -41,6 +42,7 @@ function Restore-CallerEnvironment {
         if ([bool]$record.exists) { [Environment]::SetEnvironmentVariable($name, [string]$record.value, "Process") }
         else { Remove-Item -LiteralPath ("Env:{0}" -f $name) -ErrorAction SilentlyContinue }
     }
+    # 模块通过点引入参与入口会话；恢复调用者作用域的编码，不能只修改当前函数的局部变量。
     Set-Variable -Name OutputEncoding -Value $snapshot.output_encoding_variable -Scope 1
     [Console]::OutputEncoding = $snapshot.output_encoding
     [Console]::InputEncoding = $snapshot.input_encoding

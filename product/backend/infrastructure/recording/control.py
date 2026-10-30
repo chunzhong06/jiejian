@@ -1,18 +1,6 @@
-# =============================================================================
 # Recording attempt 控制标记
-#
-# 定位
-#   API/ApplicationCore 与 Recording Runner 之间的当前尝试控制事实边界
-#
-# 职责
-#   固定标记命名｜原子写入无秘密值｜校验标记类型和内容
-#
-# 边界
-#   不保存用户输入、凭据或录制事件；调用者必须先绑定到当前 attempt 目录。
-#
-# 调用链
-#   RecordingLifecycle / RecordingJobHandler → control markers → recording_process
-# =============================================================================
+# 固定标记命名、原子写入无秘密值、校验标记类型和内容
+# 不保存用户输入、凭据或录制事件；调用者必须先绑定到当前 attempt 目录。
 
 from __future__ import annotations
 

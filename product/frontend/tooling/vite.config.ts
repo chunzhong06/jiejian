@@ -29,11 +29,12 @@ export default defineConfig({
   define: { __JIEJIAN_FRONTEND_BUILD_ID__: JSON.stringify(buildId) },
   plugins: [react(), {
     name: 'jiejian-frontend-identity', apply: 'build', enforce: 'post',
-    generateBundle(_options,bundle) {
+    // Vite 会在普通生成钩子中补写预加载依赖；清单须摘要这些改写后的字节。
+    generateBundle: { order: 'post', handler(_options,bundle) {
       const assets = Object.values(bundle).map(item => ({path:item.fileName,
         sha256:createHash('sha256').update(item.type === 'chunk' ? item.code : item.source).digest('hex')}))
       this.emitFile({type:'asset',fileName:'frontend-manifest.json',source:JSON.stringify({schema_version:'1',build_id:buildId,assets})})
-    },
+    } },
   }],
   cacheDir: process.env.JIEJIAN_FRONTEND_CACHE_DIR || '.vite',
   server: { port: 5173, strictPort: true },

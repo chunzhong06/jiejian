@@ -1,18 +1,6 @@
-# =============================================================================
 # Worker 稳定进程入口
-#
-# 定位
-#   product.backend.interfaces.worker.job 的长期进程壳与 Execution 调度之间的组合边界
-#
-# 职责
-#   解析单任务参数｜创建 WorkerContainer｜调度注册的 JobHandler
-#
-# 边界
-#   进程入口不解释 Job 业务结果；退出码只表达调度完成或稳定失败类别。
-#
-# 调用链
-#   python -m product.backend.interfaces.worker.job → WorkerContainer → JobHandler
-# =============================================================================
+# 解析单任务参数、创建 WorkerContainer、调度注册的 JobHandler
+# 进程入口不解释 Job 业务结果；退出码只表达调度完成或稳定失败类别。
 
 from __future__ import annotations
 

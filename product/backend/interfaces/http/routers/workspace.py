@@ -1,16 +1,5 @@
-# =============================================================================
-# 定位
-#   动作级工作区的 loopback HTTP 读入口。
-#
-# 职责
-#   把 WorkspaceService 的权威投影装入统一 API envelope。
-#
-# 边界
-#   只提供 GET；不接受页面状态、任务执行或旧 ProductStatus 写入。
-#
-# 调用链
-#   CURRENT Web 工作台 -> /api/projects/{project_id}/workspace -> WorkspaceService。
-# =============================================================================
+# 把 WorkspaceService 的权威投影装入统一 API envelope。
+# 只提供 GET；不接受页面状态、任务执行或旧 ProductStatus 写入。
 
 from fastapi import APIRouter
 

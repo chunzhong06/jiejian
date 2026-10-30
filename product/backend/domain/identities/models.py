@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试身份领域模型
-#
-# 定位
-#   稳定 BusinessActor revision 与受限登录状态元数据之间的项目级事实。
-#
-# 职责
-#   表达测试账号业务主体｜约束 Cookie/Bearer 非秘密元数据｜维护准备时间与秘密引用。
-#
-# 边界
-#   不等同 Contract Subject、WebExecutionIdentity 或运行时 Cookie Jar；不包含秘密正文。
-#
-# 调用链
-#   TestIdentityService ↔ TestIdentity ↔ storage / SecretStore
-# =============================================================================
+# 表达测试账号业务主体、约束 Cookie/Bearer 非秘密元数据、维护准备时间与秘密引用。
+# 不等同 Contract Subject、WebExecutionIdentity 或运行时 Cookie Jar；不包含秘密正文。
 
 from __future__ import annotations
 

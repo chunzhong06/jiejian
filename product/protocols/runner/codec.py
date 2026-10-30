@@ -10,6 +10,7 @@ from typing import Any, TypeAlias, TypeVar
 from pydantic import ValidationError
 
 from product.backend.domain.errors import JiejianError
+from product.protocols.codec import decode_json
 
 from .input import (
     EVIDENCE_MAX_BYTES,
@@ -49,19 +50,6 @@ def canonical_runner_sha256(document: ProtocolDocument, *, known_secrets: Sequen
     return hashlib.sha256(canonical_runner_json_bytes(document, known_secrets=known_secrets)).hexdigest()
 
 
-def _reject_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(" JSON contains duplicate keys")
-        result[key] = value
-    return result
-
-
-def _reject_nonfinite(value: str) -> None:
-    raise ValueError(" JSON contains a non-finite number")
-
-
 def _parse_(
     raw: bytes,
     model: type[ProtocolT],
@@ -76,9 +64,7 @@ def _parse_(
     if len(raw) > maximum or raw.startswith(b"\xef\xbb\xbf"):
         raise JiejianError("PROTOCOL_INVALID", f"{label} is oversized or contains a BOM")
     try:
-        parsed = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_pairs, parse_constant=_reject_nonfinite)
-        if not isinstance(parsed, dict):
-            raise ValueError(" root must be an object")
+        parsed = decode_json(raw, limit=maximum)
         if expected_schema_version is not None and parsed.get("schema_version") != expected_schema_version:
             raise ValueError(" schema_version is missing or unsupported")
         _reject_secret_material(parsed)

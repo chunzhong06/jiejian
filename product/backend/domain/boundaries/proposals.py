@@ -1,12 +1,6 @@
-# =============================================================================
 # Business Boundary Proposal 与 Decision 不可变事实
-#
-# 职责
-#   冻结用户提交的本地 item 引用、discovery 来源快照、Proposal fingerprint 与最终 Decision。
-#
-# 边界
-#   Proposal 写入后不更新；正式 ID、Approval、epoch 与服务端来源指纹不接受客户端自述。
-# =============================================================================
+# 冻结用户提交的本地 item 引用、discovery 来源快照、Proposal fingerprint 与最终 Decision。
+# Proposal 写入后不更新；正式 ID、Approval、epoch 与服务端来源指纹不接受客户端自述。
 
 from __future__ import annotations
 

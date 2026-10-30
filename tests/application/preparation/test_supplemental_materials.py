@@ -29,6 +29,7 @@ def material(tmp_path):
 
 def create(harness, document, request_id=None):
     service = harness.core.supplemental_materials
+    document = SupplementalDocument.model_validate(document)
     preview = service.preview(harness.project_id, harness.action.action_id, document)
     return service.create(harness.project_id, harness.action.action_id, document=document,
         expected_fingerprint=preview["fingerprint"], request_id=request_id or str(uuid4()))
@@ -46,8 +47,10 @@ def test_preview_append_replay_withdraw_preserve_execution_facts(material):
     second = service.revise(project, action, first["material_id"], expected_revision=1, request_id=str(uuid4()),
         title="补充说明", source_label="用户整理", claimed_resource_label="交付包")
     assert second["records"] == first["records"] and second["association_status"] == "USER_DECLARED"
+    assert second["fingerprint"] != first["fingerprint"]
     withdrawn = service.withdraw(project, action, first["material_id"], expected_revision=2, request_id=str(uuid4()))
     assert withdrawn["withdrawn"] and withdrawn["revision"] == 3
+    assert withdrawn["fingerprint"] == second["fingerprint"]
     history = service.list(project, action, material_id=first["material_id"])
     assert [item["revision"] for item in history["items"]] == [3, 2, 1]
     assert history["items"][-1] == first
@@ -102,10 +105,10 @@ def test_unknown_fields_budget_and_known_secret(material):
         return work
     service = SupplementalMaterialService(known)
     with pytest.raises(JiejianError):
-        service.preview(harness.project_id, document["action_id"], dict(document, title="opaque-sensitive-value"))
+        service.preview(harness.project_id, document["action_id"], SupplementalDocument.model_validate(dict(document, title="opaque-sensitive-value")))
     secret_document = dict(document, title="opaque-sensitive-value")
     with pytest.raises(JiejianError):
-        service.create(harness.project_id, document["action_id"], document=secret_document,
+        service.create(harness.project_id, document["action_id"], document=SupplementalDocument.model_validate(secret_document),
             expected_fingerprint=material_fingerprint(secret_document), request_id=str(uuid4()))
 
 

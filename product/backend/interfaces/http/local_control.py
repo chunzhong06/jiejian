@@ -1,18 +1,6 @@
-# =============================================================================
 # 本地控制面安全门
-#
-# 定位
-#   浏览器、静态界面与所有 API Router 之前的单实例访问边界
-#
-# 职责
-#   固定 Host｜签发进程内控制会话｜验证写请求精确同源 Origin
-#
-# 边界
-#   令牌只驻留当前服务内存与 HttpOnly Cookie；不信任代理头，也不参与业务授权。
-#
-# 调用链
-#   Browser / TestClient → LocalControlGuard → FastAPI Router / StaticFiles
-# =============================================================================
+# 固定 Host、签发进程内控制会话、验证写请求精确同源 Origin
+# 令牌只驻留当前服务内存与 HttpOnly Cookie；不信任代理头，也不参与业务授权。
 
 from __future__ import annotations
 
@@ -60,6 +48,7 @@ class LocalControlGuard:
             return LocalControlDecision(allowed=True, issue_session=True)
         if request.url.path != "/api" and not request.url.path.startswith("/api/"):
             return LocalControlDecision(allowed=True)
+        # 浏览器会自动附带 Cookie，写请求还必须精确同源；loopback 地址本身不能阻止跨站请求。
         presented = request.cookies.get(self.cookie_name)
         if presented is None or not compare_digest(presented, self._session_token):
             return LocalControlDecision(allowed=False)
@@ -77,6 +66,7 @@ class LocalControlGuard:
             key=self.cookie_name,
             value=self._session_token,
             httponly=True,
+            # 当前入口固定为本机 HTTP，不能使用只在 HTTPS 发送的 Secure Cookie。
             secure=False,
             samesite="strict",
             path="/api",

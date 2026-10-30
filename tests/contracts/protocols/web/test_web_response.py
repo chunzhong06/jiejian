@@ -1,13 +1,9 @@
 # 验证 Web response 提取、谓词和结果分类边界。
 
 from __future__ import annotations
-import json
-from pathlib import Path
 import pytest
 from pydantic import ValidationError
-from product.protocols.web.request import EmptyBody, HttpParameter, HttpRequestTemplate, JsonBody, MultipartBody, MultipartPart, ValueSlot, ValueSlotConsumer, ValueSlotSource
-from product.protocols.web.response import HttpOutcome, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, ResponseExtractor, ResponseExtractorKind
-from product.protocols.web.identity import StaticHeaderCredential, StaticHeadersIdentityBinding
+from product.protocols.web.response import HttpOutcome, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
 
 @pytest.mark.parametrize("path", ["$..items", "$.items[*]", "$.items[?(@.ok)]", "javascript:alert(1)"])
 def test_response_predicates_reject_unbounded_json_or_code(path: str) -> None:

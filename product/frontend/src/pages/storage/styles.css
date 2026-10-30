@@ -1,5 +1,5 @@
-.jj-storage-workspace, .jj-storage-review, .jj-storage-result, .jj-example-archives { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; }
-.jj-storage-workspace > header, .jj-storage-review > header, .jj-example-archives > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 28px; background: var(--inset); border-bottom: 1px solid var(--line); }
+.jj-storage-workspace, .jj-storage-review, .jj-storage-result { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; }
+.jj-storage-workspace > header, .jj-storage-review > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 28px; background: var(--inset); border-bottom: 1px solid var(--line); }
 .jj-storage-workspace > header h2, .jj-storage-review > header h2 { margin-top: 4px; font-variant-numeric: tabular-nums; }
 .jj-storage-summary-row, .jj-storage-category-heading { display: grid; grid-template-columns: minmax(0,1fr) 64px 112px; align-items: center; gap: 24px; padding: 18px 28px; }
 .jj-storage-summary-row + .jj-storage-summary-row { border-top: 1px solid var(--line); }
@@ -26,18 +26,26 @@
 .jj-storage-result > header { display: flex; align-items: center; gap: 12px; }
 .jj-storage-result > header .anticon { font-size: var(--text-section); color: var(--good); }
 .jj-storage-result > p { margin: 12px 0 20px; }
-.jj-example-archives > header h2 { font-size: var(--text-body); }
-.jj-example-archives > article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; }
-.jj-example-archives > article + article { border-top: 1px solid var(--line); }
-.jj-example-archives time { display: block; margin-top: 5px; }
 @media(max-width:600px) {
   .jj-storage-summary-row, .jj-storage-category-heading { grid-template-columns: minmax(0,1fr) 36px 84px; gap: 10px; padding: 18px; }
-  .jj-storage-workspace > header, .jj-storage-review > header, .jj-example-archives > header, .jj-storage-workspace > footer, .jj-storage-review > footer { padding: 20px; }
-  .jj-storage-review > header, .jj-example-archives > header { align-items: start; flex-direction: column; gap: 8px; }
+  .jj-storage-workspace > header, .jj-storage-review > header, .jj-storage-workspace > footer, .jj-storage-review > footer { padding: 20px; }
+  .jj-storage-review > header { align-items: start; flex-direction: column; gap: 8px; }
   .jj-storage-category > details { padding-inline: 18px; }
   .jj-storage-selection > label { grid-template-columns: 18px minmax(0,1fr); }
   .jj-storage-selection > label > span:last-child { grid-column: 2; text-align: left; }
   .jj-storage-result { padding: 20px; }
-  .jj-example-archives > article { flex-wrap: wrap; padding: 18px 20px; }
-  .jj-example-archives .jj-button { margin-left: auto; }
 }
+
+.jj-storage-layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr); min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); }
+.jj-storage-layout > .jj-storage-workspace { border:0; border-radius:0; }
+.jj-storage-layout .jj-storage-kept { background:var(--inset); border-left:1px solid var(--line); padding:24px; min-width:0; }
+.jj-storage-kept > h2 { font-size:var(--text-body); margin-bottom:16px; }
+.jj-storage-kept > p { font-size:var(--text-meta); color:var(--muted); line-height:1.8; margin-bottom:20px; }
+.jj-storage-kept > details { padding:16px 0; }
+.jj-storage-kept > details > .jj-small { margin:16px 0; }
+.jj-storage-layout .jj-storage-workspace > header { background:var(--surface); }
+.jj-storage-layout .jj-storage-workspace > footer { align-items:center; }
+.jj-storage-category-heading { padding-block:20px 8px; }
+.jj-storage-category > details > summary { font-size:var(--text-meta); }
+.jj-storage-review > footer .jj-inline-actions { gap:12px; }
+@media(max-width:950px) { .jj-storage-layout { grid-template-columns:minmax(0,1fr); } .jj-storage-layout .jj-storage-kept { border-left:0; border-top:1px solid var(--line); } }

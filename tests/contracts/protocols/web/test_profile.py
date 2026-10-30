@@ -7,9 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from product.backend.domain.errors import JiejianError
-from product.backend.domain.verification.permissions.contract import PermissionContract
-from product.backend.bootstrap.application import ApplicationCore
 from product.protocols.web.identity import PreparedCookieCredential, PreparedCookieSessionIdentityBinding, WebExecutionIdentity
 from product.backend.domain.verification.facts import TargetType
 from product.protocols.web.profile import WebExecutionProfile, WebExecutionSnapshot

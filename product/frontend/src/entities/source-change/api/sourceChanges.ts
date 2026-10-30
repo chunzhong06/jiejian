@@ -12,10 +12,10 @@ export type SourceChangeViewDto = {
   revalidation: { status: 'READY' | 'NO_BASELINE' | 'SOURCE_STALE' | 'POLICY_STALE' | 'MAPPING_REVIEW_REQUIRED'; can_execute: boolean; preparation_gaps: Array<{ reason: string }> }
 }
 const base = (id: string) => `/api/projects/${encodeURIComponent(id)}/source-changes`
-export type RegistrationPreview = { project_id: string; fingerprint: string; policy_epoch: number; permission_count: number }
+export type RegistrationPreview = { project_id: string; fingerprint: string; policy_epoch: number; permission_count: number; source_fingerprint: string; files: Array<{ path: string; status: 'ADDED' | 'MODIFIED' | 'REMOVED' }> }
 export const sourceChangesApi = {
   registrationPreview: (id: string) => request<RegistrationPreview>(`${base(id)}/registration-preview`),
-  register: (id: string, body: { operation_id: string; expected_registration_fingerprint: string; reason: string; claimed_paths: string[]; repair_reference: RepairReference | null; rule_targets?: RuleChangeTarget[] }) => request<DevelopmentReceipt>(`${base(id)}/register`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
+  register: (id: string, body: { operation_id: string; expected_registration_fingerprint: string; expected_source_fingerprint?: string; reason: string; claimed_paths: string[]; repair_reference: RepairReference | null; rule_targets?: RuleChangeTarget[] }) => request<DevelopmentReceipt>(`${base(id)}/register`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
   list: (id: string, limit = 50) => request<SourceChangeViewDto[]>(`${base(id)}?limit=${limit}`),
   latest: (id: string) => request<SourceChangeViewDto | null>(`${base(id)}/latest`),
   show: (id: string, changeId: string) => request<SourceChangeViewDto>(`${base(id)}/${encodeURIComponent(changeId)}`),

@@ -1,15 +1,6 @@
-# =============================================================================
 # Web 身份协议
-#
-# 定位
-#   Web Execution Profile 与身份运行时之间的无秘密 wire 边界。
-#
-# 职责
-#   定义 Cookie/Header/Login/OAuth 绑定｜约束 Auth scope 与 Bootstrap｜收集 secret ref
-#
-# 边界
-#   只保存环境引用，不解析秘密、不保存 Cookie，不包含业务 TARGET 或 Verification。
-# =============================================================================
+# 定义 Cookie/Header/Login/OAuth 绑定、约束 Auth scope 与 Bootstrap、收集 secret ref
+# 只保存环境引用，不解析秘密、不保存 Cookie，不包含业务 TARGET 或 Verification。
 
 from __future__ import annotations
 

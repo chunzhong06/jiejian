@@ -11,7 +11,7 @@ from product.backend.domain.checks.repair import repair_context, verify_current_
 from product.backend.domain.lifecycle import ProjectStatus
 from product.backend.infrastructure.artifacts.checks.check_publication import CheckPublisher
 from product.backend.infrastructure.execution.check_executor import CheckExecutor
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, SubmitJob
 from product.backend.infrastructure.storage.applications.projects import ProjectRecord
 from product.backend.bootstrap.worker import WorkerContainer

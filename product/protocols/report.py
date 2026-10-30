@@ -1,19 +1,10 @@
-# =============================================================================
 # 统一报告严格协议
-#
-# 定位
-#   以已发布 Run、Finalizer 快照、确定性展示快照、Artifact 三态和明确
-#   GateResult 组成不可变 Report；report.json 是唯一语义真源。
-#
-# 职责
-#   约束 Base/Gate 判别联合、权限摘要、断裂诊断与修复复验｜计算稳定身份｜约束 package manifest。
-#
-# 边界
-#   协议只消费已验证事实，不执行 Target、不写 Finding、不决定 Verdict。
-# =============================================================================
+# 约束 Base/Gate 判别联合、权限摘要、断裂诊断与修复复验、计算稳定身份、约束 package manifest。
+# 协议只消费已验证事实，不执行 Target、不写 Finding、不决定 Verdict。
 
 from __future__ import annotations
 
+from product.protocols.codec import decode_json
 import hashlib
 import json
 import re
@@ -33,7 +24,6 @@ _SHA256 = r"^[0-9a-f]{64}$"
 
 class ReportModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
-
 
 
 class ReportEvidenceRef(ReportModel):
@@ -556,11 +546,7 @@ def report_id_for(report_type: Literal["BASE", "GATE"], semantic_input_sha256: s
 
 def parse_report_document(raw: bytes | str | dict[str, Any]) -> ReportDocument:
     value = (
-        json.loads(
-            raw,
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_nonfinite,
-        )
+        decode_json(raw)
         if isinstance(raw, (bytes, str))
         else raw
     )
@@ -570,29 +556,12 @@ def parse_report_document(raw: bytes | str | dict[str, Any]) -> ReportDocument:
 
 
 def parse_report_package_manifest(raw: bytes | str) -> ReportPackageManifest:
-    value = json.loads(
-        raw,
-        object_pairs_hook=_reject_duplicate_keys,
-        parse_constant=_reject_nonfinite,
-    )
+    value = decode_json(raw)
     if not isinstance(value, dict) or value.get("schema_version") != REPORT_PACKAGE_SCHEMA_VERSION:
         raise ValueError("report manifest root version is invalid")
     return ReportPackageManifest.model_validate_json(
         json.dumps(value, ensure_ascii=False), strict=True
     )
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON key")
-        result[key] = value
-    return result
-
-
-def _reject_nonfinite(value: str) -> Any:
-    raise ValueError(f"non-finite JSON value: {value}")
 
 
 def report_json_schema() -> dict[str, Any]:

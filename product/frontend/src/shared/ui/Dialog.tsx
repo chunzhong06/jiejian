@@ -4,9 +4,11 @@ import {Button} from './actions'
 
 export function Dialog({title,children,onClose,actions}:{title:string;children:ReactNode;onClose:()=>void;actions?:ReactNode|((dismiss:()=>void)=>ReactNode)}){
   const ref=useRef<HTMLDialogElement>(null),heading=useRef<HTMLHeadingElement>(null),id=useId(),close=useRef(onClose),closing=useRef(false),[exiting,setExiting]=useState(false);close.current=onClose
+  // 首次焦点落在标题，避免自动聚焦关闭按钮并弹出提示；卸载后只恢复仍在文档中的触发元素。
   useEffect(()=>{const node=ref.current,trigger=document.activeElement as HTMLElement|null;heading.current?.setAttribute('autofocus','');node?.showModal();heading.current?.focus({preventScroll:true});return()=>{node?.close();if(trigger?.isConnected)trigger.focus({preventScroll:true})}},[])
   useEffect(()=>{
     if(!exiting)return
+    // 退出动画结束前仍保留原生模态层，先禁用内部命中，防止重复提交或点击穿透到背景。
     const node=ref.current
     if(node)node.inert=true
     const token=getComputedStyle(document.documentElement).getPropertyValue('--motion-exit').trim(),duration=parseFloat(token)*(token.endsWith('ms')?1:1000)

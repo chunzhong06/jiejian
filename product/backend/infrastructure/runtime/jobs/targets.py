@@ -1,21 +1,11 @@
-# =============================================================================
 # Execution Job target 端口
-#
-# 定位
-#   通用 Job 生命周期与 Run、Recording、RuntimeLoad 持久目标之间的适配边界
-#
-# 职责
-#   定义目标类型和完成结果｜注册目标处理器｜提供 Verification Run 默认实现
-#
-# 边界
-#   通用队列不猜测目标状态机；每种 target 只能由已注册处理器解释。
-#
-# 调用链
-#   ApplicationCore / Worker → JobTargetRegistry → 对应目标处理器；各Worker只领取自己注册的类型
-# =============================================================================
+# 定义目标契约、核对冻结输入、处理持久状态；录制的完整执行流程由独立模块拥有
+# 通用队列不猜测目标状态机；每种 target 只能由已注册处理器解释。
 
 from __future__ import annotations
 
+from product.protocols.preparation.proof_sources import proof_fingerprint
+from product.protocols.runtime.node_runtime import node_document_fingerprint
 from enum import StrEnum
 from typing import Protocol
 
@@ -30,9 +20,11 @@ class JobTargetType(StrEnum):
     RUNTIME_LOAD = "RUNTIME_LOAD"
     PROOF_PREFLIGHT = "PROOF_PREFLIGHT"
     REFERENCE_CAPTURE='REFERENCE_CAPTURE'
+    IDENTITY_PREPARATION = 'IDENTITY_PREPARATION'
 
     @classmethod
     def from_job(cls, job: JobRecord) -> JobTargetType:
+        if job.identity_preparation_id is not None:return cls.IDENTITY_PREPARATION
         if job.reference_capture_id is not None:return cls.REFERENCE_CAPTURE
         if job.preflight_id is not None:
             return cls.PROOF_PREFLIGHT
@@ -198,3 +190,75 @@ class CheckJobTargetHandler(RunJobTargetHandler):
         return super().finish(work, job, now_us, outcome)
 
 
+class ProofPreflightTargetHandler:
+    def load(self, work, job):
+        request = None if job.preflight_id is None else work.proof_sources.preflight(job.project_id, job.preflight_id)
+        if (request is None or job.operation_type != "PROOF_PREFLIGHT"
+                or proof_fingerprint(request) != job.request_hash):
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "预检查Job与冻结输入不一致")
+        return None, None
+
+    def advance_after_claim(self, work, job, now_us):
+        return self.load(work, job)
+
+    def finish(self, work, job, now_us, outcome):
+        return self.load(work, job)
+
+
+class ReferenceCaptureTargetHandler:
+    def load(self,work,job):
+        request=None if job.reference_capture_id is None else work.proof_artifacts.capture(job.project_id,job.reference_capture_id)
+        if request is None or job.operation_type!='REFERENCE_CAPTURE' or job.max_attempts!=1 or proof_fingerprint(request)!=job.request_hash:
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT,'取样任务与冻结输入不一致')
+        return None,None
+
+    def advance_after_claim(self,work,job,now_us):
+        self.load(work,job)
+        request=work.proof_artifacts.capture(job.project_id,job.reference_capture_id)
+        if not work.proof_artifacts.authorized(request):raise JiejianError(ErrorCode.STATE_PRECONDITION,'取样授权已撤销')
+        return None,None
+
+    def finish(self,work,job,now_us,outcome):
+        self.load(work,job)
+        request=work.proof_artifacts.capture(job.project_id,job.reference_capture_id)
+        value=None if request.asset_id is None else work.proof_artifacts.input(job.project_id,request.asset_id)
+        if value is not None and value.state=='PENDING':
+            state='CANCELLED' if outcome.value=='CANCELLED' else 'INCOMPLETE'
+            work.proof_artifacts.update_input(value.model_copy(update={'state':state}),expected_state='PENDING')
+        if job.attempt==0 or request.plan.restore is not None:
+            work.proof_artifacts.resolve_recovery(job.project_id,request.capture_id,None,now_us)
+        return None,None
+
+
+class RuntimeLoadTargetHandler:
+    def load(self, work, job):
+        request = None if job.runtime_load_id is None else work.runtime_loads.get(job.runtime_load_id)
+        if (request is None or job.run_id is not None or job.recording_id is not None
+                or job.operation_type != "RUNTIME_LOAD" or request.project_id != job.project_id
+                or node_document_fingerprint(request) != job.request_hash):
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "运行加载Job与冻结输入不一致")
+        # 输入与回执由runtime_loads持久保存；Run/Recording字段保持为空。
+        return None, None
+
+    def advance_after_claim(self, work, job, now_us):
+        return self.load(work, job)
+
+    def finish(self, work, job, now_us, outcome):
+        return self.load(work, job)
+
+
+class IdentityPreparationTargetHandler:
+    def load(self, work, job):
+        row = work.identity_preparations.get(job.identity_preparation_id)
+        if row is None or row['project_id'] != job.project_id or row['request_fingerprint'] != job.request_hash:
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, '登录任务与冻结输入不一致')
+        return None, None
+
+    def advance_after_claim(self, work, job, now_us):
+        return self.load(work, job)
+
+    def finish(self, work, job, now_us, outcome):
+        self.load(work, job)
+        work.identity_preparations.update(job.identity_preparation_id,
+            phase='CANCELLED' if outcome is JobTargetOutcome.CANCELLED else 'FAILED', now_us=now_us)
+        return None, None

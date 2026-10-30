@@ -12,13 +12,13 @@ from sqlalchemy import event
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.artifacts.checks.check_publication import CheckPublisher
 from product.backend.infrastructure.execution.check_executor import CheckExecutor
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.application.checks.reading.results import CheckResultReader
 from product.protocols.checks.check_result import CheckRunnerProgress, canonical_check_document
 from product.protocols.checks.check_runtime import parse_check_runtime
 from product.protocols.checks.execution_request import ExecutionRequest
 from tests.support.builders.checks.check_publication import package_parts, NOW
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_plan import prepared_action
 from tests.support.builders.control_plane import create_app, TestClient
 
@@ -173,7 +173,7 @@ def test_status_get_is_read_only_and_does_not_resolve_live_identity(progress_par
     write_progress(parts, completed_cases=2)
     with sqlite3.connect(worker_services.database_path) as source, sqlite3.connect(parts.var_dir / "data/jiejian.db") as destination:
         source.backup(destination)
-    app = create_app(parts.var_dir, start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(parts.var_dir, start_worker=False, secret_store=MemorySecrets(), environ={})
     with TestClient(app) as client:
         context = app.state.context
         forbidden = Mock(side_effect=AssertionError("current case GET must only read frozen facts"))

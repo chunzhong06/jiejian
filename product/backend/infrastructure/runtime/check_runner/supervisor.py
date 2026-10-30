@@ -12,7 +12,7 @@ from product.backend.infrastructure.artifacts.checks.check_packages import check
 from product.backend.infrastructure.artifacts.checks.check_publication import CheckPublisher
 from product.backend.infrastructure.artifacts.checks.check_validation import validate_check_inputs
 from product.backend.infrastructure.execution.web.check_runtime import check_secret_names
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.backend.infrastructure.runtime.process.control import (AttemptProcessControl, DEFAULT_LEASE_DURATION_US,

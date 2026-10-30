@@ -15,13 +15,16 @@ from collections.abc import Mapping, Sequence
 from enum import StrEnum
 
 
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, TYPE_CHECKING
 
 
 from pydantic import Field, field_validator, model_validator
 
 
 from product.protocols.web.base import ProtocolModel
+
+if TYPE_CHECKING:
+    from product.protocols.web.response import ResponseExtractor
 
 
 HTTP_TEMPLATE_MAX_BYTES = 262_144

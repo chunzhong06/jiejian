@@ -1,18 +1,6 @@
-# =============================================================================
 # Recording 应用服务
-#
-# 定位
-#   控制面、持久 Recording 与隔离 Recording Runner 之间的应用边界
-#
-# 职责
-#   幂等提交 Recording Job｜校验可信 Runner 结果｜生成 FlowDraft 并提交完成态
-#
-# 边界
-#   控制面不执行浏览器操作；只消费当前 fencing token 对应的 Runner 结果。
-#
-# 调用链
-#   CLI / API → RecordingSubmission → RequestStore / JobAttemptPort / Storage
-# =============================================================================
+# 幂等提交 Recording Job、校验可信 Runner 结果、生成 FlowDraft 并提交完成态
+# 控制面不执行浏览器操作；只消费当前 fencing token 对应的 Runner 结果。
 
 from __future__ import annotations
 
@@ -117,6 +105,7 @@ class RecordingSubmission:
     ) -> RecordingSubmissionResult:
         """原子保存录制请求并创建幂等 Job；事务失败时移除本次孤立快照。"""
 
+        # 文件系统与 SQLite 不共享事务：先形成完整快照，再让 Job 引用它；失败按原摘要补偿。
         if command.request.created_at_us != command.now_us:
             raise JiejianError(ErrorCode.JOB_TIME_INVALID, "录制请求创建时间不一致")
         job_id = command.job_id or f"job_{uuid4().hex}"
@@ -152,17 +141,17 @@ class RecordingSubmission:
         """固定配方重入只排除新会话、创建时刻与随机录制标识；其他输入必须一致。"""
         return request.model_dump(mode="json", exclude={"recording_id", "created_at_us", "sessions"})
 
-    def captured_existing(self, project_id: str, idempotency_key: str):
-        """读取持久固定配方结果；不领取旧任务，也不保留任何登录秘密。"""
+    def captured_existing(self, project_id: str, idempotency_key: str, *, require_completed: bool = True):
+        """回读原请求；固定配方要求已完成，普通录制可恢复正在执行的任务。"""
         with self._new_uow(()) as work:
             job = work.jobs.get_by_idempotency(project_id, "BROWSER_RECORDING", idempotency_key)
             if job is None:
                 return None
             request = self._request_store.load(job.job_id, expected_hash=job.request_hash)
             result = self._existing(work, job, job.request_hash)
-            if job.state is not JobState.SUCCEEDED or result.recording.state not in {
+            if require_completed and (job.state is not JobState.SUCCEEDED or result.recording.state not in {
                 RecordingState.PENDING_REVIEW, RecordingState.COMPLETED,
-            }:
+            }):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "固定流程需要人工处理既有任务",
                     details={"reason": "EXISTING_RECORDING_REQUIRES_REVIEW"})
             return request, result
@@ -243,7 +232,7 @@ class RecordingSubmission:
             raise RuntimeError("consume_result requires an injected JobAttemptPort")
         attempts = self._attempts
         canonical_recording_json_bytes(result, known_secrets=known_secrets)
-        # --- 阶段：可信成功结果进入 FlowDraft 物化 ---
+        # 采集完成和安全停止都保留执行事实；只有 CAPTURED 分支形成待审草稿。
         if result.result_type in {
             RecordingRunnerResultType.CAPTURED,
             RecordingRunnerResultType.SAFETY_STOPPED,
@@ -263,7 +252,7 @@ class RecordingSubmission:
                 if accepted is not None:
                     completion = completion.model_copy(update={"recording": accepted.recording})
             return completion
-        # --- 阶段：非成功结果只更新 Job/Recording 生命周期 ---
+        # 取消与失败只收口生命周期，不能从残留事件拼出可执行草稿。
         if result.result_type is RecordingRunnerResultType.CANCELLED:
             mutation = attempts.complete_cancellation(
                 CompleteCancellation(
@@ -418,6 +407,7 @@ class RecordingSubmission:
 
     def _persist_success_in_work(self, work: StorageUnitOfWork, *, job_id: str, lease_owner: str, fencing_token: int, result: RecordingRunnerResult, now_us: int, known_secrets: Sequence[str]):
         """复用调用方事务的正式持久化算法，不自行提交。"""
+        # 解析成功只证明格式成立；持久关联、执行所有权和完成时刻仍须匹配当前 attempt。
         job = work.jobs.get(job_id)
         if (
             job is None
@@ -505,6 +495,7 @@ class RecordingSubmission:
                 )
             )
         work.recordings.replace(persisted)
+        # 草稿、录制状态和条件完成属于同一事务；fence 竞争失败时不能留下半份待审结果。
         completed = work.job_control.complete_recording_result(
             job_id=job.job_id,
             recording_id=persisted.recording_id,

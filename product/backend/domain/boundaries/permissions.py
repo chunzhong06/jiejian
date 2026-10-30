@@ -1,12 +1,6 @@
-# =============================================================================
 # PermissionIntent v2 长期权限语义
-#
-# 职责
-#   冻结稳定 Actor/Action revision 引用、受保护 Effect identity 与项目 policy epoch。
-#
-# 边界
-#   不复制显示名、Effect 正文、Candidate、Binding、TestIdentity、HTTP 或 Observer 事实。
-# =============================================================================
+# 冻结稳定 Actor/Action revision 引用、受保护 Effect identity 与项目 policy epoch。
+# 不复制显示名、Effect 正文、Candidate、Binding、TestIdentity、HTTP 或 Observer 事实。
 
 from __future__ import annotations
 

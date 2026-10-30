@@ -1,18 +1,6 @@
-# =============================================================================
 # Execution 子进程监督
-#
-# 定位
-#   Verification 与 Recording Handler 共用的 lease/cancel/process 控制器
-#
-# 职责
-#   周期续租｜传播持久取消｜超时后温和终止并最终杀死子进程
-#
-# 边界
-#   租约或 fencing 失效时必须停止子进程；控制器不解释 Runner 业务结果。
-#
-# 调用链
-#   RunnerSupervisor / RecordingJobHandler → AttemptProcessControl → subprocess / JobAttempts
-# =============================================================================
+# 周期续租、传播持久取消、超时后温和终止并最终杀死子进程
+# 租约或 fencing 失效时必须停止子进程；控制器不解释 Runner 业务结果。
 
 from __future__ import annotations
 
@@ -81,9 +69,12 @@ class AttemptProcessControl:
         *,
         max_duration_us: int,
         cancel_path: Path,
+        on_poll=None,
     ) -> tuple[bool, bool]:
         """返回 `(超时, 取消后被强制终止)`，同时维持当前 fence。"""
 
+        # 持续时间用单调时钟，持久租约用 UTC 微秒，两者不能互相作为时间基准。
+        # 失权异常交给调用方收口进程；根进程正常退出后，调用方仍需确认整棵树已释放。
         started = self._monotonic()
         next_renew = started + self._lease_duration_us / 3_000_000
         deadline = started + max_duration_us / 1_000_000
@@ -97,6 +88,8 @@ class AttemptProcessControl:
                 raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "任务租约不匹配")
             if current_job.lease_expires_at_us is None or current_job.lease_expires_at_us <= self._utc_now_us():
                 raise JiejianError(ErrorCode.JOB_LEASE_EXPIRED, "任务租约已过期")
+            if on_poll is not None:
+                on_poll(current_job)
             if current_job.cancel_requested_at_us is not None:
                 if cancellation_started is None:
                     cancel_path.write_text("cancel\n", encoding="utf-8")

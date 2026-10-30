@@ -137,7 +137,7 @@ export function Permissions({ projectId, official, refresh, onError, route }: Pa
     catch (error) {
         setUncertain(true);
         throw error;
-    } })}>生成待审权限</Button>{uncertain && <Notice>生成结果未确认。请读取待审变更，找到本次提案后继续。</Notice>}</section> : <Empty title="先写清楚访问要求">将角色、业务操作、资源归属和允许或禁止的结果交给开发 Agent 整理，保存的候选会出现在下方。</Empty>}
+    } })}>生成待审权限</Button>{uncertain && <Notice>生成结果未确认。请读取待审变更，找到本次提案后继续。</Notice>}</section> : <Empty title="先写清楚访问要求" action={<><Button kind="primary" onClick={() => setMaintenance(true)}>编写权限要求</Button><Button onClick={() => go('/tools', projectId)}>连接开发工具</Button></>}>直接填写角色、操作和业务结果，或通过开发工具整理候选。所有规则均需审阅后生效。</Empty>}
     <section className="jj-business-requirements"><div className="jj-section-header jj-near-heading"><h2>待整理的业务要求</h2><Button kind="quiet" onClick={candidates.reload}>刷新</Button></div>{candidates.loading ? <Loading /> : candidates.data?.candidates.filter(item => !item.decision && !item.visibility?.archived).length ? <div className="jj-candidate-list">{candidates.data.candidates.filter(item => !item.decision && !item.visibility?.archived).map(item => <button key={item.candidate_id} onClick={() => void act(async () => setCandidate(await ruleCandidatesApi.show(projectId, item.candidate_id, item.revision)))}><span>{text(item.original_text)}</span><Badge tone="accent">查看要求</Badge></button>)}</div> : <p className="jj-small jj-muted">没有尚未处理的业务要求。</p>}</section>
   </>;
 }

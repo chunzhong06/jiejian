@@ -6,8 +6,8 @@ import hashlib
 from threading import RLock
 from uuid import uuid4
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.infrastructure.storage.base import _canonical_json
-from product.backend.application.preparation.supplemental.contract import SupplementalDocument, material_fingerprint, request_uuid, validate_material_payload
+from product.backend.infrastructure.storage.base import _canonical_json, ensure_storage_payload_safe
+from product.backend.application.preparation.supplemental.contract import SupplementalDocument, material_fingerprint, request_uuid
 
 
 class SupplementalMaterialService:
@@ -23,22 +23,22 @@ class SupplementalMaterialService:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "材料必须关联本项目当前正式动作修订")
 
     @staticmethod
-    def _document(project_id, action_id, document):
-        document = SupplementalDocument.model_validate(document).model_dump(mode="json")
+    def _document(project_id, action_id, document: SupplementalDocument):
+        document = document.model_dump(mode="json")
         if (document["project_id"], document["action_id"]) != (project_id, action_id):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "材料所属项目或动作不一致")
         return document
 
-    def preview(self, project_id, action_id, document):
+    def preview(self, project_id, action_id, document: SupplementalDocument):
         document = self._document(project_id, action_id, document)
         with self._uow_factory() as work:
             self._action(work, project_id, action_id, document["action_revision"])
-            validate_material_payload(document, work._known_secrets)
+            ensure_storage_payload_safe(document, work._known_secrets)
         return dict(project_id=project_id, action_id=action_id, document=document,
             fingerprint=material_fingerprint(document), record_count=len(document["records"]),
             association_status="USER_DECLARED" if document["claimed_resource_label"] else "UNCONFIRMED", usage="SUPPLEMENTAL_ONLY")
 
-    def create(self, project_id, action_id, *, document, expected_fingerprint, request_id):
+    def create(self, project_id, action_id, *, document: SupplementalDocument, expected_fingerprint, request_id):
         document = self._document(project_id, action_id, document)
         fingerprint = material_fingerprint(document)
         if fingerprint != expected_fingerprint:
@@ -69,6 +69,7 @@ class SupplementalMaterialService:
                 document = payload["document"]
                 self._action(work, project_id, action_id, document["action_revision"])
                 value = dict(document, material_id="mat_" + uuid4().hex, revision=1, received_at_us=now, updated_at_us=now, withdrawn=False)
+                value["fingerprint"] = payload["expected_fingerprint"]
             else:
                 value = work.supplemental_materials.get(material_id)
                 if value is None or (value["project_id"], value["action_id"]) != (project_id, action_id):
@@ -81,12 +82,12 @@ class SupplementalMaterialService:
                     value["withdrawn"] = True
                 else:
                     value.update({key: payload[key] for key in ("title", "source_label", "claimed_resource_label")})
-            document = {key: value[key] for key in SupplementalDocument.model_fields if key != "schema_version"}
-            document["schema_version"] = "1"
-            document = SupplementalDocument.model_validate(document).model_dump(mode="json")
+                    # 改写标签形成新内容；撤回只改变生命周期，沿用原内容指纹。
+                    document = {key: value[key] for key in SupplementalDocument.model_fields if key != "schema_version"}
+                    document["schema_version"] = "1"
+                    document = SupplementalDocument.model_validate(document).model_dump(mode="json")
+                    value["fingerprint"] = material_fingerprint(document)
             value.pop("schema_version", None)
-            value["fingerprint"] = material_fingerprint(document)
-            validate_material_payload(document)
             work.supplemental_materials.add(value, request_id=request_id, content_fingerprint=receipt_hash)
             result = work.supplemental_materials.get(value["material_id"], value["revision"])
             work.commit()

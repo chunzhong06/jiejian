@@ -31,7 +31,7 @@
 - 先核对当前代码、测试、Git 和运行环境实态，再按已接受设计实施；发现文档与代码实质冲突时明确指出并决定应修正哪一方，不偷偷选择。
 - Python 检查同时设置 `PYTHONDONTWRITEBYTECODE=1` 并使用 `python -B`，语法优先 `ast.parse`。正式 pytest 只能经 `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test ...`；前端测试只能经 `dev.ps1 frontend-test`。
 - 验证按“模块范围 × L1～L4 程度 × 是否需要 L5”选择最小充分证据；同一代码状态不重复 L4。失败后先区分产品、测试/fixture 与环境，再只重跑失败项和直接邻域。
-- 修改项目自有源码或测试后，最终验证前使用 `.agents/skills/jiejian-comments/SKILL.md` 校准注释；项目自有 Python 文件至少保留一行职责性 `#` 文件头。
+- 修改项目自有源码或测试后，最终验证前使用全局 `code-comments` skill 校准注释；按真实职责、使用契约和维护原因决定详略，不要求统一文件头或固定注释密度。
 - 副作用结果不明确时先回读当前事实，不得重复执行提交、推送、删除、数据库写入、凭据写入或真实外部调用来试探第一次是否成功。
 
 ## 五、停止、升级与执行线程接受

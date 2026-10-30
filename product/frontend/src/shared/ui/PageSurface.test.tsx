@@ -61,3 +61,17 @@ it('减少动效时立即更新，不等待动画完成',()=>{
   expect(pageTransitionActive()).toBe(false)
   delete (document as unknown as {startViewTransition?:unknown}).startViewTransition
 })
+
+it('主题切换直接提交并使用可取消淡入，不捕获整页交互控件',()=>{
+  const animate=track(),update=vi.fn(),native=vi.fn()
+  vi.spyOn(window,'matchMedia').mockReturnValue({matches:false,addEventListener(){},removeEventListener(){}} as unknown as MediaQueryList)
+  Object.defineProperty(document,'startViewTransition',{configurable:true,writable:true,value:native})
+  commitThemeTransition(update)
+  expect(update).toHaveBeenCalledTimes(1)
+  expect(native).not.toHaveBeenCalled()
+  expect(animate).toHaveBeenCalledTimes(1)
+  const animation=animate.mock.results[0].value
+  commitThemeTransition(update)
+  expect(animation.cancel).toHaveBeenCalledTimes(1)
+  delete (document as unknown as {startViewTransition?:unknown}).startViewTransition
+})

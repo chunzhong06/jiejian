@@ -1,15 +1,5 @@
-# =============================================================================
 # Recording 事件采集
-#
-# 定位
-#   Playwright 回调与可持久 RecordingEvent 之间的安全边界
-#
-# 职责
-#   关联 identity/page/frame/request｜执行 TargetScope 与预算｜落盘前统一脱敏
-#
-# 调用链
-#   BrowserRecordingAdapter → RecordingEventCollector → RecordingEvent / BoundedRouteTransport
-# =============================================================================
+# 关联 identity/page/frame/request、执行 TargetScope 与预算、落盘前统一脱敏
 
 from __future__ import annotations
 
@@ -550,7 +540,7 @@ class RecordingEventCollector:
             truncated=truncated,
         )
 
-    def _page_error(self, identity_id: str, page: Page, error: Error) -> None:
+    def _page_error(self, identity_id: str, page: Page, error: PlaywrightError) -> None:
         message, truncated = self._sanitizer.sanitize_text(str(error))
         self._append(
             identity_id=identity_id,

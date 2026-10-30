@@ -14,6 +14,7 @@ export function PageSurface({view,transitionKey=view,children}:{view:string;tran
     const play=()=>{
       if(played||pending())return
       played=true;observer?.disconnect()
+      // 原生页面过渡与内容出现只选一个；普通轮询更新不反复淡入整页。
       if(preference.matches||pageTransitionActive()||!changed&&!wasPending)return
       running.current?.cancel()
       running.current=node.animate(
@@ -22,6 +23,7 @@ export function PageSurface({view,transitionKey=view,children}:{view:string;tran
       )
     }
     if(pending()){
+      // 等实际内容替换加载占位后再播放，不用固定延时拖住导航或猜测请求何时完成。
       running.current?.cancel()
       observer=new MutationObserver(play);observer.observe(node,{childList:true,subtree:true,attributes:true,attributeFilter:['data-page-pending']})
     }else play()

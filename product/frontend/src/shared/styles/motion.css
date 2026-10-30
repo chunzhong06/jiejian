@@ -16,7 +16,7 @@
 }
 .jj-button.is-primary { --state-fill: var(--accent-hover); }
 .jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 16%,var(--surface)); }
-.jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--accent-soft)); }
+.jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--selected)); }
 @media(hover:hover) and (pointer:fine) {
   :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a):not(:disabled):hover::before {
     opacity: 1;
@@ -54,11 +54,10 @@ input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border
 .jj-choice-menu.ant-select-dropdown .ant-select-item-option-disabled::before { display: none; }
 .jj-recording-list > label:has(input:disabled)::before { display: none; }
 .jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--surface); }
-.jj-example-menu, .jj-info-popover, .jj-choice-menu { --popup-shift: -4px; transform-origin: center top; }
-.jj-example-menu[class*='placement-top'], .jj-info-popover[class*='placement-top'], .jj-choice-menu[class*='placement-top'] { --popup-shift: 4px; transform-origin: center bottom; }
-body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown) { opacity: 1; transform: none; animation: none; transition: opacity var(--motion-popup) var(--ease-enter), transform var(--motion-popup) var(--ease-enter); }
-body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown):is([class*='-enter'],[class*='-appear']):not([class*='-active']):not([class*='-done']) { opacity: 0; transform: translateY(var(--popup-shift,-4px)) scale(.985); }
-body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown)[class*='-leave-active'] { opacity: 0; transform: translateY(var(--popup-shift,-4px)) scale(.985); transition-duration: var(--motion-exit); transition-timing-function: var(--ease-exit); }
+/* 定位器会测量浮层本体；本体只淡入淡出，缩放会改变它读到的边界。 */
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown) { opacity: 1; transform: none; animation: none; transition: opacity var(--motion-popup) var(--ease-enter); }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown):is([class*='-enter'],[class*='-appear']):not([class*='-active']):not([class*='-done']) { opacity: 0; }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown)[class*='-leave-active'] { opacity: 0; transition-duration: var(--motion-exit); transition-timing-function: var(--ease-exit); }
 .jj-hint.ant-tooltip:is([class*='-enter'],[class*='-appear']) { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
 .jj-hint.ant-tooltip[class*='-leave'] { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
 [role=menuitem]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -74,8 +73,6 @@ body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice
 .jj-working-dot { animation: jj-working 1000ms ease-in-out infinite alternate; }
 progress::-webkit-progress-value { transition: width var(--motion-content) var(--ease-layout); }
 ::view-transition { pointer-events: none; }
-::view-transition-old(root) { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; mix-blend-mode: normal; }
-::view-transition-new(root) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; mix-blend-mode: normal; }
 @supports(interpolate-size:allow-keywords) {
   details::details-content { transition: height var(--motion-panel) var(--ease-layout), opacity var(--motion-content) var(--ease-enter), content-visibility var(--motion-panel) allow-discrete; }
 }
@@ -94,8 +91,6 @@ progress::-webkit-progress-value { transition: width var(--motion-content) var(-
 :root { view-transition-name:none; --page-offset:10px; }
 :root[data-page-direction=back] { --page-offset:-10px; }
 .jj-page { view-transition-name:jj-workspace; }
-:root[data-visual-transition=theme] { view-transition-name:root; }
-:root[data-visual-transition=theme] .jj-page { view-transition-name:none; }
 ::view-transition-group(jj-workspace) { animation-duration:var(--motion-page); animation-timing-function:var(--ease-layout); }
 ::view-transition-old(jj-workspace) { animation:jj-workspace-out var(--motion-exit) var(--ease-exit) both; }
 ::view-transition-new(jj-workspace) { animation:jj-workspace-in var(--motion-page) var(--ease-layout) both; }

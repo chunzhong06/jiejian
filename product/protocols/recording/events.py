@@ -1,21 +1,10 @@
-# =============================================================================
 # Recording Runner 进程协议
-#
-# 定位
-#   Worker 与隔离 Recording Runner 之间的稳定版本化 Wire DTO 边界
-#
-# 职责
-#   校验 action/session/范围和预算｜约束事件与清理结果｜编码严格 JSON 请求和结果
-#
-# 边界
-#   不执行浏览器、不保存原始 secret；认证只允许非秘密元数据与 env 引用。
-#
-# 调用链
-#   Recording job handler ↔ Recording JSON files ↔ recording_process
-# =============================================================================
+# 校验 action/session/范围和预算、约束事件与清理结果、编码严格 JSON 请求和结果
+# 不执行浏览器、不保存原始 secret；认证只允许非秘密元数据与 env 引用。
 
 from __future__ import annotations
 
+from product.protocols.codec import decode_json
 import json
 import math
 import re
@@ -75,7 +64,6 @@ class RecordingProtocolModel(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
-
 
 
 class RecordingRunnerResultType(StrEnum):
@@ -502,18 +490,15 @@ def _parse_recording_json(
     if raw.startswith(b"\xef\xbb\xbf"):
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议不得包含 BOM")
     try:
-        parsed = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_unique_object,
-            parse_constant=_reject_non_finite,
-        )
+        parsed = decode_json(raw, limit=maximum)
+    except ValueError:
+        raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议不是严格 JSON") from None
+    try:
         expected_version = "3" if model is RecordingRunnerRequest else "1"
         if not isinstance(parsed, dict) or parsed.get("schema_version") != expected_version:
             raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议版本不受支持")
         _reject_known_secret_material(parsed, known_secrets)
         return model.model_validate_json(raw, strict=True)
-    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateKey, _NonFinite):
-        raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议不是严格 JSON") from None
     except ValidationError as exc:
         raise JiejianError(
             ErrorCode.RECORD_PROTOCOL_INVALID,
@@ -523,27 +508,6 @@ def _parse_recording_json(
                 "issue_types": tuple(issue["type"] for issue in exc.errors()[:64]),
             },
         ) from None
-
-
-class _DuplicateKey(ValueError):
-    pass
-
-
-class _NonFinite(ValueError):
-    pass
-
-
-def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _DuplicateKey
-        result[key] = value
-    return result
-
-
-def _reject_non_finite(_: str) -> None:
-    raise _NonFinite
 
 
 def _reject_known_secret_material(value: Any, known_secrets: Sequence[str]) -> None:

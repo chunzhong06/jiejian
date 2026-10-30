@@ -1,21 +1,10 @@
-# =============================================================================
 # 测试身份准备进程协议
-#
-# 定位
-#   控制面与独立 headed browser 进程之间的版本化非秘密 wire 边界。
-#
-# 职责
-#   冻结端点与账号引用｜返回 Cookie/Bearer 元数据和 SecretStore 引用｜限制消息大小。
-#
-# 边界
-#   不承载密码、Cookie 值、Token 正文、浏览器历史或完整 storage_state。
-#
-# 调用链
-#   IdentityPreparationManager ↔ identity_preparation_process ↔ browser adapter
-# =============================================================================
+# 冻结端点与账号引用、返回 Cookie/Bearer 元数据和 SecretStore 引用、限制消息大小。
+# 不承载密码、Cookie 值、Token 正文、浏览器历史或完整 storage_state。
 
 from __future__ import annotations
 
+from product.protocols.codec import decode_json
 import json
 from enum import StrEnum
 from typing import Literal
@@ -69,6 +58,7 @@ class PreparedCookieRef(ProtocolModel):
 
 
 class IdentityPreparationResult(ProtocolModel):
+    # PREPARED 仅说明采集进程形成了受控引用；应用层仍须核对账号、来源和执行权后采用。
     schema_version: Literal["1"]
     preparation_id: str = Field(pattern=_PREPARATION_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
@@ -86,6 +76,7 @@ class IdentityPreparationResult(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_result_matrix(self) -> IdentityPreparationResult:
+        # 成功结果只能选择 Cookie 或 Bearer 一种表示，失败结果不允许夹带可采用的认证状态。
         if self.result_type is IdentityPreparationResultType.PREPARED:
             if self.auth_method is None or self.prepared_at_us is None or self.error_code:
                 raise ValueError("prepared result is incomplete")
@@ -141,12 +132,10 @@ def canonical_identity_preparation_json_bytes(
 
 
 def parse_identity_preparation_request(raw: bytes) -> IdentityPreparationRequest:
-    if len(raw) > IDENTITY_PREPARATION_REQUEST_MAX_BYTES:
-        raise ValueError("identity preparation request exceeds byte budget")
+    decode_json(raw, limit=IDENTITY_PREPARATION_REQUEST_MAX_BYTES)
     return IdentityPreparationRequest.model_validate_json(raw, strict=True)
 
 
 def parse_identity_preparation_result(raw: bytes) -> IdentityPreparationResult:
-    if len(raw) > IDENTITY_PREPARATION_RESULT_MAX_BYTES:
-        raise ValueError("identity preparation result exceeds byte budget")
+    decode_json(raw, limit=IDENTITY_PREPARATION_RESULT_MAX_BYTES)
     return IdentityPreparationResult.model_validate_json(raw, strict=True)

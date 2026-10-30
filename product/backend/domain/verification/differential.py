@@ -1,18 +1,6 @@
-# =============================================================================
 # 关系差分孪生计划
-#
-# 定位
-#   在 Contract-only Coverage 之后，把允许控制与禁止变体冻结为可解释实验对。
-#
-# 职责
-#   唯一配对 ALLOW/DENY case｜记录唯一变化｜冻结工作流、效果、观察与基线不变量
-#
-# 边界
-#   不理解 HTTP、Cookie 或具体 Observer；调用方只传入已计算的稳定指纹。
-#
-# 调用链
-#   ExecutionWorkflow → Coverage → DifferentialExperimentPlan → Runner / Verification
-# =============================================================================
+# 唯一配对 ALLOW/DENY case、记录唯一变化、冻结工作流、效果、观察与基线不变量
+# 不理解 HTTP、Cookie 或具体 Observer；调用方只传入已计算的稳定指纹。
 
 from __future__ import annotations
 
@@ -151,11 +139,13 @@ def build_differential_experiment_plan(
             gaps.append(TwinPlanGap(deny_case_id=deny.case_id, code=TwinPlanGapCode.MISSING_ALLOW_CONTROL, detail="没有同动作、同资源和同观察要求的 ALLOW 控制"))
             continue
         ranked = sorted(candidates, key=lambda item: (len(_variation_fields(item, deny)), item.fingerprint))
+        # 摘要只保证输出稳定，不能把两个同等接近的合法对照变成“任选一个”的实验依据。
         allow = ranked[0]
         if len(ranked) > 1 and len(_variation_fields(ranked[0], deny)) == len(_variation_fields(ranked[1], deny)):
             gaps.append(TwinPlanGap(deny_case_id=deny.case_id, code=TwinPlanGapCode.AMBIGUOUS_ALLOW_CONTROL, detail="存在多个同等接近的 ALLOW 控制"))
             continue
         dimension, changed_fields = _variation(allow, deny)
+        # 孪生实验只解释一个权限维度的变化；多维差异保留缺口，不能归因于单一访问限制。
         if dimension is None:
             gaps.append(TwinPlanGap(deny_case_id=deny.case_id, code=TwinPlanGapCode.MULTIPLE_VARIATIONS, detail="ALLOW 与 DENY 之间不是一个可解释的权限变化"))
             continue

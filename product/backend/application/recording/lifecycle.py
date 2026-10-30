@@ -1,18 +1,6 @@
-# =============================================================================
 # Recording 审阅工作流
-#
-# 定位
-#   CLI/API 与 Recording、FlowDraft revision、最终 Flow 文件之间的应用服务
-#
-# 职责
-#   查询状态｜追加不可变审阅 revision｜明确放弃待审录制｜原子发布已确认 Flow
-#
-# 边界
-#   不执行浏览器请求；仅在审阅完成且绑定有效后发布最终 Flow。
-#
-# 调用链
-#   CLI / API → RecordingLifecycle → reviewer + compiler / Storage / final flow file
-# =============================================================================
+# 查询状态、追加不可变审阅 revision、明确放弃待审录制、原子发布已确认 Flow
+# 不执行浏览器请求；仅在审阅完成且绑定有效后发布最终 Flow。
 
 from __future__ import annotations
 
@@ -34,6 +22,7 @@ from product.backend.infrastructure.recording.control import control_paths_for_a
 from product.backend.infrastructure.storage import FlowDraftRevisionRecord, RecordingRecord, StorageUnitOfWork
 from product.backend.application.recording.flow_compiler import FlowDraftCompiler
 from product.backend.application.recording.review import FlowDraftReviewer
+from product.backend.application.recording.source import require_persisted_recording_source
 from product.backend.infrastructure.recording.flows import recorded_flow_path, read_recorded_flow, publish_recorded_flow, canonical_flow_bytes
 
 
@@ -135,6 +124,7 @@ class RecordingLifecycle:
         recording_id: str,
         action: Literal["start", "stop"],
     ) -> RecordingStatusView:
+        # 标记归属于当前 Job/attempt，不复用上一轮目录；写入请求不等于采集进程已确认执行。
         if self._var_dir is None:
             raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制控制面尚未完成装配")
         with self._uow_factory() as work:
@@ -167,6 +157,7 @@ class RecordingLifecycle:
         return self.status(recording_id)
 
     def _capture_phase(self, recording: RecordingRecord, job) -> str:
+        # capture_phase 是控制握手的展示投影，不代替持久 Recording 或 Job 生命周期。
         if recording.state in {
             RecordingState.PROCESSING,
             RecordingState.PENDING_REVIEW,
@@ -215,6 +206,7 @@ class RecordingLifecycle:
             events=recording.browser_events, action_path_templates=templates,
             allow_created_resources=recording.purpose is RecordingPurpose.TARGET and action.state_changing
                 and any(effect.effect_kind.value == "OBJECT_CREATION" for effect in action.effect_catalog))
+        # 只替换仍能对应原请求的资源候选；其他人工确认沿用旧草稿，失效的资源选择才清空。
         replacement = {step.id: step for step in fresh.steps}
         if any(step.id not in replacement or replacement[step.id].request_id != step.request_id for step in draft.steps):
             raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "原步骤与事件无法对应，已保留原审阅")
@@ -285,7 +277,7 @@ class RecordingLifecycle:
 
         bindings = self._bindings or PreparationBindingService(self._uow_factory, var_dir)
 
-        # --- 阶段：读取并编译明确记录的最新草稿 revision ---
+        # 接受最新不可变草稿时再次核对当前来源；审阅通过不授予过期材料继续执行的资格。
         with self._uow_factory() as work:
             recording = work.recordings.get(recording_id)
             draft_record = work.flow_drafts.latest(recording_id)

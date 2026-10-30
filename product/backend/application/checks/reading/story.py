@@ -11,10 +11,39 @@ from product.backend.domain.verification.breakpoints import BreakpointLocator, B
 from product.backend.domain.verification.checks import CheckDecisionInput, project_check_effect_facts
 from product.backend.domain.verification.trace import TraceAuthorizationDecision, TraceEventKind
 from product.backend.application.checks.repairs.repair_presentation import RepairComparisonRow, build_repair_comparison
-from product.backend.application.checks.reading.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
 from product.backend.application.checks.reading.observation_reading import ObservationReading, observation_reading
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
 from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, WireModel
+
+
+JUDGEMENTS = {
+    "PASS": "检查结果符合已批准的权限要求",
+    "BLOCK": "已发现规则禁止的实际结果",
+    "INCONCLUSIVE": "证据或检查条件不足，尚不能确定",
+}
+
+EXECUTION_LABELS = {
+    "ACCEPTED": "业务请求已被接受",
+    "DENIED": "业务请求被明确拒绝",
+    "UNKNOWN": "无法确认业务请求的完成情况",
+    "FAILED": "业务请求未能正常完成",
+}
+
+EFFECT_LABELS = {
+    "CONFIRMED": "已有记录证明这项结果发生",
+    "ABSENT": "本次观察已完成，未发现这项结果",
+    "UNKNOWN": "无法确认这项业务结果是否发生",
+}
+
+
+CLAIM_BOUNDARIES = {
+    "execution": "请求响应只能说明表面处理情况，不能单独证明权限安全。",
+    "supporting": "这项材料说明执行过程，不能单独证明受保护业务结果发生或消失。",
+    "unknown": "没有观察到充分证据，不等于业务后果没有发生。",
+    "identity": "实际账号需要独立确认，不能用计划使用的账号代替。",
+    "scope": "本次结论只适用于检查时使用的权限规则、账号、资源和记录读取范围。",
+    "immutable": "本次记录和结论继续保留；补齐条件或修改应用后，需要重新检查。",
+}
 
 
 class StoryIdentity(WireModel):

@@ -1,18 +1,6 @@
-# =============================================================================
 # Alembic 迁移运行环境
-#
-# 定位
-#   为界鉴 SQLite 数据库装配 Alembic 的离线 SQL 与在线迁移入口
-#
-# 职责
-#   绑定当前 ORM metadata｜复用 SQLite 连接约束｜限定迁移事务和连接生命周期
-#
-# 边界
-#   不定义具体表变更，不绕过版本迁移，也不持有在线连接。
-#
-# 调用链
-#   Alembic → 本环境 → SQLite Engine / 版本迁移
-# =============================================================================
+# 绑定当前 ORM metadata、复用 SQLite 连接约束、限定迁移事务和连接生命周期
+# 不定义具体表变更，不绕过版本迁移，也不持有在线连接。
 
 from __future__ import annotations
 
@@ -52,6 +40,12 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """建立受配置约束的 SQLite 连接并在单个 Alembic 事务中迁移。"""
 
+    supplied = config.attributes.get("connection")
+    if supplied is not None:
+        context.configure(connection=supplied, target_metadata=target_metadata, compare_type=True)
+        with context.begin_transaction():
+            context.run_migrations()
+        return
     engine = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

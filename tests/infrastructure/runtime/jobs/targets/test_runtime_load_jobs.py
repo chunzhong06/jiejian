@@ -9,7 +9,7 @@ from product.backend.domain.lifecycle import JobState
 from product.backend.infrastructure.runtime.jobs.attempts import JobAttempts
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, RequestCancellation
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
-from product.backend.infrastructure.runtime.jobs.target_handlers.runtime_load import runtime_load_targets
+from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
 from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWork
 from product.backend.application.runtime.load_jobs import RuntimeLoadJobs
 from product.protocols.runtime.node_runtime import NodeRuntimeLoadRequest, NodeRuntimeLoadReceipt, NodeRuntimeReference, node_document_fingerprint

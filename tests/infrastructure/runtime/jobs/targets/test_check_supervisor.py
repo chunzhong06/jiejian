@@ -8,7 +8,7 @@ from sqlalchemy import text
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.lifecycle import JobState, ProjectStatus
 from product.backend.infrastructure.runtime.check_runner.supervisor import CheckRunnerSupervisor
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 from product.backend.infrastructure.storage.applications.projects import ProjectRecord
 from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWork

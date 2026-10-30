@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试身份受控浏览器适配器
-#
-# 定位
-#   独立身份准备进程中的 Playwright、网络安全和 SecretStore 边界。
-#
-# 职责
-#   启动独立 BrowserContext｜限制每个请求到确认目标｜捕获受限 Cookie 或 Bearer 状态。
-#
-# 边界
-#   不生成 RecordingEvent，不保存密码、localStorage、storage_state、历史或其他主机 Cookie。
-#
-# 调用链
-#   identity_preparation_process → adapter → Playwright / BoundedRouteTransport / SecretStore
-# =============================================================================
+# 启动独立 BrowserContext、限制每个请求到确认目标、捕获受限 Cookie 或 Bearer 状态。
+# 不生成 RecordingEvent，不保存密码、localStorage、storage_state、历史或其他主机 Cookie。
 
 from __future__ import annotations
 

@@ -18,7 +18,7 @@ from product.backend.application.preparation.models import (
     ActionTechnicalPreparationView, EffectEvidencePreparationView, PreparationItemView,
     PreparationStatus, ResourcePreparationView,
 )
-from product.backend.application.preparation.bindings.recording_candidates import choose_supplement_candidate, flow_resource_injection, request_event, recorded_resource_value, supplement_candidates
+from product.backend.application.preparation.bindings.recording_candidates import choose_supplement_candidate, flow_resource_injection, recorded_resource_value, supplement_candidates
 from product.backend.application.recording.source import require_persisted_recording_source
 from product.backend.application.test_identities.service import TestIdentityStatus
 from product.backend.domain.checks.plan import RegisteredEffectProofCapability
@@ -45,7 +45,7 @@ class PreparationBindingService:
 
     def describe_evidence(self, action, views):
         """仅描述当前已绑定材料；指纹漂移时不拼接旧状态和新来源。"""
-        from product.backend.application.preparation.materials.evidence_models import EffectMaterialSummary
+        from product.backend.application.preparation.materials.evidence import EffectMaterialSummary
         effects = {item.effect_id: item for item in action.effect_catalog}
         result = []
         with self._uow_factory() as work:
@@ -101,6 +101,7 @@ class PreparationBindingService:
 
     def accept_recording(self, work, recording, draft_record, *, flow=None, now_us: int):
         """由生命周期服务在同一完成事务调用，候选不明确时整个事务不生效。"""
+        # 构造与采用分开：影响预览可以复用构造规则，只有接受路径替换当前技术材料。
         for binding in self.build_recording_bindings(work, recording, draft_record, flow=flow, now_us=now_us):
             work.action_preparation.replace(binding)
 
@@ -235,6 +236,7 @@ class PreparationBindingService:
 
     def inspect_item(self, work, binding, action, understanding, missing_reason):
         """在调用者事务内投影单项材料，并核对当前账号可用性；不写入准备状态。"""
+        # 保存过的绑定可能因账号、地址或来源变化而过期；不能仅按记录存在显示“已就绪”。
         if binding is None:
             return PreparationItemView(status=PreparationStatus.NEEDS_USER, reason_codes=(missing_reason,))
         reasons = self.source_inspector.reasons(work, binding, action, understanding)
@@ -242,8 +244,8 @@ class PreparationBindingService:
             reasons += ("TEST_IDENTITY_INSPECTION_UNAVAILABLE",)
         else:
             try:
-                identity = self._test_identities.get(binding.subject_test_identity_id)
-                owner = self._test_identities.get(binding.resource_owner_test_identity_id)
+                identity = self._test_identities.get(binding.subject_test_identity_id, work=work)
+                owner = self._test_identities.get(binding.resource_owner_test_identity_id, work=work)
                 if any(item.project_id != action.project_id or item.status is not TestIdentityStatus.PREPARED for item in (identity, owner)):
                     reasons += ("TEST_IDENTITY_LOGIN_REQUIRED",)
             except JiejianError:

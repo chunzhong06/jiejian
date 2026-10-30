@@ -70,3 +70,62 @@
 .jj-candidate-list > button { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 22px; color: var(--ink); border: 1px solid var(--line); background: var(--surface); border-radius: 10px; text-align: left; }
 @media(max-width:1100px) { .jj-rule-workspace:has(.jj-rule-inspector) { grid-template-columns: minmax(0,1fr); } .jj-rule-inspector { position: static; } }
 @media(max-width:700px) { .jj-review-content { padding-inline: 20px; } .jj-review-overview { flex-wrap: wrap; gap: 8px 20px; } .jj-review-overview > span:last-child { width: 100%; margin: 0; } .jj-rule-meaning, .jj-rule-compare { grid-template-columns: minmax(0,1fr); gap: 16px; } .jj-rule-effects { margin-left: 35px; } .jj-approval-footer { padding: 22px 20px; } .jj-approval-decision { align-items: flex-start; flex-direction: column; } .jj-approval-decision > .jj-button { align-self: flex-end; } .jj-rule-toolbar { flex-wrap: wrap; } .jj-rule-toolbar > input { max-width: none; } .jj-business-agreement { grid-template-columns: minmax(0,1fr); } }
+
+.jj-rule-authoring { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:start; border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--inset); overflow:clip; }
+.jj-rule-authoring-editor { container: rule-editor / inline-size; min-width:0; align-self:stretch; background:var(--surface); border-right:1px solid var(--line); }
+.jj-rule-authoring-editor > .jj-tabs { display:flex; flex-wrap:wrap; gap:8px 24px; margin:0; padding-inline:24px; background:var(--inset); border-bottom:1px solid var(--line); }
+.jj-rule-authoring-editor > .jj-tabs > button { border:0; background:transparent; color:var(--muted); font-size:var(--text-body); font-weight:500; padding:18px 0; }
+.jj-rule-authoring-editor > .jj-tabs > button[aria-selected=true] { color:var(--accent-ink); font-weight:600; }
+.jj-rule-authoring-editor > .jj-tabs > button:hover { color:var(--ink); }
+.jj-rule-authoring-panel { animation:jj-initial-panel-in var(--motion-content) var(--ease-enter) both; }
+.jj-initial-rules { border:0; padding:0; margin:0; min-width:0; }
+.jj-initial-definitions > header { display:flex; gap:16px; align-items:center; justify-content:space-between; padding:24px; }
+.jj-initial-definitions h2 { font-size:var(--text-section); }
+.jj-initial-empty { padding:8px 24px 32px; color:var(--muted); }
+.jj-initial-role { display:grid; grid-template-columns:minmax(0,1fr) 32px; gap:12px; align-items:start; padding:24px; border-top:1px solid var(--line); }
+.jj-initial-role > .jj-button { margin-top:24px; padding:6px; min-height:32px; }
+.jj-initial-role-fields,.jj-initial-action-fields,.jj-initial-effect-fields,.jj-initial-permission-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; min-width:0; }
+.jj-initial-role-fields > .jj-field:last-child,.jj-initial-action-fields > .jj-field:has(textarea),.jj-initial-action-fields > .jj-checkbox,.jj-initial-effect-fields > .jj-field:has(textarea) { grid-column:1/-1; }
+.jj-initial-rules textarea { min-height:76px; resize:vertical; }
+.jj-initial-action,.jj-initial-permission { padding:24px; border-top:1px solid var(--line); }
+.jj-initial-effects { margin-top:28px; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--inset); }
+.jj-initial-effects > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line); }
+.jj-initial-effects h3 { font-size:var(--text-body); }
+.jj-initial-effects > section { padding:20px 18px; }
+.jj-initial-effects > section + section { border-top:1px solid var(--line); }
+.jj-initial-effects > section > .jj-button { margin-top:12px; }
+.jj-initial-entity-actions { display:flex; justify-content:flex-end; margin-top:16px; }
+.jj-initial-permission > header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.jj-initial-protected { border:0; padding:0; margin:24px 0 0; display:flex; gap:12px 24px; flex-wrap:wrap; min-width:0; }
+.jj-initial-protected legend { padding:0; margin-bottom:12px; color:var(--muted); font-size:var(--text-meta); }
+.jj-initial-provenance { border-top:1px solid var(--line); padding:24px; background:var(--inset); }
+.jj-initial-provenance textarea { min-height:92px; resize:vertical; }
+.jj-initial-next { display:flex; justify-content:flex-end; padding:18px 24px; border-top:1px solid var(--line); }
+.jj-initial-preview { position:sticky; top:92px; min-width:0; background:var(--inset); }
+.jj-initial-preview > header { display:flex; align-items:center; gap:12px; padding:22px 20px; border-bottom:1px solid var(--line); }
+.jj-initial-preview > header > div { display:grid; gap:7px; justify-items:start; }
+.jj-initial-preview h2 { font-size:var(--text-body); }
+.jj-initial-preview-symbol { display:grid; place-items:center; width:40px; height:40px; border-radius:var(--radius-control); background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); flex:none; }
+.jj-initial-preview-rules { padding:8px; }
+.jj-initial-preview-rule.jj-button { width:100%; display:grid; grid-template-columns:18px minmax(0,1fr); gap:12px; align-items:start; text-align:left; padding:18px 12px; white-space:normal; }
+.jj-initial-preview-rule + .jj-initial-preview-rule { border-top:1px solid var(--line); border-radius:0; }
+.jj-initial-preview-rule > .anticon { margin-top:4px; }
+.jj-initial-preview-rule[data-tone=positive] > .anticon { color:var(--good); }
+.jj-initial-preview-rule[data-tone=negative] > .anticon { color:var(--bad); }
+.jj-initial-preview-rule > span:last-child { min-width:0; display:grid; gap:7px; }
+.jj-initial-preview-rule strong { font-weight:550; line-height:1.7; overflow-wrap:anywhere; }
+.jj-initial-preview-rule small { color:var(--muted); font-size:var(--text-meta); }
+.jj-initial-preview-effect { font-size:var(--text-meta); color:var(--muted); padding-left:10px; border-left:2px solid var(--line-strong); }
+.jj-initial-preview-empty { padding:24px 20px; }
+.jj-initial-preview-empty > span { display:block; margin-top:10px; color:var(--muted); font-size:var(--text-meta); }
+.jj-initial-submit { display:grid; gap:16px; padding:22px 20px; border-top:1px solid var(--line); }
+.jj-initial-submit > p { font-size:var(--text-meta); color:var(--muted); }
+.jj-initial-submit > .jj-button { width:100%; justify-content:space-between; }
+.jj-initial-missing { display:grid; gap:6px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.jj-initial-missing h3 { font-size:var(--text-meta); color:var(--muted); margin-bottom:2px; }
+.jj-initial-missing > .jj-button { white-space:normal; text-align:left; justify-content:space-between; padding:8px 0; font-size:var(--text-meta); }
+@keyframes jj-initial-panel-in { from { opacity:.8; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@container rule-editor (min-width:760px) { .jj-initial-permission-fields { grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; } .jj-initial-action { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; } .jj-initial-effects { margin-top:0; } .jj-initial-entity-actions { grid-column:1/-1; margin-top:0; } }
+@media(max-width:1120px) { .jj-rule-authoring { grid-template-columns:minmax(0,1fr); } .jj-rule-authoring-editor { border-right:0; border-bottom:1px solid var(--line); } .jj-initial-preview { position:static; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .jj-initial-preview > header { grid-column:1/-1; } .jj-initial-provenance { grid-column:2; grid-row:2; border-top:0; border-left:1px solid var(--line); } .jj-initial-submit { grid-column:1/-1; } .jj-initial-preview:not([data-section=permissions]) > .jj-initial-submit { grid-column:2; grid-row:2; border-top:0; border-left:1px solid var(--line); } }
+@media(max-width:650px) { .jj-initial-role-fields,.jj-initial-permission-fields,.jj-initial-action-fields,.jj-initial-effect-fields { grid-template-columns:minmax(0,1fr); } .jj-initial-preview { display:block; } .jj-initial-provenance { border-left:0; border-top:1px solid var(--line); } .jj-initial-submit { border-left:0; border-top:1px solid var(--line); } .jj-initial-definitions > header { flex-wrap:wrap; padding:20px; } .jj-initial-role,.jj-initial-action,.jj-initial-permission,.jj-initial-provenance { padding:20px; } .jj-rule-authoring-editor > .jj-tabs { padding-inline:12px; } .jj-initial-effects > section { padding:18px 14px; } }
+@media(prefers-reduced-motion:reduce) { .jj-rule-authoring-panel { animation:none; } }

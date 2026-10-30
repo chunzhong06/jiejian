@@ -1,9 +1,11 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
-import { useRef, useState, type ReactNode } from 'react';
+import { ApiError } from '../../shared/api/http';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeftOutlined, ArrowRightOutlined, CheckCircleOutlined, CheckOutlined, ExclamationCircleOutlined, MinusOutlined, SafetyOutlined } from '@ant-design/icons';
 import type { BusinessBoundaryViewDto } from '../../entities/permission/api/businessBoundaries';
 import { ruleWorkspaceApi, type RuleItem, type RuleState } from '../../entities/permission/api/ruleWorkspace';
-import { sourceChangesApi, type RuleChangeTarget } from '../../entities/source-change/api/sourceChanges';
+import { sourceChangesApi, type RuleChangeTarget, type RegistrationPreview } from '../../entities/source-change/api/sourceChanges';
+import { ChangePreview } from '../../entities/source-change/ui/ChangePreview';
 import { developmentApi } from '../../entities/source-change/api/development';
 import { repairReference, type ProjectRepair } from '../../entities/check/api/repairs';
 import { assertProject, type PageProps } from '../../shared/model/page';
@@ -107,7 +109,7 @@ function RepairSubmission({ rule, rules, issue, projectId, onClose, onSaved, onE
     onSaved: (id: string) => void;
     onError: PageProps['onError'];
 }) {
-    const key = 'jiejian.studio.rule-change:' + projectId;
+    const key = 'jiejian.studio.rule-change:' + projectId + ':' + rule.permission.intent_id + ':' + rule.permission.revision;
     const [pending, setPending] = useState<Pending | undefined>(() => { const saved = sessionStorage.getItem(key); if (!saved)
         return; try {
         return JSON.parse(saved) as Pending;
@@ -116,7 +118,9 @@ function RepairSubmission({ rule, rules, issue, projectId, onClose, onSaved, onE
         return undefined;
     } });
     const base: RuleChangeTarget = { permission: rule.permission, repair: issue ? repairReference(issue.contract) : null };
-    const [targets, setTargets] = useState<RuleChangeTarget[]>(pending?.targets ?? [base]), [reason, setReason] = useState(pending?.reason ?? ''), [busy, setBusy] = useState(false);
+    const draftKey = key + ':' + rule.permission.intent_id;
+    const [targets, setTargets] = useState<RuleChangeTarget[]>(pending?.targets ?? [base]), [reason, setReason] = useState(pending?.reason ?? sessionStorage.getItem(draftKey) ?? ''), [busy, setBusy] = useState(false), [preview, setPreview] = useState<RegistrationPreview>();
+    useEffect(() => { sessionStorage.setItem(draftKey, reason); }, [draftKey, reason]);
     const lock = useRef(false);
     const alternatives = rules.flatMap(item => item.issues.filter(task => !['VERIFIED', 'STALE'].includes(task.status)).map(task => ({ rule: item, task, target: { permission: item.permission, repair: repairReference(task.contract) } })));
     const save = async () => {
@@ -134,19 +138,23 @@ function RepairSubmission({ rule, rules, issue, projectId, onClose, onSaved, onE
                 onSaved(receipt.change_id);
                 return;
             }
-            const preview = await sourceChangesApi.registrationPreview(projectId);
-            assertProject(preview.project_id, projectId);
+            if (!preview) {
+                const value = await sourceChangesApi.registrationPreview(projectId);
+                assertProject(value.project_id, projectId); setPreview(value); return;
+            }
             const operation = { operation: crypto.randomUUID().replaceAll('-', ''), reason: reason.trim(), targets };
             sessionStorage.setItem(key, JSON.stringify(operation));
             setPending(operation);
-            const receipt = await sourceChangesApi.register(projectId, { operation_id: operation.operation, expected_registration_fingerprint: preview.fingerprint, reason: operation.reason, claimed_paths: [], repair_reference: null, rule_targets: targets });
+            const receipt = await sourceChangesApi.register(projectId, { operation_id: operation.operation, expected_registration_fingerprint: preview.fingerprint, expected_source_fingerprint: preview.source_fingerprint, reason: operation.reason, claimed_paths: [], repair_reference: null, rule_targets: targets });
             assertProject(receipt.project_id, projectId);
             if (!receipt.change_id)
                 throw new Error('提交未返回修改记录，请查询原回执。');
             sessionStorage.removeItem(key);
+            sessionStorage.removeItem(draftKey);
             onSaved(receipt.change_id);
         }
         catch (error) {
+            if (error instanceof ApiError && ['STATE_PRECONDITION', 'INPUT_INVALID'].includes(error.code)) { sessionStorage.removeItem(key); setPending(undefined); setPreview(undefined); }
             onError(error);
         }
         finally {
@@ -154,5 +162,5 @@ function RepairSubmission({ rule, rules, issue, projectId, onClose, onSaved, onE
             setBusy(false);
         }
     };
-    return <section className="jj-rule-submission" aria-label="提交规则修复"><header><div><h2>{issue ? '提交针对这个问题的修复' : '提交涉及这条规则的修改'}</h2><p>记录真实代码变化，随后复查原问题和正常功能。</p></div><Button disabled={busy} onClick={onClose}>收起</Button></header><div className="jj-rule-submission-body"><Field label="修改说明"><textarea autoFocus rows={3} maxLength={512} disabled={busy || Boolean(pending)} placeholder="说明修复了什么，以及正常功能如何保留" value={reason} onChange={event => setReason(event.target.value)}/></Field><fieldset><legend>本次修复目标</legend><label className="jj-rule-fix-target"><input type="checkbox" checked readOnly/><span><strong>{text(rule.title)}</strong><small>{text(rule.resource_scope)}</small></span></label>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).length > 0 && <details><summary>同一次修改还修复了其他问题</summary>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).map(item => <label className="jj-rule-fix-target" key={item.task.task_reference}><input type="checkbox" disabled={busy || Boolean(pending)} checked={targets.some(target => target.repair?.repair_fingerprint === item.task.contract.repair_fingerprint)} onChange={event => setTargets(values => event.target.checked ? [...values, item.target] : values.filter(target => target.repair?.repair_fingerprint !== item.task.contract.repair_fingerprint))}/><span><strong>{text(item.rule.title)}</strong><small>{text(item.rule.resource_scope)}</small></span></label>)}</details>}</fieldset></div><footer>{pending ? <Notice>提交结果尚未确认，查询原回执后继续。</Notice> : <span className="jj-small jj-muted">提交说明不会将问题标为已修复。</span>}<Button kind="primary" busy={busy} disabled={!reason.trim() && !pending} onClick={() => void save()}>{pending ? '查询本次提交' : '提交修复记录'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></section>;
+    return <section className="jj-rule-submission" aria-label="提交规则修复"><header><div><h2>{issue ? '提交针对这个问题的修复' : '提交涉及这条规则的修改'}</h2><p>记录真实代码变化，随后复查原问题和正常功能。</p></div><Button disabled={busy} onClick={onClose}>收起</Button></header><div className="jj-rule-submission-body"><Field label="修改说明"><textarea autoFocus rows={3} maxLength={512} disabled={busy || Boolean(pending)} placeholder="说明修复了什么，以及正常功能如何保留" value={reason} onChange={event => setReason(event.target.value)}/></Field><fieldset><legend>本次修复目标</legend><label className="jj-rule-fix-target"><input type="checkbox" checked readOnly/><span><strong>{text(rule.title)}</strong><small>{text(rule.resource_scope)}</small></span></label>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).length > 0 && <details><summary>同一次修改还修复了其他问题</summary>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).map(item => <label className="jj-rule-fix-target" key={item.task.task_reference}><input type="checkbox" disabled={busy || Boolean(pending)} checked={targets.some(target => target.repair?.repair_fingerprint === item.task.contract.repair_fingerprint)} onChange={event => setTargets(values => event.target.checked ? [...values, item.target] : values.filter(target => target.repair?.repair_fingerprint !== item.task.contract.repair_fingerprint))}/><span><strong>{text(item.rule.title)}</strong><small>{text(item.rule.resource_scope)}</small></span></label>)}</details>}</fieldset></div>{preview && <ChangePreview value={preview}/>}<footer>{pending ? <Notice>提交结果尚未确认，查询原回执后继续。</Notice> : <span className="jj-small jj-muted">提交说明不会将问题标为已修复。</span>}<Button kind="primary" busy={busy} disabled={!reason.trim() && !pending} onClick={() => void save()}>{pending ? '查询本次提交' : preview ? '确认登记修复' : '预览文件变化'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></section>;
 }

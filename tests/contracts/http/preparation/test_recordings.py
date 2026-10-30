@@ -22,7 +22,8 @@ from product.backend.infrastructure.runtime.jobs.models import RequestCancellati
 from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.backend.interfaces.http.routers.preparation.recordings import build_recordings_router
 from tests.support.builders.control_plane import TestClient, create_app
-from tests.support.builders.preparation.action_preparation import add_recording, build_preparation_harness, MemorySecretStore
+from tests.support.builders.preparation.action_preparation import add_recording, build_preparation_harness
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.control_plane import TEST_CONTROL_ORIGIN
 
 pytestmark = [pytest.mark.level4, pytest.mark.database, pytest.mark.process, pytest.mark.slow]
@@ -30,7 +31,7 @@ pytestmark = [pytest.mark.level4, pytest.mark.database, pytest.mark.process, pyt
 
 @pytest.fixture
 def review_context(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     h = build_preparation_harness(tmp_path, core=app.state.context)
     target = add_recording(h)
     h.core.recording_lifecycle.finalize(target.recording_id, var_dir=h.var_dir, now_us=100)
@@ -183,7 +184,7 @@ def test_discard_api_local_control(review_context, authorization):
 
 
 def test_cancel_api_rejects_unsupported_job_without_touching_queue(tmp_path, monkeypatch):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     core = app.state.context
     run_job = SimpleNamespace(job_id="job-run", run_id="run-frozen", recording_id=None, state="QUEUED", operation_type="LEGACY")
     before = vars(run_job).copy()
@@ -264,7 +265,7 @@ def test_recording_finalize_api_supplies_runtime_timestamp(tmp_path: Path) -> No
 @pytest.mark.level4
 @pytest.mark.parametrize("material_candidate", [False, True])
 def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path: Path, material_candidate: bool) -> None:
-    store = MemorySecretStore()
+    store = MemorySecrets()
     app = create_app(tmp_path / "var", start_worker=False, secret_store=store, environ={})
     harness = build_preparation_harness(tmp_path, core=app.state.context)
     project_id = harness.project_id

@@ -1,4 +1,5 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
+import { InitialRules } from './InitialRules';
 import { useRef, useState } from 'react';
 import { businessBoundariesApi as api } from '../../entities/permission/api/businessBoundaries';
 import { ApiError } from '../../shared/api/http';
@@ -22,6 +23,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     if (state.error || !state.data)
         return <ErrorNote error={state.error} onRetry={state.reload}/>;
     const value = state.data;
+    if (!value.permissions.length) return <InitialRules projectId={projectId} basis={value} onBack={onBack} onProposal={onProposal} onError={onError}/>;
     const changed = value.permissions.some(item => changes[item.item_id] && changes[item.item_id] !== item.expectation);
     const act = async (callback: () => Promise<unknown>) => { if (lock.current)
         return; lock.current = true; setBusy(true); try {

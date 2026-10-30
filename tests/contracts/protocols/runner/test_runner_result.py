@@ -1,19 +1,9 @@
 # 验证 RunnerResult、cleanup 与稳定错误边界。
 
 from __future__ import annotations
-import json
-from pathlib import Path
 import pytest
-from product.backend.domain.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
-from product.backend.domain.errors import JiejianError
-from product.backend.domain.verification.facts import ExecutionOutcome, ObservedEffect, TargetType
 from product.protocols.runner.result import CleanupResult, CleanupIssue, RunnerResult
-from product.protocols.runner.input import CleanupIssueCode, CleanupStatus, RunnerInput, RunnerFailurePhase, RunnerResultType
-from product.protocols.runner.evidence import Evidence, build_evidence
-from product.protocols.web.identity import PreparedCookieCredential, PreparedCookieSessionIdentityBinding, WebExecutionIdentity
-from product.protocols.runner.codec import canonical_runner_json_bytes, canonical_runner_sha256, parse_runner_result, parse_runner_input
-from product.protocols.runner.result import _reject_secret_material
-from tests.support.builders.runtime.runner import evidence, runner_input
+from product.protocols.runner.input import CleanupIssueCode, CleanupStatus, RunnerFailurePhase
 pytestmark = pytest.mark.level2
 
 def test_runner_result_root_and_cleanup_completion_contract_are_current() -> None:

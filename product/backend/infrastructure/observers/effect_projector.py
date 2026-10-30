@@ -1,15 +1,6 @@
-# =============================================================================
 # 确定性业务效果投影器
-#
-# 定位
-#   在规范化 ObservationEnvelope 与 Verification 事实之间解释冻结业务效果。
-#
-# 职责
-#   按 effect identity/projector version 选择目标投影｜形成 ObservationFact｜聚合 SecurityEffectFact
-#
-# 边界
-#   不读取 live Target、数据库或 Sample；不使用 whole-state hash，也不产生 Verdict/Finding。
-# =============================================================================
+# 按 effect identity/projector version 选择目标投影、形成 ObservationFact、聚合 SecurityEffectFact
+# 不读取 live Target、数据库或 Sample；不使用 whole-state hash，也不产生 Verdict/Finding。
 
 from __future__ import annotations
 

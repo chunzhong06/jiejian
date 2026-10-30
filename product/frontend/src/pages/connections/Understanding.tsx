@@ -1,5 +1,5 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { projectsApi, type CandidateSelection } from '../../entities/application/api/projects';
 import { Choice } from "../../shared/ui/Choice";
@@ -9,13 +9,18 @@ import { Heading } from "../../shared/ui/layout";
 import { assertProject } from '../../shared/model/page';
 import { go } from '../../shared/lib/navigation';
 import { text } from '../../shared/lib/format';
+import { readPending, savePending } from '../../shared/lib/operations';
 import { useRead } from '../../shared/lib/useRead';
 export function Understanding({ projectId, onError }: {
     projectId: string;
     onError: (error: unknown) => void;
 }) {
     const state = useRead('business-understanding:' + projectId, async () => { const value = await projectsApi.understanding(projectId); assertProject(value.project_id, projectId); return value; });
-    const [choices, setChoices] = useState<Record<string, CandidateSelection>>({}), [busy, setBusy] = useState(false);
+    const draftKey = 'jiejian.studio.business-draft:' + projectId;
+    const [draft, setDraft] = useState(() => readPending<{revision: number; choices: Record<string, CandidateSelection>}>(draftKey)), [busy, setBusy] = useState(false);
+    const choices = state.data?.revision === draft?.revision ? draft?.choices ?? {} : {};
+    const setChoices = (update: Record<string, CandidateSelection> | ((value: Record<string, CandidateSelection>) => Record<string, CandidateSelection>)) => { if (state.data) setDraft({revision: state.data.revision, choices: typeof update === 'function' ? update(choices) : update}); };
+    useEffect(() => { savePending(draftKey, draft); }, [draftKey, draft]);
     if (state.loading)
         return <PageSkeleton view="/application" title="业务名称"/>;
     if (state.error || !state.data)

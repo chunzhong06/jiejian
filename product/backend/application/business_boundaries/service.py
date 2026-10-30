@@ -1,12 +1,6 @@
-# =============================================================================
 # Business Boundary Proposal 应用事务
-#
-# 职责
-#   形成 discovery 预览与不可变 Proposal，并在单一 UoW 原子批准 Actor/Action/Permission。
-#
-# 边界
-#   只有本服务能写正式 Boundary；Candidate 仅校验来源快照和生成 ImplementationBinding。
-# =============================================================================
+# 形成 discovery 预览与不可变 Proposal，并在单一 UoW 原子批准 Actor/Action/Permission。
+# 只有本服务能写正式 Boundary；Candidate 仅校验来源快照和生成 ImplementationBinding。
 
 from __future__ import annotations
 

@@ -1,6 +1,5 @@
 # 验证准备依赖装配不启动进程，关闭失败时保留监督事实、数据库与运行版本引用。
 
-import io
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -9,19 +8,20 @@ import pytest
 
 from product.backend.bootstrap.application import ApplicationCore
 from product.backend.domain.errors import ErrorCode, JiejianError
-import product.backend.application.test_identities.preparation as preparation_module
-from tests.support.builders.preparation.action_preparation import MemorySecretStore, build_preparation_harness
+from tests.support.builders.preparation.action_preparation import build_preparation_harness
+from tests.support.secrets import MemorySecrets
 
 
 def test_core_constructs_preparation_readers_without_starting_processes(tmp_path, monkeypatch):
     launch = Mock(side_effect=AssertionError("构造不应启动进程"))
-    monkeypatch.setattr(subprocess, "Popen", launch)
-    core = ApplicationCore(tmp_path / "var", secret_store=MemorySecretStore(), environ={})
+    class ForbiddenProcess(subprocess.Popen):
+        def __init__(self, *args, **kwargs):
+            launch(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", ForbiddenProcess)
+    core = ApplicationCore(tmp_path / "var", secret_store=MemorySecrets(), environ={})
     try:
-        assert core.workspace._preparation is core.preparation
-        assert core.identity_preparations._application_understanding is core.application_understanding
-        assert core.identity_preparations._business_boundaries is core.business_boundaries
-        assert core.identity_preparations._identities is core.test_identities
+        assert core.identity_preparations.list("prj_" + "0" * 32) == ()
         assert core.identity_preparations.active_runtime_paths() == ()
         assert not core.worker.is_running()
         launch.assert_not_called()
@@ -60,54 +60,44 @@ def test_core_close_releases_independent_owners_and_protects_shared_resources(fa
         assert max(events.index(name) for name in ("worker","sample","runtime","manager")) < min(events.index(name) for name in ("vault","secrets","engine","assets"))
 
 
-def test_manager_cleanup_failure_protects_active_paths_and_engine(tmp_path, monkeypatch):
+def test_worker_cleanup_failure_keeps_login_recoverable_and_protects_shared_resources(tmp_path, monkeypatch):
     h = build_preparation_harness(tmp_path)
     core = h.core
     identity = core.test_identities.reset(h.identities[0].identity_id)
-    class Input(io.BytesIO):
-        def close(self):
-            pass
-    class Process:
-        stdin = Input()
-        stdout = io.BytesIO()
-        returncode = None
-        def poll(self):
-            return self.returncode
-        def wait(self, timeout):
-            if self.returncode is None:
-                raise subprocess.TimeoutExpired("controlled-fake", timeout)
-            return self.returncode
-    process = Process()
     manager = core.identity_preparations
-    manager._environment["JIEJIAN_PROJECT_ROOT"] = str(tmp_path)
-    manager._process_launcher = lambda *_args, **_kwargs: process
+    wake = Mock()
+    manager.bind_worker(wake)
     started = manager.start(identity.identity_id)
-    active = manager._active[started.preparation_id]
+    wake.assert_called_once_with()
+    directory = core.paths.identity_preparations / started.preparation_id
+    directory.mkdir()
     disposed = Mock(wraps=core.engine.dispose)
     monkeypatch.setattr(core.engine, "dispose", disposed)
-    failure = [True]
-    def terminate(*_):
-        if failure[0]:
-            raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "注入清理失败")
-        process.returncode = 1
-    monkeypatch.setattr(preparation_module, "terminate_process_tree", terminate)
-    with pytest.raises(JiejianError):
+    stop = core.worker.stop
+    monkeypatch.setattr(core.worker, "stop", Mock(side_effect=JiejianError(
+        ErrorCode.PROCESS_TREE_FAILED, "注入 Worker 关闭失败")))
+    try:
+        with pytest.raises(JiejianError):
+            core.close()
+        disposed.assert_not_called()
+        assert manager.status(started.preparation_id) == started
+        assert manager.active_runtime_paths() == (directory,)
+        relative = directory.relative_to(core.var_dir).as_posix()
+        item = next(item for item in core.maintenance.status()["inventory"] if item["relative_path"] == relative)
+        assert item["state"] == "PROTECTED"
+
+        # 尚未交给 Worker 的任务可直接取消；确认无执行者后才允许发布闲置标记。
+        assert manager.cancel(started.preparation_id).status.value == "CANCELLED"
+        with core.uow_factory() as work:
+            job = work.jobs.get(started.job_id)
+        assert job.attempt == 0
+        manager.reconcile_exited(job)
+        assert manager.active_runtime_paths() == ()
+        item = next(item for item in core.maintenance.status()["inventory"] if item["relative_path"] == relative)
+        assert item["state"] == "CLEANABLE"
+    finally:
+        monkeypatch.setattr(core.worker, "stop", stop)
         core.close()
-    disposed.assert_not_called()
-    assert manager._active[started.preparation_id] is active
-    assert core.maintenance._active_runtime_paths() == (active.controls.root,)
-    # 根已退出但尚未清理的树与 journal 仍由 maintenance 保护。
-    process.returncode = 1
-    assert manager.active_runtime_paths() == (active.controls.root,)
-    # Worker 接管 Job 后即保护精确目录和日志，不把整个 runtime 作为活动范围。
-    job_id = "job_" + "a" * 32
-    monkeypatch.setattr(core.worker, "_job_id", job_id)
-    paths = core.maintenance._active_runtime_paths()
-    assert paths == (core.paths.jobs / job_id, core.paths.worker_logs / f"{job_id}.log", core.paths.worker_runtime, active.controls.root)
-    monkeypatch.setattr(core.worker, "_job_id", None)
-    failure[0] = False
-    core.close()
     disposed.assert_called_once()
-    assert manager.active_runtime_paths() == ()
 
 pytestmark = [pytest.mark.level3]

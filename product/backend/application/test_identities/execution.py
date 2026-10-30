@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试身份执行时凭据投影
-#
-# 定位
-#   TestIdentity 长期 secret_ref 与 Generated WebExecutionProfile 环境引用之间的桥接。
-#
-# 职责
-#   生成稳定无秘密身份绑定｜按提交所需名称读取最小秘密集合｜拒绝失效身份。
-#
-# 边界
-#   明文只作为一次环境映射返回；不写 Profile、数据库、日志或 API 响应。
-#
-# 调用链
-#   SecuritySetupCompiler / ExecutionWorkflow → provider → TestIdentity / SecretStore
-# =============================================================================
+# 生成稳定无秘密身份绑定、按提交所需名称读取最小秘密集合、拒绝失效身份。
+# 明文只作为一次环境映射返回；不写 Profile、数据库、日志或 API 响应。
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 import {preloadRoute} from './Router'
-import { AppstoreOutlined, SafetyOutlined, CarryOutOutlined, FileSearchOutlined, LinkOutlined, ApiOutlined, ExperimentOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, SafetyOutlined, CarryOutOutlined, FileSearchOutlined, LinkOutlined, ExperimentOutlined } from '@ant-design/icons'
 import type {Route} from '../shared/lib/navigation'
-import {historyLocation} from '../shared/lib/navigation'
+import {historyLocation,scopedPath} from '../shared/lib/navigation'
 
 const primary=[
   {path:'/workspace',label:'应用概览',icon:<AppstoreOutlined aria-hidden="true"/>},
@@ -11,7 +11,6 @@ const primary=[
 ]
 const connections=[
   {path:'/application',label:'应用连接',icon:<LinkOutlined aria-hidden="true"/>},
-  {path:'/tools',label:'开发工具',icon:<ApiOutlined aria-hidden="true"/>},
   {path:'/environment',label:'官方示例',icon:<ExperimentOutlined aria-hidden="true"/>},
 ]
 export function normalizedPath(route:Route){
@@ -32,15 +31,15 @@ export function pageTransitionKey(route:Route,projectId?:string){
 }
 export function navigationDirection(from:Route,to:Route){
   if(normalizedPath(from)===normalizedPath(to))return from.query.size>to.query.size?'back':'forward'
-  const order=[...primary,...connections].map(item=>item.path)
+  const order=[...primary,...connections,{path:'/tools'},{path:'/storage'}].map(item=>item.path)
   return order.indexOf(normalizedPath(to))<order.indexOf(normalizedPath(from))?'back':'forward'
 }
-export function NavigationLinks({current,hasProject,onNavigate}:{current:string;hasProject:boolean;onNavigate:()=>void}){
-  const items=(list:typeof primary)=>list.map(item=><a className="jj-nav-item" key={item.path} href={'#'+item.path} onPointerEnter={()=>preloadRoute(item.path)} onFocus={()=>preloadRoute(item.path)} aria-current={current===item.path?'page':undefined} onClick={onNavigate}>{item.icon}<span>{item.label}</span></a>)
-  return <div className={'jj-nav-groups'+(hasProject?' has-project':'')}>{hasProject&&<nav aria-label="应用工作区">{items(primary)}</nav>}<section className="jj-nav-section"><h2>连接与环境</h2><nav aria-label="连接与环境">{items(connections)}</nav></section></div>
+export function NavigationLinks({current,hasProject,projectId,onNavigate}:{current:string;hasProject:boolean;projectId?:string;onNavigate:()=>void}){
+  const items=(list:typeof primary)=>list.map(item=><a className="jj-nav-item" key={item.path} href={'#'+scopedPath(item.path,projectId)} onPointerEnter={()=>preloadRoute(item.path)} onFocus={()=>preloadRoute(item.path)} aria-current={current===item.path?'page':undefined} onClick={onNavigate}>{item.icon}<span>{item.label}</span></a>)
+  return <div className={'jj-nav-groups'+(hasProject?' has-project':'')}>{hasProject&&<nav aria-label="应用工作区">{items(primary)}</nav>}<section className="jj-nav-section"><h2>应用与示例</h2><nav aria-label="应用与示例">{items(connections)}</nav></section></div>
 }
 export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectName?:string;projectId?:string}){
-  const current=normalizedPath(route),section=[...primary,...connections,{path:'/changes',label:'源码修改'},{path:'/storage',label:'本地存储'},{path:'/archive',label:'归档记录'}].find(item=>item.path===current)
+  const current=normalizedPath(route),section=[...primary,...connections,{path:'/tools',label:'开发工具'},{path:'/changes',label:'源码修改'},{path:'/storage',label:'本地存储'},{path:'/archive',label:'归档记录'}].find(item=>item.path===current)
   const detail=current==='/reports'?route.query.has('run_id')?'报告详情':route.query.get('view')==='plan'?'检查范围':undefined
     :current==='/permissions'&&route.query.has('proposal_id')?'审阅权限变更'
     :current==='/permissions'&&route.query.has('rule_id')?'规则详情'
@@ -50,6 +49,6 @@ export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectNa
     :current==='/archive'&&route.query.has('run_id')?'报告详情':undefined
   const global=['/environment','/tools','/storage','/archive'].includes(current)||!projectName
   const parent=current==='/reports'?historyLocation(projectId):current==='/archive'?'/archive?project_id='+encodeURIComponent(route.query.get('project_id')??''):section?.path
-  const levels=[{label:global?'界鉴':projectName!,href:'#/workspace'},...(current==='/archive'?[{label:'官方示例',href:'#/environment'}]:[]),...(section?[{label:section.label,href:detail?'#'+parent:undefined}]:[]),...(detail?[{label:detail,href:undefined}]:[])]
+  const levels=[{label:global?'界鉴':projectName!,href:'#'+scopedPath('/workspace',projectId)},...(current==='/archive'?[{label:'官方示例',href:'#/environment'}]:[]),...(section?[{label:section.label,href:detail&&parent?'#'+scopedPath(parent,projectId):undefined}]:[]),...(detail?[{label:detail,href:undefined}]:[])]
   return <nav className="jj-breadcrumb" aria-label="当前位置"><ol>{levels.map((item,index)=><li key={index}>{index>0&&<span className="jj-breadcrumb-separator" aria-hidden="true">/</span>}{item.href?<a href={item.href}>{item.label}</a>:<span aria-current="page">{item.label}</span>}</li>)}</ol></nav>
 }

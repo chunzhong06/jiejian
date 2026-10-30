@@ -22,6 +22,12 @@ from product.backend.infrastructure.runtime.jobs.models import RequestCancellati
 def build_recordings_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
+    @router.get('/api/projects/{project_id}/recording-requests/{operation_id}', response_model=ApiResponse)
+    def recording_request(project_id: str, operation_id: str):
+        with context.uow_factory() as work:
+            job = work.jobs.get_by_idempotency(project_id, 'BROWSER_RECORDING', operation_id)
+        return data_response(None) if job is None else get_recording(job.recording_id)
+
     @router.post("/api/jobs/{job_id}/cancel", response_model=ApiResponse)
     def cancel_recording_job(job_id: str):
         with context.uow_factory() as work:

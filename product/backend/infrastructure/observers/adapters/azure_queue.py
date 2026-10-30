@@ -1,8 +1,5 @@
-# =============================================================================
 # Runner 隔离域 Azure Queue Peek 观察器
-#
 # 仅访问固定 Queue REST Peek 窗口；SAS、响应原文和服务定位不进入观察工件。
-# =============================================================================
 
 from __future__ import annotations
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
@@ -298,6 +295,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
     records: list[dict[str, Any]] | None = None
     reason: str | None = None
     total_response_bytes = 0
+    # 只 peek，不消费或删除消息；重试处理瞬时获取错误，不因未匹配业务记录反复读取以凑齐结果。
     try:
         for attempt in range(locator.peek_budget.max_attempts):
             if time.monotonic_ns() >= deadline_ns:
@@ -338,6 +336,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
     by_event: dict[str, bytes] = {}
     matched: list[dict[str, Any]] = []
     conflict = False
+    # 事件去重后还要同时匹配本 Case 的请求标记和资源，队列中存在消息本身不能证明本次业务后果。
     for record in records:
         record_bytes = canonical_json_bytes(record)
         previous = by_event.get(record["event_id"])

@@ -1,15 +1,6 @@
-# =============================================================================
 # Recording 完成提交与同动作补录关系校验
-#
-# 定位
-#   Web 与普通 CLI 共用的当前项目录制请求准备边界。
-#
-# 职责
-#   校验已确认动作与端点｜准备单一测试身份会话｜构造并提交 Recording Job
-#
-# 边界
-#   不执行浏览器、不控制采集阶段，也不从登录行为推导业务流程。
-# =============================================================================
+# 校验已确认动作与端点、准备单一测试身份会话、构造并提交 Recording Job
+# 不执行浏览器、不控制采集阶段，也不从登录行为推导业务流程。
 
 from __future__ import annotations
 
@@ -229,20 +220,19 @@ class ProjectRecordingService:
             owner=owner, owner_actor_binding=next(item for item in boundary.actor_bindings if item.actor_id == owner.actor_id),
             controlled_instance_id=controlled_instance_id,
         )
-        if captured_events is not None:
-            prior = self._recording_submission.captured_existing(project_id, idempotency_key)
-            if prior is not None:
-                request, result = prior
-                expected = dict(business_action_id=action.action_id, action_revision=action.revision,
-                    subject_test_identity_id=subject_test_identity_id, resource_owner_test_identity_id=resource_owner_test_identity_id,
-                    subject_slot_id=subject_slot_id, resource_owner_slot_id=resource_owner_slot_id,
-                    resource_owner_confirmed=resource_owner_confirmed, preparation_source_fingerprint=source_fingerprint,
-                    purpose=purpose, parent_recording_id=parent_recording_id, effect_id=effect_id,
-                    target_scope=recording_target_scope(understanding.confirmed_endpoint), headless=headless,
-                    budget=RecordingBudget(max_duration_us=duration_seconds * 1_000_000, max_contexts=1))
-                if any(getattr(request, key) != value for key, value in expected.items()):
-                    raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, "固定流程输入已变化")
-                return ProjectRecordingSubmission(request=request, result=result, action=action, test_identity=identity)
+        prior = self._recording_submission.captured_existing(project_id, idempotency_key, require_completed=captured_events is not None)
+        if prior is not None:
+            request, result = prior
+            expected = dict(business_action_id=action.action_id, action_revision=action.revision,
+                subject_test_identity_id=subject_test_identity_id, resource_owner_test_identity_id=resource_owner_test_identity_id,
+                subject_slot_id=subject_slot_id, resource_owner_slot_id=resource_owner_slot_id,
+                resource_owner_confirmed=resource_owner_confirmed, preparation_source_fingerprint=source_fingerprint,
+                purpose=purpose, parent_recording_id=parent_recording_id, effect_id=effect_id,
+                target_scope=recording_target_scope(understanding.confirmed_endpoint), headless=headless,
+                budget=RecordingBudget(max_duration_us=duration_seconds * 1_000_000, max_contexts=1))
+            if any(getattr(request, key) != value for key, value in expected.items()):
+                raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, "原录制请求的账号、资源或范围已变化")
+            return ProjectRecordingSubmission(request=request, result=result, action=action, test_identity=identity)
         now_us = self._clock_us()
         recording_id = f"rec_{uuid4().hex}"
         duration_us = duration_seconds * 1_000_000

@@ -13,7 +13,7 @@ from product.backend.domain.identities.models import TestIdentityAuthMethod as I
 from product.backend.infrastructure.secrets.refs import credential_ref
 from product.backend.application.test_identities.service import PreparedLoginState
 from product.backend.application.business_boundaries.proposals.official_recipe import official_boundary_recipe
-from tests.support.secrets import MemorySecrets as InMemorySecretStore
+from tests.support.secrets import MemorySecrets
 
 
 def _reachable_discovery(endpoint: str) -> TargetEndpointDiscovery:
@@ -113,6 +113,15 @@ def test_application_connection_confirms_endpoint_without_profile(
             "AUTHORIZE_SOURCE_ANALYSIS"
         )
         assert workspace_data["primary_task"]["route"] == "/application"
+        readiness = client.get(f"/api/projects/{project_id}/readiness")
+        assert readiness.status_code == 200
+        facts = readiness.json()["data"]
+        assert facts["project_id"] == project_id
+        assert {item["key"]: item["state"] for item in facts["items"]}["endpoint"] == "READY"
+        assert client.get(f"/api/projects/{project_id}/readiness").json()["data"] == facts
+        assert client.get(f"/api/projects/{project_id}/activity").json()["data"]["items"] == []
+        with app.state.context.uow_factory() as work:
+            assert work.jobs.list_for_project(project_id) == ()
 
         authorized = client.put(
             f"/api/projects/{project_id}/source-analysis-authorization",
@@ -314,7 +323,7 @@ def test_remove_application_archives_history_cleans_secrets_and_same_source_rest
         ),
         encoding="utf-8",
     )
-    secrets = InMemorySecretStore()
+    secrets = MemorySecrets()
     app = create_app(
         tmp_path / "var",
         start_worker=False,

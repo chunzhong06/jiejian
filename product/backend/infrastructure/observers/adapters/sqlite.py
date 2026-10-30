@@ -1,14 +1,10 @@
-# =============================================================================
 # Runner 隔离域只读 SQLite 观察器
-#
 # 只允许预注册的 resource-state 查询。父进程仅传递最小环境和无秘密调用，
 # 子进程以 SQLite URI mode=ro 及 query_only 读取，并把结果交回严格  envelope。
-# =============================================================================
 
 from __future__ import annotations
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
 
-import json
 import os
 import subprocess
 from product.backend.infrastructure.runtime.process.tree import release_process_tree, terminate_process_tree
@@ -185,6 +181,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
 
     try:
         uri = f"file:{source_path.resolve().as_posix()}?mode=ro"
+        # 目标库只读打开，查询固定模板且资源值作为绑定参数；调用者不能提供任意 SQL 或 URI 参数。
         connection = sqlite3.connect(uri, uri=True, timeout=0)
     except (OSError, sqlite3.Error):
         return _failure_envelope(invocation, ObservationCompleteness.MISSING, SQLITE_UNAVAILABLE, started_at_us, utc_now_us())
@@ -193,6 +190,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
     try:
         connection.execute("PRAGMA query_only=ON")
         connection.set_progress_handler(lambda: int(_deadline_reached(deadline_ns)), 1_000)
+        # 多取一行只为识别截断，不能把恰好读满预算的一页误报为完整结果。
         rows = connection.execute(_QUERY, (invocation.correlation.resource_id,)).fetchmany(invocation.spec.budget.max_rows + 1)
         if _deadline_reached(deadline_ns):
             return _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, SQLITE_QUERY_TIMEOUT, started_at_us, utc_now_us())

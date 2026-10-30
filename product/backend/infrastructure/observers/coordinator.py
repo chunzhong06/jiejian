@@ -1,15 +1,6 @@
-# =============================================================================
 # 共享 Observer 阶段协调器
-#
-# 定位
-#   在通用 Runner 与 Observer Adapter、Target Case Session 之间调度观察。
-#
-# 职责
-#   维护阶段游标｜校验相关性｜归一化 Observer Outcome。
-#
-# 边界
-#   不认识 Web/HTTP/身份协议；OWNER_API 必须通过 TargetCaseSession.observe_target。
-# =============================================================================
+# 维护阶段游标、校验相关性、归一化 Observer Outcome。
+# 不认识 Web/HTTP/身份协议；OWNER_API 必须通过 TargetCaseSession.observe_target。
 
 from __future__ import annotations
 

@@ -1,5 +1,4 @@
 # 人工参照输入沿原准备依据和操作回执保存；已被来源引用的字节不可替换或清除。
-import hashlib
 from typing import Literal
 from pydantic import Field
 from product.backend.domain.errors import ErrorCode,JiejianError
@@ -43,8 +42,8 @@ class ProofArtifactPreparation:
 
     def upload(self,project_id,command,content):
         known=self._known(project_id,command.action_id,command.action_revision)
-        self.store.checked_bytes(content,known)
-        if (len(content),hashlib.sha256(content).hexdigest())!=(command.size,command.sha256):
+        content=self.store.accept(content,known)
+        if (len(content.raw),content.sha256)!=(command.size,command.sha256):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'上传内容与本次操作不一致')
         def execute(work):
             facts=self.proofs._current(work,project_id,command)
@@ -60,7 +59,7 @@ class ProofArtifactPreparation:
                 resource_id=resource.actual_resource_id,owner_identity_id=resource.resource_owner_test_identity_id,
                 origin='UPLOAD',state='COMPLETE',manifest=manifest,created_at_us=self.proofs._clock(),basis_id=facts.basis_id)
             work.proof_artifacts.add_input(value)
-            self.store.save(project_id,asset_id,content,known_secrets=known)
+            self.store.save(project_id,asset_id,content)
             return dict(asset_id=asset_id,state='COMPLETE',manifest=manifest.model_dump(mode='json'))
         return self.proofs._operation(project_id,'UPLOAD_REFERENCE',command,execute)
 

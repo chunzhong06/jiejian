@@ -7,11 +7,12 @@ from product.backend.domain.lifecycle import JobState
 from product.backend.domain.recording.models import RecordingState
 from product.protocols.recording.flow_draft import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, flow_draft_source_choice_id
 from product.backend.application.recording.submission import SubmitRecording
-from product.backend.infrastructure.runtime.jobs.target_handlers.recording import RecordingJobHandler
+from product.backend.infrastructure.runtime.jobs.recording import RecordingJobHandler
 from product.backend.infrastructure.runtime.jobs.models import WaitingFatalFailure
 from product.backend.infrastructure.artifacts.run_packages import attempt_paths_for
 from product.backend.application.recording.lifecycle import RecordingLifecycle
-from tests.support.builders.preparation.recording import RecordingContext as _Context, runner_request as _request, captured_result as _captured_result
+from tests.support.builders.preparation.recording import RecordingContext as _Context
+from tests.support.builders.preparation.recording_facts import runner_request as _request, captured_result as _captured_result
 pytestmark = [pytest.mark.level4, pytest.mark.database]
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "recording-project"

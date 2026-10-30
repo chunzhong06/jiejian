@@ -1,18 +1,6 @@
-# =============================================================================
 # Verification HTTP 执行
-#
-# 定位
-#   所有 Verification 目标请求的受控网络适配器
-#
-# 职责
-#   逐次目标授权｜请求与响应预算｜重定向、超时和取消处理
-#
-# 边界
-#   只实现 Web 目标的网络细节，不决定 Permission、Verification 或 Finding 结论
-#
-# 调用链
-#   Runner → HttpExecutionAdapter → TargetGuard / httpx
-# =============================================================================
+# 逐次目标授权、请求与响应预算、重定向、超时和取消处理
+# 只实现 Web 目标的网络细节，不决定 Permission、Verification 或 Finding 结论
 
 from __future__ import annotations
 

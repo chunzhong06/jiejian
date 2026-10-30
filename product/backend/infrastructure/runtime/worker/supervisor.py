@@ -1,18 +1,6 @@
-# =============================================================================
 # 本地 Worker 管理器
-#
-# 定位
-#   API serve 生命周期与独立 Worker 调度循环之间的资源监督边界
-#
-# 职责
-#   启停后台调度线程｜报告就绪状态｜确保 API 进程不执行目标流量
-#
-# 边界
-#   监督器只管理 Worker 调度线程；目标请求仍由独立 Runner 进程执行。
-#
-# 调用链
-#   FastAPI lifespan → LocalWorkerSupervisor → WorkerDispatcher
-# =============================================================================
+# 启停后台调度线程、报告就绪状态、确保 API 进程不执行目标流量
+# 监督器只管理 Worker 调度线程；目标请求仍由独立 Runner 进程执行。
 
 from __future__ import annotations
 
@@ -39,7 +27,7 @@ from product.backend.infrastructure.runtime.jobs.models import (
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
 from product.backend.infrastructure.runtime.jobs.targets import JobTargetRegistry
 from product.backend.infrastructure.runtime.jobs.registration import current_check_and_recording_targets
-from product.backend.infrastructure.runtime.jobs.requests.checks import CheckRequestStore
+from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.execution.web.check_runtime import check_secret_names
 from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.protocols.recording.events import required_recording_secret_names
@@ -66,6 +54,7 @@ class LocalWorkerSupervisor:
         targets: JobTargetRegistry | None = None,
         job_authorized=None,
         capture_publisher=None,
+        identity_cleanup=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
@@ -84,6 +73,7 @@ class LocalWorkerSupervisor:
         self._recovered_jobs = 0
         self._job_authorized = job_authorized or (lambda job: job.preflight_id is None and job.reference_capture_id is None)
         self._capture_publisher=capture_publisher
+        self._identity_cleanup = identity_cleanup
         self._parallel_worker = None
         self.on_progress = lambda: None
 
@@ -360,6 +350,11 @@ class LocalWorkerSupervisor:
         if expected_lease_owner is None or current.lease_owner != expected_lease_owner:
             return
         try:
+            if current.identity_preparation_id is not None:
+                if not WorkerLifetimeLock.execution_has_exited(self.var_dir, current.job_id, current.lease_owner):
+                    return
+                if self._identity_cleanup is not None:
+                    self._identity_cleanup(current)
             if self._reconcile_check(current):
                 return
             if current.lease_expires_at_us is not None and current.lease_expires_at_us > now_us:
@@ -443,6 +438,8 @@ class LocalWorkerSupervisor:
             return
         if self._reconcile_check(job):
             return
+        if job.identity_preparation_id is not None and self._identity_cleanup is not None:
+            self._identity_cleanup(job)
         result = self._recovery.confirm_recovery(
             ConfirmRecovery(
                 job_id=current.job_id,

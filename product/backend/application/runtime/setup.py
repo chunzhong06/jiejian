@@ -17,7 +17,7 @@ from product.backend.infrastructure.runtime.process.controlled.node_owned import
 from product.backend.application.runtime.load_jobs import RuntimeLoadJobs
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
-from product.backend.infrastructure.runtime.jobs.target_handlers.runtime_load import runtime_load_targets
+from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
 from product.protocols.runtime.node_runtime import NodeRuntimeManifest, NodeRuntimeLoadRequest, ProjectId, node_document_fingerprint
 from product.protocols.runtime.runtime_identity import RuntimeFile, RuntimeModel, runtime_source_fingerprint, Digest
 

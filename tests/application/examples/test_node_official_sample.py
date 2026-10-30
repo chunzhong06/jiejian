@@ -8,7 +8,7 @@ import pytest
 from product.backend.bootstrap.application import ApplicationCore
 from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.samples.official.installation import _load_installation
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.runtime.runtime_environment import runtime_identity_environment, write_python_installation_contract
 from tests.support.builders.runtime.official_preparation import prepare_actual_sessions, prepare_proof_sources, use_memory_sample_login
 
@@ -32,7 +32,7 @@ def test_manifest_two_is_strict_and_old_python_remains_readable(tmp_path):
 def test_gallery_materials_and_five_real_implementations(tmp_path):
     import time
     var=tmp_path/'var'
-    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     use_memory_sample_login(core)
     try:
         started=core.official_experience.start(consent=True);project=started.project_id
@@ -100,7 +100,7 @@ def test_gallery_materials_and_five_real_implementations(tmp_path):
 @pytest.mark.process
 def test_provided_gallery_files_are_ready_without_capture_or_implicit_adoption(tmp_path):
     var=tmp_path/'var'
-    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     use_memory_sample_login(core)
     try:
         project=core.official_experience.start(consent=True).project_id
@@ -129,7 +129,7 @@ def test_gallery_preset_refreshes_sources_and_preflight_can_continue(tmp_path):
     import json,time
     from product.backend.application.examples.environment import OfficialScenarioVersion
     var=tmp_path/'var'
-    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecretStore(),environ=runtime_identity_environment(var))
+    core=ApplicationCore(var,official_sample_root=SAMPLE,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     use_memory_sample_login(core)
     try:
         project=core.official_experience.start(consent=True).project_id

@@ -1,19 +1,5 @@
-# =============================================================================
-# 权限关系模型与覆盖计划
-#
-# 定位
-#   表达可验证的权限意图，并编译为不执行目标流量的规范化 Verification 用例
-#
-# 职责
-#   定义权限图与规则｜校验跨引用不变量｜编译稳定规范计划
-#
-# 边界
-#   只接受显式、有限、可序列化的关系事实；不包含 URL、秘密、脚本或任意 payload。
-#   本模块不依赖适配器，也不执行 Runner。
-#
-# 调用链
-#   Contract governance / ExecutionWorkflow → PermissionContract → normalized plan
-# =============================================================================
+# 校验完整权限关系的跨引用，并生成稳定排序和指纹的规范检查计划。
+# 只消费已声明的关系和规则，不访问目标或调用执行适配器。
 
 from __future__ import annotations
 
@@ -26,22 +12,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-_ID_PATTERN = r"^[a-z][a-z0-9_-]{0,63}$"
-_TEXT_PATTERN = r"^[a-z][a-z0-9_.:-]{0,127}$"
-_STATE_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]{0,63}$"
 _HEX_PATTERN = r"^[0-9a-f]{64}$"
-_SECRET_OR_URL = re.compile(
-    r"(?:https?://|javascript:|data:|bearer\s|authorization\s*[:=]|"
-    r"(?:password|passwd|secret|token|api[_-]?key)\s*[:=])",
-    re.IGNORECASE,
-)
 
 
-from product.backend.domain.verification.permissions.models import ActionDefinition, BatchPermissionRule, CoverageDimension, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition, _ordered_unique, _safe_text
+from product.backend.domain.verification.permissions.models import INTENT_ID_PATTERN, INTENT_TEXT_PATTERN, WORKFLOW_STATE_PATTERN, ActionDefinition, BatchPermissionRule, CoverageDimension, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition, sorted_unique_values, validate_intent_text
 
 class PermissionContract(PermissionModel):
     schema_version: Literal["1"] = "1"
-    contract_id: str = Field(pattern=_ID_PATTERN)
+    contract_id: str = Field(pattern=INTENT_ID_PATTERN)
     version: int = Field(ge=1, le=2_147_483_647)
     role_ids: tuple[str, ...] = Field(min_length=1, max_length=128)
     workflow_states: tuple[str, ...] = Field(min_length=1, max_length=128)
@@ -56,15 +34,15 @@ class PermissionContract(PermissionModel):
     @field_validator("contract_id")
     @classmethod
     def reject_forbidden_contract_text(cls, value: str) -> str:
-        return _safe_text(value, "contract_id")
+        return validate_intent_text(value, "contract_id")
 
     @field_validator("role_ids", "workflow_states")
     @classmethod
     def normalize_declared_ids(cls, values: tuple[str, ...], info: Any) -> tuple[str, ...]:
-        pattern = _STATE_PATTERN if info.field_name == "workflow_states" else _ID_PATTERN
+        pattern = WORKFLOW_STATE_PATTERN if info.field_name == "workflow_states" else INTENT_ID_PATTERN
         if any(not re.fullmatch(pattern, value) for value in values):
             raise ValueError(f"{info.field_name} must contain bounded IDs")
-        return _ordered_unique(values, info.field_name)
+        return sorted_unique_values(values, info.field_name)
 
     @model_validator(mode="after")
     def validate_references(self) -> PermissionContract:
@@ -454,34 +432,34 @@ def parse_permission_contract(raw: bytes | str) -> PermissionContract:
     return PermissionContract.model_validate_json(encoded, strict=True)
 
 class NormalizedPermissionCase(PermissionModel):
-    case_id: str = Field(pattern=_ID_PATTERN)
+    case_id: str = Field(pattern=INTENT_ID_PATTERN)
     fingerprint: str = Field(pattern=_HEX_PATTERN)
     source_kind: Literal["permission"]
-    source_contract_id: str = Field(pattern=_ID_PATTERN)
-    source_rule_id: str = Field(pattern=_ID_PATTERN)
-    subject_id: str = Field(pattern=_ID_PATTERN)
-    action_id: str = Field(pattern=_ID_PATTERN)
-    resource_id: str = Field(pattern=_ID_PATTERN)
+    source_contract_id: str = Field(pattern=INTENT_ID_PATTERN)
+    source_rule_id: str = Field(pattern=INTENT_ID_PATTERN)
+    subject_id: str = Field(pattern=INTENT_ID_PATTERN)
+    action_id: str = Field(pattern=INTENT_ID_PATTERN)
+    resource_id: str = Field(pattern=INTENT_ID_PATTERN)
     relation_path: tuple[str, ...] = Field(min_length=1, max_length=64)
     context: PermissionContext
     expected: PermissionExpectation
     required_observations: tuple[str, ...] = Field(min_length=1, max_length=16)
     seed: int
-    engine_version: str = Field(min_length=1, max_length=128, pattern=_TEXT_PATTERN)
-    source_case_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    source_step_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    source_identity_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    source_resource_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    source_owner_identity_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    source_mutation: str | None = Field(default=None, pattern=_TEXT_PATTERN)
+    engine_version: str = Field(min_length=1, max_length=128, pattern=INTENT_TEXT_PATTERN)
+    source_case_id: str | None = Field(default=None, pattern=INTENT_ID_PATTERN)
+    source_step_id: str | None = Field(default=None, pattern=INTENT_ID_PATTERN)
+    source_identity_id: str | None = Field(default=None, pattern=INTENT_ID_PATTERN)
+    source_resource_id: str | None = Field(default=None, pattern=INTENT_ID_PATTERN)
+    source_owner_identity_id: str | None = Field(default=None, pattern=INTENT_ID_PATTERN)
+    source_mutation: str | None = Field(default=None, pattern=INTENT_TEXT_PATTERN)
 
 
 class NormalizedPermissionPlan(PermissionModel):
     schema_version: Literal["1"] = "1"
-    plan_id: str = Field(pattern=_ID_PATTERN)
-    source_contract_id: str = Field(pattern=_ID_PATTERN)
+    plan_id: str = Field(pattern=INTENT_ID_PATTERN)
+    source_contract_id: str = Field(pattern=INTENT_ID_PATTERN)
     seed: int
-    engine_version: str = Field(min_length=1, max_length=128, pattern=_TEXT_PATTERN)
+    engine_version: str = Field(min_length=1, max_length=128, pattern=INTENT_TEXT_PATTERN)
     cases: tuple[NormalizedPermissionCase, ...] = Field(min_length=1, max_length=8192)
 
     @model_validator(mode="after")

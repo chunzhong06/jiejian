@@ -1,15 +1,5 @@
-# =============================================================================
 # Recording 浏览器适配
-#
-# 定位
-#   Recording Runner 内创建隔离 BrowserContext 和受控 Page 的资源边界
-#
-# 职责
-#   每身份独立 context｜安装事件与网络控制｜按确定顺序关闭页面、context 和 browser
-#
-# 调用链
-#   recording_process → BrowserRecordingAdapter → RecordingEventCollector / Playwright
-# =============================================================================
+# 每身份独立 context、安装事件与网络控制、按确定顺序关闭页面、context 和 browser
 
 from __future__ import annotations
 

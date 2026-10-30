@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.secrets import MemorySecrets
 import hashlib
 import json
 from dataclasses import dataclass
@@ -23,25 +24,6 @@ from product.protocols.recording.events import RecordingEvent, RecordingEventKin
 from product.protocols.web.request import ValueSlotConsumer
 
 from tests.support.builders.checks import assurance
-
-
-class MemorySecretStore:
-    """仅为离线测试提供按引用判断，不连接平台凭据管理器。"""
-
-    def __init__(self) -> None:
-        self._values: dict[str, str] = {}
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        self._values[secret_ref] = secret
-
-    def read(self, secret_ref: str) -> str | None:
-        return self._values.get(secret_ref)
-
-    def delete(self, secret_ref: str) -> None:
-        self._values.pop(secret_ref, None)
-
-    def configured(self, secret_ref: str | None) -> bool:
-        return secret_ref is not None and secret_ref in self._values
 
 
 @dataclass(frozen=True)
@@ -72,7 +54,7 @@ def build_preparation_harness(tmp_path: Path, *, identity_count: int = 1, state_
     source_root.mkdir()
     source_file = source_root / "routes.py"
     source_file.write_text("def update_document():\n    return True\n", encoding="utf-8")
-    secret_store = MemorySecretStore()
+    secret_store = MemorySecrets()
     core = core or ApplicationCore(var_dir, secret_store=secret_store, environ={})
     secret_store = core.secret_store
     connection = core.application_understanding.connect(source_root, project_name="fixture-app")
@@ -395,7 +377,7 @@ def add_recording(
         created_at_us=3,
     )
     # 同步保存不可变请求和 Job hash，使审阅走真实来源 reader，而非绕过生产检查。
-    from tests.support.builders.preparation.recording import runner_request
+    from tests.support.builders.preparation.recording_facts import runner_request
     from product.backend.infrastructure.recording.request_store import RecordingRequestStore
     from product.backend.infrastructure.storage.execution.jobs import JobRecord
     from product.backend.domain.lifecycle import JobState
@@ -435,4 +417,4 @@ def current_identity(harness: PreparationHarness, identity_index: int = 0) -> Te
     return record
 
 
-__all__ = ["MemorySecretStore", "PreparationHarness", "add_recording", "build_preparation_harness", "current_identity"]
+__all__ = ["PreparationHarness", "add_recording", "build_preparation_harness", "current_identity"]

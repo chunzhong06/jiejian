@@ -1,24 +1,11 @@
-# =============================================================================
 # Azure Blob 只读对象观察器
-#
-# 定位
-#   Runner 隔离域内对授权 Blob 范围的多面事实采集
-#
-# 职责
-#   固定 container/prefix｜有界 list、head、get｜SAS 与响应原文隔离
-#
-# 边界
-#   仅形成 Observation，不决定 Verdict；超时、取消或完整性不足均不可视为安全。
-#
-# 调用链
-#   Runner → observer parent → isolated child → Azure Blob REST
-# =============================================================================
+# 固定 container/prefix、有界 list、head、get、SAS 与响应原文隔离
+# 仅形成 Observation，不决定 Verdict；超时、取消或完整性不足均不可视为安全。
 
 from __future__ import annotations
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
 
 import hashlib
-import json
 import os
 import re
 import subprocess
@@ -422,6 +409,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
     seen_markers: set[str] = set()
     reason: str | None = None
     try:
+        # 分页必须正常耗尽才闭合读取窗口；页数、对象数或时间预算耗尽都不能作为完整读取。
         for page in range(locator.scan_budget.max_pages):
             if (attempt_dir / "cancel.requested").is_file():
                 reason = AZURE_BLOB_CANCELLED
@@ -489,6 +477,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
                     if item.content_length > locator.scan_budget.max_object_bytes:
                         reason = AZURE_BLOB_OBJECT_BYTES
                         break
+                    # 列表与 HEAD 的长度、ETag 和元数据须一致；对象内容仍要有界读取并单独计算摘要。
                     head, total_bytes, head_reason = _request_with_retry(
                         client,
                         "HEAD",

@@ -1,18 +1,6 @@
-# =============================================================================
 # Recording Runner 进程适配
-#
-# 定位
-#   Recording 协议与受控 Playwright 录制之间的独立进程边界
-#
-# 职责
-#   严格读取请求｜运行 BrowserRecordingAdapter｜写入脱敏事件和可信结果
-#
-# 边界
-#   stdout/stderr 不承载录制内容；所有工件留在 staging，最终状态由 Worker 验证后提交。
-#
-# 调用链
-#   recording_process → execute_recording_runner → BrowserRecordingAdapter → RecordingRunnerResult
-# =============================================================================
+# 严格读取请求、运行 BrowserRecordingAdapter、写入脱敏事件和可信结果
+# stdout/stderr 不承载录制内容；所有工件留在 staging，最终状态由 Worker 验证后提交。
 
 from __future__ import annotations
 

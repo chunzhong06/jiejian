@@ -2,13 +2,13 @@
 
 import pytest
 from uuid import uuid4
-from tests.support.builders.preparation.action_preparation import MemorySecretStore
+from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
 from tests.support.builders.control_plane import TestClient, create_app
 
 
 def test_current_source_change_routes_preserve_project_and_reject_client_scope(tmp_path):
-    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     harness = ready_check_harness(tmp_path, core=app.state.context)
     project = harness.project_id
     current = app.state.context.application_understanding.get(project)
@@ -44,3 +44,29 @@ def test_current_source_change_routes_preserve_project_and_reject_client_scope(t
             assert all(job.operation_type != "CHECK" for job in work.jobs.list_for_project(project))
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_registration_previews_real_files_and_rejects_changed_source(tmp_path):
+    app = create_app(tmp_path / 'var', start_worker=False, secret_store=MemorySecrets(), environ={})
+    h = ready_check_harness(tmp_path, core=app.state.context)
+    understanding = app.state.context.application_understanding.get(h.project_id)
+    app.state.context.application_understanding.analyze_source_for_change(h.project_id, revision=understanding.revision)
+    path = f'/api/projects/{h.project_id}/source-changes'
+    source = h.source_root / 'routes.py'
+    source.write_text('def update_document():\n    return False\n', encoding='utf-8')
+    with TestClient(app) as client:
+        response = client.get(path + '/registration-preview')
+        assert response.status_code == 200, response.text
+        preview = response.json()['data']
+        assert preview['files'] == [{'path': 'routes.py', 'status': 'MODIFIED'}]
+        assert client.get(path).json()['data'] == []
+        body = dict(schema_version='1', operation_id=uuid4().hex, expected_registration_fingerprint=preview['fingerprint'],
+            expected_source_fingerprint=preview['source_fingerprint'], reason='修复访问控制')
+        source.write_text('def update_document():\n    return None\n', encoding='utf-8')
+        assert client.post(path + '/register', json=body).status_code == 409
+        assert client.get(path).json()['data'] == []
+        current = client.get(path + '/registration-preview').json()['data']
+        body['expected_source_fingerprint'] = current['source_fingerprint']
+        saved = client.post(path + '/register', json=body)
+        assert saved.status_code == 201, saved.text
+        assert client.post(path + '/register', json=body).json()['data'] == saved.json()['data']

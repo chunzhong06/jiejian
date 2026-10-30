@@ -1,21 +1,10 @@
-# =============================================================================
 # 源码变化与权限实现影响核心模型
-#
-# 定位
-#   受控源码重分析、Agent 变更声明和长期权限实现映射之间的确定性事实边界。
-#
-# 职责
-#   冻结文件指纹快照｜约束真实增删改｜表达逐 Intent 影响｜保存可选权威修复引用。
-#
-# 边界
-#   不保存源码正文、diff、Git 凭据或命令；不修改 PermissionIntent revision、hash 或 policy epoch。
-#
-# 调用链
-#   SourceChangeService / analyzer → Core models → Storage / application projection
-# =============================================================================
+# 冻结文件指纹快照、约束真实增删改、表达逐 Intent 影响、保存可选权威修复引用。
+# 不保存源码正文、diff、Git 凭据或命令；不修改 PermissionIntent revision、hash 或 policy epoch。
 
 from __future__ import annotations
 
+from product.protocols.checks.execution_request import WireModel, content_hash
 import hashlib
 import json
 import re
@@ -397,3 +386,11 @@ __all__ = [
     "source_fingerprint",
     "source_snapshot_id",
 ]
+
+
+class RuleChangeTarget(WireModel):
+    permission: PermissionReference
+    repair: CurrentRepairReference | None = None
+
+    def key(self):
+        return content_hash('RuleChangeTarget', self.model_dump(mode='json'))

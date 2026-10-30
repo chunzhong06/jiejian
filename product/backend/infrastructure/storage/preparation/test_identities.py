@@ -1,18 +1,6 @@
-# =============================================================================
 # 测试准备：测试身份持久化
-#
-# 定位
-#   TestIdentity 非秘密元数据与 SQLite 关系记录之间的 Repository 边界。
-#
-# 职责
-#   持久化账号与稳定 Actor revision 关联｜保存 Cookie 元数据与秘密引用｜精确替换和删除。
-#
-# 边界
-#   绝不保存 Cookie/Token 正文；Repository 在事务内验证删除，应用服务清理秘密后才提交。
-#
-# 调用链
-#   TestIdentityService → TestIdentityRepository → SQLite
-# =============================================================================
+# 持久化账号与稳定 Actor revision 关联、保存 Cookie 元数据与秘密引用、精确替换和删除。
+# 绝不保存 Cookie/Token 正文；Repository 在事务内验证删除，应用服务清理秘密后才提交。
 
 from __future__ import annotations
 
@@ -74,6 +62,8 @@ class TestIdentityRow(Base):
     actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
     actor_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
+    authentication_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    active_preparation_id: Mapped[str | None] = mapped_column(String(37))
     auth_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bearer_secret_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     prepared_at_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -148,6 +138,7 @@ class TestIdentityRepository:
             raise JiejianError(ErrorCode.TEST_IDENTITY_CONFLICT, "测试账号与项目不匹配")
         values = self._row_values(record)
         ensure_storage_payload_safe(values, self._known_secrets)
+        row.authentication_generation += 1
         for key, value in values.items():
             setattr(row, key, value)
         self._session.execute(
@@ -156,6 +147,17 @@ class TestIdentityRepository:
             )
         )
         self._replace_cookies(record)
+        _flush(self._session)
+
+    def preparation_owner(self, identity_id):
+        row = self._session.get(TestIdentityRow, identity_id)
+        if row is None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
+        return row.authentication_generation, row.active_preparation_id
+
+    def claim_preparation(self, identity_id, preparation_id):
+        row = self._session.get(TestIdentityRow, identity_id)
+        row.active_preparation_id = preparation_id
         _flush(self._session)
 
     def delete(self, identity_id: str) -> None:

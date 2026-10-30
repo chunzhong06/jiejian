@@ -16,7 +16,8 @@ from product.protocols.recording.flow_draft import ConfirmFlowDraftResource, can
 from product.protocols.recording.created_resource import response_object_candidates, location_resource
 from product.protocols.recording.recording_flow import Flow
 from product.protocols.recording.events import RecordingRunnerResultType, RecordingEventKind
-from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, TEST_IDENTITY_ID, recording_request
+from tests.support.builders.preparation.recording import COOKIE_ENV_NAME, recording_request
+from tests.support.builders.preparation.recording_facts import TEST_IDENTITY_ID
 from tests.support.official import until
 
 

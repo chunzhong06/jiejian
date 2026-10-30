@@ -1,18 +1,6 @@
-# =============================================================================
 # 通用执行与安全效果事实
-#
-# 定位
-#   具体执行/观察适配器与 Verification 判定之间的纯事实语言。
-#
-# 职责
-#   表达执行结果｜保留原始观察事实｜聚合与适配器无关的 SecurityEffectFact
-#
-# 边界
-#   HTTP、数据库、队列等适配器字段必须先归约；事实本身不产生 Finding 或 Gate。
-#
-# 调用链
-#   Execution/Observer adapters → ObservationFact → SecurityEffectFact → Verification
-# =============================================================================
+# 表达执行结果、保留原始观察事实、聚合与适配器无关的 SecurityEffectFact
+# HTTP、数据库、队列等适配器字段必须先归约；事实本身不产生 Finding 或 Gate。
 
 from __future__ import annotations
 

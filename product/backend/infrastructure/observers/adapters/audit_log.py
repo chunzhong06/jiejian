@@ -1,9 +1,6 @@
-# =============================================================================
 # Runner 隔离域结构化审计日志观察器
-#
 # 监督器只注入 authorized_root_ref 对应的单一环境变量；子进程仅读取授权根
 # 顶层的固定 JSONL 轮转族，并把显式 case tag 的有界摘要交回 Observer 。
-# =============================================================================
 
 from __future__ import annotations
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
@@ -433,6 +430,7 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
     deadline_ns = time.monotonic_ns() + budget.timeout_us * 1_000
     cursor_paths: dict[str, AuditLogStartCursor] = {}
     reasons: set[str] = set()
+    # 日志可能轮转，文件名不能唯一证明是原文件；用游标前的内容锚点寻找唯一后继。
     for cursor in invocation.start_cursors:
         if cursor.offset == 0:
             cursor_paths[cursor.file_name] = cursor
@@ -499,6 +497,7 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
             line_start = position
             position += len(line)
             if index == len(lines) - 1 and not line.endswith((b"\n", b"\r")):
+                # 最后一行可能仍在追加；保留其起点供下次读取，不能把半条事件作为完整事实消费。
                 next_offsets.append(_cursor_payload(path.name, offset, data, line_start))
                 reasons.add(AUDIT_PARTIAL_LINE)
                 continue
@@ -540,6 +539,7 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
             event_id = record["event_id"]
             canonical = canonical_json_bytes(record)
             if event_id in seen:
+                # 重复投递允许去重，同一事件标识下内容变化则保留冲突，不能静默覆盖。
                 if seen[event_id] != canonical:
                     reasons.add(AUDIT_EVENT_CONFLICT)
                 continue
@@ -590,6 +590,7 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
         reasons.add(AUDIT_TIMEOUT)
     next_offsets.sort(key=lambda item: item["file_name"])
     consumed.sort(key=lambda item: (item["file_name"], item["offset"], item["record_sha256"]))
+    # 来源摘要覆盖实际采用的记录位置与内容，不宣称扫描了日志目录的所有历史。
     source_sha256 = observer_canonical_sha256(consumed)
     if AUDIT_TIMEOUT in reasons:
         return _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, AUDIT_TIMEOUT, started_at_us, utc_now_us())

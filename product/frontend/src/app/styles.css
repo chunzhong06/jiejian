@@ -6,3 +6,12 @@
 @import '../shared/styles/loading.css';
 @import '../shared/styles/motion.css';
 
+.jj-activity { display: grid; gap: 6px; padding: 16px 0 0; border-top: 1px solid var(--line); margin-top: 16px; }
+.jj-activity > span { padding: 0 12px 4px; }
+.jj-activity > .jj-button { display: grid; grid-template-columns: 16px minmax(0,1fr) 12px; gap: 10px; font-size: var(--text-meta); padding: 12px; text-align: left; white-space: normal; }
+.jj-activity > .jj-button > .anticon:first-child { color: var(--accent-ink); }
+.jj-activity > .jj-button[data-attention=true] > .anticon:first-child { color: var(--warn); }
+.jj-activity > .jj-button > .anticon:last-child { color: var(--muted); }
+.jj-activity-label { display: grid; gap: 3px; min-width: 0; }
+.jj-activity-label strong { font-weight: 550; }
+.jj-activity-label small { color: var(--muted); font-size: var(--text-meta); font-weight: 400; }
