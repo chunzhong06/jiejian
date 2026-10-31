@@ -1,6 +1,6 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import { useEffect, useState } from 'react';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import { currentChecksApi as api } from '../../entities/check/api/currentChecks';
 import { Button } from "../../shared/ui/actions";
 import { Badge, ErrorNote } from "../../shared/ui/feedback";

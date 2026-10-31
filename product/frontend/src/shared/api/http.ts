@@ -27,7 +27,8 @@ export class ApiError extends Error {
   }
 }
 
-const pendingReads = new Map<string, Promise<unknown>>()
+type PendingRead = {promise:Promise<unknown>;controller:AbortController;consumers:Set<symbol>}
+const pendingReads = new Map<string, PendingRead>()
 let readGeneration = 0
 
 export function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -40,16 +41,26 @@ export function request<T>(path: string, init?: RequestInit): Promise<T> {
         window.dispatchEvent(new Event('jiejian:activity-changed'))
     })
   }
-  // 独立取消或自定义头的请求不共享 Promise，避免一个消费者中止或改变另一个消费者的读取。
-  if (init?.signal || init?.headers) return send<T>(path, init)
+  if (init&&Object.keys(init).some(key=>key!=='signal'&&key!=='method')) return send<T>(path, init)
+  if (init?.signal?.aborted) return Promise.reject(init.signal.reason??new DOMException('读取已取消','AbortError'))
   const key = `${readGeneration}:${path}`
-  const existing = pendingReads.get(key)
-  if (existing) return existing as Promise<T>
-  const operation = send<T>(path, init).finally(() => {
-    if (pendingReads.get(key) === operation) pendingReads.delete(key)
+  let operation = pendingReads.get(key)
+  if (!operation) {
+    const controller=new AbortController()
+    operation={controller,consumers:new Set(),promise:send<T>(path,{...init,signal:controller.signal}).finally(()=>{
+      if(pendingReads.get(key)===operation)pendingReads.delete(key)
+    })}
+    pendingReads.set(key,operation)
+  }
+  const shared=operation,consumer=Symbol()
+  shared.consumers.add(consumer)
+  return new Promise<T>((resolve,reject)=>{
+    const release=()=>{init?.signal?.removeEventListener('abort',cancel);shared.consumers.delete(consumer)}
+    const cancel=()=>{release();if(!shared.consumers.size){shared.controller.abort();if(pendingReads.get(key)===shared)pendingReads.delete(key)};reject(init?.signal?.reason??new DOMException('读取已取消','AbortError'))}
+    init?.signal?.addEventListener('abort',cancel,{once:true})
+    // 每个订阅者独立取消，只有最后一个离开时才取消底层读取。
+    shared.promise.then(value=>{release();resolve(value as T)},error=>{release();reject(error)})
   })
-  pendingReads.set(key, operation)
-  return operation
 }
 
 async function send<T>(path: string, init?: RequestInit): Promise<T> {

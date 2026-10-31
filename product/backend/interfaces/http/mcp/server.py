@@ -237,7 +237,9 @@ def build_mcp_control(
             raise _as_mcp_error(JiejianError(ErrorCode.STATE_PRECONDITION,"指定原题需要源检查引用"))
         value = _invoke(lambda:context.project_repair.evaluate(project_id))
         return {"project_id":project_id,"status":value.status,"tasks":[{"status":item.status,"change_id":item.change_id,
-            "run_id":item.run_id,"requirement":_current_repair_view(item.contract)} for item in value.tasks]}
+            "run_id":item.run_id,"history":_json(item.history),"recurrence_count":item.recurrence_count,
+            "first_source_run_id":item.first_source_run_id,"last_verified_run_id":item.last_verified_run_id,
+            "verification":_json(item.verification),"requirement":_current_repair_view(item.contract)} for item in value.tasks]}
 
     @server.tool(name="jiejian_change_registration_preview", structured_output=True)
     def change_registration_preview(ctx: Context, project_id: str) -> dict[str, Any]:
@@ -253,7 +255,7 @@ def build_mcp_control(
         """一次登记修改，无需另行建任务或接单；回执未知时按 DELIVER 与原 operation_id 查询。"""
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
         name = _REQUEST_CLIENT.get()
-        submitted_by = "MCP Agent" if name is None else "MCP · " + name[:122]
+        submitted_by = "MCP Agent" if name is None else "MCP " + name[:122]
         return _json(_invoke(lambda: context.development.register_change(project_id, operation_id=operation_id,
             expected_registration_fingerprint=expected_registration_fingerprint, reason=reason,
             claimed_paths=claimed_paths or (), repair_reference=repair_reference, submitted_by=submitted_by, rule_targets=rule_targets or ())))

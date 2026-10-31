@@ -27,6 +27,8 @@
 .jj-system-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: var(--text-body); }
 .jj-system-facts dt { color: var(--muted); }
 .jj-system-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.jj-system-popover-footer { display:flex; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }
+.jj-system-popover-footer > .jj-button { margin-right:-8px; padding-inline:8px; font-size:var(--text-meta); }
 .jj-system-facts > div + div { border-top: 1px solid var(--line); padding-top: 12px; }
 .jj-system-refresh { width: 32px; min-height: 32px; padding: 7px; flex: none; }
 .jj-info-popover .jj-notice { margin-top: 16px; }

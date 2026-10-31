@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react'
-import {CloseOutlined} from '@ant-design/icons'
+import CloseOutlined from '@ant-design/icons/CloseOutlined';
 import {Button} from '../shared/ui/actions'
 import {ErrorNote} from '../shared/ui/feedback'
 import {commitPageTransition} from '../shared/lib/pageTransition'

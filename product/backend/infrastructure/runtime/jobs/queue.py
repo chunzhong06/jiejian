@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from uuid import uuid4
+from threading import Event
 
 from product.backend.domain.lifecycle import JobState, RunLifecycle
 from product.backend.domain.errors import ErrorCode, JiejianError
@@ -33,6 +34,15 @@ class JobQueue:
     ) -> None:
         self._uow_factory = uow_factory
         self._targets = targets or current_check_and_recording_targets()
+        self._submitted = Event()
+
+    def wake(self) -> None:
+        self._submitted.set()
+
+    def wait_for_submission(self, timeout: float) -> None:
+        """本地通知只缩短等待；外部进程的提交仍由有界轮询发现。"""
+        self._submitted.wait(timeout)
+        self._submitted.clear()
 
     def submit(
         self,
@@ -111,6 +121,7 @@ class JobQueue:
                     metadata={"attempt": 0},
                 )
                 work.commit()
+                self.wake()
                 return JobSubmissionResult(created=True, job=job, run=run)
         except JiejianError as exc:
             if exc.code != ErrorCode.STORAGE_CONSTRAINT.value:

@@ -55,6 +55,13 @@ export type StoryTraceEvent = {
   source_component: string; source_location: string
 }
 export type StoryExecutionPath = { complete: boolean; reason_codes: string[]; events: StoryTraceEvent[]; evidence_refs: string[] }
+export type ActivityEvent = {
+  event_id: string; parent_event_id: string | null; kind: 'HTTP_SERVER' | 'HTTP_CLIENT' | 'SQLITE' | 'FILESYSTEM'
+  operation: 'REQUEST' | 'EXEC' | 'PREPARE' | 'RUN' | 'GET' | 'ALL' | 'ITERATE' | 'READ' | 'WRITE' | 'APPEND'
+  started_at_us: number; duration_us: number; outcome: 'OK' | 'ERROR' | 'INCOMPLETE'; source_location: string | null
+  http_method: string | null; http_status: number | null
+}
+export type RequestActivity = { collector: 'CONTROLLED_NODE'; adapters: string[]; complete: boolean; dropped_count: number; events: ActivityEvent[] }
 export type StoryProofCoverage = {
   effect_id: string; business_label: string; proof_fingerprint: string
   required_level: 'VERDICT_REQUIRED' | 'SUPPORTING'; source_label: string
@@ -73,15 +80,18 @@ export type ActionResultStory = {
   breakpoint: CheckBreakpoint | null; decisive_proof_chain: EvidenceExplanation[]; evidence_explanations: EvidenceExplanation[]
   claim_boundary: string[]; repair_requirement: RepairContract | null; repair_comparison?: RepairComparisonRow[]; technical_references: string[]
   execution_path?: StoryExecutionPath | null
+  request_activity?: {capture: RequestActivity; evidence_refs: string[]} | null
+  activity_error?: string | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
+export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
   schema_version: '1' | '2' | '3'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
   trace: { complete: boolean; events: Array<{ event_id: string; parent_event_ids: string[]; kind: string; source_component: string; source_location: string }> } | null
+  activity?: RequestActivity | null
 }
-export type EvidenceRecordLink = {record_id:string;kind:'FACT'|'OUTCOME'|'OBSERVATION'|'TRACE';label:string;proof_fingerprint:string|null;observer_id:string|null;phase:string|null;event_id:string|null}
+export type EvidenceRecordLink = {record_id:string;kind:'FACT'|'OUTCOME'|'OBSERVATION'|'TRACE'|'ACTIVITY';label:string;proof_fingerprint:string|null;observer_id:string|null;phase:string|null;event_id:string|null}
 export type EvidenceRecordIndex = {project_id:string;run_id:string;case_id:string;action_id:string;evidence_id:string;records:EvidenceRecordLink[]}
 export type EvidenceRecordView = Omit<EvidenceRecordIndex,'records'> & {record:EvidenceRecordLink;summary:string;published_judgement:string;role:'PROOF'|'SUPPORTING';
   verification:Array<{key:string;title:string;status:'CONFIRMED'|'LIMITED'|'UNKNOWN';text:string;record_refs:string[];source:Record<string,string>;fragment:Record<string,unknown>}>;
@@ -129,9 +139,10 @@ export const currentChecksApi = {
   cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   status: readStatus,
   story: (id: string, signal?:AbortSignal) => request<ResultStory>(`${runPath(id)}/result-story`,{signal}),
-  evidenceBundle:(projectId:string,runId:string,caseId:string,ids:string[])=>{
+  evidenceBundle:(projectId:string,runId:string,caseId:string,ids:string[],recordId?:string|null)=>{
     const query=new URLSearchParams({project_id:projectId,case_id:caseId});ids.forEach(id=>query.append('evidence_id',id))
-    return request<{project_id:string;run_id:string;case_id:string;items:Array<{document:CheckEvidence;index:EvidenceRecordIndex}>}>(`${runPath(runId)}/evidence-bundle?${query}`)
+    if(recordId)query.set('record_id',recordId)
+    return request<{project_id:string;run_id:string;case_id:string;items:Array<{document:CheckEvidence;index:EvidenceRecordIndex;record?:EvidenceRecordView}>}>(`${runPath(runId)}/evidence-bundle?${query}`)
   },
   evidence: async (runId: string, evidenceId: string) => {
     const value = await request<CheckEvidence>(`${runPath(runId)}/evidence/${encodeURIComponent(evidenceId)}`)

@@ -1,6 +1,9 @@
 import './workspace.css'
 import { useRef, useState } from 'react';
-import { ArrowRightOutlined, CheckOutlined, LinkOutlined, SafetyOutlined } from '@ant-design/icons';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import LinkOutlined from '@ant-design/icons/LinkOutlined';
+import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
 import { agentClients, agentConnectionsApi, mcpAccessApi, type AgentClient, type MCPAccessLevel, type AgentConnection } from '../../entities/runtime/api/mcp';
 import { Choice } from "../../shared/ui/Choice";
 import { Badge, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";

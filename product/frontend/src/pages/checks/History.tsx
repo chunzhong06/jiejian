@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRightOutlined } from '@ant-design/icons';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { currentChecksApi as api, type CheckHistoryCursor, type CheckVerdict } from '../../entities/check/api/currentChecks';
 import { Choice } from "../../shared/ui/Choice";
 import { Button } from "../../shared/ui/actions";

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from scripts.build.common import RELEASE_VERSION, RELEASE_NAME, FULL_ARCHIVE, NOSAMPLES_ARCHIVE, inside, reset_directory, run, sha256
 from scripts.build.runtime import runtime_environment, copy_runtime, install_product, metadata, place_product
-from scripts.build.resources import write_runtime_files
+from scripts.build.resources import write_runtime_files, write_update_manifest
 from scripts.build.launcher import compile_launcher
 from scripts.build.validation import validate_base
 from scripts.build.archive import write_zip, archive_content
@@ -108,6 +108,7 @@ def build(arguments: argparse.Namespace) -> None:
     place_product(base, python)
     write_runtime_files(base, runtime_metadata, project_root)
     compile_launcher(base, arguments.launcher_compiler.resolve(), toolchain, environment, project_root)
+    write_update_manifest(base)
     validate_base(base, project_root)
 
     full = artifacts / FULL_ARCHIVE

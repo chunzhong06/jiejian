@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, ArrowRightOutlined, SafetyOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
+import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
+import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
+import StopOutlined from '@ant-design/icons/StopOutlined';
 import { businessBoundariesApi as api, type BoundaryMaintenanceDraftDto, type BoundaryMaintenanceCommandDto, type ProposedEffectDto } from '../../entities/permission/api/businessBoundaries';
 import { ApiError } from '../../shared/api/http';
 import { readPending, savePending } from '../../shared/lib/operations';

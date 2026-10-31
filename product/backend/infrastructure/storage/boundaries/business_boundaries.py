@@ -266,6 +266,15 @@ class BusinessBoundaryRepository:
         rows = _scalars(self._session, select(BusinessActorRow).where(BusinessActorRow.project_id == project_id).order_by(BusinessActorRow.actor_id))
         return tuple(BusinessActor.model_validate(self._columns(row)) for row in rows)
 
+    def actor_revisions(self, project_id: str, keys) -> dict[tuple[str, int], BusinessActorRevision]:
+        from sqlalchemy import tuple_
+        if not keys:
+            return {}
+        rows = _scalars(self._session, select(BusinessActorRevisionRow).where(
+            BusinessActorRevisionRow.project_id == project_id,
+            tuple_(BusinessActorRevisionRow.actor_id, BusinessActorRevisionRow.revision).in_(keys)))
+        return {(row.actor_id, row.revision): self._actor_revision(row) for row in rows}
+
     def add_action(self, action: BusinessAction) -> None:
         self._add(BusinessActionRow, action.model_dump(mode="json"))
 

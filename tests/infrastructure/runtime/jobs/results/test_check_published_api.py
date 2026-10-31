@@ -111,7 +111,9 @@ def test_published_api_story_evidence_without_assistant_and_tamper(package_parts
         reading=reading.json()['data']
         sections={item['key']:item for item in reading['verification']}
         assert {'rule','experiment','method','association','reason','boundary'}<=sections.keys()
-        assert any('旧证据' in text for text in reading['limitations'])
+        assert reading['limitations']
+        assert reading['values'] == []
+        assert 'correlation_refs' not in reading['fragment']
         assert reading['location']['pointer'].startswith('/observations/')
         assert sections['rule']['source']['pointer']=='/case/permission'
         assert 'request_ref' not in json.dumps(reading) and 'lease_owner' not in json.dumps(reading)
@@ -172,6 +174,7 @@ def test_published_story_and_project_repair_share_read_only_comparison(package_p
         permission_intents=contract.original_intents))
     monkeypatch.setattr(context.source_changes, "latest_for_repair", lambda *args: N(manifest=N(change_id=change.change_id),
         revalidation=N(status="READY", can_execute=True)))
+    monkeypatch.setattr(context.source_changes, "repair_references", lambda *args: (contract.reference(),))
     targets=Mock(return_value=())
     monkeypatch.setattr(context.source_changes, 'targets', targets)
     # 服务构造时已保存 bound method，必须注入实际使用的只读依赖，而非事后替换未被调用的方法。

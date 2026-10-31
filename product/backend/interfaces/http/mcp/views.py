@@ -25,7 +25,7 @@ def _current_change_view(value):
     """Agent 仅看到相对路径与业务影响，不得到源码、快照或配置指纹。"""
     return dict(project_id=value.manifest.project_id,change_id=value.manifest.change_id,reason=value.manifest.reason,
         submitted_by=value.manifest.submitted_by,claimed_paths=list(value.manifest.claimed_paths),
-        registration_status="RECORDED", repair_reference=_json(value.manifest.repair_reference),
+        rule_targets=_json(value.rule_targets), registration_status="RECORDED", repair_reference=_json(value.manifest.repair_reference),
         comparison_status=value.change_set.status,
         receipt_boundary="登记回执只确认本批修改已记录，不确认修复成功；无需让用户重复登记。",
         added_paths=list(value.change_set.added_paths),modified_paths=list(value.change_set.modified_paths),
@@ -53,7 +53,7 @@ def _current_repair_view(contract):
 
 def _current_story_view(story):
     return dict(run_id=story.run_id,project_id=story.project_id,verdict=story.verdict,judgement=story.judgement,
-        review_url=f'#/tests?run_id={story.run_id}',
+        review_url=f'#/reports?run_id={story.run_id}',
         interpretation_steps=['先说明已批准的权限、实际测试账号与资源。','按每项 evidence_refs 调用 jiejian_evidence_show 核对原始证据，再解释执行事件、实际观察、结论与缺口。',
             '引用本轮 run_id、case_id、evidence_id 和 review_url；缺少路径时说明采集缺口，不能补造内部调用。',
             '先向用户解释并讨论下一步；修改应用或提交复验必须沿已有变化登记、授权与人工确认流程。'],
@@ -64,7 +64,9 @@ def _current_story_view(story):
             breakpoint=None if item.breakpoint is None else dict(breakpoint_type=item.breakpoint.breakpoint_type,precision=item.breakpoint.precision),
             repair_requirement=None if item.repair_requirement is None else _current_repair_view(item.repair_requirement),
               evidence_refs=[ref for ref in item.technical_references if ref!=item.case_id],
-              execution_path_available=bool(item.execution_path and item.execution_path.events),
-              execution_path_complete=item.execution_path.complete if item.execution_path else False,
-              review_url=f'#/tests?run_id={story.run_id}&case_id={item.case_id}',
-              claim_boundary=list(item.claim_boundary)) for item in story.actions],repair_verification=_json(story.repair_verification))
+              execution_path_available=bool(item.request_activity or item.execution_path and item.execution_path.events),
+              execution_path_complete=item.request_activity.capture.complete if item.request_activity else item.execution_path.complete if item.execution_path else False,
+              execution_path_source='AUTOMATIC_CALLS' if item.request_activity else 'APPLICATION_EVENTS' if item.execution_path and item.execution_path.events else 'UNAVAILABLE',
+              permission_events_available=bool(item.execution_path and item.execution_path.events),
+              review_url=f'#/reports?run_id={story.run_id}&case_id={item.case_id}',
+              claim_boundary=list(item.claim_boundary)) for item in story.actions],repair_verification=_json(story.repair_verification), repair_reviews=_json(story.repair_reviews))

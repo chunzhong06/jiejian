@@ -76,7 +76,7 @@ class CheckObserverRuntime:
         self._evidence_sources = {}
         self._creation_histories = {}
         self._json_sources = {'json_' + item.source_id[4:]:item for item in bundle.proof_sources}
-        self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if self._json_sources else None
+        self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if environ.get('JIEJIAN_VAR_DIR') else None
 
     def restart_case_baseline(self, case_id: str) -> None:
         """恢复后的前置观察重新建窗；已返回的证据保留，内部投影不跨恢复动作拼接。"""
@@ -214,6 +214,24 @@ class CheckObserverRuntime:
         return CheckObservedSource(CheckObservation(**common, state="UNKNOWN", closure="UNKNOWN",
             complete=False, reliable=False, correlated=False, authoritative=False,
             window_end_us=self.clock(), reason_codes=(reason,)), None)
+
+    def activity_fields(self, case):
+        from product.protocols.checks.check_runtime import NodeRuntime
+        from product.backend.infrastructure.observers.records.record_source import read_request_activity
+        from product.backend.infrastructure.observers.adapters.json_source import SourceReadError
+        receipt = self.web.target_request(case.case_id)
+        if self.var_dir is None or not isinstance(self.bundle.runtime, NodeRuntime) or receipt is None:
+            return {}
+        try:
+            activity = read_request_activity(self.var_dir, self.bundle.runtime.reference,
+                *receipt, cancelled=self.cancelled)
+            if activity is not None and any(secret and secret in activity.model_dump_json() for secret in self.known_secrets):
+                return {'activity_error':'ACTIVITY_UNSAFE_RECORD'}
+            return {'activity':activity} if activity is not None else {'activity_error':'ACTIVITY_NOT_RECORDED'}
+        except SourceReadError as error:
+            return {'activity_error':'ACTIVITY_SOURCE_INVALID' if error.code in {'ACTIVITY_CORRELATION_INVALID','RECORD_SOURCE_INVALID'} else 'ACTIVITY_SOURCE_UNAVAILABLE'}
+        except (JiejianError, OSError):
+            return {'activity_error':'ACTIVITY_SOURCE_UNAVAILABLE'}
 
     def trace(self, action, case):
         from product.backend.infrastructure.observers.checks.check_trace import build_check_trace

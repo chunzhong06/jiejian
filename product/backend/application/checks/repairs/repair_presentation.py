@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from product.backend.domain.checks.repair import CurrentRepairContract, repair_case_identity, repair_context
+from product.backend.domain.checks.repair import CurrentRepairContract, CurrentRepairReference, CurrentRepairVerification, repair_case_identity, repair_context
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.lifecycle import CaseVerdict
 from product.protocols.checks.execution_request import WireModel
@@ -26,7 +26,13 @@ class RepairComparisonRow(WireModel):
     match_status: Literal["NOT_AVAILABLE", "MATCHED", "NOT_FOUND", "AMBIGUOUS"]
 
 
-def build_repair_comparison(contract: CurrentRepairContract, source, current=None) -> tuple[RepairComparisonRow, ...]:
+class RepairReview(WireModel):
+    reference: CurrentRepairReference
+    verification: CurrentRepairVerification
+    comparison: tuple[RepairComparisonRow, ...]
+
+
+def build_repair_comparison(contract: CurrentRepairContract, source, current=None, *, linked_reference=None) -> tuple[RepairComparisonRow, ...]:
     """调用者先通过严格 Reader；关联诊断只复制结果，不替代原题复验与证据标准核验。"""
     if source.result.run_id != contract.source_run_id or source.request.project_id != contract.project_id:
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "原题修复要求无法从已发布事实重建")
@@ -38,7 +44,7 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
         current.result.run_id != contract.source_run_id
         and current.request.project_id == contract.project_id
         and current.request.change_context is not None
-        and current.request.repair_context == repair_context(contract)
+        and (current.request.repair_context == repair_context(contract) or linked_reference == contract.reference())
     )
     candidates, current_results = {}, {}
     if available:

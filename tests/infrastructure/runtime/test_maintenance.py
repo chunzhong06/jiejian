@@ -13,6 +13,40 @@ from product.backend.infrastructure.runtime.generated_files import register_gene
 from product.backend.infrastructure.runtime.worker.lifetime import WorkerLifetimeLock
 
 
+def test_interrupted_cleanup_keeps_confirmed_results_without_replaying_deletion(tmp_path, monkeypatch):
+    service = LocalMaintenanceService(tmp_path / 'var')
+    for name in ('first.bin', 'second.bin'):
+        path = service.paths.assistant_cache / name
+        path.write_bytes(b'cache')
+        register_generated_file(service.paths.root, path, 'assistant-cache')
+    plan = service.preview('clear-assistant-cache')
+    execute = service._execute_candidate
+    calls = []
+    def interrupt(item):
+        calls.append(item.item_id)
+        if len(calls) == 2:
+            raise KeyboardInterrupt()
+        return execute(item)
+    monkeypatch.setattr(service, '_execute_candidate', interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        service.execute(plan['plan_id'])
+    recovered = LocalMaintenanceService(service.paths.root)
+    result = recovered.outcome(plan['plan_id'])
+    assert result['state'] == 'INTERRUPTED'
+    assert result['result']['counts']['DELETED'] == 1
+    assert result['result']['unconfirmed'] == 1
+    assert recovered.status()['unresolved_plans'] == [plan['plan_id']]
+    with pytest.raises(Exception, match='先查询'):
+        recovered.preview('clear-assistant-cache')
+    with pytest.raises(Exception, match='原清理已中断'):
+        recovered.execute(plan['plan_id'])
+    assert len(list(service.paths.assistant_cache.glob('*.bin'))) == 1
+    recovered.review_interruption(plan['plan_id'])
+    assert recovered.status()['unresolved_plans'] == []
+    assert recovered.outcome(plan['plan_id'])['state'] == 'INTERRUPTED'
+    assert recovered.preview('clear-assistant-cache')['targets']
+
+
 def test_gui_profile_is_not_temporary_or_damaged_runtime(tmp_path: Path) -> None:
     service = LocalMaintenanceService(tmp_path / "var", session_started_at=time.time() + 60)
     profile = service.paths.gui_browser

@@ -3,7 +3,10 @@ import './styles/permissions.css'
 import './styles/rules.css'
 import './workspace.css'
 import { useEffect, useRef, useState } from 'react';
-import { CheckOutlined, MinusOutlined, ArrowLeftOutlined, CloseOutlined } from '@ant-design/icons';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import MinusOutlined from '@ant-design/icons/MinusOutlined';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import CloseOutlined from '@ant-design/icons/CloseOutlined';
 import { businessBoundariesApi as api, type BusinessBoundaryViewDto, type BoundaryProposalViewDto, type BoundaryReviewValueDto } from '../../entities/permission/api/businessBoundaries';
 import { ruleCandidatesApi, type RuleCandidateView } from '../../entities/permission/api/ruleCandidates';
 import { RuleEditor } from './RuleEditor';

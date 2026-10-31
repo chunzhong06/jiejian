@@ -29,9 +29,10 @@ class DevelopmentReader:
             if before_task_id is not None and before is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "任务游标不属于当前应用")
             tasks = work.development.tasks(project_id, limit + 1, before=before)
+            contexts = work.development.contexts(project_id, [task.context_id for task in tasks[:limit]])
             items = []
             for task in tasks[:limit]:
-                context = work.development.context(project_id, task.context_id)
+                context = contexts.get(task.context_id)
                 if context is None:
                     raise JiejianError(ErrorCode.STORAGE_FAILURE, "任务上下文缺失")
                 items.append(dict(task_id=task.task_id, title=context.title, status=task.status,
@@ -45,13 +46,14 @@ class DevelopmentReader:
         self.task(project_id, task_id)
         with self._uow() as work:
             values = work.development.deliveries(project_id, task_id, limit + 1, before_ordinal=before_ordinal)
+            descriptions = work.source_changes.change_descriptions(project_id, [item.change_id for item in values[:limit]])
             items = []
             for delivery in values[:limit]:
-                saved = work.source_changes.current_change(project_id, delivery.change_id)
+                saved = descriptions.get(delivery.change_id)
                 if saved is None:
                     raise JiejianError(ErrorCode.STORAGE_FAILURE, "交付变化记录缺失")
-                items.append(dict(delivery=delivery.model_dump(mode="json"), reason=saved[0].reason,
-                    submitted_by=saved[0].submitted_by))
+                items.append(dict(delivery=delivery.model_dump(mode="json"), reason=saved["reason"],
+                    submitted_by=saved["submitted_by"]))
         return dict(project_id=project_id, task_id=task_id, items=items,
             next_ordinal=values[limit - 1].ordinal if len(values) > limit else None)
 
@@ -88,25 +90,27 @@ class DevelopmentReader:
                 if snapshot is not None and context is not None:
                     same_source_run_id = work.runs.completed_for_source(project_id, snapshot.source_fingerprint, context.policy_epoch, delivery.created_at_us)
         value = dict(delivery=delivery.model_dump(mode="json"), run_id=run_id, lifecycle=None,
-            verdict=None, runtime_status="UNSUPPORTED", repair_status=None, same_source_run_id=None)
+            verdict=None, runtime_status="UNSUPPORTED", repair_status=None, repair_verifications=[], same_source_run_id=None)
         if same_source_run_id is not None and self._results is not None:
             status = self._results.status(same_source_run_id, project_id=project_id)
             if status.result_integrity == 'VALID':
                 value['same_source_run_id'] = same_source_run_id
         if run_id is None or self._results is None:
             return value
-        status = self._results.status(run_id, project_id=project_id)
+        status, package = self._results.inspect(run_id, project_id=project_id)
         value["lifecycle"] = status.run.lifecycle.value
         if status.result_integrity != "VALID":
             return value
-        package = self._results.package(run_id, project_id=project_id)
+        assert package is not None
         if package.request.change_context is None or package.request.change_context.change_id != delivery.change_id:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "交付检查关联不完整")
         correspondence = getattr(package.result, "runtime_correspondence", None)
         value["runtime_status"] = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         value["verdict"] = package.result.verdict.value if package.result.verdict is not None else None
-        repair = None if self._repairs is None else self._repairs.verification(run_id)
-        value["repair_status"] = None if repair is None else repair.status
+        reviews = () if self._repairs is None else self._repairs.reviews_from_verified_package(package)
+        value["repair_verifications"] = [item.verification.model_dump(mode="json") for item in reviews]
+        priority = {"NOT_VERIFIED": 0, "STALE": 1, "INCONCLUSIVE": 2, "VERIFIED": 3}
+        value["repair_status"] = min((item.verification.status for item in reviews), key=priority.get, default=None)
         return value
 
 

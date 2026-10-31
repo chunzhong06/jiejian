@@ -3,7 +3,17 @@ import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import './styles/preparation.css'
 import './styles/materials.css'
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftOutlined, UserOutlined, VideoCameraOutlined, DatabaseOutlined, FileDoneOutlined, UndoOutlined, ArrowRightOutlined, CheckOutlined, CheckCircleOutlined, ClockCircleOutlined, RightOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import UserOutlined from '@ant-design/icons/UserOutlined';
+import VideoCameraOutlined from '@ant-design/icons/VideoCameraOutlined';
+import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined';
+import FileDoneOutlined from '@ant-design/icons/FileDoneOutlined';
+import UndoOutlined from '@ant-design/icons/UndoOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
+import ClockCircleOutlined from '@ant-design/icons/ClockCircleOutlined';
+import RightOutlined from '@ant-design/icons/RightOutlined';
 import { preparationApi, type ActionPreparation, type MaterialReference, type PreparationItem } from '../../entities/preparation/api/preparation';
 import { preparationBatchesApi as batches, type PreparationBatchPlan } from '../../entities/preparation/api/batches';
 import { assertProject, type PageProps } from '../../shared/model/page';

@@ -7,6 +7,8 @@ import sqlite3
 from contextlib import closing
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
+from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, Integer, String, create_engine
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,6 +19,29 @@ from product.backend.infrastructure.storage.schema import sqlite_schema_signatur
 
 WORKSPACE_FORMAT = "jiejian.workspace"
 WORKSPACE_GENERATION = 1
+
+
+class WorkspaceRevision:
+    """用独立只读连接观察其他连接提交；仅用于界面刷新，不接受缓存安全结论。"""
+
+    def __init__(self, path: Path):
+        self._path, self._connection = path, None
+        self._generation, self._lock = uuid4().hex, Lock()
+
+    def read(self):
+        with self._lock:
+            if self._connection is None:
+                self._generation = uuid4().hex
+                self._connection = sqlite3.connect(self._path.as_uri()+'?mode=ro', uri=True,
+                    check_same_thread=False, isolation_level=None)
+            revision = self._connection.execute('PRAGMA data_version').fetchone()[0]
+            return {'revision': f'{self._generation}:{revision}'}
+
+    def close(self):
+        with self._lock:
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
 
 
 class WorkspaceSchemaRow(Base):

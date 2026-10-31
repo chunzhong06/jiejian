@@ -1,5 +1,6 @@
 # 验证通用同步记录的原子性、完整历史和幂等；不依赖任何本地业务应用。
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -180,3 +181,81 @@ def test_credential_fields_and_unbounded_values_are_rejected(payload):
         RecordSeed(collection="records", resource_id="item-1", owner_id="person-1", data=payload)
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_incremental_history_limits_writes_and_preserves_operations_after_checkpoints(tmp_path):
+    value = store(tmp_path)
+    for index in range(24):
+        value.seed(RecordSeed(collection='large', resource_id=f'item-{index}', owner_id='person-1', data={'text':'x'*5000}))
+    before = value._file.tell()
+    snapshots = 0
+    operations = []
+    for index in range(80):
+        operations.append(value.transact(command().model_copy(update={
+            'request_key':f'change-{index}', 'expected_version':index})))
+        snapshots += len(value._db.serialize())
+    written = value._file.tell() - before
+    assert written < snapshots // 3
+    value.close()
+    with closing(TransactionRecordStore(value.database)) as reopened:
+        assert reopened.read('records', 'item-1').version == 80
+        assert [reopened.operation(item.operation_id) for item in operations] == operations
+
+
+def test_existing_snapshot_history_continues_without_rewriting_its_prefix(tmp_path):
+    import hashlib
+    import struct
+    value = store(tmp_path)
+    image = value._db.serialize()
+    value.close()
+    length = struct.pack('>I', len(image))
+    legacy = b'JIEJIAN-TRANSACTION-RECORDS-3\n' + length + image + hashlib.sha256(bytes(32)+length+image).digest()
+    value.database.write_bytes(legacy)
+    with closing(TransactionRecordStore(value.database)) as reopened:
+        operation = reopened.transact(command())
+    assert value.database.read_bytes().startswith(legacy)
+    with closing(TransactionRecordStore(value.database)) as reopened:
+        assert reopened.operation(operation.operation_id) == operation
+
+
+def test_unconfirmed_persistence_poisoning_prevents_further_reads(tmp_path, monkeypatch):
+    import os
+    value = store(tmp_path)
+    with monkeypatch.context() as scope:
+        scope.setattr(os, 'fsync', lambda descriptor: (_ for _ in ()).throw(OSError('interrupted')))
+        with pytest.raises(OSError):
+            value.transact(command())
+    try:
+        with pytest.raises(RecordStoreError, match='RECORD_STORE_UNAVAILABLE'):
+            value.read('records', 'item-1')
+    finally:
+        value.close()
+
+
+@pytest.mark.parametrize('damage', ['size', 'expansion', 'duplicate-page', 'trailing-stream'])
+def test_compressed_history_rejects_invalid_payload_even_with_a_matching_chain(tmp_path, damage):
+    import hashlib
+    import struct
+    import zlib
+    value = store(tmp_path)
+    image = value._db.serialize()
+    value.close()
+    first = b'JJC1' + struct.pack('>I', len(image)) + zlib.compress(image)
+    if damage == 'size':
+        payload = b'JJC1' + struct.pack('>I', 2**31) + zlib.compress(image)
+    elif damage == 'expansion':
+        payload = b'JJC1' + struct.pack('>I', 16) + zlib.compress(b'x'*17)
+    elif damage == 'trailing-stream':
+        payload = first + zlib.compress(b'extra')
+    else:
+        page_size = struct.unpack('>H', image[16:18])[0]
+        page = struct.pack('>I', 0) + image[:page_size]
+        payload = b'JJD1' + zlib.compress(struct.pack('>III', len(image), page_size, 2) + page + page)
+    raw, digest = b'JIEJIAN-TRANSACTION-RECORDS-3\n', bytes(32)
+    for data in (first, payload):
+        length = struct.pack('>I', len(data))
+        digest = hashlib.sha256(digest+length+data).digest()
+        raw += length + data + digest
+    value.database.write_bytes(raw)
+    with pytest.raises(RecordStoreError, match='RECORD_HISTORY_'):
+        TransactionRecordStore(value.database)

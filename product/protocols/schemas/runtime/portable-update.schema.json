@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "PortableUpdateFile": {
+      "additionalProperties": false,
+      "properties": {
+        "relative_path": {
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256"
+      ],
+      "title": "PortableUpdateFile",
+      "type": "object"
+    },
+    "PortableWorkspaceIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "minimum": 1,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "revision": {
+          "minLength": 1,
+          "title": "Revision",
+          "type": "string"
+        },
+        "schema_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "revision",
+        "schema_digest"
+      ],
+      "title": "PortableWorkspaceIdentity",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "document_type": {
+      "const": "jiejian.portable-update",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/PortableUpdateFile"
+      },
+      "maxItems": 30000,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "supported_workspaces": {
+      "items": {
+        "$ref": "#/$defs/PortableWorkspaceIdentity"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Supported Workspaces",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    },
+    "workspace_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Workspace Digest",
+      "type": "string"
+    },
+    "workspace_generation": {
+      "minimum": 1,
+      "title": "Workspace Generation",
+      "type": "integer"
+    },
+    "workspace_revision": {
+      "title": "Workspace Revision",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "document_type",
+    "version",
+    "workspace_generation",
+    "workspace_revision",
+    "workspace_digest",
+    "supported_workspaces",
+    "files"
+  ],
+  "title": "PortableUpdateManifest",
+  "type": "object"
+}

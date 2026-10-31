@@ -44,38 +44,38 @@ def build_mcp_access_router(
         return data_response(connections.restore(client))
 
     @router.get("/api/mcp/access", response_model=ApiResponse)
-    async def get_mcp_access():
+    def get_mcp_access():
         return data_response(access.view().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/pair", response_model=ApiResponse)
-    async def pair_mcp_access():
+    def pair_mcp_access():
         return data_response(access.pair().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/reveal", response_model=ApiResponse)
-    async def reveal_mcp_access():
+    def reveal_mcp_access():
         return data_response(access.reveal().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/rotate", response_model=ApiResponse)
-    async def rotate_mcp_access():
+    def rotate_mcp_access():
         return data_response(access.rotate().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/resume", response_model=ApiResponse)
-    async def resume_mcp_access():
+    def resume_mcp_access():
         return data_response(access.resume().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/pause", response_model=ApiResponse)
-    async def pause_mcp_access():
+    def pause_mcp_access():
         return data_response(access.pause().model_dump(mode="json"))
 
     @router.post("/api/mcp/access/forget", response_model=ApiResponse)
-    async def forget_mcp_access():
+    def forget_mcp_access():
         return data_response(access.forget().model_dump(mode="json"))
 
     @router.put(
         "/api/mcp/access/projects/{project_id}",
         response_model=ApiResponse,
     )
-    async def set_mcp_project_access(
+    def set_mcp_project_access(
         project_id: str,
         body: MCPProjectGrantRequest,
     ):

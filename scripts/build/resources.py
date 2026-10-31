@@ -9,6 +9,42 @@ from product.protocols.runtime.portable_release import PortableReleaseManifest
 from scripts.build.common import RELEASE_VERSION
 
 
+def write_update_manifest(base: Path) -> None:
+    from alembic import command
+    from sqlalchemy import create_engine
+    from product.backend.infrastructure.runtime.updates import file_digest, package_files
+    from product.backend.infrastructure.storage.workspace import WORKSPACE_GENERATION, current_schema_digest
+    from product.backend.migrations.runtime import MigrationHistory, migration_config, migration_resources
+    from product.protocols.codec import encode_json
+    from product.protocols.runtime.portable_update import PortableUpdateManifest
+
+    with migration_resources() as root:
+        history = MigrationHistory.load(root)
+        supported = []
+        # 从固定迁移重建每个受支持起点，不把当前 ORM 的摘要套给历史结构。
+        for revision in sorted(history.revisions):
+            engine = create_engine('sqlite+pysqlite:///:memory:')
+            try:
+                with engine.begin() as connection:
+                    config = migration_config(root)
+                    config.attributes['connection'] = connection
+                    command.upgrade(config, revision)
+                    generation, digest = connection.exec_driver_sql(
+                        'SELECT generation, schema_digest FROM workspace_schema WHERE singleton=1').one()
+                    supported.append({'generation': generation, 'revision': revision, 'schema_digest': digest})
+            finally:
+                engine.dispose()
+    files = package_files(base)
+    manifest = PortableUpdateManifest.model_validate({
+        'schema_version': '2', 'document_type': 'jiejian.portable-update', 'version': RELEASE_VERSION,
+        'workspace_generation': WORKSPACE_GENERATION, 'workspace_revision': history.head,
+        'workspace_digest': current_schema_digest(),
+        'supported_workspaces': supported,
+        'files': [{'relative_path': path.relative_to(base).as_posix(), 'sha256': file_digest(path)} for path in sorted(files)],
+    })
+    (base / 'app/update-manifest.json').write_bytes(encode_json(manifest.model_dump(mode='json')))
+
+
 def write_runtime_files(base: Path, metadata: dict[str, str], project_root: Path) -> None:
     launcher = project_root / 'product/launcher/windows'
     guide = (project_root / 'docs/产品/便携版使用.md').read_text('utf-8')

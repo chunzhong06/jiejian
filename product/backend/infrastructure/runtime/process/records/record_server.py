@@ -19,6 +19,7 @@ from product.backend.infrastructure.observers.records.transaction_store import T
 from product.protocols.runtime.transaction_records import RecordKey, RecordSeed, RecordTransaction
 from product.protocols.runtime.transaction_records import RecordProviderReference, RecordProofRequest
 from product.protocols.runtime.record_trace import RecordTraceWrite,RecordTraceReceipt
+from product.protocols.runtime.request_activity import RequestActivity
 from product.protocols.runtime.creation_records import ScopedRecordSeed, RecordRemove
 from product.protocols.runtime.node_runtime import ProjectId
 
@@ -31,11 +32,11 @@ def record_store_path(var_dir: Path, project_id: str) -> Path:
 def record_provider_fingerprint() -> str:
     """冻结产品记录组件本身的实现身份；与任何接入应用的文件名、角色或业务无关。"""
     from product.backend.infrastructure.observers.records import transaction_store, record_history
-    from product.protocols.runtime import transaction_records, record_trace, creation_records
+    from product.protocols.runtime import transaction_records, record_trace, creation_records, request_activity
     record_capabilities = import_module('product.backend.infrastructure.runtime.process.records.record_capabilities')
     exclusive_file = import_module('product.backend.infrastructure.runtime.process.exclusive_file')
     digest = hashlib.sha256()
-    for module in (transaction_store, record_history, transaction_records, record_trace, creation_records, record_capabilities, exclusive_file):
+    for module in (transaction_store, record_history, transaction_records, record_trace, creation_records, request_activity, record_capabilities, exclusive_file):
         path = Path(module.__file__)
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
@@ -92,10 +93,12 @@ class OwnedRecordServer:
                     if not 0 < size <= 98304 or self.headers.get("Transfer-Encoding"):
                         return self.reply(413, {"error": "RECORD_INPUT_LIMIT"})
                     data = strict_json(self.rfile.read(size), 98304)
-                    if self.path == '/scope/open' and set(data) == {'request_nonce','request_digest'}:
-                        result = owner.store.open_scope(data['request_nonce'],data['request_digest'])
-                    elif self.path == '/scope/close' and set(data) == {'scope_id','complete'} and type(data['complete']) is bool:
-                        result = owner.store.close_scope(data['scope_id'],data['complete'])
+                    if self.path == '/scope/open' and set(data) in ({'request_nonce','request_digest'}, {'request_nonce','request_digest','activity'}):
+                        activity = RequestActivity.model_validate_json(json.dumps(data['activity'])) if data.get('activity') is not None else None
+                        result = owner.store.open_scope(data['request_nonce'],data['request_digest'],activity)
+                    elif self.path == '/scope/close' and set(data) in ({'scope_id','complete'}, {'scope_id','complete','activity'}) and type(data['complete']) is bool:
+                        activity = RequestActivity.model_validate_json(json.dumps(data['activity'])) if data.get('activity') is not None else None
+                        result = owner.store.close_scope(data['scope_id'],data['complete'],activity)
                     elif self.path == "/resource/seed":
                         model = ScopedRecordSeed if data.get('schema_version') == '2' else RecordSeed
                         command = model.model_validate_json(json.dumps(data,allow_nan=False))
@@ -130,6 +133,9 @@ class OwnedRecordServer:
                         return self.reply(403, {'error':'RECORD_READ_DENIED'})
                     parsed = urlsplit(self.path)
                     parts = parsed.path.split('/')
+                    if not parsed.query and not parsed.fragment and parts[:3] == ['', 'activity', 'read'] and len(parts) == 4:
+                        nonce = TypeAdapter(RecordKey).validate_python(unquote(parts[3]), strict=True)
+                        return self.reply(200, {'data':owner.store.request_scope(nonce).model_dump(mode='json')})
                     if not parsed.query and not parsed.fragment and parts[:3] == ['', 'creation', 'read'] and len(parts) in {4, 5}:
                         collection = TypeAdapter(RecordKey).validate_python(unquote(parts[3]), strict=True)
                         nonce = TypeAdapter(RecordKey).validate_python(unquote(parts[4]), strict=True) if len(parts) == 5 else None

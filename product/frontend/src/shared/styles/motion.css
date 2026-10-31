@@ -1,9 +1,9 @@
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a) {
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a) {
   position: relative;
   isolation: isolate;
   --state-fill: var(--hover);
 }
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a)::before {
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -18,13 +18,13 @@
 .jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 16%,var(--surface)); }
 .jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--selected)); }
 @media(hover:hover) and (pointer:fine) {
-  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-breadcrumb a):not(:disabled):hover::before {
+  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a):not(:disabled):hover::before {
     opacity: 1;
     transition-duration: var(--motion-hover-in);
   }
 }
-.jj-button { transition: transform var(--motion-press) var(--ease-respond), box-shadow var(--motion-press) var(--ease-respond); }
-.jj-button:not(:disabled):active { transform: translateY(1px); transition-duration: 0ms; }
+.jj-button { transition: transform var(--motion-press) var(--ease-spring), box-shadow var(--motion-press) var(--ease-respond); }
+.jj-button:not(:disabled):active { transform: translateY(1px) scale(.975); transition-duration: 0ms; }
 .jj-nav-item.jj-button:active { transform: none; }
 :is(.jj-button, .jj-home-cards > button, .jj-material-select, .jj-case-select, .jj-step-select):not(:disabled):active::before { opacity: 1; transition-duration: 0ms; }
 input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border-color var(--motion-hover-in) var(--ease-respond), box-shadow var(--motion-hover-in) var(--ease-respond); }
@@ -65,7 +65,7 @@ body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice
 .jj-dialog::backdrop { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
 .jj-dialog[data-closing=true] { animation: jj-dialog-exit var(--motion-exit) var(--ease-exit) both; pointer-events: none; }
 .jj-dialog[data-closing=true]::backdrop { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
-:is(.jj-material-detail, .jj-proof-detail, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-rule-submission, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+:is(.jj-material-detail, .jj-proof-detail, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-change-registration, .jj-rule-authoring-panel, .jj-rule-detail-panel, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
 .jj-inspector-content .jj-step-reading { animation-name: jj-reader-enter; }
 .jj-notice:not([role=alert]) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; }
 .jj-report-layout { transition: grid-template-columns var(--motion-panel) var(--ease-layout), gap var(--motion-panel) var(--ease-layout); }
@@ -78,18 +78,29 @@ progress::-webkit-progress-value { transition: width var(--motion-content) var(-
 }
 @keyframes jj-fade-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes jj-fade-exit { to { opacity: 0; } }
-@keyframes jj-dialog-enter { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes jj-dialog-enter { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes jj-dialog-exit { to { opacity: 0; transform: translateY(6px) scale(.99); } }
-@keyframes jj-content-enter { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@keyframes jj-reader-enter { from { transform: translateY(4px); } to { transform: none; } }
+@keyframes jj-content-enter { from { opacity: .4; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes jj-reader-enter { from { opacity: .65; transform: translateY(8px); } to { transform: none; } }
 @keyframes jj-working { to { opacity: .45; } }
+.jj-button > .anticon-arrow-right { transition: transform var(--motion-disclosure) var(--ease-spring); }
+@media(hover:hover) { .jj-button:not(:disabled):hover > .anticon-arrow-right { transform: translateX(3px); } }
+.jj-tabs > button, .jj-nav-item, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-toggle-group > button { transition: background-color var(--motion-indicator) var(--ease-layout), color var(--motion-hover-in) var(--ease-respond); }
+.jj-tabs > button { border-radius: var(--radius-control); }
+.jj-inspector-slot:not(:empty) { animation: jj-inspector-enter var(--motion-panel) var(--ease-enter) both; }
+.jj-record-reading { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-choice-menu.ant-select-dropdown :is(.ant-select-item-option-selected .anticon-check) { animation: jj-check-enter var(--motion-disclosure) var(--ease-spring) both; }
+body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown):is([class*='-enter-active'],[class*='-appear-active']) > :is(.ant-dropdown-menu,.ant-popover-content,.rc-virtual-list) { animation: jj-menu-enter var(--motion-popup) var(--ease-enter) both; }
+@keyframes jj-inspector-enter { from { opacity: .3; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes jj-menu-enter { from { opacity: .5; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes jj-check-enter { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 @media(prefers-reduced-motion:reduce) {
   *, *::before, *::after, *::backdrop, *::details-content { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   progress::-webkit-progress-value { transition: none !important; }
 }
-:root { view-transition-name:none; --page-offset:10px; }
-:root[data-page-direction=back] { --page-offset:-10px; }
+:root { view-transition-name:none; --page-offset:16px; }
+:root[data-page-direction=back] { --page-offset:-16px; }
 .jj-page { view-transition-name:jj-workspace; }
 ::view-transition-group(jj-workspace) { animation-duration:var(--motion-page); animation-timing-function:var(--ease-layout); }
 ::view-transition-old(jj-workspace) { animation:jj-workspace-out var(--motion-exit) var(--ease-exit) both; }

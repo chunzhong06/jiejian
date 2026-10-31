@@ -1,7 +1,215 @@
 {
+  "$defs": {
+    "ActivityEvent": {
+      "additionalProperties": false,
+      "description": "宿主观察到的技术调用；不携带业务值、授权决定或提交成功的断言。",
+      "properties": {
+        "duration_us": {
+          "minimum": 0,
+          "title": "Duration Us",
+          "type": "integer"
+        },
+        "event_id": {
+          "pattern": "^call_[0-9a-f]{32}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "http_method": {
+          "anyOf": [
+            {
+              "enum": [
+                "GET",
+                "HEAD",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS",
+                "CONNECT",
+                "TRACE",
+                "OTHER"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Method"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "maximum": 599,
+              "minimum": 100,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Status"
+        },
+        "kind": {
+          "enum": [
+            "HTTP_SERVER",
+            "HTTP_CLIENT",
+            "SQLITE",
+            "FILESYSTEM"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "REQUEST",
+            "EXEC",
+            "PREPARE",
+            "RUN",
+            "GET",
+            "ALL",
+            "ITERATE",
+            "READ",
+            "WRITE",
+            "APPEND"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "OK",
+            "ERROR",
+            "INCOMPLETE"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "parent_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^call_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Event Id"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Location"
+        },
+        "started_at_us": {
+          "minimum": 0,
+          "title": "Started At Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "event_id",
+        "parent_event_id",
+        "kind",
+        "operation",
+        "started_at_us",
+        "duration_us",
+        "outcome"
+      ],
+      "title": "ActivityEvent",
+      "type": "object"
+    },
+    "RequestActivity": {
+      "additionalProperties": false,
+      "description": "一次真实请求内的有界诊断记录；complete 仅表示已启用探针的收集闭合。",
+      "properties": {
+        "adapters": {
+          "items": {
+            "enum": [
+              "node:http",
+              "node:https",
+              "node:sqlite",
+              "node:fs",
+              "node:fs/promises"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Adapters",
+          "type": "array"
+        },
+        "collector": {
+          "const": "CONTROLLED_NODE",
+          "default": "CONTROLLED_NODE",
+          "title": "Collector",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "dropped_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Dropped Count",
+          "type": "integer"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/ActivityEvent"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Events",
+          "type": "array"
+        },
+        "request_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Digest",
+          "type": "string"
+        },
+        "request_nonce": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Nonce",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_nonce",
+        "request_digest",
+        "adapters",
+        "complete",
+        "events"
+      ],
+      "title": "RequestActivity",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "description": "宿主独立记录的请求完成边界；应用不能通过业务事务声明完成。",
   "properties": {
+    "activity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestActivity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "generation": {
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
       "title": "Generation",

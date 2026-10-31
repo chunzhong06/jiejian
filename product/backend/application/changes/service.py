@@ -188,6 +188,13 @@ class CurrentSourceChangeService:
         with self._uow_factory() as work:
             return work.source_changes.rule_targets(project_id, change_id)
 
+    def repair_references(self, project_id, change_id):
+        manifest, _, _ = self.get(project_id, change_id)
+        targets = self.targets(project_id, change_id)
+        return tuple(dict.fromkeys(reference for reference in (
+            manifest.repair_reference, *(item.repair for item in targets)
+        ) if reference is not None))
+
     def view(self, project_id, change_id):
         return self._view(project_id,change_id,read_plan=self._plan_reader)
 

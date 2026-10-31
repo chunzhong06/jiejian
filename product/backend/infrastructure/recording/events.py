@@ -51,7 +51,7 @@ class RecordingEventCollector:
         self.started_at_us = started_at_us
         self._sanitizer = RecordingSanitizer(budget, known_secrets)
         self._transport = BoundedRouteTransport(scope, allow_files=True)
-        self.events: tuple[RecordingEvent, ...] = ()
+        self._events: list[RecordingEvent] = []
         self.safety_error: JiejianError | None = None
         self.safety_reason = RecordingReasonCode.TARGET_SCOPE_VIOLATION
         self._frozen = False
@@ -67,6 +67,11 @@ class RecordingEventCollector:
         self._action_count = 0
         self._pending_actions: dict[tuple[str, str, str], str] = {}
         self._guards: dict[str, WebTargetGuard] = {}
+
+    @property
+    def events(self) -> tuple[RecordingEvent, ...]:
+        """交付事件快照；采集中的缓冲仍由当前 Collector 独占。"""
+        return tuple(self._events)
 
     def begin_capture(self) -> None:
         """开启持久事件采集，并丢弃准备阶段建立的关联索引。"""
@@ -160,7 +165,7 @@ class RecordingEventCollector:
             return
         updated = []
         changed = False
-        for event in self.events:
+        for event in self._events:
             if (
                 event.kind is RecordingEventKind.PAGE_OPENED
                 and event.page_id == page_id
@@ -170,8 +175,8 @@ class RecordingEventCollector:
                 changed = True
             updated.append(event)
         if changed:
-            self.events = tuple(updated)
-            self._payload_bytes = sum(self._event_size(event) for event in self.events)
+            self._events = updated
+            self._payload_bytes = sum(self._event_size(event) for event in self._events)
 
     def check_runtime_budget(self, identity_id: str) -> None:
         if self.now_us() - self.started_at_us > self.budget.max_duration_us:
@@ -659,11 +664,11 @@ class RecordingEventCollector:
             if self.now_us() - self.started_at_us > self.budget.max_duration_us:
                 self._stop_for_budget(str(values["identity_id"]), values.get("page_id"))
                 return
-            if len(self.events) >= max(0, self.budget.max_events - 1):
+            if len(self._events) >= max(0, self.budget.max_events - 1):
                 self._stop_for_budget(str(values["identity_id"]), values.get("page_id"))
                 return
         event = RecordingEvent(
-            sequence=len(self.events) + 1,
+            sequence=len(self._events) + 1,
             occurred_at_us=self.now_us(),
             **values,
         )
@@ -678,7 +683,7 @@ class RecordingEventCollector:
                 self._stop_for_budget(str(values["identity_id"]), values.get("page_id"))
             return
         self._payload_bytes += size
-        self.events = (*self.events, event)
+        self._events.append(event)
 
     @staticmethod
     def _event_size(event: RecordingEvent) -> int:

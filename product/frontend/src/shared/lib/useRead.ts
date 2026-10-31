@@ -1,5 +1,20 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
 
+const readers=new Set<()=>void>()
+let resumeTimer:ReturnType<typeof setTimeout>|undefined
+const resumeReaders=()=>{
+  if(resumeTimer!==undefined||document.visibilityState==='hidden')return
+  resumeTimer=setTimeout(()=>{resumeTimer=undefined;for(const resume of readers)resume()},0)
+}
+function subscribeResume(resume:()=>void){
+  if(readers.size===0){document.addEventListener('visibilitychange',resumeReaders);window.addEventListener('online',resumeReaders);window.addEventListener('focus',resumeReaders)}
+  readers.add(resume)
+  return()=>{
+    readers.delete(resume)
+    if(readers.size===0){clearTimeout(resumeTimer);resumeTimer=undefined;document.removeEventListener('visibilitychange',resumeReaders);window.removeEventListener('online',resumeReaders);window.removeEventListener('focus',resumeReaders)}
+  }
+}
+
 /** 按读取键持有数据；刷新保留已有内容，换键或离开后丢弃旧响应。 */
 export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T>, interval:number|((data?:T)=>number)=0) {
   // key 须包含会改变结果的项目和查询条件；替换 read 回调只更新后续读取，不自动重取同键数据。
@@ -22,9 +37,9 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
     }
     // 隐藏期间不启动新读取；恢复焦点或网络后复用串行入口，避免轮询和恢复同时发请求。
     const resume=()=>{clearTimeout(timer);if(document.visibilityState!=='hidden')void refresh()}
-    void refresh();document.addEventListener('visibilitychange',resume);window.addEventListener('online',resume);window.addEventListener('focus',resume)
+    void refresh();const unsubscribe=subscribeResume(resume)
     // 取消由读取函数执行，valid 仍拦截忽略取消信号的迟到结果。
-    return()=>{valid=false;controller.abort();clearTimeout(timer);document.removeEventListener('visibilitychange',resume);window.removeEventListener('online',resume);window.removeEventListener('focus',resume)}
+    return()=>{valid=false;controller.abort();clearTimeout(timer);unsubscribe()}
   },[key,epoch,typeof interval==='number'?interval:'adaptive'])
   const reload=useCallback(()=>setEpoch(value=>value+1),[])
   return {...(state.key===key?state:{key,loading:key!==null}),reload}

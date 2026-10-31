@@ -20,14 +20,14 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def node_runtime_input(tmp_path, port, *, wrong_port=False, control_session_id=None, script=None):
+def node_runtime_input(tmp_path, port, *, wrong_port=False, control_session_id=None, script=None, project_id='owned-node-project'):
     node=Path(json.loads((ROOT/'var/runtime/source/receipt.json').read_text(encoding='utf-8-sig'))['node']['executable'])
     source=tmp_path/'source';source.mkdir()
     script=script or "import http from 'node:http'; http.createServer((req,res)=>res.end('frozen source')).listen("+('0' if wrong_port else 'Number(process.env.PORT)')+",'127.0.0.1');"
     raw=script.encode();(source/'app.mjs').write_bytes(raw)
     files=(RuntimeFile(relative_path='app.mjs',sha256=hashlib.sha256(raw).hexdigest(),size=len(raw)),)
     with node.open('rb') as stream: interpreter=hashlib.file_digest(stream,'sha256').hexdigest()
-    manifest=NodeRuntimeManifest(instance_id='rti_'+uuid4().hex,project_id='owned-node-project',entry='app.mjs',
+    manifest=NodeRuntimeManifest(instance_id='rti_'+uuid4().hex,project_id=project_id,entry='app.mjs',
         port=port,files=files,source_fingerprint=runtime_source_fingerprint(files),interpreter_fingerprint=interpreter,
         executor_fingerprint=hashlib.sha256(EXECUTOR.read_bytes()).hexdigest())
     artifact=create_node_runtime_artifact(source,node_artifact_store(tmp_path/'var'),manifest=manifest)

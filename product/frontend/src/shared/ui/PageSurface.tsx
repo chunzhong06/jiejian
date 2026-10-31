@@ -18,8 +18,8 @@ export function PageSurface({view,transitionKey=view,children}:{view:string;tran
       if(preference.matches||pageTransitionActive()||!changed&&!wasPending)return
       running.current?.cancel()
       running.current=node.animate(
-        [{opacity:.9,transform:wasPending?'translateY(2px)':'translateY(6px)'},{opacity:1,transform:'none'}],
-        {duration:wasPending?100:180,easing:'cubic-bezier(.2,0,0,1)'}
+        [{opacity:.4,transform:'translateY(14px)'},{opacity:1,transform:'none'}],
+        {duration:240,easing:'cubic-bezier(.16,1,.3,1)'}
       )
     }
     if(pending()){

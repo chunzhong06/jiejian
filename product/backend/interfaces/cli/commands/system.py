@@ -163,6 +163,7 @@ def serve_command(
             def request_shutdown() -> None:
                 server_instance = server_holder.get("server")
                 if server_instance is not None:
+                    print('__JIEJIAN_SERVE_STATUS__:stopping', flush=True)
                     setattr(server_instance, "should_exit", True)
 
             api = create_app(
@@ -172,6 +173,7 @@ def serve_command(
                 shutdown_callback=request_shutdown,
                 official_sample_root=official_sample_root,
             )
+            api.state.context.updates.accept_startup()
             config = uvicorn.Config(
                 api, host=host, port=port, log_level=settings.log_level.lower(),
                 # Windows 连接重置可能遗漏传输层关闭通知；只限制HTTP排空，后续应用资源仍按原顺序关闭。
@@ -184,6 +186,10 @@ def serve_command(
             gui_session = GuiBrowserSession()
             if open_browser:
                 gui_url = f"http://127.0.0.1:{port}/"
+                update = api.state.context.updates.latest()
+                if (update and update['phase'] in {'STARTING', 'READY'}
+                        and update['target_release'] == os.environ.get('JIEJIAN_RELEASE_ROOT')):
+                    gui_url += '#' + update['return_path']
 
                 def reopen_gui() -> bool:
                     return open_gui_browser(gui_url, settings.var_dir, session=gui_session, system_browser=browser == GuiBrowser.SYSTEM)

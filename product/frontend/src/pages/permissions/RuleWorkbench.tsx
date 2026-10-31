@@ -1,12 +1,15 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
-import { ApiError } from '../../shared/api/http';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeftOutlined, ArrowRightOutlined, CheckCircleOutlined, CheckOutlined, ExclamationCircleOutlined, MinusOutlined, SafetyOutlined } from '@ant-design/icons';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import ExclamationCircleOutlined from '@ant-design/icons/ExclamationCircleOutlined';
+import MinusOutlined from '@ant-design/icons/MinusOutlined';
+import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
 import type { BusinessBoundaryViewDto } from '../../entities/permission/api/businessBoundaries';
 import { ruleWorkspaceApi, type RuleItem, type RuleState } from '../../entities/permission/api/ruleWorkspace';
-import { sourceChangesApi, type RuleChangeTarget, type RegistrationPreview } from '../../entities/source-change/api/sourceChanges';
-import { ChangePreview } from '../../entities/source-change/ui/ChangePreview';
-import { developmentApi } from '../../entities/source-change/api/development';
+import { ChangeRegistration, changeTargetOptions } from '../../entities/source-change/ui/ChangeRegistration';
 import { repairReference, type ProjectRepair } from '../../entities/check/api/repairs';
 import { assertProject, type PageProps } from '../../shared/model/page';
 import { date, text } from '../../shared/lib/format';
@@ -14,8 +17,9 @@ import { go } from '../../shared/lib/navigation';
 import { useRead } from '../../shared/lib/useRead';
 import { ActionLink, Button } from "../../shared/ui/actions";
 import { Badge, Empty, ErrorNote, Notice } from "../../shared/ui/feedback";
-import { Field, Heading } from "../../shared/ui/layout";
+import { Heading } from "../../shared/ui/layout";
 import { Tabs } from "../../shared/ui/Tabs";
+import { AgentHandoff } from '../../entities/check/ui/AgentHandoff';
 import { repairGap } from '../../entities/check/model/checks';
 const stateLabels: Record<RuleState, string> = { UNCONFIRMED: '运行版本待确认', UNTESTED: '尚未检查', STALE: '版本变化，待重查', SAFE: '符合规则', VULNERABLE: '发现违规', INCONCLUSIVE: '证据不足', REPAIR_PENDING: '原问题待复验' };
 const issueLabels: Record<string, string> = { REPAIR_REQUIRED: '待修复', CHANGE_SUBMITTED: '修复已提交', READY_TO_VERIFY: '待复验', VERIFIED: '已验证修复', NOT_VERIFIED: '问题仍存在', INCONCLUSIVE: '复验未能确认', STALE: '规则已变化' };
@@ -73,94 +77,45 @@ function RuleDetail({ rule, rules, projectId, route, onError, onReload }: {
     onError: PageProps['onError'];
     onReload: () => void;
 }) {
-    const [repair, setRepair] = useState<Issue | null | undefined>(undefined);
+    const [repair, setRepair] = useState<Issue | null | undefined>(undefined), [assist, setAssist] = useState<Issue>();
     const section = route.query.get('section') ?? 'results', reference = route.query.get('repair_reference');
+    const panelId = useId(), panel = useRef<HTMLDivElement>(null), focusRegistration = useRef(false);
+    const beginRegistration = (issue: Issue | null) => {
+        focusRegistration.current = true;
+        setRepair(issue);
+        go(rulePath(rule, '&section=changes'));
+    };
+    useLayoutEffect(() => {
+        if (section !== 'changes' || repair === undefined || !focusRegistration.current) return;
+        focusRegistration.current = false;
+        panel.current?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        panel.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+    }, [section, repair]);
     const issues = reference ? rule.issues.filter(issue => issue.contract.repair_fingerprint === reference) : rule.issues;
     const latest = rule.latest;
     return <>
     <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go('/permissions')}>权限规则</Button></div>
     <section className="jj-rule-detail-header"><div><div className="jj-rule-detail-label"><Badge tone={rule.expectation === 'ALLOW' ? 'positive' : 'negative'}>{rule.expectation === 'ALLOW' ? '允许' : '禁止'}</Badge><span>规则版本 {rule.permission.revision}</span></div><h1>{text(rule.title)}</h1><p>{text(rule.resource_scope)}</p></div><div className="jj-rule-detail-status"><Badge tone={tone(rule.state)}>{stateLabels[rule.state]}</Badge><Button onClick={() => go('/reports?view=plan&rule_id=' + encodeURIComponent(rule.permission.intent_id))}>检查相关规则<ArrowRightOutlined aria-hidden="true"/></Button></div></section>
-    <Tabs label="规则详情" value={section} onValueChange={value => go(rulePath(rule, '&section=' + value))} items={[{ value: 'results', label: '检查结果' }, { value: 'changes', label: '修复与修改' }, { value: 'history', label: '检查历史' }]} className="jj-action-tabs"/>
-    {repair !== undefined && <RepairSubmission key={repair?.task_reference ?? 'rule'} rule={rule} rules={rules} issue={repair} projectId={projectId} onClose={() => setRepair(undefined)} onError={onError} onSaved={changeId => { setRepair(undefined); onReload(); go(rulePath(rule, '&section=changes&change_id=' + encodeURIComponent(changeId))); }}/>}
+    {assist && <AgentHandoff projectId={projectId} runId={assist.contract.source_run_id} caseId={assist.contract.source_case_id} targets={[repairReference(assist.contract)]} repair onClose={() => setAssist(undefined)}/>}
+    <section className="jj-rule-detail-workspace">
+    <div className="jj-rule-section-bar"><Tabs label="规则详情" value={section} idPrefix={panelId} panelId={panelId + '-content'} onValueChange={value => { setRepair(undefined); go(rulePath(rule, '&section=' + value)); }} items={[{ value: 'results', label: '检查结果' }, { value: 'changes', label: '修复与修改' }, { value: 'history', label: '检查历史' }]} className="jj-action-tabs"/></div>
+    <div className="jj-rule-detail-panel" role="tabpanel" id={panelId + '-content'} aria-labelledby={panelId + '-' + section} ref={panel} key={section} tabIndex={0}>
     {section === 'results' && <div className="jj-rule-result-layout"><section className="jj-rule-result-main"><div className="jj-section-header"><h2>{issues.length ? '发现的问题' : '检查情况'}</h2><span className="jj-small jj-muted">{issues.length ? `${issues.length} 项` : ''}</span></div>
       {issues.map(issue => <article className="jj-rule-issue" key={issue.task_reference}>
-        <header><span className="jj-rule-issue-icon" data-state={issue.status}>{issue.status === 'VERIFIED' ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />}</span><div><Badge tone={issueTone(issue.status)}>{issueLabels[issue.status]}</Badge><h3>{issue.status === 'VERIFIED' ? '已确认原违规消除，正常功能保留' : '检查中出现了不应发生的业务结果'}</h3><p>在原来的账号、资源与证明要求下复查。</p></div></header>
+        <header><span className="jj-rule-issue-icon" data-state={issue.status}>{issue.status === 'VERIFIED' ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />}</span><div><Badge tone={issueTone(issue.status)}>{issue.status === 'REPAIR_REQUIRED' && (issue.recurrence_count ?? 0) > 0 ? '问题再次出现' : issueLabels[issue.status]}</Badge><h3>{issue.status === 'VERIFIED' ? '原问题已解决，正常功能保留' : issue.status === 'NOT_VERIFIED' ? '修改后仍出现了不应发生的结果' : '检查中出现了不应发生的业务结果'}</h3><p>{issue.history?.at(-1)?.kind === 'CONDITIONS_CHANGED' ? '新的证明条件下发现违规，作为新一轮原题处理。' : issue.recurrence_count ? `已确认修复后再次发现违规，累计 ${issue.recurrence_count} 次。` : '按原问题的账号、资源与证明要求复查。'}</p></div></header>
         {issue.verification && ['INCONCLUSIVE', 'STALE'].includes(issue.verification.status) && <div className="jj-rule-verification-gap"><Notice>{repairGap(issue.verification.reason_codes)}</Notice></div>}
         <div className="jj-rule-obligations">{(['DENY', 'SELECTED_ALLOW', 'REGRESSION'] as const).map(role => { const rows = issue.comparison?.filter(item => item.role === role) ?? []; return <div key={role}><span>{role === 'DENY' ? '原违规场景' : role === 'SELECTED_ALLOW' ? '正常功能' : '相关功能回归'}</span><strong>{!rows.length ? '未安排' : rows.every(item => item.after_verdict === 'SAFE') ? '本次均符合规则' : rows.some(item => item.after_verdict === 'VULNERABLE') ? '仍有违规' : rows.some(item => item.after_verdict === 'INCONCLUSIVE') ? '证据不足' : '等待复验'}</strong></div>; })}</div>
-        <footer><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(issue.contract.source_run_id) + '&case_id=' + encodeURIComponent(issue.contract.source_case_id))}>原问题与证据<ArrowRightOutlined aria-hidden="true"/></Button><div className="jj-inline-actions">{issue.run_id && <Button onClick={() => go('/reports?run_id=' + encodeURIComponent(issue.run_id!))}>复验报告</Button>}{issue.status !== 'STALE' && issue.status !== 'VERIFIED' && (issue.change_id ? <><Button onClick={() => setRepair(issue)}>提交下一次修复</Button><Button kind="primary" onClick={() => go('/reports?view=plan&change_id=' + encodeURIComponent(issue.change_id!) + '&rule_id=' + encodeURIComponent(rule.permission.intent_id))}>复查这次修复</Button></> : <Button kind="primary" onClick={() => setRepair(issue)}>提交修复<ArrowRightOutlined aria-hidden="true"/></Button>)}</div></footer>
+        <IssueHistory issue={issue}/><footer><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(issue.contract.source_run_id) + '&case_id=' + encodeURIComponent(issue.contract.source_case_id))}>原问题与证据<ArrowRightOutlined aria-hidden="true"/></Button><div className="jj-inline-actions">{!['VERIFIED', 'STALE'].includes(issue.status) && <Button kind="quiet" onClick={() => setAssist(issue)}>交给 Agent 修复</Button>}{issue.run_id && <Button onClick={() => go('/reports?run_id=' + encodeURIComponent(issue.run_id!))}>复验报告</Button>}{issue.status !== 'STALE' && issue.status !== 'VERIFIED' && (issue.change_id ? <><Button onClick={() => beginRegistration(issue)}>提交下一次修复</Button><Button kind="primary" onClick={() => go('/reports?view=plan&change_id=' + encodeURIComponent(issue.change_id!) + '&rule_id=' + encodeURIComponent(rule.permission.intent_id))}>复查这次修复</Button></> : <Button kind="primary" onClick={() => beginRegistration(issue)}>提交修复<ArrowRightOutlined aria-hidden="true"/></Button>)}</div></footer>
       </article>)}
       {!issues.length && (latest ? <article className="jj-rule-current"><Badge tone={tone(rule.state)}>{stateLabels[rule.state]}</Badge><h3>{rule.state === 'SAFE' ? '本次已检查场景符合这条规则' : rule.state === 'INCONCLUSIVE' ? '还缺少能够确认结果的证据' : rule.state === 'STALE' ? '已有结果对应先前的规则或代码' : '查看本次检查记录'}</h3><p>{latest.case_count} 个检查场景，{date(latest.created_at_us)}</p><Button onClick={() => go('/reports?run_id=' + encodeURIComponent(latest.run_id) + '&case_id=' + encodeURIComponent(latest.case_ids[0]))}>阅读检查依据<ArrowRightOutlined aria-hidden="true"/></Button></article> : <Empty title="还没有这条规则的检查记录" action={<Button kind="primary" onClick={() => go('/preparation?rule_id=' + encodeURIComponent(rule.permission.intent_id))}>准备检查材料</Button>}/>)}
     </section><aside className="jj-rule-context"><h2>这条规则</h2><dl><div><dt>操作角色</dt><dd>{text(rule.subject)}</dd></div><div><dt>业务操作</dt><dd>{text(rule.action)}</dd></div><div><dt>资源范围</dt><dd>{text(rule.resource_scope)}</dd></div></dl><ActionLink href={'#/preparation?rule_id=' + encodeURIComponent(rule.permission.intent_id)}>查看检查材料<ArrowRightOutlined aria-hidden="true"/></ActionLink><div className="jj-rule-context-divider"/><h3>最近修改</h3>{rule.changes[0] ? <><p>{text(rule.changes[0].reason)}</p><ActionLink href={'#' + rulePath(rule, '&section=changes')}>查看修改与复验<ArrowRightOutlined aria-hidden="true"/></ActionLink></> : <p className="jj-small jj-muted">尚未提交关联修改。</p>}</aside></div>}
-    {section === 'changes' && <section className="jj-rule-change-list"><div className="jj-section-header"><h2>针对这条规则的修改</h2><Button onClick={() => setRepair(rule.issues.find(issue => !['VERIFIED', 'STALE'].includes(issue.status)) ?? null)}>提交修改</Button></div>{rule.changes.map(change => <article className="jj-rule-change" key={change.change_id}><div><span className="jj-small jj-muted">{date(change.created_at_us)}</span><h3>{text(change.reason)}</h3><p>{change.file_count} 个文件发生变化{change.targets.some(target => target.repair) ? '，用于修复已发现的问题' : '，声明涉及这条权限规则'}</p></div><div className="jj-inline-actions"><Button onClick={() => go('/changes?change_id=' + encodeURIComponent(change.change_id))}>代码变化</Button><Button kind="primary" onClick={() => go('/reports?view=plan&change_id=' + encodeURIComponent(change.change_id) + '&rule_id=' + encodeURIComponent(rule.permission.intent_id))}>预览复验范围<ArrowRightOutlined aria-hidden="true"/></Button></div></article>)}{!rule.changes.length && <Empty title="尚未提交关联修改">完成代码修改后，从这里登记实际变化及修复目标。</Empty>}</section>}
+    {section === 'changes' && (repair !== undefined ? <ChangeRegistration key={repair?.task_reference ?? 'rule'} options={changeTargetOptions(rules)} initialTargets={[{permission: rule.permission, repair: repair ? repairReference(repair.contract) : null}]} projectId={projectId} closeLabel="返回修改记录" onClose={() => setRepair(undefined)} onError={onError} onSaved={changeId => { setRepair(undefined); onReload(); go(rulePath(rule, '&section=changes&change_id=' + encodeURIComponent(changeId))); }}/> : <section className="jj-rule-change-list"><div className="jj-section-header"><h2>关联修改</h2><Button kind="primary" onClick={() => beginRegistration(rule.issues.find(issue => !['VERIFIED', 'STALE'].includes(issue.status)) ?? null)}>登记修改<ArrowRightOutlined aria-hidden="true"/></Button></div>{rule.changes.map(change => <article className="jj-rule-change" key={change.change_id}><div><span className="jj-small jj-muted">{date(change.created_at_us)}</span><h3>{text(change.reason)}</h3><p>{change.file_count} 个文件发生变化{change.targets.some(target => target.repair) ? '，用于修复已发现的问题' : '，声明涉及这条权限规则'}</p></div><div className="jj-inline-actions"><Button onClick={() => go('/changes?change_id=' + encodeURIComponent(change.change_id))}>代码变化</Button><Button kind="primary" onClick={() => go('/reports?view=plan&change_id=' + encodeURIComponent(change.change_id) + '&rule_id=' + encodeURIComponent(rule.permission.intent_id))}>预览复验范围<ArrowRightOutlined aria-hidden="true"/></Button></div></article>)}{!rule.changes.length && <Empty title="尚未提交关联修改">完成代码修改后，从这里登记实际变化及修复目标。</Empty>}</section>)}
     {section === 'history' && <section className="jj-rule-history"><header><h2>这条规则的检查历史</h2><span className="jj-small jj-muted">每次检查保留当时的规则与代码范围</span></header>{rule.history.map(item => <button key={item.run_id} onClick={() => go('/reports?run_id=' + encodeURIComponent(item.run_id) + '&case_id=' + encodeURIComponent(item.case_ids[0]))}><time>{date(item.created_at_us)}</time><Badge tone={tone(item.verdict)}>{stateLabels[item.verdict]}</Badge><span>{item.case_count} 个场景</span><span>{item.change_id ? '关联代码修改' : '常规检查'}</span><ArrowRightOutlined aria-hidden="true"/></button>)}{!rule.history.length && <Empty title="暂无检查记录"/>}{rule.history_has_more && <Button kind="quiet" onClick={() => go('/reports?intent_id=' + rule.permission.intent_id + '&revision=' + rule.permission.revision + '&intent_hash=' + rule.permission.intent_hash)}>更早的检查</Button>}</section>}
+    </div></section>
   </>;
 }
-type Pending = {
-    operation: string;
-    reason: string;
-    targets: RuleChangeTarget[];
-};
-function RepairSubmission({ rule, rules, issue, projectId, onClose, onSaved, onError }: {
-    rule: RuleItem;
-    rules: RuleItem[];
-    issue: Issue | null;
-    projectId: string;
-    onClose: () => void;
-    onSaved: (id: string) => void;
-    onError: PageProps['onError'];
-}) {
-    const key = 'jiejian.studio.rule-change:' + projectId + ':' + rule.permission.intent_id + ':' + rule.permission.revision;
-    const [pending, setPending] = useState<Pending | undefined>(() => { const saved = sessionStorage.getItem(key); if (!saved)
-        return; try {
-        return JSON.parse(saved) as Pending;
-    }
-    catch {
-        return undefined;
-    } });
-    const base: RuleChangeTarget = { permission: rule.permission, repair: issue ? repairReference(issue.contract) : null };
-    const draftKey = key + ':' + rule.permission.intent_id;
-    const [targets, setTargets] = useState<RuleChangeTarget[]>(pending?.targets ?? [base]), [reason, setReason] = useState(pending?.reason ?? sessionStorage.getItem(draftKey) ?? ''), [busy, setBusy] = useState(false), [preview, setPreview] = useState<RegistrationPreview>();
-    useEffect(() => { sessionStorage.setItem(draftKey, reason); }, [draftKey, reason]);
-    const lock = useRef(false);
-    const alternatives = rules.flatMap(item => item.issues.filter(task => !['VERIFIED', 'STALE'].includes(task.status)).map(task => ({ rule: item, task, target: { permission: item.permission, repair: repairReference(task.contract) } })));
-    const save = async () => {
-        if (lock.current)
-            return;
-        lock.current = true;
-        setBusy(true);
-        try {
-            if (pending) {
-                const receipt = await developmentApi.receipt(projectId, 'DELIVER', pending.operation);
-                if (!receipt?.change_id)
-                    throw new Error('本次提交回执尚未确认，请稍后查询。');
-                assertProject(receipt.project_id, projectId);
-                sessionStorage.removeItem(key);
-                onSaved(receipt.change_id);
-                return;
-            }
-            if (!preview) {
-                const value = await sourceChangesApi.registrationPreview(projectId);
-                assertProject(value.project_id, projectId); setPreview(value); return;
-            }
-            const operation = { operation: crypto.randomUUID().replaceAll('-', ''), reason: reason.trim(), targets };
-            sessionStorage.setItem(key, JSON.stringify(operation));
-            setPending(operation);
-            const receipt = await sourceChangesApi.register(projectId, { operation_id: operation.operation, expected_registration_fingerprint: preview.fingerprint, expected_source_fingerprint: preview.source_fingerprint, reason: operation.reason, claimed_paths: [], repair_reference: null, rule_targets: targets });
-            assertProject(receipt.project_id, projectId);
-            if (!receipt.change_id)
-                throw new Error('提交未返回修改记录，请查询原回执。');
-            sessionStorage.removeItem(key);
-            sessionStorage.removeItem(draftKey);
-            onSaved(receipt.change_id);
-        }
-        catch (error) {
-            if (error instanceof ApiError && ['STATE_PRECONDITION', 'INPUT_INVALID'].includes(error.code)) { sessionStorage.removeItem(key); setPending(undefined); setPreview(undefined); }
-            onError(error);
-        }
-        finally {
-            lock.current = false;
-            setBusy(false);
-        }
-    };
-    return <section className="jj-rule-submission" aria-label="提交规则修复"><header><div><h2>{issue ? '提交针对这个问题的修复' : '提交涉及这条规则的修改'}</h2><p>记录真实代码变化，随后复查原问题和正常功能。</p></div><Button disabled={busy} onClick={onClose}>收起</Button></header><div className="jj-rule-submission-body"><Field label="修改说明"><textarea autoFocus rows={3} maxLength={512} disabled={busy || Boolean(pending)} placeholder="说明修复了什么，以及正常功能如何保留" value={reason} onChange={event => setReason(event.target.value)}/></Field><fieldset><legend>本次修复目标</legend><label className="jj-rule-fix-target"><input type="checkbox" checked readOnly/><span><strong>{text(rule.title)}</strong><small>{text(rule.resource_scope)}</small></span></label>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).length > 0 && <details><summary>同一次修改还修复了其他问题</summary>{alternatives.filter(item => item.task.task_reference !== issue?.task_reference).map(item => <label className="jj-rule-fix-target" key={item.task.task_reference}><input type="checkbox" disabled={busy || Boolean(pending)} checked={targets.some(target => target.repair?.repair_fingerprint === item.task.contract.repair_fingerprint)} onChange={event => setTargets(values => event.target.checked ? [...values, item.target] : values.filter(target => target.repair?.repair_fingerprint !== item.task.contract.repair_fingerprint))}/><span><strong>{text(item.rule.title)}</strong><small>{text(item.rule.resource_scope)}</small></span></label>)}</details>}</fieldset></div>{preview && <ChangePreview value={preview}/>}<footer>{pending ? <Notice>提交结果尚未确认，查询原回执后继续。</Notice> : <span className="jj-small jj-muted">提交说明不会将问题标为已修复。</span>}<Button kind="primary" busy={busy} disabled={!reason.trim() && !pending} onClick={() => void save()}>{pending ? '查询本次提交' : preview ? '确认登记修复' : '预览文件变化'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></section>;
+
+function IssueHistory({ issue }: { issue: Issue }) {
+    const names = { FOUND: '首次发现问题', CHECKED: '再次检查', VERIFIED: '修复已验证', RECURRED: '问题再次出现', CONDITIONS_CHANGED: '新条件下发现违规', CHECK_PENDING: '复验正在进行', CHECK_INTERRUPTED: '复验已中断' };
+    return issue.history?.length ? <details className="jj-issue-history"><summary>问题处理历史 <span>{issue.history.length} 条记录</span></summary><ol>{issue.history.map(event => <li key={event.run_id}><time>{date(event.created_at_us)}</time><div><strong>{names[event.kind]}</strong>{event.status && <span>{issueLabels[event.status]}</span>}{event.kind === 'CHECKED' && !event.status && <small>本次未关联原题修复</small>}</div><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(event.run_id))}>查看报告<ArrowRightOutlined aria-hidden="true"/></Button></li>)}</ol></details> : null;
 }

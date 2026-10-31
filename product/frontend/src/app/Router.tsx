@@ -11,7 +11,8 @@ import { Empty } from "../shared/ui/feedback";
 import { Heading } from "../shared/ui/layout";
 const overview = () => import('../pages/overview/Home'), permissions = () => import('../pages/permissions/Permissions'), preparation = () => import('../pages/preparation/Preparation'), checks = () => import('../pages/checks/Reports'), connection = () => import('../pages/connections/Connect'), changes = () => import('../pages/changes/Changes'), tools = () => import('../pages/tools/Agent'), storage = () => import('../pages/storage/Storage'), archive = () => import('../pages/checks/ArchivedExample'), business = () => import('../pages/connections/Understanding');
 const Home = routePage(() => overview().then(module => ({ default: module.Home })),'/workspace'), Permissions = routePage(() => permissions().then(module => ({ default: module.Permissions })),'/permissions'), Preparation = routePage(() => preparation().then(module => ({ default: module.Preparation })),'/preparation'), Reports = routePage(() => checks().then(module => ({ default: module.Reports })),'/reports'), Connect = routePage(() => connection().then(module => ({ default: module.Connect })),'/application'), Changes = routePage(() => changes().then(module => ({ default: module.Changes })),'/changes'), Agent = routePage(() => tools().then(module => ({ default: module.Agent })),'/tools'), Storage = routePage(() => storage().then(module => ({ default: module.Storage })),'/storage'), ArchivedExample = routePage(() => archive().then(module => ({ default: module.ArchivedExample })),'/archive'), Understanding = routePage(() => business().then(module => ({ default: module.Understanding })),'/application');
-const loaders: Record<string, () => Promise<unknown>> = { '/workspace': Home.preload, '/permissions': Permissions.preload, '/preparation': Preparation.preload, '/reports': Reports.preload, '/application': Connect.preload, '/environment': Connect.preload, '/changes': Changes.preload, '/tools': Agent.preload, '/storage': Storage.preload, '/archive': ArchivedExample.preload };
+const System = routePage(() => import('../pages/system/System').then(module=>({default:module.System})),'/system');
+const loaders: Record<string, () => Promise<unknown>> = { '/system': System.preload, '/workspace': Home.preload, '/permissions': Permissions.preload, '/preparation': Preparation.preload, '/reports': Reports.preload, '/application': Connect.preload, '/environment': Connect.preload, '/changes': Changes.preload, '/tools': Agent.preload, '/storage': Storage.preload, '/archive': ArchivedExample.preload };
 export function preloadRoute(path: string) { void loaders[path]?.().catch(() => { }); }
 type Props = {
     current: string;
@@ -25,6 +26,7 @@ type Props = {
     onError: (error: unknown) => void;
 };
 export function RouteContent({ current, route, context, project, loading, workspace, environment, onConnected, onError }: Props) {
+    if (current === '/system') return <System route={route} projectId={project?.project_id}/>;
     if (current === '/tools')
         return <Agent key={project?.project_id} projectId={project?.project_id} name={project?.name} onError={onError}/>;
     if (current === '/storage')

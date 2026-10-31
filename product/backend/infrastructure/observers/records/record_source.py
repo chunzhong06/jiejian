@@ -47,8 +47,8 @@ def record_provider(var_dir: Path, runtime_reference, *, require_live=True) -> R
         return None
 
 
-def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False):
-    """仅由预检查/正式检查 Runner 调用；每次读取前后都核对同一来源拥有者，响应不进入公共日志。"""
+def _read_owned_payload(var_dir, runtime_reference, path, *, timeout_us, max_response_bytes, cancelled):
+    """来源读权限仅在 Runner 内使用；同一请求前后核对拥有者，不向 API 进程转交能力。"""
     provider = record_provider(var_dir, runtime_reference)
     if provider is None or cancelled():
         raise SourceReadError('RECORD_PROVIDER_UNAVAILABLE')
@@ -59,41 +59,64 @@ def read_record_source(var_dir, runtime_reference, config, resource_id, *, reque
     origin = f'http://127.0.0.1:{provider.port}'
     scope = WebTargetScope(base_url=origin,allowed_origins=(origin,),allowed_hosts=('127.0.0.1',),
         allowed_ports=(provider.port,),allow_private_network=True,max_requests=1,
-        timeout_seconds=config.timeout_us/1_000_000,max_response_bytes=config.max_response_bytes)
+        timeout_seconds=timeout_us/1_000_000,max_response_bytes=max_response_bytes)
     identity = HttpIdentityRuntime(BearerIdentityBinding(secret_ref='env:JIEJIAN_RECORD_READ'),
         resolve_secret=lambda _ref:capability, business_origin=origin)
     adapter = HttpExecutionAdapter(scope, known_secrets=(capability,), cancellation_requested=cancelled, executor_process_id=os.getpid())
     try:
         identity.bootstrap(lambda *_a, **_k:None)
-        if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
-        creation = config.source_kind == 'CREATED_OBJECT_RECORDS' and not trace
-        path = ('/creation/read/'+quote(config.collection,safe='')) if creation else (
-            ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe=''))
-        if request_nonce is not None:
-            path += '/'+quote(request_nonce,safe='')
         _, response = adapter.execute_detailed(HttpRequestTemplate(method='GET',path=path),
             case_id='record-read',action_id='record-proof',identity_runtime=identity)
+        body = strict_json(response.body, max_response_bytes)
         if response.status_code != 200:
-            if creation:
-                payload = strict_json(response.body, config.max_response_bytes)
-                if payload.get('error') in {'CREATION_COLLECTION_LIMIT','CREATION_COLLECTION_UNKNOWN','RECORD_STORE_UNAVAILABLE'}:
-                    raise SourceReadError(payload['error'])
+            if path.startswith('/creation/') and body.get('error') in {'CREATION_COLLECTION_LIMIT','CREATION_COLLECTION_UNKNOWN','RECORD_STORE_UNAVAILABLE'}:
+                raise SourceReadError(body['error'])
             raise SourceReadError('RECORD_SOURCE_UNAVAILABLE')
-        body = strict_json(response.body, config.max_response_bytes)
-        try:
-            from product.protocols.runtime.record_trace import RecordTraceLog
-            from product.protocols.runtime.creation_records import CreationView
-            value = (CreationView if creation else RecordTraceLog if trace else RecordProofView).model_validate_json(json.dumps(body.get('data'),allow_nan=False))
-        except (ValueError, TypeError):
-            raise SourceReadError('RECORD_SOURCE_INVALID') from None
-        selected=value if trace or creation else value.snapshot
-        if (selected.collection != config.collection or not creation and selected.resource_id != resource_id
-                or trace and value.request_nonce!=request_nonce
-                or creation and value.scope is not None and value.scope.request_nonce!=request_nonce):
-            raise SourceReadError('OPERATION_CORRELATION_INVALID')
         if record_provider(var_dir,runtime_reference) != provider or cancelled():
             raise SourceReadError('RECORD_PROVIDER_UNAVAILABLE')
-        return value
+        return body
     finally:
         identity.close()
         adapter.close()
+
+
+def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False):
+    if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
+    creation = config.source_kind == 'CREATED_OBJECT_RECORDS' and not trace
+    path = ('/creation/read/'+quote(config.collection,safe='')) if creation else (
+        ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe=''))
+    if request_nonce is not None:
+        path += '/'+quote(request_nonce,safe='')
+    body = _read_owned_payload(var_dir, runtime_reference, path, timeout_us=config.timeout_us,
+        max_response_bytes=config.max_response_bytes, cancelled=cancelled)
+    from product.protocols.runtime.record_trace import RecordTraceLog
+    from product.protocols.runtime.creation_records import CreationView
+    try:
+        value = (CreationView if creation else RecordTraceLog if trace else RecordProofView).model_validate_json(json.dumps(body.get('data'),allow_nan=False))
+    except (ValueError, TypeError):
+        raise SourceReadError('RECORD_SOURCE_INVALID') from None
+    selected=value if trace or creation else value.snapshot
+    if (selected.collection != config.collection or not creation and selected.resource_id != resource_id
+            or trace and value.request_nonce!=request_nonce
+            or creation and value.scope is not None and value.scope.request_nonce!=request_nonce):
+        raise SourceReadError('OPERATION_CORRELATION_INVALID')
+    return value
+
+
+
+def read_request_activity(var_dir, runtime_reference, request_nonce, request_digest, *, cancelled):
+    from product.protocols.runtime.transaction_records import RecordRequestScope
+    body = _read_owned_payload(var_dir, runtime_reference, '/activity/read/'+quote(request_nonce,safe=''),
+        timeout_us=2_000_000, max_response_bytes=98304, cancelled=cancelled)
+    try:
+        scope = RecordRequestScope.model_validate_json(json.dumps(body.get('data'), allow_nan=False))
+        if (scope.request_nonce, scope.request_digest) != (request_nonce, request_digest):
+            raise ValueError('request activity mismatch')
+        activity = scope.activity
+        if activity is not None and (activity.request_nonce, activity.request_digest) != (request_nonce, request_digest):
+            raise ValueError('request activity mismatch')
+        if activity is not None and scope.state != 'COMPLETE' and activity.complete:
+            raise ValueError('activity closure mismatch')
+        return activity
+    except (ValueError, TypeError):
+        raise SourceReadError('ACTIVITY_CORRELATION_INVALID') from None

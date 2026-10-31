@@ -4,6 +4,7 @@ function Get-FrontendBuildDigest($Inputs, [string]$DependencyDigest) {
     $lines = New-Object System.Collections.Generic.List[string]
     $null = $lines.Add(("dependency|{0}" -f $DependencyDigest))
     foreach ($input in $Inputs) {
+        if ([string]$input.relative -match "(^|/)[^/]+\.test\.tsx?$|^tooling/vitest\.setup\.ts$") { continue }
         $null = $lines.Add(("{0}|{1}" -f [string]$input.relative, (Get-FileDigest ([string]$input.source))))
     }
     $bytes = $script:Utf8NoBom.GetBytes(($lines -join "`n"))

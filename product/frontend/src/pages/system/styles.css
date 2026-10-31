@@ -1,0 +1,67 @@
+.jj-system-page { display:grid; gap:24px; width:100%; max-width:1120px; margin-inline:auto; }
+.jj-system-pane { display:grid; gap:24px; min-width:0; animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-system-page > .jj-tabs { display:flex; gap:8px 24px; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+.jj-system-page > .jj-tabs > button { min-height:44px; padding:12px 8px; border:0; background:transparent; color:var(--muted); font:inherit; cursor:pointer; }
+.jj-system-page > .jj-tabs > button[aria-selected=true] { color:var(--accent-ink); font-weight:600; }
+.jj-system-workspace { min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); }
+.jj-system-workspace > header { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); }
+.jj-system-workspace header p { margin-top:6px; font-size:var(--text-meta); color:var(--muted); }
+.jj-system-workspace footer { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 28px; border-top:1px solid var(--line); background:var(--inset); }
+.jj-system-workspace footer p { font-size:var(--text-meta); color:var(--muted); max-width:58ch; }
+.jj-system-components { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.jj-system-components > div { display:flex; align-items:center; gap:12px; padding:24px 28px; }
+.jj-system-components > div:nth-child(2n) { border-left:1px solid var(--line); }
+.jj-system-components > div:nth-child(n+3) { border-top:1px solid var(--line); }
+.jj-system-components .jj-badge { margin-left:auto; }
+.jj-system-components .anticon { font-size:var(--text-section); }
+.jj-positive { color:var(--good); }.jj-caution { color:var(--warn); }
+.jj-system-diagnostic { margin:0; padding:20px 28px; border:0; }
+.jj-system-diagnostic pre { margin-bottom:0; }
+.jj-system-exit { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.jj-update-workspace { min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); container:update-workspace / inline-size; }
+.jj-update-current { display:grid; grid-template-columns:minmax(0,1fr) minmax(140px,auto); align-items:start; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); }
+.jj-update-version { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px; }
+.jj-update-location { max-width:380px; margin:0; padding:0; border:0; justify-self:end; }
+.jj-update-location summary { width:fit-content; margin-left:auto; font-size:var(--text-meta); }
+.jj-update-location p { margin-top:14px; color:var(--muted); font-size:var(--text-meta); overflow-wrap:anywhere; }
+.jj-update-result,.jj-update-form { padding:28px; animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-update-result { display:grid; gap:24px; }
+.jj-update-result-heading { display:grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:center; gap:16px; }
+.jj-update-result-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:var(--radius-control); background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); }
+.jj-update-result[data-phase=complete] .jj-update-result-icon { color:var(--good); background:color-mix(in srgb,var(--good) 10%,var(--surface)); }
+.jj-update-result[data-phase=failed] .jj-update-result-icon { color:var(--warn); background:color-mix(in srgb,var(--warn) 10%,var(--surface)); }
+.jj-update-result-heading p { margin-top:8px; color:var(--muted); }
+.jj-update-result > .jj-button { justify-self:end; }
+.jj-update-next { margin-left:60px; font-size:var(--text-meta); color:var(--muted); }
+.jj-update-path { margin-left:60px; padding:12px 16px; border-radius:var(--radius-control); background:var(--inset); overflow-wrap:anywhere; font-size:var(--text-meta); }
+.jj-update-impact { margin-left:60px; }.jj-update-impact p { margin-top:6px; color:var(--muted); }
+.jj-update-confirm { display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.jj-update-confirm > p { font-size:var(--text-meta); max-width:60ch; color:var(--muted); }
+.jj-update-confirm > .jj-button { flex:none; }
+.jj-update-footer { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:16px; padding:16px 28px; border-top:1px solid var(--line); background:var(--inset); }
+.jj-update-footer > details { min-width:0; margin:0; border:0; padding:8px 0; }
+.jj-update-footer > details > summary { width:fit-content; font-size:var(--text-meta); }
+.jj-update-footer dl { display:grid; gap:16px; margin-top:20px; font-size:var(--text-meta); }
+.jj-update-footer dl > div { display:grid; grid-template-columns:80px minmax(0,1fr); gap:16px; }
+.jj-update-footer dt { color:var(--muted); }.jj-update-footer dd { margin:0; overflow-wrap:anywhere; }
+.jj-update-footer > .jj-button { font-size:var(--text-meta); }
+.jj-update-form { display:grid; gap:24px; }
+.jj-update-form > div > p { margin-top:8px; color:var(--muted); }
+.jj-update-picker { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:12px; }
+@container update-workspace (max-width:620px) {
+  .jj-update-current { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .jj-update-location { max-width:100%; justify-self:start; }.jj-update-location summary { margin-left:0; }
+  .jj-update-result-heading { grid-template-columns:40px minmax(0,1fr); align-items:start; }
+  .jj-update-result-heading > .jj-button { grid-column:2; justify-self:start; }
+  .jj-update-confirm { flex-direction:column; align-items:stretch; gap:16px; }.jj-update-confirm > .jj-button { align-self:flex-end; }
+  .jj-update-path,.jj-update-impact,.jj-update-next { margin-left:0; }
+  .jj-update-footer { grid-template-columns:minmax(0,1fr); gap:8px; }.jj-update-footer > .jj-button { justify-self:end; }
+}
+@media(max-width:760px) {
+  .jj-system-workspace > header,.jj-system-workspace footer { flex-wrap:wrap; padding:20px; gap:16px; }
+  .jj-system-components { grid-template-columns:minmax(0,1fr); }
+  .jj-system-components > div { padding:20px; }.jj-system-components > div:nth-child(2n) { border-left:0; }
+  .jj-system-components > div + div { border-top:1px solid var(--line); }
+  .jj-system-diagnostic,.jj-update-current,.jj-update-form,.jj-update-result { padding:20px; }
+  .jj-update-footer { padding:16px 20px; }
+}

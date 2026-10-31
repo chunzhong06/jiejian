@@ -1,6 +1,7 @@
 import {Children,isValidElement,useState,type ReactNode} from 'react'
 import {Select} from 'antd'
-import {CheckOutlined,DownOutlined} from '@ant-design/icons'
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import DownOutlined from '@ant-design/icons/DownOutlined';
 import {popupParent} from './overlay'
 
 type Option={value:string;label:ReactNode;disabled?:boolean;title:string}

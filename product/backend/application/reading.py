@@ -31,3 +31,14 @@ def projected_once(owner: object, key: Hashable, read: Callable[[], T]) -> T:
     if identity not in scope:
         scope[identity]=read()
     return cast(T, deepcopy(scope[identity]))
+
+
+def accepted_once(owner: object, key: Hashable, read: Callable[[], T]) -> T:
+    """同次只读操作复用内部接受结果；消费者不得修改共享的发布包。"""
+    scope = _projection.get()
+    if scope is None:
+        return read()
+    identity = (id(owner), key)
+    if identity not in scope:
+        scope[identity] = read()
+    return cast(T, scope[identity])

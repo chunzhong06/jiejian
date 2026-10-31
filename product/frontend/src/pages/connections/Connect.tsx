@@ -1,6 +1,13 @@
 import './styles.css'
 import { useRef, useState } from 'react';
-import { ArrowRightOutlined, CodeOutlined, FolderOpenOutlined, AppstoreOutlined, DownOutlined, ReloadOutlined, PauseOutlined, PlusOutlined } from '@ant-design/icons';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import CodeOutlined from '@ant-design/icons/CodeOutlined';
+import FolderOpenOutlined from '@ant-design/icons/FolderOpenOutlined';
+import AppstoreOutlined from '@ant-design/icons/AppstoreOutlined';
+import DownOutlined from '@ant-design/icons/DownOutlined';
+import ReloadOutlined from '@ant-design/icons/ReloadOutlined';
+import PauseOutlined from '@ant-design/icons/PauseOutlined';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { Dropdown } from 'antd';
 import { type OfficialExperienceDto } from '../../entities/application/api/experience';
 import { projectsApi, type ProjectDto, type ConnectionPreview, type ConnectionChoice } from '../../entities/application/api/projects';

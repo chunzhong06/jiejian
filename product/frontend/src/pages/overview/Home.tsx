@@ -1,4 +1,7 @@
-import { ArrowRightOutlined, SafetyOutlined, CarryOutOutlined, FileSearchOutlined } from '@ant-design/icons';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
+import CarryOutOutlined from '@ant-design/icons/CarryOutOutlined';
+import FileSearchOutlined from '@ant-design/icons/FileSearchOutlined';
 import type { WorkspaceViewDto, PrimaryTaskKind } from '../../entities/workspace/api/workspace';
 import type { OfficialExperienceDto } from '../../entities/application/api/experience';
 import { currentChecksApi } from '../../entities/check/api/currentChecks';

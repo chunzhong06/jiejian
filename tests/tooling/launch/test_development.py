@@ -300,3 +300,26 @@ def test_browser_download_restores_temporary_environment(tmp_path, monkeypatch, 
 
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_frontend_build_identity_changes_for_runtime_but_not_pure_tests(tmp_path):
+    source, test = tmp_path/'main.tsx', tmp_path/'main.test.tsx'
+    source.write_text('runtime-one', encoding='utf-8')
+    test.write_text('test-one', encoding='utf-8')
+    command = (
+        f". {_powershell_literal(MODULE_ROOT / 'frontend.ps1')};"
+        "$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);"
+        "function Get-FileDigest($Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash};"
+        f"$inputs=@([pscustomobject]@{{source={_powershell_literal(source)};relative='src/main.tsx'}},"
+        f"[pscustomobject]@{{source={_powershell_literal(test)};relative='src/main.test.tsx'}});"
+        "$before=Get-FrontendBuildDigest $inputs 'dependencies';"
+        f"[IO.File]::WriteAllText({_powershell_literal(test)},'test-two');"
+        "$afterTest=Get-FrontendBuildDigest $inputs 'dependencies';"
+        f"[IO.File]::WriteAllText({_powershell_literal(source)},'runtime-two');"
+        "$afterSource=Get-FrontendBuildDigest $inputs 'dependencies';"
+        "[pscustomobject]@{testUnchanged=($before -eq $afterTest);sourceChanged=($before -ne $afterSource)}|ConvertTo-Json -Compress"
+    )
+    result = subprocess.run([POWERSHELL, '-NoLogo', '-NoProfile', '-Command', command], cwd=ROOT,
+                            text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1]) == dict(testUnchanged=True, sourceChanged=True)

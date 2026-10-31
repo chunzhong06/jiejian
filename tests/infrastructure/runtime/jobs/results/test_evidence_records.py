@@ -62,7 +62,49 @@ def test_legacy_outcome_remains_limited_without_inventing_collection_steps(packa
     record=record_index(package,document.evidence_id,document.case.case_id).records[0]
     view=record_view(package,document.evidence_id,document.case.case_id,record.record_id)
     assert view.role=='SUPPORTING' and not view.values
-    assert any('未保存' in text for text in view.limitations)
+    assert any('不能单独证明' in text for text in view.limitations)
+    assert not any('旧证据' in text for text in view.limitations)
     assert 'UNKNOWN' in json.dumps(view.fragment)
+
+
+def test_automatic_activity_is_published_addressed_and_read_as_supporting(package_parts):
+    from product.protocols.runtime.request_activity import RequestActivity
+    from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckEvidence
+    from product.backend.application.checks.reading.story import _request_activity, _activity_error
+    package=validate_check_package(package_parts[3],published=False)
+    original=package.evidence[0]
+    original_bytes=canonical_check_document(original)
+    assert b'"activity"' not in original_bytes
+    assert b'"activity_error"' not in original_bytes
+    assert canonical_check_document(parse_check_document(original_bytes,CheckEvidence))==original_bytes
+    capture=RequestActivity.model_validate_json(json.dumps(dict(request_nonce='a'*64,request_digest='b'*64,
+        adapters=['node:http','node:sqlite'],complete=True,events=[
+            dict(event_id='call_'+'1'*32,parent_event_id=None,kind='HTTP_SERVER',operation='REQUEST',started_at_us=10,duration_us=50,outcome='OK',http_method='POST',http_status=403),
+            dict(event_id='call_'+'2'*32,parent_event_id='call_'+'1'*32,kind='SQLITE',operation='GET',started_at_us=12,duration_us=2,outcome='OK',source_location='app.mjs:20')])))
+    fields={name:getattr(original,name) for name in CheckEvidence.model_fields if name not in {'evidence_id','activity'}}
+    document=seal_check_evidence(**fields,activity=capture)
+    result=next(item for item in package.result.case_results if item.case_id==document.case.case_id)
+    package=replace(package,evidence=(document,),result=package.result.model_copy(update={'case_results':(
+        result.model_copy(update={'evidence_ids':(document.evidence_id,)}),)}))
+    assert document.evidence_id!=original.evidence_id
+    raw=canonical_check_document(document)
+    assert parse_check_document(raw,CheckEvidence).activity==capture
+    path=_request_activity((document,))
+    assert path.capture==capture and path.evidence_refs==(document.evidence_id,)
+    assert _activity_error((document,)) is None
+    missing=seal_check_evidence(**{**fields,'activity_error':'ACTIVITY_SOURCE_UNAVAILABLE'})
+    assert _request_activity((missing,)) is None
+    assert _activity_error((missing,))=='ACTIVITY_SOURCE_UNAVAILABLE'
+    assert _activity_error((document,missing))=='ACTIVITY_RECORDS_CONFLICT'
+    link=next(item for item in record_index(package,document.evidence_id,document.case.case_id).records if item.event_id==capture.events[1].event_id)
+    view=record_view(package,document.evidence_id,document.case.case_id,link.record_id)
+    assert view.role=='SUPPORTING' and view.location['pointer']=='/activity/events/1'
+    assert view.fragment['source_location']=='app.mjs:20'
+    assert view.verification[3].source['pointer']=='/activity'
+    assert view.verification[3].status=='LIMITED' and '关联到实际请求' in view.verification[3].text
+    assert not any('旧证据' in item for item in view.limitations)
+    assert 'SQLITE' in view.fragment.values()
+    changed=raw.replace(b'"duration_us":2,',b'"duration_us":3,')
+    with pytest.raises(ValueError):parse_check_document(changed,CheckEvidence)
 
 pytestmark = [pytest.mark.level3]

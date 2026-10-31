@@ -28,6 +28,17 @@ def recorded_material_reusable(work, binding, understanding, var_dir):
     return scope[1][key]
 
 
+def material_fact(work, owner, key, read):
+    """只读材料投影可复用同事务事实；写入用例及外部文件读取不进入此缓存。"""
+    scope = _reuse_read.get()
+    if scope is None or scope[0] is not work:
+        return read()
+    identity = (id(owner), key)
+    if identity not in scope[1]:
+        scope[1][identity] = read()
+    return scope[1][identity]
+
+
 def _recorded_material_reusable(work, binding, understanding, var_dir):
     if binding.source_fingerprint is None or understanding.source_fingerprint is None:
         return False

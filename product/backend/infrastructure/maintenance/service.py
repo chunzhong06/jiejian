@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import time
+import stat as stat_mode
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -62,16 +63,17 @@ class LocalMaintenanceService:
         self._state_path = self.paths.runtime / "local-maintenance-state.json"
         self.assets = StartupAssets(self.paths.root, development_root)
         self._completed: dict[str, dict] = {}
+        self._executing: set[str] = set()
 
     def status(self) -> dict[str, object]:
         """按生成方归属返回候选及保留原因；兼容统计也只包含已登记的闲置文件。"""
 
         return self._status_payload(self._inventory())
 
-    def _status_payload(self, assets: list[Asset]) -> dict[str, object]:
+    def _status_payload(self, assets: list[Asset], measurements=None) -> dict[str, object]:
         # 预览与展示复用同一次扫描；删除前仍逐项重读归属和占用，不能复用旧许可。
         state = read_record(self._state_path) or {}
-        inventory = [self._asset_payload(item) for item in assets]
+        inventory = [self._asset_payload(item, measurements) for item in assets]
 
         # CLI 的分类摘要与 GUI 明细使用同一次扫描，避免占用状态和大小出现两套结果。
         def entry(category: str, root: Path) -> dict[str, object]:
@@ -93,6 +95,7 @@ class LocalMaintenanceService:
                 "temporary": entry("temporary", self.paths.root),
             },
             "last_successful_operation": state.get("last_successful_operation"),
+            "unresolved_plans": self._unresolved_plans(),
             "protected": self._protected_summary(),
             "inventory": inventory,
             "ownership_policy": "仅管理由启动和运行模块登记的闲置生成物",
@@ -122,11 +125,14 @@ class LocalMaintenanceService:
 
         self._validate_operation(operation)
         with self._locked():
+            if self._unresolved_plans():
+                raise JiejianError(ErrorCode.LOCAL_MAINTENANCE_FAILED, '请先查询并核对上次清理结果，再建立新计划')
             now_us = self._now_us()
             self._prune_plans(now_us)
             inventory = self._inventory()
+            measurements = {}
             candidates = tuple(
-                self._snapshot_candidate(operation, asset)
+                self._snapshot_candidate(operation, asset, measurements)
                 for asset in self._operation_candidates(operation, inventory)
                 if safe_tree(asset.path, asset.root)
             )
@@ -138,7 +144,7 @@ class LocalMaintenanceService:
                 candidates=candidates,
             )
             self._plans[plan.plan_id] = plan
-            return self._plan_payload(plan, self._status_payload(inventory))
+            return self._plan_payload(plan, self._status_payload(inventory, measurements))
 
     def execute(
         self,
@@ -151,8 +157,15 @@ class LocalMaintenanceService:
 
         with self._locked():
             now_us = self._now_us()
-            if plan_id in self._completed:
-                return self._completed[plan_id]
+            previous = self.outcome(plan_id)
+            if previous['state'] == 'COMPLETED':
+                result = previous['result']
+                if (expected_scope is not None and result['scope'] != expected_scope
+                        or item_ids is not None and set(item_ids) != set(result.get('selected_ids', [item['item_id'] for item in result['targets']]))):
+                    raise JiejianError(ErrorCode.INPUT_INVALID, '该计划已按其他选择完成，请查询原结果')
+                return previous['result']
+            if previous['state'] == 'INTERRUPTED':
+                raise JiejianError(ErrorCode.LOCAL_MAINTENANCE_FAILED, '原清理已中断，请先核对原操作结果')
             plan = self._plans.get(plan_id)
             if plan is None or plan.expires_at_us < now_us:
                 raise JiejianError(
@@ -170,8 +183,24 @@ class LocalMaintenanceService:
             if not selected_ids or not selected_ids.issubset(known_ids):
                 if known_ids or item_ids is not None:
                     raise JiejianError(ErrorCode.INPUT_INVALID, "清理选择不属于这份预览计划")
+            progress = {**self._plan_payload(plan), 'dry_run': False, 'confirmed': True,
+                        'selected_ids': sorted(selected_ids)}
+            self._save_receipt(plan_id, 'RUNNING', progress)
             self._plans.pop(plan_id, None)
-            results = [self._execute_candidate(item) for item in plan.candidates if item.item_id in selected_ids]
+            results = []
+            self._executing.add(plan_id)
+            try:
+                for item in plan.candidates:
+                    if item.item_id not in selected_ids:
+                        continue
+                    progress['current_item'] = item.item_id
+                    self._save_receipt(plan_id, 'RUNNING', progress)
+                    results.append(self._execute_candidate(item))
+                    progress['results'] = list(results)
+                    progress['current_item'] = None
+                    self._save_receipt(plan_id, 'RUNNING', progress)
+            finally:
+                self._executing.discard(plan_id)
             deleted = [
                 str(item["relative_path"])
                 for item in results
@@ -198,6 +227,7 @@ class LocalMaintenanceService:
                 **self._plan_payload(plan),
                 "dry_run": False,
                 "confirmed": True,
+                "selected_ids": sorted(selected_ids),
                 "removed": deleted,
                 "results": results,
                 "counts": counts,
@@ -208,18 +238,35 @@ class LocalMaintenanceService:
             }
             self._completed[plan_id] = result
             try:
-                receipts = self.paths.runtime / "maintenance-results"
-                receipts.mkdir(parents=True, exist_ok=True)
-                receipt = receipts / (hashlib.sha256(plan_id.encode()).hexdigest() + ".json")
-                temporary = receipt.with_suffix(".tmp")
-                temporary.write_text(json.dumps({"schema_version":"1", "plan_id":plan_id,
-                    "result":{key:value for key,value in result.items() if key != "status"}}, ensure_ascii=False), encoding="utf-8")
-                os.replace(temporary, receipt)
+                self._save_receipt(plan_id, 'COMPLETED', result)
             except OSError:
                 result["recorded"] = False
             if len(self._completed) > 20:
                 self._completed.pop(next(iter(self._completed)))
             return result
+
+    def _save_receipt(self, plan_id: str, phase: str, result: dict) -> None:
+        receipt = self.paths.runtime / 'maintenance-results' / (hashlib.sha256(plan_id.encode()).hexdigest() + '.json')
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        temporary = receipt.with_suffix('.tmp')
+        with temporary.open('w', encoding='utf-8') as stream:
+            json.dump({'schema_version': '1', 'plan_id': plan_id, 'phase': phase,
+                       'result': {key: value for key, value in result.items() if key != 'status'}}, stream, ensure_ascii=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, receipt)
+
+    def _unresolved_plans(self) -> list[str]:
+        return [record['plan_id'] for path in (self.paths.runtime / 'maintenance-results').glob('*.json')
+                if (record := read_record(path)) and record.get('phase') == 'RUNNING']
+
+    def review_interruption(self, plan_id: str) -> dict[str, object]:
+        with self._locked():
+            outcome = self.outcome(plan_id)
+            if outcome['state'] != 'INTERRUPTED':
+                raise JiejianError(ErrorCode.LOCAL_MAINTENANCE_FAILED, '该清理尚无可核对的中断结果')
+            self._save_receipt(plan_id, 'REVIEWED', outcome['result'])
+            return {'reviewed': True, 'plan_id': plan_id}
 
     def outcome(self, plan_id: str) -> dict[str, object]:
         if not 1 <= len(plan_id) <= 128:
@@ -228,7 +275,16 @@ class LocalMaintenanceService:
             return {"state":"COMPLETED", "result":self._completed[plan_id]}
         receipt = read_record(self.paths.runtime / "maintenance-results" / (hashlib.sha256(plan_id.encode()).hexdigest() + ".json"))
         if receipt and receipt.get("plan_id") == plan_id and isinstance(receipt.get("result"),dict):
-            return {"state":"COMPLETED", "result":{**receipt["result"], "status":self.status()}}
+            result = receipt['result']
+            if receipt.get('phase', 'COMPLETED') != 'COMPLETED':
+                if plan_id in self._executing:
+                    return {'state': 'PENDING', 'result': None}
+                # 未落盘的删除结果不能靠文件缺失补造成成功，更不能自动重放。
+                counts = {key: sum(item['status'] == key for item in result['results']) for key in result['counts']}
+                result = {**result, 'counts': counts, 'interrupted': True,
+                          'unconfirmed': len(result['selected_ids']) - len(result['results'])}
+                return {'state': 'INTERRUPTED', 'result': {**result, 'status': self.status()}}
+            return {"state":"COMPLETED", "result":{**result, "status":self.status()}}
         return {"state":"PENDING" if plan_id in self._plans else "UNKNOWN", "result":None}
 
     def startup_maintenance(self) -> dict[str, object]:
@@ -338,9 +394,13 @@ class LocalMaintenanceService:
             return path.relative_to(self.paths.root).as_posix()
         return "共享启动目录/" + path.relative_to(root).as_posix()
 
-    def _asset_payload(self, item: Asset) -> dict[str, object]:
-        safe = item.state == "CLEANABLE" and safe_tree(item.path, item.root)
-        size, files = self._measure(item.path) if safe else (None,None)
+    def _asset_payload(self, item: Asset, measurements=None) -> dict[str, object]:
+        measured = None if measurements is None else measurements.get(item.path)
+        if measured is not None:
+            size, files = measured
+        else:
+            safe = item.state == "CLEANABLE" and safe_tree(item.path, item.root)
+            size, files = self._measure(item.path) if safe else (None,None)
         return {"category":item.category,"label":item.label,"relative_path":self._relative_path(item.path,item.root),
                 "state":item.state,"reason":item.reason,"bytes":size,"files":files}
 
@@ -504,20 +564,24 @@ class LocalMaintenanceService:
         self,
         operation: str,
         asset: Asset,
+        measurements=None,
     ) -> MaintenanceCandidate:
         path, root = asset.path, asset.root
         relative_path = self._relative_path(path, root)
         item_id = hashlib.sha256(
             f"{operation}\0{relative_path}".encode("utf-8")
         ).hexdigest()[:24]
+        fingerprint, size, files = self._path_details(path)
+        if measurements is not None:
+            measurements[path] = (size, files)
         return MaintenanceCandidate(
             item_id=item_id,
             label=asset.label,
             relative_path=relative_path,
             path=path,
             root=root,
-            estimated_bytes=self._measure(path)[0],
-            fingerprint=self._path_fingerprint(path),
+            estimated_bytes=size,
+            fingerprint=fingerprint,
             category=asset.category,
         )
 
@@ -580,7 +644,12 @@ class LocalMaintenanceService:
 
     @classmethod
     def _path_fingerprint(cls, path: Path) -> str:
+        return cls._path_details(path)[0]
+
+    @staticmethod
+    def _path_details(path: Path) -> tuple[str, int, int]:
         digest = hashlib.sha256()
+        size = files = 0
         members = [path]
         if path.is_dir():
             members.extend(sorted(path.rglob("*"), key=lambda item: item.as_posix()))
@@ -588,6 +657,9 @@ class LocalMaintenanceService:
             relative = "." if member == path else member.relative_to(path).as_posix()
             try:
                 stat = member.stat(follow_symlinks=False)
+                if stat_mode.S_ISREG(stat.st_mode):
+                    size += stat.st_size
+                    files += 1
                 value = (
                     relative,
                     stat.st_mode,
@@ -598,7 +670,7 @@ class LocalMaintenanceService:
                 value = (relative, "unavailable")
             digest.update(repr(value).encode("utf-8"))
             digest.update(b"\0")
-        return digest.hexdigest()
+        return digest.hexdigest(), size, files
 
     @staticmethod
     def _now_us() -> int:

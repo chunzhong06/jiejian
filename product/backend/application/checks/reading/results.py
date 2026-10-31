@@ -15,6 +15,7 @@ from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequ
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
 from product.protocols.checks.execution_request import WireModel
+from product.backend.application.reading import accepted_once, projection_read
 
 
 class CheckRunView(WireModel):
@@ -83,7 +84,7 @@ class CheckHistoryPage(WireModel):
 
 
 class CheckResultReader:
-    """没有凭据、执行器和写仓储入口；每次读取重新核验已发布字节，不缓存可变文件结论。"""
+    """没有凭据、执行器和写仓储入口；每次独立读取重新核验已发布字节；同次派生共用接受结果。"""
 
     def __init__(self, *, var_dir, uow_factory):
         self._var_dir, self._uow_factory = var_dir, uow_factory
@@ -91,6 +92,7 @@ class CheckResultReader:
     def list_for_project(self, project_id: str) -> tuple[CheckRunStatus, ...]:
         return tuple(status for status, _ in self.project_readings(project_id))
 
+    @projection_read
     def project_readings(self, project_id):
         """历史聚合只在当前请求传递核验后的包，避免修复与总览再次读取同一文件。"""
         with self._uow_factory() as work:
@@ -107,6 +109,7 @@ class CheckResultReader:
                 lifecycles=(RunLifecycle.QUEUED, RunLifecycle.RUNNING))
             return None if not candidates else self._status(work, candidates[0])
 
+    @projection_read
     def history(self, project_id: str, *, limit: int = 25, before_created_at_us: int | None = None,
                 before_run_id: str | None = None, query: str | None = None,
                 verdict: RunVerdict | None = None, lifecycle: RunLifecycle | None = None,rule_reference:tuple[str,int,str]|None=None) -> CheckHistoryPage:
@@ -162,6 +165,11 @@ class CheckResultReader:
         with self._uow_factory() as work:
             return self._status(work, self._run(work, run_id, project_id))
 
+    def inspect(self, run_id: str, *, project_id: str | None = None):
+        """一次读取返回状态及已核验发布包；未发布或失效时包为空。"""
+        with self._uow_factory() as work:
+            return self._status_and_package(work, self._run(work, run_id, project_id))
+
     def package(self, run_id: str, *, project_id: str | None = None) -> CheckPackage:
         with self._uow_factory() as work:
             run = self._run(work, run_id, project_id)
@@ -185,18 +193,21 @@ class CheckResultReader:
         package=self.package(run_id,project_id=project_id)
         return record_index(package,evidence_id,case_id) if record_id is None else record_view(package,evidence_id,case_id,record_id)
 
-    def evidence_bundle(self, project_id, run_id, case_id, evidence_ids):
+    def evidence_bundle(self, project_id, run_id, case_id, evidence_ids, *, record_id=None):
         """同次展开所需文档和索引共享一次完整核验；其它请求仍重新校验字节。"""
-        from product.backend.application.checks.reading.records import record_index
+        from product.backend.application.checks.reading.records import record_index, record_view
         ids = tuple(dict.fromkeys(evidence_ids))
-        if not ids or len(evidence_ids) > 32:
+        if not ids or len(evidence_ids) > 32 or record_id is not None and len(ids) != 1:
             raise JiejianError(ErrorCode.INPUT_INVALID, '每次请选择1至32份发布证据')
         package = self.package(run_id, project_id=project_id)
         values = []
         for evidence_id in ids:
             index = record_index(package, evidence_id, case_id)
             document = next(item for item in package.evidence if item.evidence_id == evidence_id)
-            values.append(dict(document=document.model_dump(mode='json'), index=index.model_dump(mode='json')))
+            item = dict(document=document.model_dump(mode='json'), index=index.model_dump(mode='json'))
+            if record_id is not None:
+                item['record'] = record_view(package, evidence_id, case_id, record_id).model_dump(mode='json')
+            values.append(item)
         return dict(project_id=project_id, run_id=run_id, case_id=case_id, items=values)
 
     @staticmethod
@@ -291,6 +302,10 @@ class CheckResultReader:
         receipt = work.check_publications.get(run.run_id)
         if receipt is None:
             raise JiejianError(ErrorCode.ARTIFACT_NOT_PUBLISHED, "结果尚未发布")
+        key = ('published', run.model_dump_json(), None if job is None else job.model_dump_json(), receipt.model_dump_json())
+        return accepted_once(self, key, lambda: self._verified_package(work, run, job, receipt))
+
+    def _verified_package(self, work, run, job, receipt):
         package = validate_check_package(check_final_directory(self._var_dir, run.project_id, run.run_id), published=True)
         manifest, result, request = package.manifest, package.result, package.request
         digest = hashlib.sha256(canonical_check_document(manifest)).hexdigest()

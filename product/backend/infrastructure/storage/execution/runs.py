@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, String
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, String, desc
 from sqlalchemy.orm import Mapped, mapped_column
 
 from product.backend.infrastructure.storage.base import Base
@@ -39,7 +39,7 @@ class RunRow(Base):
             "AND (finished_at_us IS NULL OR finished_at_us >= created_at_us)",
             name="time_order",
         ),
-        Index("ix_runs_project_created", "project_id", "created_at_us"),
+        Index("ix_runs_project_created", "project_id", desc("created_at_us"), "run_id"),
         Index("ix_runs_lifecycle_updated", "lifecycle", "updated_at_us"),
     )
 

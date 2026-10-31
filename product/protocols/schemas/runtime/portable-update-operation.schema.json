@@ -1,0 +1,92 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "number"
+    },
+    "document_type": {
+      "const": "jiejian.portable-update-operation",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "manifest_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Digest",
+      "type": "string"
+    },
+    "operation_id": {
+      "pattern": "^upd_[0-9a-f]{32}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "PREVIEWED",
+        "WAITING_FOR_EXIT",
+        "STARTING",
+        "READY",
+        "FAILED"
+      ],
+      "title": "Phase",
+      "type": "string"
+    },
+    "port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "previous_release": {
+      "title": "Previous Release",
+      "type": "string"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "return_path": {
+      "default": "/workspace",
+      "title": "Return Path",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "target_release": {
+      "title": "Target Release",
+      "type": "string"
+    },
+    "target_version": {
+      "title": "Target Version",
+      "type": "string"
+    },
+    "workspace": {
+      "title": "Workspace",
+      "type": "string"
+    },
+    "workspace_upgrade": {
+      "default": false,
+      "title": "Workspace Upgrade",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "document_type",
+    "operation_id",
+    "workspace",
+    "previous_release",
+    "target_release",
+    "manifest_digest",
+    "target_version",
+    "port",
+    "created_at",
+    "phase"
+  ],
+  "title": "PortableUpdateOperation",
+  "type": "object"
+}

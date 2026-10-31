@@ -1,5 +1,5 @@
 import type {ReactNode} from 'react'
-import {LoadingOutlined} from '@ant-design/icons'
+import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
 import {Button} from './actions'
 
 export function Badge({children,tone='neutral'}:{children:ReactNode;tone?:'neutral'|'positive'|'negative'|'caution'|'accent'}){return <span className={`jj-badge is-${tone}`}>{children}</span>}

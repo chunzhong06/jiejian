@@ -20,22 +20,24 @@ def test_project_repair_projects_exact_linked_state(state):
     linked = state in {"VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE", "PENDING"}
     if linked:
         current.request = current.request.model_copy(update={"repair_context": repair_context(contract), "change_context": N(change_id=change_id)})
-        entries.append(N(run=N(run_id=current.result.run_id, created_at_us=2), result_integrity="PENDING" if state == "PENDING" else "VALID"))
+        entries.append(N(run=N(run_id=current.result.run_id, created_at_us=2, lifecycle="RUNNING"), result_integrity="PENDING" if state == "PENDING" else "VALID"))
     change = None if state in {None, "REPAIR_REQUIRED", "STALE"} else N(manifest=N(change_id=change_id), revalidation=N(status="READY" if state == "READY_TO_VERIFY" else "MAPPING_REVIEW_REQUIRED", can_execute=state == "READY_TO_VERIFY"))
     service = CurrentProjectRepairService(reader=N(project_readings=lambda _: tuple((entry, None if entry.result_integrity == "PENDING" else source if entry.run.run_id == source.result.run_id else current) for entry in entries),
         package=lambda run, **kwargs: source if run == source.result.run_id else current),
         repairs=N(contracts_from_verified_package=lambda _: (contract,), verification_for_contract=lambda package, contract: CurrentRepairVerification(
             repair_reference=contract.repair_fingerprint, source_run_id=contract.source_run_id, run_id=current.result.run_id, status=state, reason_codes=())),
-        changes=N(targets=lambda *_: (),latest_for_repair=lambda *args: change), boundaries=N(view=lambda _: boundary), pending_request_reader=lambda _: current.request)
+        changes=N(repair_references=lambda _, identity: (contract.reference(),) if identity == change_id else (), targets=lambda *_: (),latest_for_repair=lambda *args: change), boundaries=N(view=lambda _: boundary), pending_request_reader=lambda _: current.request)
     actual = service.evaluate(source.request.project_id)
-    assert actual.status == ("INCONCLUSIVE" if state == "PENDING" else state)
+    assert actual.status == ("CHANGE_SUBMITTED" if state == "PENDING" else state)
     assert len(actual.tasks) == (0 if state is None else 1)
     if actual.tasks:
         rows = actual.tasks[0].comparison
         assert [row.role for row in rows] == ["DENY", "SELECTED_ALLOW", "REGRESSION"]
         assert all(row.match_status == ("MATCHED" if linked and state != "PENDING" else "NOT_AVAILABLE") for row in rows)
         assert actual.tasks[0].contract == contract
-    if linked:
+    if state == "PENDING":
+        assert actual.tasks[0].history[-1].kind == "CHECK_PENDING"
+    if linked and state != "PENDING":
         assert actual.tasks[0].run_id == current.result.run_id
 
 
@@ -53,7 +55,7 @@ def test_unrelated_passing_run_cannot_verify_the_original_problem(mismatch):
     entries = [N(run=N(run_id=item.result.run_id,created_at_us=index),result_integrity='VALID') for index,item in enumerate((source,current))]
     service = CurrentProjectRepairService(reader=N(project_readings=lambda _:tuple((entry, source if entry.run.run_id == source.result.run_id else current) for entry in entries),package=lambda run,**kwargs:source if run==source.result.run_id else current),
         repairs=N(contracts_from_verified_package=lambda _:(contract,),verification_for_contract=lambda *_:pytest.fail('不相关检查不能进入原题验证')),
-        changes=N(targets=lambda *_: (),latest_for_repair=lambda *args:N(manifest=N(change_id=change_id),revalidation=N(status='READY',can_execute=True))),
+        changes=N(repair_references=lambda _, identity: (contract.reference(),) if identity == change_id else (), targets=lambda *_: (),latest_for_repair=lambda *args:N(manifest=N(change_id=change_id),revalidation=N(status='READY',can_execute=True))),
         boundaries=N(view=lambda _:N(policy_epoch=1,permission_intents=contract.original_intents)),pending_request_reader=lambda _:None)
     value = service.evaluate(source.request.project_id)
     assert value.status == 'READY_TO_VERIFY'
@@ -90,4 +92,72 @@ def test_project_repair_multiple_original_families_preserve_priority():
     assert [item.status for item in value.tasks] == ["REPAIR_REQUIRED", "READY_TO_VERIFY"]
     assert value.primary_task_reference == first.deny.identity.fingerprint()
 
+
+def test_problem_history_keeps_failed_attempt_resolution_and_recurrence():
+    from product.backend.domain.checks.repair import verify_current_repair
+    from product.protocols.checks.execution_request import ChangeContext
+    source, failed, fixed, ordinary, recurring = [package(forbidden=bad, run_id='run_' + str(index) * 32)
+        for index, bad in enumerate((True, True, False, False, True), start=1)]
+    contract = build_current_repair_contract(source, next(item.case_id for item in source.result.case_results if item.verdict == 'VULNERABLE'))
+    refs = {}
+    for index, item in enumerate((failed, fixed), start=1):
+        change = ChangeContext(change_id='chg_' + str(index) * 32, impact_fingerprint=str(index) * 64,
+            required_intent_ids=tuple(sorted(ref.intent_id for ref in contract.original_intents)))
+        item.request = item.request.model_copy(update={'repair_context': repair_context(contract), 'change_context': change})
+        refs[change.change_id] = (contract.reference(),)
+    values = [source, failed, fixed, ordinary, recurring]
+    service = CurrentProjectRepairService(reader=N(project_readings=lambda _: tuple(
+        (N(run=N(run_id=item.result.run_id, created_at_us=index, lifecycle='COMPLETED'), result_integrity='VALID'), item)
+        for index, item in enumerate(values)), package=lambda run, **_: next(item for item in values if item.result.run_id == run)),
+        repairs=N(contracts_from_verified_package=lambda item: tuple(build_current_repair_contract(item, case.case_id)
+            for case in item.result.case_results if case.verdict == 'VULNERABLE'),
+            verification_for_contract=lambda item, original: verify_current_repair(original, request=item.request,
+                bundle=item.bundle, result=item.result, evidence=item.evidence, expected_change_context=item.request.change_context)),
+        changes=N(repair_references=lambda _, change: refs[change], targets=lambda *_: (), latest_for_repair=lambda *_: None),
+        boundaries=N(view=lambda _: N(policy_epoch=1, permission_intents=contract.original_intents)), pending_request_reader=None)
+    task = service.evaluate(source.request.project_id).tasks[0]
+    assert task.status == 'REPAIR_REQUIRED'
+    assert task.contract.source_run_id == recurring.result.run_id
+    assert task.first_source_run_id == source.result.run_id
+    assert task.last_verified_run_id == fixed.result.run_id and task.recurrence_count == 1
+    assert [(item.kind, item.status) for item in task.history] == [
+        ('FOUND', 'REPAIR_REQUIRED'), ('CHECKED', 'NOT_VERIFIED'), ('VERIFIED', 'VERIFIED'),
+        ('CHECKED', None), ('RECURRED', 'REPAIR_REQUIRED')]
+    values.pop()
+    task = service.evaluate(source.request.project_id).tasks[0]
+    assert task.status == 'VERIFIED' and task.run_id == fixed.result.run_id
+
+
+def test_new_proof_conditions_do_not_claim_recurrence():
+    from product.backend.application.projects.repair import _same_conditions
+    source = package()
+    original = build_current_repair_contract(source, next(item.case_id for item in source.result.case_results if item.verdict == 'VULNERABLE'))
+    changed = original.model_copy(update={'deny': original.deny.model_copy(update={'evidence_standard_fingerprints': ('f' * 64,)})})
+    assert not _same_conditions(original, changed)
+    assert _same_conditions(original, original)
+
 pytestmark = [pytest.mark.level3]
+
+
+def test_multi_target_review_cannot_accept_one_success_for_the_batch():
+    from types import SimpleNamespace as N
+    from product.backend.application.checks.repairs.repair import CurrentRepairService
+    from tests.support.builders.checks.repair import contract_and_new
+    from product.backend.domain.checks.repair import CurrentRepairVerification
+    from tests.support.builders.checks.repair import package
+    source = package()
+    original = build_current_repair_contract(source, next(item.case_id for item in source.result.case_results if item.verdict == 'VULNERABLE'))
+    second_source = package(run_id='run_' + '3' * 32)
+    second = build_current_repair_contract(second_source, next(item.case_id for item in second_source.result.case_results if item.verdict == 'VULNERABLE'))
+    contract, current, context = contract_and_new()
+    targets = tuple(N(repair=item.reference()) for item in (original, second))
+    service = CurrentRepairService.__new__(CurrentRepairService)
+    service._reader = N(package=lambda run, **_: source if run == original.source_run_id else second_source)
+    service._rule_targets_reader = lambda *_: targets
+    service.contracts_from_verified_package = lambda item: (original,) if item is source else (second,)
+    service.verification_for_contract = lambda package, item: CurrentRepairVerification(repair_reference=item.repair_fingerprint,
+        source_run_id=item.source_run_id,run_id=current.result.run_id,status='VERIFIED' if item is original else 'INCONCLUSIVE',reason_codes=())
+    reviews = service.reviews_from_verified_package(current)
+    assert [item.verification.status for item in reviews] == ['VERIFIED', 'INCONCLUSIVE']
+    assert {item.reference for item in reviews} == {original.reference(), second.reference()}
+    assert all(item.comparison[0].match_status == 'MATCHED' for item in reviews)

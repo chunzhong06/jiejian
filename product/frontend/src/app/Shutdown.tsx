@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { PoweroffOutlined } from '@ant-design/icons';
+import PoweroffOutlined from '@ant-design/icons/PoweroffOutlined';
 import { systemApi } from '../entities/runtime/api/system';
 import { Button } from "../shared/ui/actions";
 import { Dialog } from "../shared/ui/Dialog";

@@ -15,6 +15,7 @@ function frontendBuildId() {
     })
   }
   for (const path of [...collect('src'), 'index.html', 'package.json', 'pnpm-lock.yaml', 'tooling/vite.config.ts'].sort()) {
+    if(/(?:^|\/)[^/]+\.test\.tsx?$/.test(path.replaceAll('\\','/')))continue
     hash.update(path.replaceAll('\\','/')+'\0'); hash.update(readFileSync(path)); hash.update('\0')
   }
   return hash.digest('hex')

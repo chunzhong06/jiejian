@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftOutlined, UserOutlined, GlobalOutlined, CheckOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import UserOutlined from '@ant-design/icons/UserOutlined';
+import GlobalOutlined from '@ant-design/icons/GlobalOutlined';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
 import { testIdentitiesApi as api, type IdentityPreparationDto, type TestIdentityDto } from '../../../entities/preparation/api/testIdentities';
 import { preparationApi, type ActionPreparation } from '../../../entities/preparation/api/preparation';
 import { ApiError } from '../../../shared/api/http';

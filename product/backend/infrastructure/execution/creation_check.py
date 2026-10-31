@@ -68,7 +68,7 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
     document=seal_check_evidence(run_id=executor.input.run_id,job_id=executor.input.job_id,
         attempt=executor.input.attempt,action_id=action.action_id,action_revision=action.action_revision,
         request_hash=executor.input.request_hash,config_hash=executor.input.config_hash,case=case,outcome=outcome,
-        observations=observations,business_facts=facts,fact_references=references)
+        observations=observations,business_facts=facts,fact_references=references,**observers.activity_fields(case))
     return CheckCaseResult(case_id=case.case_id,action_id=action.action_id,verdict=decision.verdict,
         reason_codes=decision.reason_codes,evidence_ids=(document.evidence_id,),outcome=outcome),document
 

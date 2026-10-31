@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {projectsApi} from '../../entities/application/api/projects'
 import {experienceApi} from '../../entities/application/api/experience'
 import {workspaceApi} from '../../entities/workspace/api/workspace'
@@ -10,7 +10,6 @@ import {useRead} from '../../shared/lib/useRead'
 export function useApplication(current:string,route:Route){
   const [selected,setSelected]=useState(()=>localStorage.getItem('jiejian.studio.project')??'')
   const projects=useRead('applications',projectsApi.projects)
-  const environment=useRead('environment',signal=>experienceApi.status(undefined,true,signal),3000)
   const runId=current==='/reports'?route.query.get('run_id'):null
   const legacy=useRead(runId&&!route.query.has('project_id')?'report-owner:'+runId:null,async()=>runId?currentChecksApi.status(runId):null)
   const requested=current==='/archive'?undefined:route.query.get('project_id')??legacy.data?.run.project_id
@@ -19,6 +18,8 @@ export function useApplication(current:string,route:Route){
   const known=projects.data?.find(item=>item.project_id===scope)
   const resolved=useRead(requested&&!known?'application-owner:'+requested:null,()=>projectsApi.project(requested!))
   const project=known??(requested?resolved.data:projects.data?.[0])
+  const needsEnvironment=current==='/environment'||current==='/workspace'&&Boolean(project?.official_sample)
+  const environment=useRead(needsEnvironment?'environment':null,signal=>experienceApi.status(undefined,true,signal),current==='/environment'?3000:0)
   useEffect(()=>{
     if(project?.status==='ARCHIVED'&&current!=='/archive'&&runId){const query=new URLSearchParams(route.query);query.set('project_id',project.project_id);go('/archive?'+query)}
     else if(legacy.data&&!route.query.has('project_id')){const query=new URLSearchParams(route.query);query.set('project_id',legacy.data.run.project_id);go(route.path+'?'+query)}
@@ -30,7 +31,17 @@ export function useApplication(current:string,route:Route){
     const value=await workspaceApi.current(project.project_id,signal)
     assertProject(value.project.project_id,project.project_id)
     return value
+  // DB 修订缩短普通提交的刷新等待；独立文件仍沿用原来的定期重读边界。
   },value=>value?.active_check?2000:10000)
+  const revision=useRead(needsWorkspace&&project?'workspace-revision:'+project.project_id:null,
+    signal=>workspaceApi.revision(project!.project_id,signal),2000)
+  const lastRevision=useRef<{project:string;value:string}|undefined>(undefined)
+  useEffect(()=>{
+    if(!project||!revision.data)return
+    const previous=lastRevision.current
+    lastRevision.current={project:project.project_id,value:revision.data.revision}
+    if(previous?.project===project.project_id&&previous.value!==revision.data.revision&&!workspace.data?.active_check)workspace.reload()
+  },[project?.project_id,revision.data?.revision])
   useEffect(()=>{if(project)localStorage.setItem('jiejian.studio.project',project.project_id)},[project?.project_id])
   const choose=(id:string)=>{setSelected(id);go('/workspace',id)}
   const refresh=()=>{workspace.reload();projects.reload();environment.reload()}

@@ -133,6 +133,13 @@ class DevelopmentRepository:
             revision=value.revision, payload=self._payload(value)))
         _flush(self._session)
 
+    def contexts(self, project_id, context_ids):
+        if not context_ids:
+            return {}
+        rows = self._session.scalars(select(DevelopmentContextRow).join(DevelopmentTaskRow)
+            .where(DevelopmentTaskRow.project_id == project_id, DevelopmentContextRow.context_id.in_(context_ids)))
+        return {row.context_id: self._read(row, DevelopmentContext) for row in rows}
+
     def first_context(self, project_id, task_id):
         row = self._session.scalar(select(DevelopmentContextRow).join(DevelopmentTaskRow).where(
             DevelopmentTaskRow.project_id == project_id, DevelopmentContextRow.task_id == task_id,

@@ -88,6 +88,107 @@ async function main() {
   const recordCapability = process.env.JIEJIAN_RECORD_CAPABILITY
   const recordControl = process.env.JIEJIAN_RECORD_CONTROL
   const requestScopes = new AsyncLocalStorage()
+  const adapterNames = new Set(['node:http'])
+  const methodName = method => ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS','CONNECT','TRACE'].includes(method) ? method : 'OTHER'
+  const nowUs = () => Math.trunc(performance.timeOrigin * 1000 + performance.now() * 1000)
+  function sourcePosition() {
+    const stack = new Error().stack?.split('\n') ?? []
+    for (const line of stack) {
+      const match = line.match(/(?:\(|at )([^()]+\.mjs):(\d+):\d+\)?$/)
+      if (match && records.get(match[1].toLowerCase())?.relative === match[1]) return match[1]+':'+match[2]
+    }
+    return null
+  }
+  function startCall(scope, kind, operation, extra = {}) {
+    const capture = scope?.capture
+    if (!capture || scope.ending) return null
+    if (capture.events.length >= 128) { capture.dropped_count += 1; return null }
+    const event = {event_id:'call_'+crypto.randomBytes(16).toString('hex'),
+      parent_event_id:capture.events[0]?.event_id ?? null, kind, operation, started_at_us:nowUs(),
+      duration_us:0, outcome:'INCOMPLETE', source_location:sourcePosition(), http_method:null, http_status:null, ...extra}
+    capture.events.push(event)
+    return event
+  }
+  function finishCall(event, outcome = 'OK', extra = {}) {
+    if (event) Object.assign(event,{outcome,duration_us:Math.max(0,nowUs()-event.started_at_us)},extra)
+  }
+  function captureSync(kind, operation, invoke) {
+    const event = startCall(requestScopes.getStore(),kind,operation)
+    try { const result = invoke(); finishCall(event); return result }
+    catch (error) { finishCall(event,'ERROR'); throw error }
+  }
+  function activitySnapshot(scope, closed) {
+    // 单次请求有界缓冲，随闭合回执一次保存；崩溃时只留下预先持久化的未闭合入口。
+    if (!scope.capture) return undefined
+    return {...scope.capture, adapters:[...adapterNames].sort(), complete:closed && !scope.capture.dropped_count
+      && scope.capture.events.every(event=>event.outcome!=='INCOMPLETE'),
+      events:scope.capture.events.map(event=>({...event,duration_us:event.outcome==='INCOMPLETE'
+        ? Math.max(0,nowUs()-event.started_at_us) : event.duration_us}))}
+  }
+  function instrumentSqlite(namespace) {
+    class CapturedDatabase extends namespace.DatabaseSync {
+      exec(...args) { return captureSync('SQLITE','EXEC',()=>super.exec(...args)) }
+      prepare(...args) {
+        let statement
+        try { statement = super.prepare(...args) }
+        catch (error) { const event=startCall(requestScopes.getStore(),'SQLITE','PREPARE'); finishCall(event,'ERROR'); throw error }
+        const methods = new Map()
+        return new Proxy(statement,{get(target,key) {
+          const value = Reflect.get(target,key,target)
+          if (typeof value !== 'function') return value
+          if (!methods.has(key)) methods.set(key, (...values) => {
+            if (['run','get','all'].includes(key)) return captureSync('SQLITE',key.toUpperCase(),()=>Reflect.apply(value,target,values))
+            if (key !== 'iterate') return Reflect.apply(value,target,values)
+            const event = startCall(requestScopes.getStore(),'SQLITE','ITERATE')
+            let iterator
+            try { iterator = Reflect.apply(value,target,values) }
+            catch (error) { finishCall(event,'ERROR'); throw error }
+            return {
+              [Symbol.iterator]() { return this },
+              next(...input) {
+                try { const result=iterator.next(...input); if (result.done) finishCall(event); return result }
+                catch (error) { finishCall(event,'ERROR'); throw error }
+              },
+              return(...input) { try { return iterator.return ? iterator.return(...input) : {done:true} } finally { finishCall(event) } },
+            }
+          })
+          return methods.get(key)
+        }})
+      }
+    }
+    return {...namespace, DatabaseSync:CapturedDatabase}
+  }
+  function instrumentFiles(namespace, promises = false) {
+    const wrapped = {...namespace}
+    for (const [base,operation] of [['readFile','READ'],['writeFile','WRITE'],['appendFile','APPEND']]) {
+      if (!promises) wrapped[base+'Sync'] = (...args) => captureSync('FILESYSTEM',operation,()=>namespace[base+'Sync'](...args))
+      wrapped[base] = (...args) => {
+        const event = startCall(requestScopes.getStore(),'FILESYSTEM',operation)
+        if (promises) {
+          try { return namespace[base](...args).then(value=>{finishCall(event);return value},error=>{finishCall(event,'ERROR');throw error}) }
+          catch (error) { finishCall(event,'ERROR'); throw error }
+        }
+        const callback = args.at(-1)
+        if (typeof callback === 'function') args[args.length-1]=function(error,...values) { finishCall(event,error?'ERROR':'OK'); return Reflect.apply(callback,this,[error,...values]) }
+        try { return namespace[base](...args) } catch (error) { finishCall(event,'ERROR'); throw error }
+      }
+    }
+    if (!promises) wrapped.promises=instrumentFiles(namespace.promises,true)
+    return wrapped
+  }
+  function instrumentClient(namespace) {
+    function request(...args) {
+      const event = startCall(requestScopes.getStore(),'HTTP_CLIENT','REQUEST')
+      let outgoing
+      try { outgoing=namespace.request(...args) }
+      catch (error) { finishCall(event,'ERROR'); throw error }
+      if (event) event.http_method=methodName(outgoing.method)
+      outgoing.once('response',incoming=>finishCall(event,'OK',{http_status:incoming.statusCode}))
+      outgoing.once('error',()=>finishCall(event,'ERROR'))
+      return outgoing
+    }
+    return {...namespace,request,get:(...args)=>{const outgoing=request(...args);outgoing.end();return outgoing}}
+  }
   async function recordRequest(endpoint, payload, control = false) {
     if (!/^http:\/\/127\.0\.0\.1:[0-9]+$/.test(recordOrigin ?? '') || !recordCapability) throw new Error('RECORD_PROVIDER_UNAVAILABLE')
     const body = JSON.stringify(payload)
@@ -98,6 +199,11 @@ async function main() {
     if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'RECORD_PROVIDER_UNAVAILABLE')
     return data.data
   }
+  function recordScope(scope) {
+    scope.opening ??= recordRequest('/scope/open',{request_nonce:scope.nonce,request_digest:scope.digest,
+      activity:activitySnapshot(scope,false)},true).then(record=>scope.id=record.scope_id)
+    return scope.opening
+  }
   function openCollection(collection) {
     if (typeof collection !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(collection)) throw new Error('RECORD_COLLECTION_INVALID')
     return Object.freeze({
@@ -107,7 +213,7 @@ async function main() {
         if (scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
         scope.pending += 1
         try {
-          return await recordRequest('/resource/seed', {schema_version:'2',collection,resource_id,owner_id,data,scope_id:scope.id})
+          return await recordRequest('/resource/seed', {schema_version:'2',collection,resource_id,owner_id,data,scope_id:await recordScope(scope)})
         } finally { scope.pending -= 1 }
       },
       read: resource_id => recordRequest('/resource/read', {collection,resource_id}),
@@ -116,7 +222,7 @@ async function main() {
         if (!scope || scope.ending) throw new Error('RECORD_SCOPE_CLOSED')
         scope.pending += 1
         try {
-          return await recordRequest('/resource/remove', {schema_version:'1',collection,resource_id,expected_version,scope_id:scope.id})
+          return await recordRequest('/resource/remove', {schema_version:'1',collection,resource_id,expected_version,scope_id:await recordScope(scope)})
         } finally { scope.pending -= 1 }
       },
       trace: async (resource_id, event) => {
@@ -125,7 +231,7 @@ async function main() {
         scope.pending += 1
         try {
           // scope 由宿主绑定，应用只提交显式父事件与有限公开标识。
-          const receipt = await recordRequest('/trace/append', {schema_version:'1',collection,resource_id,event,scope_id:scope.id})
+          const receipt = await recordRequest('/trace/append', {schema_version:'1',collection,resource_id,event,scope_id:await recordScope(scope)})
           if (receipt.schema_version !== '1' || typeof receipt.event?.event_id !== 'string') throw new Error('TRACE_RECEIPT_INVALID')
           return receipt.event
         } finally { scope.pending -= 1 }
@@ -137,7 +243,7 @@ async function main() {
         try {
           // 操作关联由宿主注入，业务模块不能回放旧事务或借用另一请求的完成记录。
           return await recordRequest('/resource/transact', {...input,schema_version:'2',collection,
-            scope_id:scope.id,request_key:crypto.randomBytes(32).toString('hex')})
+            scope_id:await recordScope(scope),request_key:crypto.randomBytes(32).toString('hex')})
         } finally { scope.pending -= 1 }
       },
     })
@@ -149,29 +255,35 @@ async function main() {
       const supplied = request.headers['x-jiejian-request-nonce']
       const nonce = typeof supplied === 'string' && /^[a-f0-9]{64}$/.test(supplied) ? supplied : crypto.randomBytes(32).toString('hex')
       const digest = sha(Buffer.from(request.method.toUpperCase()+'\n'+request.url))
-      recordRequest('/scope/open',{request_nonce:nonce,request_digest:digest},true).then(record => {
-        const scope = {id:record.scope_id,pending:0,ending:false}
-        const end = response.end.bind(response)
-        response.end = (...endArgs) => {
-          if (scope.ending) return response
-          scope.ending = true
-          // 先冻结完成边界再结束响应；未等待的业务写入不能得到完整的“没有发生”证明。
-          recordRequest('/scope/close',{scope_id:scope.id,complete:scope.pending===0},true)
-            .then(()=>end(...endArgs),()=>response.destroy())
-          return response
+      const scope = {nonce,digest,pending:0,ending:false,capture:typeof supplied==='string' && /^[a-f0-9]{64}$/.test(supplied)
+        ? {request_nonce:nonce,request_digest:digest,collector:'CONTROLLED_NODE',dropped_count:0,events:[]} : null}
+      startCall(scope,'HTTP_SERVER','REQUEST',{http_method:methodName(request.method)})
+      const end = response.end.bind(response)
+      response.end = (...endArgs) => {
+        if (scope.ending) return response
+        finishCall(scope.capture?.events[0],'OK',{http_status:response.statusCode})
+        scope.ending = true
+        // 检查请求及真实业务写入仍先确认持久闭合；普通只读请求不创建记录日志。
+        if (!scope.opening) return end(...endArgs)
+        const complete=scope.pending===0
+        scope.opening.then(id=>recordRequest('/scope/close',{scope_id:id,complete,
+          activity:activitySnapshot(scope,complete)},true)).then(()=>end(...endArgs),()=>response.destroy())
+        return response
+      }
+      response.once('close',()=>{
+        if (!scope.ending) {
+          scope.ending=true
+          scope.opening?.then(id=>recordRequest('/scope/close',{scope_id:id,complete:false,
+            activity:activitySnapshot(scope,false)},true)).catch(()=>{})
         }
-        response.once('close',()=>{
-          if (!scope.ending) {
-            scope.ending=true
-            recordRequest('/scope/close',{scope_id:scope.id,complete:false},true).catch(()=>{})
-          }
-        })
-        requestScopes.run(scope,()=>super.emit(event,...args))
-      }).catch(()=>response.destroy())
+      })
+      const invoke=()=>{if(!response.destroyed)requestScopes.run(scope,()=>super.emit(event,...args))}
+      if(scope.capture) recordScope(scope).then(invoke,()=>response.destroy())
+      else invoke()
       return true
     }
   }
-  const scopedHttp = Object.freeze({...http,Server:ScopedServer,createServer:(...args)=>new ScopedServer(...args)})
+  const scopedHttp = Object.freeze({...instrumentClient(http),Server:ScopedServer,createServer:(...args)=>new ScopedServer(...args)})
   function moduleFor(relative) {
     const record = records.get(relative.toLowerCase())
     if (!record || record.relative !== relative || !relative.endsWith('.mjs')) fail()
@@ -191,10 +303,13 @@ async function main() {
     }
     if (allowedBuiltins.has(specifier)) {
       if (!builtinCache.has(specifier)) builtinCache.set(specifier, import(specifier).then(namespace => {
+        if (['node:http','node:https','node:sqlite','node:fs','node:fs/promises'].includes(specifier)) adapterNames.add(specifier)
+        const captured = specifier==='node:http' ? scopedHttp : specifier==='node:https' ? instrumentClient(namespace.default)
+          : specifier==='node:sqlite' ? instrumentSqlite(namespace) : specifier==='node:fs' ? instrumentFiles(namespace.default)
+          : specifier==='node:fs/promises' ? instrumentFiles(namespace.default,true) : namespace
         const names = Object.keys(namespace)
         return new vm.SyntheticModule(names, function() {
-          for (const name of names) this.setExport(name,specifier==='node:http'
-            ? (name==='default' ? scopedHttp : scopedHttp[name] ?? namespace[name]) : namespace[name])
+          for (const name of names) this.setExport(name,name==='default' && captured!==namespace ? captured : captured[name] ?? namespace[name])
         }, {context,identifier:specifier})
       }))
       return builtinCache.get(specifier)

@@ -112,6 +112,7 @@ class LocalWorkerSupervisor:
         """请求停止并等待线程退出；超时后报告失败而不伪装为已关闭。"""
 
         self._stop.set()
+        self._job_queue.wake()
         if self._thread is not None:
             self._thread.join(timeout=timeout)
             if self._thread.is_alive():
@@ -188,6 +189,7 @@ class LocalWorkerSupervisor:
     def _loop(self) -> None:
         """单线程拥有调度责任；最多两个独立预检查进程，其余任务保持独占执行。"""
 
+        idle_delay = 0.1
         while not self._stop.is_set():
             try:
                 if self._job_id is not None:
@@ -227,7 +229,12 @@ class LocalWorkerSupervisor:
                 )
                 self._stop.wait(0.25)
                 continue
-            self._stop.wait(0.1)
+            if self._process is not None or (self._parallel_worker is not None and self._parallel_worker._process is not None):
+                idle_delay = 0.1
+                self._stop.wait(0.1)
+            else:
+                self._job_queue.wait_for_submission(idle_delay)
+                idle_delay = min(1.0, idle_delay * 2)
 
     def _reap_finished_worker(self) -> None:
         process = self._process

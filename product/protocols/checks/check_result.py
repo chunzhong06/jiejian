@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 
 from product.backend.domain.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
 from product.backend.domain.verification.trace import ExecutionTrace
+from product.protocols.runtime.request_activity import RequestActivity
 from product.protocols.checks.execution_request import ExecutionCase, Hash, LogicalId, WireModel, content_hash
 from product.protocols.checks.check_publication import CheckPublicationManifest
 from product.protocols.checks.check_runtime import check_payload_contains_secret, CheckRuntimeCorrespondence
@@ -124,6 +125,9 @@ class CheckEvidence(WireModel):
     outcome: CheckCaseOutcome
     observations: tuple[CheckObservation, ...] = Field(max_length=240)
     trace: ExecutionTrace | None = None
+    # 缺省字段不参与旧证据编码与内容地址；新探针记录只作诊断，不进入 Verdict。
+    activity: RequestActivity | None = Field(default=None, exclude_if=lambda value: value is None)
+    activity_error: ReasonCode | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def validate_associations(self):
@@ -139,6 +143,8 @@ class CheckEvidence(WireModel):
             raise ValueError("duplicate published observation")
         if self.trace is not None and (self.trace.case_id, self.trace.action_id) != (self.case.case_id, self.action_id):
             raise ValueError("evidence trace case mismatch")
+        if self.activity is not None and self.activity_error is not None:
+            raise ValueError('captured activity cannot carry a collection failure')
         if self.evidence_id != evidence_content_id(self.model_dump(mode="json", exclude={"evidence_id"})):
             raise ValueError("evidence content address mismatch")
         return self
@@ -256,9 +262,18 @@ def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[st
         if type(document) not in _CHECK_ROOTS:
             raise ValueError("unsupported check root")
         parsed = type(document).model_validate_json(document.model_dump_json(), strict=True)
-        if check_payload_contains_secret(parsed.model_dump(mode="json"), known_secrets):
+        return _encode_check_document(parsed, known_secrets)
+    except (ValueError, TypeError, AttributeError):
+        raise CheckResultProtocolError("执行快照格式无效") from None
+
+
+def _encode_check_document(document: CheckDocument, known_secrets: tuple[str, ...]) -> bytes:
+    """仅接收本次边界已解析的根；调用期间不得插入可变成员的修改。"""
+    try:
+        payload = document.model_dump(mode="json")
+        if check_payload_contains_secret(payload, known_secrets):
             raise ValueError("unsafe check document")
-        raw = json.dumps(parsed.model_dump(mode="json"), ensure_ascii=False, sort_keys=True,
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"), allow_nan=False).encode()
         if len(raw) > CHECK_RESULT_MAX_BYTES or any(secret and secret.encode() in raw for secret in known_secrets):
             raise ValueError("unsafe check document")
@@ -276,7 +291,7 @@ def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secret
         decode_document(raw, document_type=model.model_fields["document_type"].default,
             version=model.model_fields["schema_version"].default, limit=CHECK_RESULT_MAX_BYTES)
         document = model.model_validate_json(raw, strict=True)
-        if canonical_check_document(document, known_secrets=known_secrets) != raw:
+        if _encode_check_document(document, known_secrets) != raw:
             raise ValueError("noncanonical check document")
         return document
     except (ValueError, TypeError, UnicodeError):

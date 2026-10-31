@@ -1,6 +1,6 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import { useEffect, useState } from 'react';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import { projectsApi, type CandidateSelection } from '../../entities/application/api/projects';
 import { Choice } from "../../shared/ui/Choice";
 import { Button } from "../../shared/ui/actions";

@@ -1,5 +1,5 @@
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react'
-import {CloseOutlined} from '@ant-design/icons'
+import CloseOutlined from '@ant-design/icons/CloseOutlined';
 import {Button} from './actions'
 
 export function Dialog({title,children,onClose,actions}:{title:string;children:ReactNode;onClose:()=>void;actions?:ReactNode|((dismiss:()=>void)=>ReactNode)}){

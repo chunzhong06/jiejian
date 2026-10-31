@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
+import VideoCameraOutlined from '@ant-design/icons/VideoCameraOutlined';
 import { preparationApi as api, type MaterialChange, type MaterialReference, type MaterialPreview } from '../../../entities/preparation/api/preparation';
 import { recordingsApi, type RecordingViewDto, type RecordingCreateInput } from '../../../entities/preparation/api/recordings';
 import { ApiError } from '../../../shared/api/http';

@@ -1,6 +1,8 @@
 import {PageSkeleton} from '../../../shared/ui/PageSkeleton'
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftOutlined, CheckOutlined, FileDoneOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import FileDoneOutlined from '@ant-design/icons/FileDoneOutlined';
 import { ApiError } from '../../../shared/api/http';
 import { proofSourcesApi as api, type AdoptionPreview, type ProofOperationKind, type ProofSource } from '../../../entities/preparation/api/proofSources';
 import { assertProject } from '../../../shared/model/page';

@@ -1,5 +1,9 @@
 import {useEffect,useState,type ReactNode} from 'react'
-import {ApiOutlined,DatabaseOutlined,MenuOutlined,MoonOutlined,SunOutlined} from '@ant-design/icons'
+import ApiOutlined from '@ant-design/icons/ApiOutlined';
+import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined';
+import MenuOutlined from '@ant-design/icons/MenuOutlined';
+import MoonOutlined from '@ant-design/icons/MoonOutlined';
+import SunOutlined from '@ant-design/icons/SunOutlined';
 import type {ProjectDto} from '../../entities/application/api/projects'
 import {scopedPath,type Route} from '../../shared/lib/navigation'
 import {ActionLink,Button} from '../../shared/ui/actions'
@@ -41,7 +45,7 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
         <nav className="jj-toolbar" aria-label="全局工具">
           <Hint label="开发工具"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/tools',project?.project_id)} aria-label="开发工具" aria-current={current==='/tools'?'page':undefined} onPointerEnter={()=>preloadRoute('/tools')} onFocus={()=>preloadRoute('/tools')}><ApiOutlined aria-hidden="true"/></ActionLink></Hint>
           <Hint label="本地存储"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/storage',project?.project_id)} aria-label="本地存储" aria-current={current==='/storage'?'page':undefined} onPointerEnter={()=>preloadRoute('/storage')} onFocus={()=>preloadRoute('/storage')}><DatabaseOutlined aria-hidden="true"/></ActionLink></Hint>
-          <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/><span className="jj-toolbar-divider" aria-hidden="true"/><RuntimeStatus/>
+          <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/><span className="jj-toolbar-divider" aria-hidden="true"/><RuntimeStatus projectId={project?.project_id}/>
         </nav>
       </header>
       <main id="jj-content" tabIndex={-1} className="jj-content">{children}</main>

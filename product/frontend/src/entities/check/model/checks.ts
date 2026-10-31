@@ -14,6 +14,11 @@ export function owner(action:ActionResultStory){const identity=action.fact_compa
 export function requirement(action:ActionResultStory){return `${subject(action)}${action.permission.expectation==='ALLOW'?'可以':'不得'}${text(action.display_name)}`}
 export function resultTitle(story:ResultStory){
   const issues=story.actions.filter(item=>judgement(item)==='negative').length
+  if (story.repair_reviews && story.repair_reviews.length > 1) {
+    const count = story.repair_reviews.length, verified = story.repair_reviews.filter(item => item.verification.status === 'VERIFIED').length;
+    if (verified === count && story.verdict !== 'PASS') return story.verdict === 'BLOCK' ? `${count} 项原问题已修复，仍有 ${issues} 项违规` : `${count} 项原问题已修复，其他结果尚未确认`;
+    return verified === count ? `${count} 项原问题已修复，正常功能保留` : `${count} 项原问题中，${verified} 项修复已验证`;
+  }
   if(story.repair_verification?.status==='VERIFIED'&&story.verdict!=='PASS')return story.verdict==='BLOCK'?`原问题已修复，仍有 ${issues} 项违规`:'原问题已修复，其他结果尚未确认'
   if(story.repair_verification)return {VERIFIED:'原问题已修复，正常功能保留',NOT_VERIFIED:'原问题尚未解决',INCONCLUSIVE:'证据不足，无法验收修复',STALE:'规则已变化，需要重新确认修复范围'}[story.repair_verification.status]
   const count=story.actions.filter(item=>judgement(item)==='negative').length

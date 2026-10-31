@@ -280,7 +280,7 @@ class ApplicationUnderstandingService:
                 ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED,
                 "尚未获得源码只读分析授权",
             )
-        return self.analyzer.analyze(current.project_id, current.source_root).source_fingerprint
+        return self.analyzer.fingerprint(current.source_root)
 
     def scan_source(self, project_id: str, *, revision: int):
         """准备受控分析，不持久化；交付事务可与源码理解更新一起提交。"""

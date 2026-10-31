@@ -5,7 +5,7 @@ from product.backend.domain.checks.repair import CurrentRepairContract, CurrentR
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.lifecycle import CaseVerdict, RunVerdict
 from product.protocols.checks.execution_request import CaseRole, content_hash
-from product.backend.application.checks.repairs.repair_presentation import build_repair_comparison
+from product.backend.application.checks.repairs.repair_presentation import RepairReview, build_repair_comparison
 
 
 def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
@@ -102,3 +102,37 @@ class CurrentRepairService:
         return verify_current_repair(contract, request=package.request, bundle=package.bundle,
             result=package.result, evidence=package.evidence, expected_change_context=expected,
             linked_repair_references=tuple(item.repair for item in targets if item.repair is not None))
+
+    def reviews_from_verified_package(self, package):
+        """逐个核验交付冻结的原题；同批部分通过时仍保留其他目标的缺口与对照。"""
+        change = package.request.change_context
+        targets = () if change is None or self._rule_targets_reader is None else self._rule_targets_reader(
+            package.request.project_id, change.change_id)
+        references = [item.repair for item in targets if item.repair is not None]
+        context = package.request.repair_context
+        sources = {}
+        if context is not None:
+            source = self._reader.package(context.source_run_id, project_id=package.request.project_id)
+            sources[context.source_run_id] = source
+            primary = [item.reference() for item in self.contracts_from_verified_package(source)
+                if item.repair_fingerprint == context.repair_reference]
+            if len(primary) != 1:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "原题修复引用无法核对")
+            references = primary + references
+        reviews, seen = [], set()
+        for reference in references:
+            if reference.repair_fingerprint in seen:
+                continue
+            seen.add(reference.repair_fingerprint)
+            if reference.source_run_id not in sources:
+                sources[reference.source_run_id] = self._reader.package(reference.source_run_id,
+                    project_id=package.request.project_id)
+            source = sources[reference.source_run_id]
+            contract = next((item for item in self.contracts_from_verified_package(source)
+                if item.reference() == reference), None)
+            if contract is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "修改关联的原题无法核对")
+            verification = self.verification_for_contract(package, contract)
+            reviews.append(RepairReview(reference=reference, verification=verification,
+                comparison=build_repair_comparison(contract, source, package, linked_reference=reference)))
+        return tuple(reviews)

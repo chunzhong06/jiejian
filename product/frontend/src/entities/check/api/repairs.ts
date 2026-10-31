@@ -16,7 +16,8 @@ export type RepairComparisonRow = {
   after_evidence_refs?: string[]; match_status: 'NOT_AVAILABLE' | 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS'
 }
 export type RepairVerification = { repair_reference: string; source_run_id: string; run_id: string; status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'STALE'; reason_codes: string[] }
-export type ProjectRepair = { project_id: string; status: RepairStatus | null; primary_task_reference: string | null; tasks: Array<{ task_reference: string; contract: RepairContract; status: RepairStatus; change_id: string | null; run_id: string | null; verification: RepairVerification | null; comparison?: RepairComparisonRow[] }> }
+export type RepairHistoryEvent = { kind: 'FOUND'|'CHECKED'|'VERIFIED'|'RECURRED'|'CONDITIONS_CHANGED'|'CHECK_PENDING'|'CHECK_INTERRUPTED'; run_id: string; source_run_id: string; created_at_us: number; status: RepairStatus|null; change_id: string|null; reason_codes: string[] }
+export type ProjectRepair = { project_id: string; status: RepairStatus | null; primary_task_reference: string | null; tasks: Array<{ task_reference: string; contract: RepairContract; status: RepairStatus; change_id: string | null; run_id: string | null; verification: RepairVerification | null; comparison?: RepairComparisonRow[]; first_source_run_id?: string|null; last_verified_run_id?: string|null; recurrence_count?: number; history?: RepairHistoryEvent[] }> }
 export const repairLabels: Record<RepairStatus, string> = { REPAIR_REQUIRED: '需要修复', CHANGE_SUBMITTED: '修改已登记，准备待完成', READY_TO_VERIFY: '可以重新检查原问题', VERIFIED: '原问题修复已验证', NOT_VERIFIED: '原问题仍然存在', INCONCLUSIVE: '尚不能确认修复', STALE: '权限要求已变化，需要重新确认修复要求' }
 export const repairReference = (contract: RepairContract): RepairReference => ({ source_run_id: contract.source_run_id, source_case_id: contract.source_case_id, repair_fingerprint: contract.repair_fingerprint })
 export const repairsApi = {

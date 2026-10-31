@@ -121,12 +121,17 @@ class TestIdentityService:
     def list(self, project_id: str, *, work=None) -> tuple[TestIdentityView, ...]:
         with (self._uow_factory() if work is None else nullcontext(work)) as work:
             records = work.test_identities.list_for_project(project_id)
-            actors = tuple(self._actor_for_record(work, record) for record in records)
+            by_id = work.business_boundaries.actor_revisions(project_id,
+                tuple({(record.actor_id, record.actor_revision) for record in records}))
+            if any((record.actor_id, record.actor_revision) not in by_id for record in records):
+                raise JiejianError(ErrorCode.STORAGE_FAILURE, "测试账号引用的业务主体数据损坏")
+            actors = tuple(by_id[(record.actor_id, record.actor_revision)] for record in records)
         return tuple(self._view(record, actor) for record, actor in zip(records, actors, strict=True))
 
     def get(self, identity_id: str, *, work=None) -> TestIdentityView:
         if work is not None:
-            record = work.test_identities.get(identity_id)
+            from product.backend.application.preparation.bindings.reuse import material_fact
+            record = material_fact(work, work.test_identities, ("get", identity_id), lambda: work.test_identities.get(identity_id))
             if record is None:
                 raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
             return self._view(record, self._actor_for_record(work, record))
@@ -300,7 +305,9 @@ class TestIdentityService:
 
     @staticmethod
     def _actor_for_record(work: StorageUnitOfWork, record: TestIdentity) -> BusinessActorRevision:
-        actor = work.business_boundaries.actor_revision(record.actor_id, record.actor_revision)
+        from product.backend.application.preparation.bindings.reuse import material_fact
+        actor = material_fact(work, work.business_boundaries, ("actor_revision", record.actor_id, record.actor_revision),
+            lambda: work.business_boundaries.actor_revision(record.actor_id, record.actor_revision))
         if actor is None or actor.project_id != record.project_id:
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "测试账号引用的业务主体数据损坏")
         return actor

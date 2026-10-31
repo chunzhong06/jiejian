@@ -1,11 +1,13 @@
-import {ReloadOutlined} from '@ant-design/icons'
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import ReloadOutlined from '@ant-design/icons/ReloadOutlined';
 import {systemApi} from '../../entities/runtime/api/system'
 import {useRead} from '../../shared/lib/useRead'
-import {Button} from '../../shared/ui/actions'
+import {ActionLink,Button} from '../../shared/ui/actions'
+import {scopedPath} from '../../shared/lib/navigation'
 import {ErrorNote} from '../../shared/ui/feedback'
 import {InfoPopover} from '../../shared/ui/InfoPopover'
 
-export function RuntimeStatus(){
+export function RuntimeStatus({projectId}:{projectId?:string}){
   const state=useRead('system',systemApi.status,10000)
   const ready=!state.error&&state.data?.api==='available'&&state.data.worker==='running'&&state.data.browser==='available'
   const label=state.error?'运行状态未知':!state.data?'正在核对服务':ready?'本地服务运行中':'运行环境需检查'
@@ -18,5 +20,6 @@ export function RuntimeStatus(){
       <div><dt>检查浏览器</dt><dd>{!state.error&&state.data?.browser==='available'?'可用':'待确认'}</dd></div>
     </dl>
     {state.error&&<ErrorNote error={state.error}/>}
+    <footer className="jj-system-popover-footer"><ActionLink href={'#'+scopedPath('/system',projectId)}>运行与维护 <ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>
   </InfoPopover>
 }

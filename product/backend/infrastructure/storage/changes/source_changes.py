@@ -228,6 +228,13 @@ class SourceChangeRepository:
         except (AttributeError,TypeError,ValueError):
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前代码变化数据损坏") from None
 
+    def change_descriptions(self, project_id: str, change_ids):
+        if not change_ids:
+            return {}
+        rows = self._session.scalars(select(ChangeManifestRow).where(
+            ChangeManifestRow.project_id == project_id, ChangeManifestRow.change_id.in_(change_ids)))
+        return {row.change_id: dict(reason=row.reason, submitted_by=row.submitted_by) for row in rows}
+
     def current_changes(self, project_id: str, *, limit: int = 50):
         if isinstance(limit,bool) or not 1 <= limit <= 100:
             raise ValueError("current change list limit")

@@ -6,6 +6,7 @@ import sqlite3
 from alembic import command
 import pytest
 
+
 from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.storage.db import prepare_database, require_current_database
 from product.backend.infrastructure.storage.workspace import current_schema_signature
@@ -46,10 +47,11 @@ def test_repeat_start_preserves_business_records_and_revision_identity(tmp_path)
 @pytest.mark.level3
 @pytest.mark.database
 @pytest.mark.parametrize('interrupt', [False, True])
-def test_same_generation_upgrade_preserves_history_and_rolls_back_as_one_unit(tmp_path, monkeypatch, interrupt):
+@pytest.mark.parametrize('revision', ['workspace_0001', 'workspace_0002'])
+def test_same_generation_upgrade_preserves_history_and_rolls_back_as_one_unit(tmp_path, monkeypatch, interrupt, revision):
     path = tmp_path / 'published.db'
     with migration_resources() as root:
-        command.upgrade(migration_config(root, path), 'workspace_0001')
+        command.upgrade(migration_config(root, path), revision)
     with closing(sqlite3.connect(path)) as db:
         db.execute("INSERT INTO projects(project_id,name,status,target_type,created_at_us,updated_at_us) VALUES ('test','保留的应用','DRAFT','WEB',1,1)")
         db.execute("INSERT INTO runs(run_id,project_id,request_hash,plan_fingerprint,source_fingerprint,policy_epoch,engine_version,lifecycle,verdict,created_at_us,updated_at_us) VALUES (?, 'test', ?, ?, ?, 1, 'test', 'COMPLETED', 'PASS', 1, 1)",
@@ -60,7 +62,8 @@ def test_same_generation_upgrade_preserves_history_and_rolls_back_as_one_unit(tm
         actual_upgrade = command.upgrade
         def fail_after_ddl(*args, **kwargs):
             actual_upgrade(*args, **kwargs)
-            raise RuntimeError('upgrade interrupted before commit')
+            if args[1] == migration_head():
+                raise RuntimeError('upgrade interrupted before commit')
         monkeypatch.setattr(command, 'upgrade', fail_after_ddl)
         with pytest.raises(JiejianError):
             prepare_database(path)
@@ -204,3 +207,40 @@ def test_uncommitted_transaction_does_not_publish_changes(core,source):
         project=work.projects.get(project_id)
         work.projects.replace(type(project)(**{**project.model_dump(),'name':'未提交的名称'}))
     assert core.projects.get(project_id).name!='未提交的名称'
+
+def test_workspace_revision_observes_other_commits_without_writing(tmp_path):
+    import sqlite3
+    from product.backend.infrastructure.storage.workspace import WorkspaceRevision
+    path = tmp_path/'state.db'
+    with sqlite3.connect(path) as writer:
+        writer.execute('CREATE TABLE items(value INTEGER)')
+        monitor = WorkspaceRevision(path)
+        try:
+            first = monitor.read()
+            assert monitor.read() == first
+            writer.execute('INSERT INTO items VALUES(1)')
+            writer.commit()
+            assert monitor.read() != first
+            assert writer.execute('SELECT COUNT(*) FROM items').fetchone()[0] == 1
+        finally:
+            monitor.close()
+
+
+def test_service_pool_reuses_connections_without_leaking_transactions(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from product.backend.infrastructure.storage.db import create_sqlite_engine
+    engine = create_sqlite_engine(tmp_path/'pooled.db', reuse_connections=True)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql('CREATE TABLE items(value INTEGER)')
+        with engine.connect() as connection:
+            connection.exec_driver_sql('INSERT INTO items VALUES(1)')
+        def read():
+            with engine.connect() as connection:
+                assert connection.exec_driver_sql('PRAGMA foreign_keys').scalar() == 1
+                return connection.exec_driver_sql('SELECT COUNT(*) FROM items').scalar()
+        with ThreadPoolExecutor(max_workers=3) as workers:
+            assert list(workers.map(lambda _: read(), range(9))) == [0]*9
+        assert engine.pool.checkedin() > 0
+    finally:
+        engine.dispose()

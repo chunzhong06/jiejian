@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { currentChecksApi as api, type CheckPreview } from '../../entities/check/api/currentChecks';
 import { preparationApi } from '../../entities/preparation/api/preparation';
 import { testIdentitiesApi } from '../../entities/preparation/api/testIdentities';
@@ -65,11 +66,15 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
         <section className="jj-panel jj-check-preview jj-plan-workspace">
             <header className="jj-plan-overview"><div><h2>{preview.action_count} 项业务操作</h2><p className="jj-small jj-muted">{preview.case_count ? `${preview.case_count} 项检查` : '按已批准权限核对所需材料'}</p></div><Badge tone={preview.can_execute ? 'positive' : 'caution'}>{preview.can_execute ? '准备齐全' : '需要补齐材料'}</Badge></header>
             <div className="jj-plan-reading">{materials.actions.map(action => {
-                const plan = preview.actions.find(item => item.action_id === action.action_id), gaps = preview.gaps.filter(item => item.action_id === action.action_id).filter((item, index, all) => all.findIndex(other => gapKind(other.reason) === gapKind(item.reason)) === index);
-                return <article className="jj-plan-task" key={action.action_id}><header><h3>{text(action.display_name)}</h3><Badge tone={gaps.length ? 'caution' : 'neutral'}>{gaps.length ? `${gaps.length} 类待准备` : `${plan?.cases.length ?? 0} 项检查`}</Badge></header>
-                    <div className="jj-plan-task-details"><div><span>测试账号</span><p>{action.identity_requirements.slots.map(slot => text(slot.actor_display_name) + (slot.requirement.ordinal > 1 ? ` ${slot.requirement.ordinal}` : '')).join('、') || '尚未确定'}</p></div><div><span>核对结果</span><p>{action.effect_evidence.map(effect => text(effect.business_label)).join('、') || '尚未确定'}</p></div></div>
-                    {!!plan?.cases.length && <details className="jj-plan-objects"><summary>检查账号与资源</summary>{plan.cases.map(item => <div key={item.case_id}><div className="jj-item-heading"><Badge tone={item.permission.expectation === 'DENY' ? 'caution' : 'neutral'}>{item.permission.expectation === 'DENY' ? '禁止' : '允许'}</Badge><strong>{text(identities.find(identity => identity.identity_id === item.subject_test_identity_id)?.label ?? '所选测试账号')}</strong></div><dl><div><dt>资源所有者</dt><dd>{text(identities.find(identity => identity.identity_id === item.resource_owner_test_identity_id)?.label ?? '所选资源账号')}</dd></div><div><dt>测试资源</dt><dd>{item.resource_id}</dd></div></dl></div>)}</details>}
-                    {gaps.length > 0 && <ul className="jj-plan-gaps">{gaps.map((gap, index) => <li key={index}><span>{gapName(gap.reason)}</span><Button kind="quiet" onClick={() => go(gapDestination(gap, returnTo, changeId))}>处理<ArrowRightOutlined aria-hidden="true"/></Button></li>)}</ul>}
+                const plan = preview.actions.find(item => item.action_id === action.action_id), gaps = groupGaps(preview.gaps.filter(item => item.action_id === action.action_id));
+                return <article className="jj-plan-task" key={action.action_id}>
+                    <div className="jj-plan-task-summary"><header><h3>{text(action.display_name)}</h3><Badge tone={gaps.length ? 'caution' : 'positive'}>{gaps.length ? `${gaps.length} 类材料待准备` : '材料齐全'}</Badge></header>
+                        <dl className="jj-plan-task-details"><div><dt>测试账号</dt><dd>{action.identity_requirements.slots.map(slot => text(slot.actor_display_name) + (slot.requirement.ordinal > 1 ? ` ${slot.requirement.ordinal}` : '')).join('、') || '尚未确定'}</dd></div><div><dt>核对结果</dt><dd>{action.effect_evidence.map(effect => text(effect.business_label)).join('、') || '尚未确定'}</dd></div></dl>
+                    </div>
+                    <div className="jj-plan-task-preparation">
+                        {gaps.length > 0 && <ul className="jj-plan-gaps">{gaps.map(({ kind, gap, messages }) => <li key={kind}><div><strong>{messages[0]}</strong>{messages.length > 1 && <p>{messages.slice(1).join('；')}</p>}</div><Button onClick={() => go(gapDestination(gap, returnTo, changeId))}>{gapAction(kind)}<ArrowRightOutlined aria-hidden="true"/></Button></li>)}</ul>}
+                        {!!plan?.cases.length && <details className="jj-plan-objects" open={!gaps.length}><summary>{plan.cases.length} 项检查场景</summary>{plan.cases.map(item => <div key={item.case_id}><div className="jj-item-heading"><Badge tone={item.permission.expectation === 'DENY' ? 'caution' : 'neutral'}>{item.permission.expectation === 'DENY' ? '禁止' : '允许'}</Badge><strong>{text(identities.find(identity => identity.identity_id === item.subject_test_identity_id)?.label ?? '所选测试账号')}</strong></div><dl><div><dt>资源所有者</dt><dd>{text(identities.find(identity => identity.identity_id === item.resource_owner_test_identity_id)?.label ?? '所选资源账号')}</dd></div><div><dt>测试资源</dt><dd>{item.resource_id}</dd></div></dl></div>)}</details>}
+                    </div>
                 </article>;
             })}{!materials.actions.length && <p>请先确认本应用的权限规则。</p>}</div>
             {preview.boundary_review_gaps?.map((gap, index) => <Notice key={index}>{text(gap.message)}<Button onClick={() => go(gap.review_url.replace(/^#/, ''))}>核对要求</Button></Notice>)}
@@ -80,7 +85,7 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
 }
 
 export function gapName(reason: string) {
-    return ({ TEST_IDENTITY_REQUIRED: '测试账号尚未就绪', IDENTITY_REQUIRED: '测试账号尚未就绪', ACTION_RESOURCE_REQUIRED: '测试资源尚未确认', RESOURCE_REQUIRED: '测试资源尚未确认', ACTION_EXECUTION_REQUIRED: '缺少操作录制', ACTION_EXECUTION_MISSING: '缺少可用操作录制', EXECUTION_REQUIRED: '缺少操作录制', EFFECT_EVIDENCE_REQUIRED: '业务结果缺少证明来源', ACTION_RECOVERY_REQUIRED: '缺少恢复方式', RECOVERY_REQUIRED: '缺少恢复方式', ALLOW_CONTROL_REQUIRED: '需要选择正常操作对照', PERMISSION_SEMANTICS_REQUIRED: '权限要求尚未确认', CREATED_RESOURCE_PROOF_REQUIRED: '缺少新建资源的独立记录', PREPARATION_REQUIRED: '材料需要重新核对' } as Record<string, string>)[reason] ?? '本项检查条件需要重新核对';
+    return ({ TEST_IDENTITY_REQUIRED: '测试账号尚未就绪', IDENTITY_REQUIRED: '测试账号尚未就绪', ACTION_RESOURCE_REQUIRED: '测试资源尚未确认', RESOURCE_REQUIRED: '测试资源尚未确认', ACTION_EXECUTION_REQUIRED: '缺少操作录制', ACTION_EXECUTION_MISSING: '缺少可用操作录制', EXECUTION_REQUIRED: '缺少操作录制', EFFECT_EVIDENCE_REQUIRED: '业务结果缺少证明来源', EFFECT_VERDICT_PROOF_REQUIRED: '业务结果缺少有效证明', REGISTERED_OBSERVER_UNAVAILABLE: '证明来源当前不可用', ACTION_RECOVERY_REQUIRED: '缺少恢复方式', RECOVERY_REQUIRED: '缺少恢复方式', ALLOW_CONTROL_REQUIRED: '需要选择正常操作对照', PERMISSION_SEMANTICS_REQUIRED: '权限要求尚未确认', CREATED_RESOURCE_PROOF_REQUIRED: '缺少新建资源的独立记录', PREPARATION_REQUIRED: '材料需要重新核对' } as Record<string, string>)[reason] ?? '本项检查条件需要重新核对';
 }
 export function gapDestination(gap: CheckPreview['gaps'][number], returnTo: string, changeId?: string | null) {
     const focus = gapKind(gap.reason);
@@ -88,5 +93,16 @@ export function gapDestination(gap: CheckPreview['gaps'][number], returnTo: stri
 }
 
 function gapKind(reason: string) {
-    return /IDENTITY/.test(reason) ? 'identity' : /RESOURCE/.test(reason) && !/PROOF/.test(reason) ? 'resource' : /EXECUTION/.test(reason) ? 'execution' : /RECOVERY/.test(reason) ? 'recovery' : /EVIDENCE|PROOF/.test(reason) ? 'evidence' : reason;
+    return /IDENTITY/.test(reason) ? 'identity' : /RESOURCE/.test(reason) && !/PROOF/.test(reason) ? 'resource' : /EXECUTION/.test(reason) ? 'execution' : /RECOVERY/.test(reason) ? 'recovery' : /EVIDENCE|PROOF|OBSERVER/.test(reason) ? 'evidence' : reason;
+}
+
+function groupGaps(gaps: CheckPreview['gaps']) {
+    // 只合并同一操作的补材料入口，保留不同原因；执行门禁仍使用服务端的完整缺口。
+    const groups = new Map<string, CheckPreview['gaps']>();
+    for (const gap of gaps) { const kind = gapKind(gap.reason); groups.set(kind, [...(groups.get(kind) ?? []), gap]); }
+    return Array.from(groups, ([kind, items]) => ({ kind, gap: items.find(item => item.effect_id) ?? items[0], messages: [...new Set(items.map(item => gapName(item.reason)))] }));
+}
+
+function gapAction(kind: string) {
+    return ({ identity: '准备测试账号', resource: '确认测试资源', execution: '补充操作录制', recovery: '准备恢复方式', evidence: '核对证明来源' } as Record<string, string>)[kind] ?? '核对检查条件';
 }

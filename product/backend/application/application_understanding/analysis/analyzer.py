@@ -52,14 +52,27 @@ class ApplicationUnderstandingAnalyzer:
     def __init__(self, *, limits: SourceAnalysisLimits | None = None) -> None:
         self.limits = limits or SourceAnalysisLimits()
 
+    def fingerprint(self, source_root: str | Path) -> str:
+        files = self._read_sources(canonical_folder(source_root))
+        return self._fingerprint(tuple((relative, hashlib.sha256(raw).hexdigest()) for relative, raw in files))
+
+    @staticmethod
+    def _fingerprint(hashes):
+        digest = hashlib.sha256()
+        for relative, content_hash in hashes:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\x00')
+            digest.update(bytes.fromhex(content_hash))
+        return digest.hexdigest()
+
     def analyze(self, project_id: str, source_root: str | Path) -> ApplicationAnalysisResult:
         """有界读取源码并返回确定性候选，不执行目标代码或自动批准规则。"""
         root = canonical_folder(source_root)
         files = self._read_sources(root)
+        hashes = tuple((relative, hashlib.sha256(raw).hexdigest()) for relative, raw in files)
         findings = CandidateCollector()
-        for relative, raw in files:
+        for (relative, raw), (_, content_hash) in zip(files, hashes, strict=True):
             text = raw.decode("utf-8")
-            content_hash = hashlib.sha256(raw).hexdigest()
             if Path(relative).name.casefold() in _OPENAPI_NAMES:
                 analyze_openapi(
                     findings, relative, text, content_hash, max_bytes=self.limits.max_file_bytes
@@ -70,19 +83,14 @@ class ApplicationUnderstandingAnalyzer:
                 analyze_javascript(findings, relative, text, content_hash)
         # 摘要覆盖本次成功读取的相对路径和原始内容；它不表示忽略目录或不可读文件的完整快照。
         # 文件排序和路径分隔参与身份，不能只对检测出的候选做摘要。
-        digest = hashlib.sha256()
-        for relative, raw in files:
-            digest.update(relative.encode("utf-8"))
-            digest.update(b"\x00")
-            digest.update(hashlib.sha256(raw).digest())
         return ApplicationAnalysisResult(
-            source_fingerprint=digest.hexdigest(),
+            source_fingerprint=self._fingerprint(hashes),
             files=tuple(
                 (
                     SourceFileFingerprint(
-                        relative_path=relative, content_sha256=hashlib.sha256(raw).hexdigest()
+                        relative_path=relative, content_sha256=content_hash
                     )
-                    for relative, raw in files
+                    for relative, content_hash in hashes
                 )
             ),
             role_candidates=findings.role_candidates(self.limits.max_roles),

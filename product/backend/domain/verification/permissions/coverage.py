@@ -155,7 +155,7 @@ def _path_index(contract: PermissionContract) -> dict[tuple[str, str], tuple[Rel
 
 
 def _find_path(
-    contract: PermissionContract,
+    index: dict[tuple[str, str], tuple[RelationFact, ...]],
     subject_id: str,
     resource_id: str,
     *,
@@ -163,7 +163,6 @@ def _find_path(
 ) -> tuple[str, ...] | None:
     if max_relation_depth < 1:
         return None
-    index = _path_index(contract)
     queue: deque[tuple[tuple[str, str], tuple[str, ...]]] = deque(
         [(('subject', subject_id), ())]
     )
@@ -362,6 +361,7 @@ def _ordinary_candidates(
     max_relation_depth: int,
     gaps: list[CoverageGap],
     engine_version: str,
+    path_index: dict[tuple[str, str], tuple[RelationFact, ...]],
 ) -> list[_Candidate]:
     subject = next(item for item in contract.subjects if item.subject_id == rule.subject_id)
     resource = next(item for item in contract.resources if item.resource_id == rule.resource_id)
@@ -423,7 +423,7 @@ def _ordinary_candidates(
                 ]
                 relation_candidates.sort(key=lambda item: _subject_order(subject, item))
                 for relation_subject in relation_candidates:
-                    found = _find_path(contract, relation_subject.subject_id, rule.resource_id, max_relation_depth=max_relation_depth)
+                    found = _find_path(path_index, relation_subject.subject_id, rule.resource_id, max_relation_depth=max_relation_depth)
                     if found is None:
                         candidate_subject_id = relation_subject.subject_id
                         break
@@ -533,8 +533,9 @@ def build_permission_coverage_plan(
     gaps: list[CoverageGap] = []
     raw: list[_Candidate] = []
     # --- 阶段：生成普通关系变异与批量变异候选 ---
+    path_index = _path_index(contract)
     for rule in contract.rules:
-        raw.extend(_ordinary_candidates(contract, rule, available_subjects, available_resources, set(available_observations), max_relation_depth, gaps, engine_version))
+        raw.extend(_ordinary_candidates(contract, rule, available_subjects, available_resources, set(available_observations), max_relation_depth, gaps, engine_version, path_index))
     for rule in contract.batch_rules:
         raw.extend(_batch_candidates(contract, rule, available_subjects, available_resources, set(available_observations), gaps, engine_version, max_relation_depth))
     def sort_key(item: _Candidate) -> tuple[Any, ...]:

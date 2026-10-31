@@ -1,5 +1,5 @@
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import { projectsApi } from '../../entities/application/api/projects';
 import { assertProject } from '../../shared/model/page';
 import { useRead } from '../../shared/lib/useRead';

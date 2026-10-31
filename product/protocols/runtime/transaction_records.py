@@ -8,6 +8,7 @@ from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from product.protocols.runtime.runtime_identity import RuntimeModel, Digest, InstanceId
 from product.protocols.runtime.node_runtime import ProjectId
+from product.protocols.runtime.request_activity import RequestActivity
 
 RecordKey = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")]
 FieldName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")]
@@ -112,6 +113,7 @@ class RecordRequestScope(RuntimeModel):
     request_nonce: Digest
     request_digest: Digest
     state: Literal['OPEN', 'COMPLETE', 'INCOMPLETE'] = 'OPEN'
+    activity: RequestActivity | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 # 一次宿主调用形成一次原子提交，连续版本与作用域顺序由 reader 校验。

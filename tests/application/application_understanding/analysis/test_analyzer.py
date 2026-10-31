@@ -149,3 +149,28 @@ def test_analyzer_enforces_file_and_byte_budgets(
     assert raised.value.code == ErrorCode.APPLICATION_ANALYSIS_BUDGET.value
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_fingerprint_preserves_analysis_identity_without_semantic_detection(tmp_path, monkeypatch):
+    _write_understood_application(tmp_path)
+    analyzer = ApplicationUnderstandingAnalyzer()
+    expected = analyzer.analyze('project-a', tmp_path).source_fingerprint
+    def forbidden(*args, **kwargs):
+        raise AssertionError('fingerprint must not analyze candidates')
+    for name in ('analyze_python', 'analyze_javascript', 'analyze_openapi'):
+        monkeypatch.setattr(analyzer_module, name, forbidden)
+    assert analyzer.fingerprint(tmp_path) == expected
+    (tmp_path/'client.ts').write_text('export const changed=true', encoding='utf-8')
+    assert analyzer.fingerprint(tmp_path) != expected
+
+
+def test_fingerprint_keeps_file_budget_and_sensitive_path_exclusion(tmp_path):
+    (tmp_path/'visible.py').write_text('x=1', encoding='utf-8')
+    (tmp_path/'secret.py').write_text('x=2', encoding='utf-8')
+    analyzer = ApplicationUnderstandingAnalyzer(limits=SourceAnalysisLimits(max_files=1))
+    before = analyzer.fingerprint(tmp_path)
+    (tmp_path/'secret.py').write_text('x=3', encoding='utf-8')
+    assert analyzer.fingerprint(tmp_path) == before
+    (tmp_path/'other.py').write_text('x=4', encoding='utf-8')
+    with pytest.raises(JiejianError, match='文件数量预算'):
+        analyzer.fingerprint(tmp_path)

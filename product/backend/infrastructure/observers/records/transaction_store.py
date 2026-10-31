@@ -1,4 +1,4 @@
-# 独立记录组件的数据边界：内存事务与独占持久快照形成一次提交，应用没有修改历史的接口。
+# 独立记录组件的数据边界：内存事务经独占页增量日志确认提交，应用没有修改历史的接口。
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +14,7 @@ from threading import RLock
 from uuid import uuid4
 
 from product.protocols.runtime.transaction_records import RecordOperation, RecordSeed, RecordSnapshot, RecordTransaction, RecordTransition, RecordProofView, RecordRequestScope, bounded_record_data
-from product.backend.infrastructure.observers.records.record_history import read_history
+from product.backend.infrastructure.observers.records.record_history import HISTORY_LIMIT, encode_frame, read_history
 
 
 _SCHEMA_SQL = r"""
@@ -101,6 +101,8 @@ class TransactionRecordStore:
         """任何截断、摘要不符都拒绝开放，不把损坏尾部当成“没有发生”。"""
         try:latest,self._last_hash=read_history(self._file,3)
         except ValueError as error:raise RecordStoreError(str(error)) from None
+        self._persisted_image = latest
+        self._frames_since_checkpoint = 0
         if latest is None:
             self._file.write(b'JIEJIAN-TRANSACTION-RECORDS-3\n')
             return False
@@ -109,13 +111,17 @@ class TransactionRecordStore:
 
     def _persist(self):
         # SQLite 只在拥有者内存中运行。落盘文件始终由 OS 独占，原生 SQLite 也不能绕过文件共享限制。
-        # 先持久化完整快照，再允许其他请求读取新状态；写入结果不明时封闭整个来源等待恢复。
+        # 先持久化变化页，再允许其他请求读取新状态；写入结果不明时封闭整个来源等待恢复。
         try:
-            data = self._db.serialize()
+            image = self._db.serialize()
+            if image == self._persisted_image:
+                return
+            checkpoint = self._frames_since_checkpoint >= 63
+            data = encode_frame(image, self._persisted_image, checkpoint=checkpoint)
             length = struct.pack('>I', len(data))
             digest = hashlib.sha256(self._last_hash + length + data).digest()
             frame = length + data + digest
-            if self._file.tell() + len(frame) > 128 * 1024 * 1024:
+            if self._file.tell() + len(frame) > HISTORY_LIMIT:
                 raise RecordStoreError('RECORD_HISTORY_LIMIT')
             offset = 0
             while offset < len(frame):
@@ -125,6 +131,8 @@ class TransactionRecordStore:
                 offset += written
             os.fsync(self._file.fileno())
             self._last_hash = digest
+            self._persisted_image = image
+            self._frames_since_checkpoint = 0 if checkpoint else self._frames_since_checkpoint + 1
         except BaseException:
             self._poisoned = True
             raise
@@ -277,12 +285,14 @@ class TransactionRecordStore:
                 raise RecordStoreError("RECORD_OPERATION_MISSING")
             return RecordOperation.model_validate_json(row[0])
 
-    def open_scope(self, request_nonce: str, request_digest: str) -> RecordRequestScope:
+    def open_scope(self, request_nonce: str, request_digest: str, activity=None) -> RecordRequestScope:
         """仅宿主控制端调用；同一随机请求标记不能被重新打开或替换。"""
         with self._connection() as db:
             generation = db.execute('SELECT generation FROM metadata WHERE singleton=1').fetchone()[0]
             scope = RecordRequestScope(scope_id=uuid4().hex, generation=generation,
-                request_nonce=request_nonce, request_digest=request_digest)
+                request_nonce=request_nonce, request_digest=request_digest, activity=activity)
+            if activity is not None and (activity.complete or (activity.request_nonce, activity.request_digest) != (request_nonce, request_digest)):
+                raise RecordStoreError('ACTIVITY_CORRELATION_INVALID')
             if db.execute('SELECT 1 FROM scopes WHERE request_nonce=?', (request_nonce,)).fetchone():
                 raise RecordStoreError('RECORD_REQUEST_REPLAYED')
             db.execute('INSERT INTO scopes VALUES(?,?,?)', (scope.scope_id, request_nonce, scope.model_dump_json()))
@@ -295,16 +305,27 @@ class TransactionRecordStore:
             raise RecordStoreError('RECORD_SCOPE_MISSING')
         return RecordRequestScope.model_validate_json(row[0])
 
-    def close_scope(self, scope_id: str, complete: bool) -> RecordRequestScope:
+    def close_scope(self, scope_id: str, complete: bool, activity=None) -> RecordRequestScope:
         """完成是单向边界；结束后不允许继续写，未结束写入或异常关闭只能记为不完整。"""
         with self._connection() as db:
             scope = self._scope(db, scope_id)
             if scope.state != 'OPEN':
                 return scope
-            scope = scope.model_copy(update={'state':'COMPLETE' if complete else 'INCOMPLETE'})
+            if activity is not None and (activity.request_nonce, activity.request_digest) != (scope.request_nonce, scope.request_digest):
+                raise RecordStoreError('ACTIVITY_CORRELATION_INVALID')
+            if activity is not None and not complete and activity.complete:
+                raise RecordStoreError('ACTIVITY_CLOSURE_INVALID')
+            scope = scope.model_copy(update={'state':'COMPLETE' if complete else 'INCOMPLETE', 'activity':activity})
             db.execute('UPDATE scopes SET document=? WHERE scope_id=?', (scope.model_dump_json(), scope_id))
             self._persist()
             return scope
+
+    def request_scope(self, request_nonce):
+        with self._connection() as db:
+            row = db.execute('SELECT document FROM scopes WHERE request_nonce=?', (request_nonce,)).fetchone()
+            if row is None:
+                raise RecordStoreError('RECORD_SCOPE_MISSING')
+            return RecordRequestScope.model_validate_json(row[0])
 
     def append_trace(self, command):
         """宿主绑定当前请求；父节点与提交引用均不得越过同一请求和资源。"""

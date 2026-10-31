@@ -27,3 +27,15 @@ it('显式重新读取保留已经显示的数据',async()=>{
   await act(async()=>finish('fresh facts'))
   expect(view.result.current.data).toBe('fresh facts')
 })
+
+it('同一轮焦点与可见性恢复只刷新一次，卸载后不再读取',async()=>{
+  const read=vi.fn().mockResolvedValue('facts')
+  const view=renderHook(()=>useRead('item',read))
+  await waitFor(()=>expect(view.result.current.data).toBe('facts'))
+  act(()=>{window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'))})
+  await waitFor(()=>expect(read).toHaveBeenCalledTimes(2))
+  view.unmount()
+  window.dispatchEvent(new Event('focus'))
+  await new Promise(resolve=>setTimeout(resolve,10))
+  expect(read).toHaveBeenCalledTimes(2)
+})

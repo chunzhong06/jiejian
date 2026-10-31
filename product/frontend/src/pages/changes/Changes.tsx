@@ -1,17 +1,19 @@
-import { ApiError } from '../../shared/api/http';
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import './workspace.css'
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRightOutlined, DownOutlined, CodeOutlined } from '@ant-design/icons';
-import { sourceChangesApi, type SourceChangeViewDto, type RegistrationPreview } from '../../entities/source-change/api/sourceChanges';
-import { ChangePreview } from '../../entities/source-change/ui/ChangePreview';
+import { useEffect, useState } from 'react';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import DownOutlined from '@ant-design/icons/DownOutlined';
+import CodeOutlined from '@ant-design/icons/CodeOutlined';
+import { sourceChangesApi, type SourceChangeViewDto } from '../../entities/source-change/api/sourceChanges';
+import { ChangeRegistration, changeTargetOptions } from '../../entities/source-change/ui/ChangeRegistration';
+import { ruleWorkspaceApi } from '../../entities/permission/api/ruleWorkspace';
 import { RuntimeActivation } from '../../entities/source-change/ui/RuntimeActivation';
 import { developmentApi } from '../../entities/source-change/api/development';
 import { repairsApi, repairReference } from '../../entities/check/api/repairs';
 import type { WorkspaceViewDto } from '../../entities/workspace/api/workspace';
 import { Button } from "../../shared/ui/actions";
 import { Badge, Empty, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
-import { Field, Heading } from "../../shared/ui/layout";
+import { Heading } from "../../shared/ui/layout";
 import { assertProject, type PageProps } from '../../shared/model/page';
 import { date, text } from '../../shared/lib/format';
 import { go } from '../../shared/lib/navigation';
@@ -20,10 +22,12 @@ const readiness: Record<SourceChangeViewDto['revalidation']['status'], string> =
 export function Changes({ projectId, official, onError, refresh, route, workspace }: PageProps & {
     workspace?: WorkspaceViewDto | null;
 }) {
-    const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [register, setRegister] = useState(route.query.get('view') === 'register'), [pending, setPending] = useState<string | null>(() => sessionStorage.getItem('jiejian.studio.change:' + projectId)), [focused, setFocused] = useState<string>(), lock = useRef(false);
-    useEffect(() => { if (route.query.get('view') === 'register')
-        setRegister(true); }, [route.query.get('view')]);
-    const [registration, setRegistration] = useState<RegistrationPreview>();
+    const [register, setRegister] = useState(route.query.get('view') === 'register'), [focused, setFocused] = useState<string>();
+    useEffect(() => { if (route.query.get('view') === 'register') setRegister(true); }, [route.query.get('view')]);
+    const ruleState = useRead('registration-rules:' + projectId + ':' + register, async () => {
+        if (!register) return null;
+        const value = await ruleWorkspaceApi.read(projectId); assertProject(value.project_id, projectId); return value;
+    });
     const state = useRead('changes:' + projectId, async () => { const [changes, repair] = await Promise.all([sourceChangesApi.list(projectId), repairsApi.project(projectId)]); assertProject(repair.project_id, projectId); changes.forEach(item => assertProject(item.manifest.project_id, projectId)); return { changes, repair }; });
     const reference = route.query.get('repair_reference'), selected = route.query.get('change_id'), expanded = selected ?? focused;
     const detail = useRead('change-detail:' + projectId + ':' + expanded, async () => { if (!expanded)
@@ -33,32 +37,18 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
             throw new Error('修改记录与检查关联不一致。');
     } return value; });
     const contract = state.data?.repair.tasks.find(item => item.contract.repair_fingerprint === reference)?.contract;
+    const repairRule = ruleState.data?.rules.find(rule => rule.issues.some(issue => issue.contract.repair_fingerprint === reference));
     const changes = selected ? state.data?.changes.filter(item => item.manifest.change_id === selected) : state.data?.changes;
-    const act = async (callback: () => Promise<unknown>) => { if (lock.current)
-        return; lock.current = true; setBusy(true); try {
-        await callback();
-    }
-    catch (error) {
-        onError(error);
-    }
-    finally {
-        lock.current = false;
-        setBusy(false);
-    } };
-    const accept = () => { setPending(null); sessionStorage.removeItem('jiejian.studio.change:' + projectId); setRegister(false); state.reload(); refresh(); };
     if (state.loading)
         return <PageSkeleton view="/changes"/>;
     if (state.error)
         return <ErrorNote error={state.error} onRetry={state.reload}/>;
     return <>
-    <Heading title="源码修改" actions={!register && <Button kind="primary" onClick={() => setRegister(true)}>{pending ? '查询登记回执' : '登记本地修改'}</Button>}/>
+    <Heading title="源码修改" actions={!register && <Button kind="primary" onClick={() => setRegister(true)}>登记本地修改</Button>}/>
     {selected && <div className="jj-back-link"><Button kind="quiet" onClick={() => { setFocused(undefined); go('/changes'); }}>全部修改记录</Button></div>}
     {contract && <section className="jj-repair-scope"><header><Badge tone="accent">原题修复</Badge><h2>本次修复范围</h2><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(contract.source_run_id) + '&case_id=' + encodeURIComponent(contract.source_case_id))}>阅读原问题依据<ArrowRightOutlined aria-hidden="true"/></Button></header><div><section><h3>消除原权限问题</h3><p>使用原问题的账号、资源和检查要求，验证禁止的业务结果不再发生。</p></section><section><h3>保留正常功能</h3><p>正常允许的操作及其他相关业务继续接受回归检查。</p></section></div></section>}
     {reference && !contract && <Notice>没有找到与这个修复引用对应的原问题，请从报告重新打开。</Notice>}
-    {register && <section className="jj-change-registration"><header><h2>登记已完成的修改</h2><p>界鉴会读取真实代码变化。登记完成后，再预览检查范围。</p></header><div><Field label="修改说明"><textarea disabled={busy || Boolean(pending)} value={reason} onChange={event => setReason(event.target.value)} placeholder="说明本次修改了什么"/></Field></div>{registration && <ChangePreview value={registration}/>}<footer><Button disabled={busy} onClick={() => setRegister(false)}>收起</Button>{pending ? <Button busy={busy} onClick={() => void act(async () => { const receipt = await developmentApi.receipt(projectId, 'DELIVER', pending); if (!receipt)
-        throw new Error('原登记回执尚未找到，请稍后查询。'); assertProject(receipt.project_id, projectId); accept(); if (receipt.change_id)
-        go('/changes?change_id=' + receipt.change_id); })}>查询本次登记</Button> : <Button kind="primary" disabled={!reason.trim() || Boolean(reference && !contract)} busy={busy} onClick={() => void act(async () => { if (!registration) { const value = await sourceChangesApi.registrationPreview(projectId); assertProject(value.project_id, projectId); setRegistration(value); return; } const preview = registration; const operation = crypto.randomUUID().replaceAll('-', ''); sessionStorage.setItem('jiejian.studio.change:' + projectId, operation); setPending(operation); const receipt = await sourceChangesApi.register(projectId, { operation_id: operation, expected_registration_fingerprint: preview.fingerprint, expected_source_fingerprint: preview.source_fingerprint, reason: reason.trim(), claimed_paths: [], repair_reference: contract ? repairReference(contract) : null }).catch(error => { if (error instanceof ApiError && ['STATE_PRECONDITION', 'INPUT_INVALID'].includes(error.code)) { setPending(null); sessionStorage.removeItem('jiejian.studio.change:' + projectId); setRegistration(undefined); } throw error; }); assertProject(receipt.project_id, projectId); accept(); if (receipt.change_id)
-        go('/changes?change_id=' + receipt.change_id); })}>{registration ? '确认登记修改' : '预览文件变化'}</Button>}</footer></section>}
+    {register && (ruleState.loading ? <Loading>正在读取可关联的权限</Loading> : ruleState.error ? <ErrorNote error={ruleState.error} onRetry={ruleState.reload}/> : reference && (!contract || !repairRule) ? <Notice>原题不在当前有效规则中，请从权限规则重新选择修改范围。</Notice> : <ChangeRegistration projectId={projectId} options={changeTargetOptions(ruleState.data?.rules ?? [])} initialTargets={contract ? [{permission: repairRule!.permission, repair: repairReference(contract)}] : []} onClose={() => setRegister(false)} onError={onError} onSaved={id => { setRegister(false); state.reload(); refresh(); go('/changes?change_id=' + encodeURIComponent(id)); }}/>) }
     {changes?.length ? <section className="jj-changes-workspace"><header><h2>修改记录</h2><span>{changes.length} 次登记</span></header>
       {changes.map(item => {
                 const id = item.manifest.change_id, open = expanded === id, verification = open ? detail.data?.verification : undefined;

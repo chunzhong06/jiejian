@@ -22,7 +22,7 @@ static HANDLE output, log_file;
 static HANDLE reopen_event;
 static int no_open;
 static wchar_t error_text[256];
-static int current_stage, ready, gui_failed, animate = 1;
+static int current_stage, ready, gui_failed, shutting_down, animate = 1;
 static ULONGLONG started_at, ready_at;
 static HFONT body_font, title_font, art_font, button_font;
 
@@ -60,7 +60,7 @@ static void paint_panel(HWND hwnd) {
     wchar_t brand[80], elapsed[80];
     swprintf(brand, 80, L"界鉴  JIEJIAN  %ls", brand_version);
     paint_text(dc, brand, 64, 206, 590, RGB(186,196,249), title_font, DT_LEFT);
-    paint_text(dc, ready ? (gui_failed ? L"界面待打开" : L"已就绪") : L"正在启动", 664, 206, 192,
+    paint_text(dc, shutting_down ? L"正在退出" : ready ? (gui_failed ? L"界面待打开" : L"已就绪") : L"正在启动", 664, 206, 192,
                gui_failed ? RGB(237,163,169) : RGB(186,196,249), body_font, DT_RIGHT);
     paint_text(dc, L"让权限要求与实际行为对应起来", 64, 244, 792, RGB(166,173,192), body_font, DT_LEFT);
     HPEN line = CreatePen(PS_SOLID, 1, RGB(59,69,91));
@@ -85,7 +85,7 @@ static void paint_panel(HWND hwnd) {
     MoveToEx(dc, 64, 512, NULL); LineTo(dc, 856, 512);
     swprintf(elapsed, 80, ready ? L"启动用时 %.1f 秒" : L"启动已用 %.1f 秒", (double)((ready ? ready_at : now) - started_at) / 1000.0);
     paint_text(dc, elapsed, 64, 538, 390, RGB(186,196,249), body_font, DT_LEFT);
-    paint_text(dc, ready ? L"关闭面板可收起；退出服务请使用网页入口。" : L"准备完成后自动打开界面，关闭面板不会中断启动。",
+    paint_text(dc, shutting_down ? L"正在等待本次服务和所属进程结束，已保存资料保留。" : ready ? L"关闭面板可收起；退出服务请使用网页入口。" : L"准备完成后自动打开界面，关闭面板不会中断启动。",
                64, 585, 792, RGB(166,173,192), body_font, DT_LEFT);
     SelectObject(dc, old_pen); DeleteObject(line);
     SetMapMode(dc, MM_TEXT);
@@ -96,6 +96,7 @@ static void paint_panel(HWND hwnd) {
 
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_STAGE) {
+        if (w == 7) { shutting_down = 1; EnableWindow(reopen_button, FALSE); SetWindowTextW(hwnd, L"界鉴 正在退出"); }
         if (w == 1) current_stage = 0;
         if (w == 6) current_stage = 1;
         if (w == 2 || w == 4) current_stage = 2;
@@ -103,7 +104,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w, LPARAM l)
             if (!ready) ready_at = GetTickCount64();
             ready = 1; gui_failed = w == 5;
             ShowWindow(reopen_button, SW_SHOW);
-            SetWindowTextW(hwnd, gui_failed ? L"界鉴 · 界面待打开" : L"界鉴 · 已就绪");
+            SetWindowTextW(hwnd, gui_failed ? L"界鉴 界面待打开" : L"界鉴 已就绪");
         }
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
@@ -150,6 +151,7 @@ static void consume_line(const char *line) {
     else if (strcmp(line, "__JIEJIAN_RELEASE_STATUS__:serve") == 0) stage = 2;
     else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:ready-browser-opened") == 0) stage = 3;
     else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:still-starting") == 0) stage = 4;
+    else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:stopping") == 0) stage = 7;
     else if (strcmp(line, "__JIEJIAN_SERVE_STATUS__:ready-browser-open-failed") == 0) {
         wcscpy(error_text, L"服务已启动，但界面窗口未能打开。请双击界鉴.exe重新打开。");
         stage = 5;
@@ -183,7 +185,7 @@ static DWORD WINAPI read_output(void *unused) {
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, int show) {
-    wchar_t root[32768], lowered[32768], script[32768], shell[32768], command[65536], path[32768];
+    wchar_t root[32768], lowered[32768], script[32768], shell[32768], command[65536], path[32768], workspace[32768], binding[32768];
     wchar_t mutex_name[80], event_name[80];
     HANDLE mutex = NULL, reopen = NULL, job = NULL, pipe_write = NULL, reader = NULL, input = NULL;
     PROCESS_INFORMATION process = {0}; STARTUPINFOW startup = {0};
@@ -192,9 +194,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     (void)previous; (void)command_line; (void)show;
     started_at = GetTickCount64();
+    root[0] = 0; workspace[0] = 0;
     output = NULL; log_file = INVALID_HANDLE_VALUE;
     for (int i = 1; i < argc; ++i) {
         if (wcscmp(argv[i], L"--no-open") == 0) no_open = 1;
+        else if (wcscmp(argv[i], L"--workspace") == 0 && i + 1 < argc) {
+            if (!GetFullPathNameW(argv[++i], 32768, workspace, NULL)) goto invalid_arguments;
+        }
         else if (wcscmp(argv[i], L"--port") == 0 && i + 1 < argc) {
             wchar_t *end; unsigned long value = wcstoul(argv[++i], &end, 10);
             if (*end || value < 1 || value > 65535) goto invalid_arguments;
@@ -205,7 +211,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     length = GetModuleFileNameW(NULL, root, 32768);
     if (!length || length >= 32768) goto cleanup;
     wchar_t *last = wcsrchr(root, L'\\'); if (!last) goto cleanup; *last = 0;
-    wcscpy(lowered, root); CharLowerBuffW(lowered, (DWORD)wcslen(lowered));
+    if (!workspace[0]) {
+        swprintf(binding, 32768, L"%ls\\var\\launcher\\workspace.ini", root);
+        if (GetFileAttributesW(binding) != INVALID_FILE_ATTRIBUTES) {
+            if (GetPrivateProfileIntW(L"workspace", L"version", 0, binding) != 1 ||
+                !GetPrivateProfileStringW(L"workspace", L"path", L"", workspace, 32768, binding)) goto cleanup;
+        } else swprintf(workspace, 32768, L"%ls\\var", root);
+    }
+    if (!GetFullPathNameW(workspace, 32768, lowered, NULL)) goto cleanup;
+    wcscpy(workspace, lowered);
+    HANDLE workspace_handle = CreateFileW(workspace, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (workspace_handle != INVALID_HANDLE_VALUE) {
+        if (!GetFinalPathNameByHandleW(workspace_handle, lowered, 32768, FILE_NAME_NORMALIZED)) wcscpy(lowered, workspace);
+        CloseHandle(workspace_handle);
+    }
+    if (wcsncmp(lowered, L"\\\\?\\UNC\\", 8) == 0) {
+        memmove(lowered + 2, lowered + 8, (wcslen(lowered + 8) + 1) * sizeof(wchar_t));
+        lowered[0] = L'\\'; lowered[1] = L'\\';
+    } else if (wcsncmp(lowered, L"\\\\?\\", 4) == 0) memmove(lowered, lowered + 4, (wcslen(lowered + 4) + 1) * sizeof(wchar_t));
+    size_t workspace_length = wcslen(lowered);
+    while (workspace_length > 3 && lowered[workspace_length - 1] == L'\\') lowered[--workspace_length] = 0;
+    CharLowerBuffW(lowered, (DWORD)wcslen(lowered));
     uint64_t hash = UINT64_C(14695981039346656037);
     for (size_t i = 0; lowered[i]; ++i) { hash ^= (unsigned char)lowered[i]; hash *= UINT64_C(1099511628211); hash ^= (unsigned char)(lowered[i] >> 8); hash *= UINT64_C(1099511628211); }
     swprintf(mutex_name, 80, L"Local\\JieJian-Launcher-%016llx", (unsigned long long)hash);
@@ -233,7 +260,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     length = GetSystemDirectoryW(shell, 32768);
     if (!length || length + 60 >= 32768) goto cleanup;
     wcscat(shell, L"\\WindowsPowerShell\\v1.0\\powershell.exe");
-    swprintf(command, 65536, L"\"%ls\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%ls\" -Port %lu -ReopenEvent \"%ls\" %ls", shell, script, port, event_name, no_open ? L"-NoOpen" : L"");
+    swprintf(command, 65536, L"\"%ls\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%ls\" -Port %lu -VarDir \"%ls\" -ReopenEvent \"%ls\" %ls", shell, script, port, workspace, event_name, no_open ? L"-NoOpen" : L"");
     if (!CreatePipe(&output, &pipe_write, &security, 0)) goto cleanup;
     SetHandleInformation(output, HANDLE_FLAG_INHERIT, 0);
     input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &security, OPEN_EXISTING, 0, NULL);
@@ -263,7 +290,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
         DWORD style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
         RECT outer = {0, 0, width, height}; AdjustWindowRectEx(&outer, style, FALSE, 0);
         width = outer.right - outer.left; height = outer.bottom - outer.top;
-        window = CreateWindowExW(0, type.lpszClassName, L"界鉴 · 启动状态", style, work.left + (work.right - work.left - width) / 2, work.top + (work.bottom - work.top - height) / 2, width, height, NULL, NULL, instance, NULL);
+        window = CreateWindowExW(0, type.lpszClassName, L"界鉴启动状态", style, work.left + (work.right - work.left - width) / 2, work.top + (work.bottom - work.top - height) / 2, width, height, NULL, NULL, instance, NULL);
         if (!window) { TerminateProcess(process.hProcess, 1); goto cleanup; }
         reopen_button = CreateWindowW(L"BUTTON", L"重新打开界面", WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 0, 0, 0, 0, window, (HMENU)(INT_PTR)ID_REOPEN, instance, NULL);
         RECT client; GetClientRect(window, &client);
@@ -281,7 +308,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, 
     GetExitCodeProcess(process.hProcess, &result);
 cleanup:
     if (pipe_write) CloseHandle(pipe_write);
-    if (job) CloseHandle(job); /* 正常退出已沿原服务收口；异常退出回收本入口拥有的残留后代。 */
+    if (job) {
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION remaining = {0};
+        /* 只收尾本入口的 Job；最终回执须等所属后代退出，不能用网页断连代替。 */
+        TerminateJobObject(job, result);
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &remaining, sizeof(remaining), NULL)) { result = 1; break; }
+            if (!remaining.ActiveProcesses) break;
+            Sleep(50);
+        }
+        if (remaining.ActiveProcesses) result = 1;
+        CloseHandle(job);
+    }
     if (reader) { WaitForSingleObject(reader, 5000); CloseHandle(reader); }
     if (output) CloseHandle(output);
     if (input && input != INVALID_HANDLE_VALUE) CloseHandle(input);
@@ -296,9 +334,18 @@ cleanup:
     if (result && !no_open) MessageBoxW(NULL, error_text[0] ? error_text : L"界鉴未能启动。请确认发布包已完整解压且目录可写，查看 var\\logs\\launcher.log 和 README.txt。", L"界鉴启动未完成", MB_OK | MB_ICONERROR);
     if (reopen) CloseHandle(reopen);
     if (mutex) { ReleaseMutex(mutex); CloseHandle(mutex); }
+    if (root[0] && workspace[0] && process.hProcess) {
+        PROCESS_INFORMATION follow = {0}; STARTUPINFOW follow_start = {0}; follow_start.cb = sizeof(follow_start);
+        swprintf(command, 65536, L"\"%ls\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%ls\" -VarDir \"%ls\" -FinishUpdate -ExitCode %lu", shell, script, workspace, result);
+        /* 原进程树与锁释放后，交接进程才可启动新发行；它不属于已关闭的 Job。 */
+        if (CreateProcessW(shell, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, root, &follow_start, &follow)) {
+            WaitForSingleObject(follow.hProcess, 30000);
+            CloseHandle(follow.hThread); CloseHandle(follow.hProcess);
+        }
+    }
     return (int)result;
 invalid_arguments:
     LocalFree(argv);
-    MessageBoxW(NULL, L"直接双击即可启动。命令行仅支持 --no-open 和 --port 端口号。", L"界鉴", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(NULL, L"直接双击即可启动。可使用 --no-open、--port 端口号及 --workspace 工作区目录。", L"界鉴", MB_OK | MB_ICONINFORMATION);
     return 2;
 }

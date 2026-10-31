@@ -22,4 +22,16 @@ def test_system_identity_matches_served_frontend_and_html_revalidates(tmp_path):
         (frontend/'index.html').write_text('replaced',encoding='utf8')
         assert client.get('/api/system/status').json()['data']['frontend_identity']['status']=='UNCONFIRMED'
 
+def test_light_status_and_update_routes_keep_the_local_control_boundary(tmp_path):
+    with TestClient(create_app(tmp_path/'var', start_worker=False, environ={})) as client:
+        summary = client.get('/api/system/summary').json()['data']
+        assert summary['api'] == 'available' and 'environment' not in summary
+        assert client.post('/api/system/updates/preview', json={'directory': str(tmp_path)},
+                           headers={'Origin': 'https://external.example'}).status_code == 403
+        response = client.post('/api/system/updates/preview', json={'directory': str(tmp_path)})
+        assert response.status_code == 400
+        assert response.json()['error']['code'] == 'INPUT_INVALID'
+        assert client.get('/api/system/updates/upd_' + 'a'*32).status_code == 400
+
+
 pytestmark = [pytest.mark.level3]

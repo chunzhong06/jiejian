@@ -5,13 +5,12 @@ import os
 import sqlite3
 import tempfile
 from contextlib import closing
-from importlib import import_module
 from pathlib import Path
 from alembic import command
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, QueuePool
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.backend.infrastructure.storage.base import Base
@@ -48,16 +47,19 @@ def configure_sqlite_engine(engine: Engine) -> None:
             cursor.close()
 
 
-def create_sqlite_engine(database_path: Path) -> Engine:
+def create_sqlite_engine(database_path: Path, *, reuse_connections: bool = False) -> Engine:
     """创建只面向文件数据库的 SQLAlchemy 引擎。"""
 
     try:
         path = database_path.resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
+        # 仅长期服务复用连接；不新增并发上限，避免嵌套只读 UoW 等待自身释放连接。
+        pool_options = dict(poolclass=QueuePool, pool_size=4, max_overflow=-1,
+                            connect_args={'check_same_thread': False}) if reuse_connections else dict(poolclass=NullPool)
         engine = create_engine(
             f"sqlite+pysqlite:///{path.as_posix()}",
             future=True,
-            poolclass=NullPool,
+            **pool_options,
         )
         configure_sqlite_engine(engine)
         return engine
@@ -83,7 +85,7 @@ def prepare_database(database_path: Path) -> None:
         with migration_resources() as resource_root:
             history = MigrationHistory.load(resource_root)
             if path.exists():
-                _upgrade_supported_workspace(path, resource_root, history.head)
+                _upgrade_supported_workspace(path, resource_root, history)
                 require_workspace(path, revision=history.head)
                 return
             with tempfile.TemporaryDirectory(prefix="workspace-", dir=path.parent) as temporary:
@@ -115,21 +117,26 @@ def prepare_database(database_path: Path) -> None:
         ) from None
 
 
-def _upgrade_supported_workspace(path: Path, root: Path, head: str) -> None:
+def _upgrade_supported_workspace(path: Path, root: Path, history: MigrationHistory) -> None:
     # 版本标签只是候选条件；写入前按基线的真实结构、身份和外键事实确认可升级性。
     with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as reader:
         try:
             revision = reader.execute("SELECT version_num FROM alembic_version").fetchall()
         except sqlite3.Error:
             return
-    if revision != [("workspace_0001",)] or head == "workspace_0001":
+    if len(revision) != 1 or revision[0][0] == history.head or revision[0][0] not in history.revisions:
         return
-    baseline = import_module("product.backend.migrations.versions.workspace_0001")
-    with closing(sqlite3.connect(":memory:")) as reference:
-        for statement in baseline._STATEMENTS:
-            reference.execute(statement)
-        signature = sqlite_schema_signature(reference)
-        identity = reference.execute("SELECT * FROM workspace_schema").fetchall()
+    reference_engine = create_engine('sqlite+pysqlite:///:memory:')
+    try:
+        with reference_engine.begin() as connection:
+            config = migration_config(root)
+            config.attributes['connection'] = connection
+            command.upgrade(config, revision[0][0])
+            reference = connection.connection.driver_connection
+            signature = sqlite_schema_signature(reference)
+            identity = reference.execute("SELECT * FROM workspace_schema").fetchall()
+    finally:
+        reference_engine.dispose()
     engine = create_sqlite_engine(path)
     try:
         with engine.connect() as connection:
@@ -148,7 +155,7 @@ def _upgrade_supported_workspace(path: Path, root: Path, head: str) -> None:
                     raise JiejianError(ErrorCode.STORAGE_MIGRATION, "仍有运行任务，请先停止原服务后升级工作区")
                 config = migration_config(root, path)
                 config.attributes["connection"] = connection
-                command.upgrade(config, head)
+                command.upgrade(config, history.head)
                 if raw.execute("PRAGMA foreign_key_check").fetchone() is not None:
                     raise JiejianError(ErrorCode.STORAGE_MIGRATION, "工作区关联核验失败；升级已回滚")
                 connection.commit()

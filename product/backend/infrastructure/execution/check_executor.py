@@ -197,7 +197,8 @@ class CheckExecutor:
         document = seal_check_evidence(run_id=self.input.run_id, job_id=self.input.job_id,
             attempt=self.input.attempt, action_id=action.action_id, action_revision=action.action_revision,
             request_hash=self.input.request_hash, config_hash=self.input.config_hash, case=case,
-            outcome=outcome, observations=tuple(observations), trace=self.observers.trace(configured, case),**evidence_fields)
+            outcome=outcome, observations=tuple(observations), trace=self.observers.trace(configured, case),
+            **self.observers.activity_fields(case), **evidence_fields)
         result = CheckCaseResult(case_id=case.case_id, action_id=action.action_id, verdict=decision.verdict,
             reason_codes=decision.reason_codes, evidence_ids=(document.evidence_id,), outcome=outcome)
         return result, document

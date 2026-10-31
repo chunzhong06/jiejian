@@ -3,6 +3,22 @@ import {request,ApiError} from './http'
 
 const response=(data:unknown,status=200)=>new Response(JSON.stringify({schema_version:'1',data}),{status})
 
+it('同一读取的订阅者独立取消，最后一个离开才取消网络请求',async()=>{
+  let finish!:(value:Response)=>void
+  const pending=new Promise<Response>(resolve=>{finish=resolve})
+  const fetch=vi.fn().mockReturnValue(pending)
+  vi.stubGlobal('fetch',fetch)
+  const first=new AbortController(),second=new AbortController()
+  const a=request('/api/shared-abort',{signal:first.signal}),b=request('/api/shared-abort',{signal:second.signal})
+  const rejection=expect(a).rejects.toHaveProperty('name','AbortError')
+  first.abort()
+  await rejection
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch.mock.calls[0][1].signal.aborted).toBe(false)
+  finish(response('retained reader'))
+  expect(await b).toBe('retained reader')
+})
+
 it('同时读取同一资源只发送一次，结束后重新读取真实状态',async()=>{
   let resolve!:(value:Response)=>void
   const first=new Promise<Response>(done=>{resolve=done})

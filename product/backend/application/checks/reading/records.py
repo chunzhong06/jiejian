@@ -43,12 +43,14 @@ PHASES={'BASELINE':'初始','BEFORE':'操作前','AFTER':'操作后','EVENTUAL':
 TRACE_LABELS={'ENTRY':'收到业务请求','IDENTITY':'核对身份','AUTHORIZATION':'权限判断','PERSISTENT_EFFECT':'提交业务变化',
     'MESSAGE':'发送消息','DELEGATION':'派发任务','FINAL_EFFECT':'记录最终后果','RECOVERY':'执行恢复'}
 
+ACTIVITY_LABELS={'HTTP_SERVER':'接收与返回请求','HTTP_CLIENT':'请求下游服务','SQLITE':'调用 SQLite','FILESYSTEM':'读写应用文件'}
+
 JUDGEMENTS={'SAFE':'本项检查符合权限要求','VULNERABLE':'本项已发生规则禁止的结果','INCONCLUSIVE':'本项证据或条件不足，暂时无法确定'}
 
 
 class RecordLink(WireModel):
     record_id:str
-    kind:Literal['FACT','OUTCOME','OBSERVATION','TRACE']
+    kind:Literal['FACT','OUTCOME','OBSERVATION','TRACE','ACTIVITY']
     label:str
     proof_fingerprint:str|None=None
     observer_id:str|None=None
@@ -62,7 +64,7 @@ class EvidenceRecordIndex(WireModel):
     case_id:str
     action_id:str
     evidence_id:str
-    records:tuple[RecordLink,...]=Field(max_length=817)
+    records:tuple[RecordLink,...]=Field(max_length=945)
 
 
 class VerificationSection(WireModel):
@@ -70,7 +72,7 @@ class VerificationSection(WireModel):
     title:str
     status:Literal['CONFIRMED','LIMITED','UNKNOWN']
     text:str
-    record_refs:tuple[str,...]=Field(default=(),max_length=817)
+    record_refs:tuple[str,...]=Field(default=(),max_length=945)
     source:dict[str,str]=Field(default_factory=dict)
     fragment:dict[str,Any]=Field(default_factory=dict)
 
@@ -89,7 +91,7 @@ class EvidenceRecordView(WireModel):
     values:tuple[dict[str,Any],...]=Field(max_length=20)
     location:dict[str,str]
     fragment:dict[str,Any]
-    related_records:tuple[RecordLink,...]=Field(max_length=817)
+    related_records:tuple[RecordLink,...]=Field(max_length=945)
     limitations:tuple[str,...]
 
 
@@ -115,6 +117,9 @@ def _entries(document):
         for index,event in enumerate(document.trace.events):
             label='准备返回业务响应' if event.kind=='MESSAGE' and event.semantic_key=='response_prepared' else TRACE_LABELS[event.kind]
             add('TRACE',event,f'/trace/events/{index}',label,event_id=event.event_id)
+    if document.activity is not None:
+        for index,event in enumerate(document.activity.events):
+            add('ACTIVITY',event,f'/activity/events/{index}',ACTIVITY_LABELS[event.kind],event_id=event.event_id)
     return entries
 
 
@@ -132,6 +137,7 @@ def record_index(package,evidence_id,case_id):
 
 
 def _summary(link,value):
+    if link.kind=='ACTIVITY':return '宿主探针记录了实际技术调用。调用结束或 HTTP 返回成功，均不单独证明权限判断或业务提交成功。'
     if link.kind=='TRACE':return f'执行路径记录了“{link.label}”。它说明过程，不单独证明业务后果。'
     if link.kind=='OUTCOME':
         return f'请求返回HTTP {value.http_status}。下面同时核对实际身份、资源归属和恢复情况。' if value.http_status is not None else '本题未保存HTTP状态；保留已取得的执行核对。'
@@ -164,9 +170,12 @@ def record_view(package,evidence_id,case_id,record_id):
         (ref.proof_fingerprint,ref.observer_id,ref.phase)==(observation.proof_fingerprint,observation.observer_id,observation.phase) for ref in refs))
     related=tuple(item for item,_,_ in entries if item.record_id in related_ids and item.record_id!=record_id)
     outcome_ref=entries[0][0].record_id
-    supporting=link.kind in {'TRACE','OUTCOME'} or link.kind=='OBSERVATION' and value.level!='VERDICT_REQUIRED'
+    supporting=link.kind in {'TRACE','ACTIVITY','OUTCOME'} or link.kind=='OBSERVATION' and value.level!='VERDICT_REQUIRED'
     limitations=['本次结论只适用于当时使用的规则、账号、资源和记录读取范围。']
-    if document.schema_version=='1':limitations.append('这份旧证据未保存逐次提交或内容比较值，无法补回当时没有记录的细节。')
+    if link.kind=='OBSERVATION' and value.level=='VERDICT_REQUIRED' and not refs:
+        limitations.append('这条观察未封存字段比较或逐次修改明细，只能读取已保存的判断字段。')
+    if link.kind=='ACTIVITY':
+        limitations.append('探针覆盖已启用的 HTTP、SQLite 和文件调用，不记录应用内部的任意函数或自动推断权限决定。')
     if supporting:limitations.append('这条过程记录不能单独证明权限安全或业务后果。')
     method='；'.join(dict.fromkeys(METHODS[ref.method] for ref in refs))
     if refs:
@@ -175,20 +184,22 @@ def record_view(package,evidence_id,case_id,record_id):
         expected=[proof.expected_state for proof in configuration.proofs if proof.binding_fingerprint in bindings and proof.expected_state is not None]
         if expected:method+=' 判断条件采用本轮确认的状态定义，具体字段和值可在原始记录中核对。'
     if not method:
-        method='读取同一封存证据中的实际执行核对。' if link.kind=='OUTCOME' else '读取本题显式执行事件及它记录的前序关系；不按时间相邻推断因果。' if link.kind=='TRACE' else '原观察只保存了来源、阶段和判断字段，没有封存更细的采集步骤。'
+        method='读取同一封存证据中的实际执行核对。' if link.kind=='OUTCOME' else '读取本题显式执行事件及它记录的前序关系；不按时间相邻推断因果。' if link.kind=='TRACE' else '读取宿主在真实请求作用域内自动采集的调用；父引用来自同一请求，不用时间相邻拼接路径。' if link.kind=='ACTIVITY' else '原观察只保存了来源、阶段和判断字段，没有封存更细的采集步骤。'
     reasons=[REASONS.get(code,f'已发布原因 {code} 尚无对应说明，请结合原记录核对。') for code in result.reason_codes]
     if not reasons:
         reasons=['本轮已核对实际账号、请求和资源，判断所需证据与恢复条件均符合要求。'+('对应的允许操作也已通过检查。' if case.permission.expectation=='DENY' else '')] if result.verdict.value=='SAFE' else ['本题未封存可读的原因说明，保留已发布结论和具体记录。']
     relevant_reasons=tuple(item.record_id for item,observation,_ in entries if item.kind=='OBSERVATION' and observation.level=='VERDICT_REQUIRED' and observation.phase in {'AFTER','EVENTUAL'})
     actual={'MATCH':'与计划一致','MISMATCH':'与计划不一致','UNKNOWN':'尚未独立确认'}[outcome.actual_identity_status]
     association=f'实际账号{actual}；记录与本次请求'+('对应' if outcome.run_correlated else '尚未确认对应')+'；记录与本题资源'+('对应。' if outcome.resource_correlated else '尚未确认对应。')
+    if link.kind=='ACTIVITY':
+        association='宿主已将本条调用关联到实际请求；调用记录不包含业务资源归属，不能替代业务记录的账号与资源核对。'
     resource_label='本次请求新建的对象' if getattr(configuration,'created_resource',None) is not None else f'资源“{case.resource_id}”'
     sections=(
         VerificationSection(key='rule',title='检查要求',status='CONFIRMED',text=f'{subject.label}对{owner.label}拥有的{resource_label}，'+('不得' if case.permission.expectation=='DENY' else '可以')+configuration.display_name+f'。采用权限修订 {case.permission.revision}。',record_refs=(outcome_ref,)),
         VerificationSection(key='experiment',title='实际操作',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' else 'LIMITED',
             text=f'计划使用{subject.label}执行“{configuration.display_name}”；实际账号{actual}。'+('未取得HTTP状态。' if outcome.http_status is None else f'请求返回HTTP {outcome.http_status}。')+'接口状态只说明请求如何被处理，实际结果还要看下面的业务记录。',record_refs=(outcome_ref,)),
-        VerificationSection(key='method',title='取证与比较方法',status='CONFIRMED' if refs or link.kind in {'TRACE','OUTCOME'} else 'UNKNOWN',text=method,record_refs=(record_id,)),
-        VerificationSection(key='association',title='账号、请求与资源对应',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' and outcome.run_correlated and outcome.resource_correlated else 'LIMITED',text=association,record_refs=(outcome_ref,)),
+        VerificationSection(key='method',title='取证与比较方法',status='CONFIRMED' if refs or link.kind in {'TRACE','ACTIVITY','OUTCOME'} else 'UNKNOWN',text=method,record_refs=(record_id,)),
+        VerificationSection(key='association',title='账号、请求与资源对应',status='CONFIRMED' if link.kind!='ACTIVITY' and outcome.actual_identity_status=='MATCH' and outcome.run_correlated and outcome.resource_correlated else 'LIMITED',text=association,record_refs=(record_id,) if link.kind=='ACTIVITY' else (outcome_ref,)),
         VerificationSection(key='reason',title='判断依据',status='CONFIRMED' if all(code in REASONS for code in result.reason_codes) and (result.reason_codes or result.verdict.value=='SAFE') else 'UNKNOWN',text=' '.join(reasons),record_refs=relevant_reasons),
         VerificationSection(key='boundary',title='结论适用范围',status='LIMITED',text=' '.join(limitations),record_refs=()),
     )
@@ -204,6 +215,9 @@ def record_view(package,evidence_id,case_id,record_id):
         'association':dict(actual_identity_status=outcome.actual_identity_status,run_correlated=outcome.run_correlated,resource_correlated=outcome.resource_correlated),
         'reason':dict(reason_codes=list(result.reason_codes)),
         'boundary':dict(resource_id=case.resource_id,permission=case.permission.model_dump(mode='json'))}
+    if link.kind=='ACTIVITY':
+        locations['association']=('/activity',digest)
+        source_fragments['association']=dict(collector=document.activity.collector,complete=document.activity.complete,event_id=value.event_id)
     sections=tuple(section.model_copy(update={'source':dict(logical_file='result.json' if section.key=='reason' else 'evidence/'+evidence_id+'.json',
         pointer=locations[section.key][0],sha256=locations[section.key][1]),'fragment':source_fragments[section.key]}) for section in sections)
     values=[]
@@ -216,10 +230,15 @@ def record_view(package,evidence_id,case_id,record_id):
         elif data.kind=='FIELD_DISCLOSURE':values=[dict(label=item.path,value='与参照一致' if item.matched else '未形成一致比较') for item in data.fields]
         elif data.kind=='REFERENCE_ARTIFACT':values=[dict(label='参照大小（字节）',value=data.manifest.size),dict(label='参照SHA-256',value=data.manifest.sha256)]
         else:values=[dict(label='账号一致',value=data.subject_match),dict(label='角色一致',value=data.role_match)]
+    elif link.kind=='ACTIVITY':
+        fragment=value.model_dump(mode='json')
+        values=[dict(label='调用结果',value={'OK':'调用已结束','ERROR':'调用发生异常','INCOMPLETE':'未收齐结束记录'}[value.outcome]),
+            dict(label='耗时（毫秒）',value=round(value.duration_us/1000,2)),dict(label='代码位置',value=value.source_location)]
+        if value.http_status is not None:values.append(dict(label='HTTP 状态',value=value.http_status))
     elif link.kind=='TRACE':
         names=('event_id','parent_event_ids','kind','semantic_key','authorization_decision','effect_id','dispatch_effect_ids','source_component','source_location','recorded_at_us')
         fragment={key:val for key,val in value.model_dump(mode='json').items() if key in names}
-        values=[dict(label='记录位置',value=value.source_component+' · '+value.source_location)]
+        values=[dict(label='记录位置',value=value.source_component+' / '+value.source_location)]
     else:
         fragment=value.model_dump(mode='json',exclude={'correlation_refs'})
         if refs:

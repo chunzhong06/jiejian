@@ -1,6 +1,7 @@
 # 只读核对材料的业务、身份、录制与来源；调用者拥有 UoW，检查与字段构造均不提交事务。
 from __future__ import annotations
 
+from product.backend.application.preparation.bindings.reuse import material_fact
 from pathlib import Path
 from typing import Protocol
 from product.backend.domain.boundaries.entities import BusinessRevisionState, ImplementationBindingStatus
@@ -35,21 +36,21 @@ class BindingSourceInspector:
             # 整体源码变化不自动销毁材料；只有独立复用检查成立才允许保留其原来源指纹。
             from product.backend.application.preparation.bindings.reuse import recorded_material_reusable
             source_reused = recorded_material_reusable(work,binding,understanding,self._var_dir)
-        identity = work.test_identities.get(binding.subject_test_identity_id)
-        owner = work.test_identities.get(binding.resource_owner_test_identity_id)
+        identity = material_fact(work, work.test_identities, ("get", binding.subject_test_identity_id), lambda: work.test_identities.get(binding.subject_test_identity_id))
+        owner = material_fact(work, work.test_identities, ("get", binding.resource_owner_test_identity_id), lambda: work.test_identities.get(binding.resource_owner_test_identity_id))
         if (owner is None or owner.project_id != action.project_id or owner.prepared_at_us is None
                 or binding.owner_identity_fingerprint != identity_source_fingerprint(owner)):
             return ("RESOURCE_OWNER_SOURCE_STALE",)
-        owner_root = work.business_boundaries.actor(owner.actor_id)
-        owner_actor = work.business_boundaries.actor_revision(owner.actor_id, owner.actor_revision)
+        owner_root = material_fact(work, work.business_boundaries, ("actor", owner.actor_id), lambda: work.business_boundaries.actor(owner.actor_id))
+        owner_actor = material_fact(work, work.business_boundaries, ("actor_revision", owner.actor_id, owner.actor_revision), lambda: work.business_boundaries.actor_revision(owner.actor_id, owner.actor_revision))
         if (owner_root is None or owner_actor is None or owner_root.current_revision != owner.actor_revision
                 or owner_actor.effective_state is not BusinessRevisionState.ACTIVE
                 or inspect_actor_binding(owner.actor_id, owner.actor_revision,
-                    work.business_boundaries.actor_binding(owner.actor_id, owner.actor_revision), understanding).status is not ImplementationBindingStatus.CURRENT):
+                    material_fact(work, work.business_boundaries, ("actor_binding", owner.actor_id, owner.actor_revision), lambda: work.business_boundaries.actor_binding(owner.actor_id, owner.actor_revision)), understanding).status is not ImplementationBindingStatus.CURRENT):
             return ("RESOURCE_OWNER_SOURCE_STALE",)
         action_root = work.business_boundaries.action(action.action_id)
         implementation = inspect_action_binding(action.action_id, action.revision,
-                                                work.business_boundaries.action_binding(action.action_id, action.revision), understanding)
+                                                material_fact(work, work.business_boundaries, ("action_binding", action.action_id, action.revision), lambda: work.business_boundaries.action_binding(action.action_id, action.revision)), understanding)
         if (action_root is None or action_root.current_revision != action.revision
                 or action.effective_state is not BusinessRevisionState.ACTIVE
                 or identity is None or identity.project_id != action.project_id or identity.prepared_at_us is None
@@ -59,13 +60,13 @@ class BindingSourceInspector:
                 or (binding.source_fingerprint != understanding.source_fingerprint and not source_reused)
                 or binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id))):
             return ("ACTION_BINDING_SOURCE_STALE",)
-        actor_root = work.business_boundaries.actor(identity.actor_id)
-        actor = work.business_boundaries.actor_revision(identity.actor_id, identity.actor_revision)
+        actor_root = material_fact(work, work.business_boundaries, ("actor", identity.actor_id), lambda: work.business_boundaries.actor(identity.actor_id))
+        actor = material_fact(work, work.business_boundaries, ("actor_revision", identity.actor_id, identity.actor_revision), lambda: work.business_boundaries.actor_revision(identity.actor_id, identity.actor_revision))
         if (actor_root is None or actor is None or actor.project_id != action.project_id
                 or actor_root.current_revision != identity.actor_revision
                 or actor.effective_state is not BusinessRevisionState.ACTIVE
                 or inspect_actor_binding(actor.actor_id, actor.revision,
-                    work.business_boundaries.actor_binding(actor.actor_id, actor.revision), understanding
+                    material_fact(work, work.business_boundaries, ("actor_binding", actor.actor_id, actor.revision), lambda: work.business_boundaries.actor_binding(actor.actor_id, actor.revision)), understanding
                 ).status is not ImplementationBindingStatus.CURRENT):
             return ("TEST_ACTOR_SOURCE_STALE",)
         if isinstance(binding, ActionEvidenceBinding) and binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
@@ -74,8 +75,8 @@ class BindingSourceInspector:
             if self._registered_observers is None or not self._registered_observers.contains(action.project_id, binding.observer_reference):
                 return ("REGISTERED_OBSERVER_UNAVAILABLE",)
             return ()
-        recording = work.recordings.get(binding.source_recording_id)
-        draft_record = work.flow_drafts.latest(binding.source_recording_id)
+        recording = material_fact(work, work.recordings, ("get", binding.source_recording_id), lambda: work.recordings.get(binding.source_recording_id))
+        draft_record = material_fact(work, work.flow_drafts, ("latest", binding.source_recording_id), lambda: work.flow_drafts.latest(binding.source_recording_id))
         expected_purpose = (RecordingPurpose.OBSERVATION if isinstance(binding, ActionEvidenceBinding) else
                             RecordingPurpose.RECOVERY if isinstance(binding, ActionRecoveryBinding) else RecordingPurpose.TARGET)
         if (recording is None or draft_record is None or recording.state is not RecordingState.COMPLETED
@@ -120,7 +121,7 @@ class BindingSourceInspector:
 
 
 def binding_source_fields(work, action, identity, understanding, now_us, owner_id):
-    implementation = work.business_boundaries.action_binding(action.action_id, action.revision)
+    implementation = material_fact(work, work.business_boundaries, ("action_binding", action.action_id, action.revision), lambda: work.business_boundaries.action_binding(action.action_id, action.revision))
     return {
         "project_id": action.project_id, "business_action_id": action.action_id, "action_revision": action.revision,
         "action_semantic_fingerprint": action.semantic_fingerprint,

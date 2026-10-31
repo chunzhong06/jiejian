@@ -10,9 +10,11 @@ from product.backend.domain.checks.repair import CurrentRepairContract, CurrentR
 from product.backend.domain.verification.breakpoints import BreakpointLocator, BreakpointResult
 from product.backend.domain.verification.checks import CheckDecisionInput, project_check_effect_facts
 from product.backend.domain.verification.trace import TraceAuthorizationDecision, TraceEventKind
-from product.backend.application.checks.repairs.repair_presentation import RepairComparisonRow, build_repair_comparison
+from product.backend.application.checks.repairs.repair_presentation import RepairComparisonRow, RepairReview, build_repair_comparison
 from product.backend.application.checks.reading.observation_reading import ObservationReading, observation_reading
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
+from product.protocols.runtime.request_activity import RequestActivity
+from product.backend.application.reading import projection_read
 from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, WireModel
 
 
@@ -112,6 +114,11 @@ class StoryExecutionPath(WireModel):
     evidence_refs: tuple[str, ...]
 
 
+class StoryRequestActivity(WireModel):
+    capture: RequestActivity
+    evidence_refs: tuple[str, ...]
+
+
 class StoryProofCoverage(WireModel):
     effect_id: str
     business_label: str
@@ -140,6 +147,8 @@ class ActionResultStory(WireModel):
     repair_comparison: tuple[RepairComparisonRow, ...] = ()
     technical_references: tuple[str, ...]
     execution_path: StoryExecutionPath | None = None
+    request_activity: StoryRequestActivity | None = None
+    activity_error: str | None = None
     proof_coverage: tuple[StoryProofCoverage, ...] = ()
 
 
@@ -156,6 +165,7 @@ class ResultStory(WireModel):
     repair_verification: CurrentRepairVerification | None = None
     # 复验通过时本轮可能没有违规项；原题义务的完整对照属于整轮，不挂靠新违规项。
     repair_comparison: tuple[RepairComparisonRow, ...] = ()
+    repair_reviews: tuple[RepairReview, ...] = ()
     runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
     runtime_instance_id: str | None = None
     requirement_scope: tuple[FrozenRequirementScope, ...] = ()
@@ -178,6 +188,7 @@ class CheckStoryBuilder:
         if self._repairs is None:
             raise ValueError("生产结果故事尚未连接原题读取者")
 
+    @projection_read
     def build(self, run_id: str, *, include_repair=True) -> ResultStory:
         package = self._reader.package(run_id)
         return self._from_verified_package(package, include_repair=include_repair)
@@ -284,15 +295,19 @@ class CheckStoryBuilder:
                     breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),
                     claim_boundary=tuple(CLAIM_BOUNDARIES[key] for key in ("execution", "identity", "scope", "immutable")),
                     technical_references=(case.case_id, *result.evidence_ids), execution_path=_execution_path(documents),
+                    request_activity=_request_activity(documents),
+                    activity_error=_activity_error(documents),
                     proof_coverage=_proof_coverage(case, proofs, documents, facts)))
-        verification, repair_comparison = None, ()
+        verification, repair_comparison, repair_reviews = None, (), ()
         if include_repair and self._repairs is not None:
             contracts = {item.source_case_id:item for item in self._repairs.contracts_from_verified_package(
                 package, breakpoints={item.case_id: item.breakpoint for item in stories})}
             stories = [item.model_copy(update={"repair_requirement": contracts.get(item.case_id),
                 "repair_comparison": build_repair_comparison(contracts[item.case_id], package)
                     if item.case_id in contracts else ()}) for item in stories]
-            verification, repair_comparison = self._repairs.review_from_verified_package(package)
+            repair_reviews = self._repairs.reviews_from_verified_package(package)
+            if repair_reviews:
+                verification, repair_comparison = repair_reviews[0].verification, repair_reviews[0].comparison
         correspondence = getattr(package.result, "runtime_correspondence", None)
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
@@ -302,7 +317,7 @@ class CheckStoryBuilder:
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
             technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),
             change_context=package.request.change_context,repair_verification=verification,
-            repair_comparison=repair_comparison)
+            repair_comparison=repair_comparison, repair_reviews=repair_reviews)
 
 
 def _proof_coverage(case, proofs, documents, facts):
@@ -348,6 +363,22 @@ def _single_trace(documents):
     traces = tuple(document.trace for document in documents if document.trace is not None)
     # 多份不相等 Trace 不拼接因果；保持违规事实并降低定位精度。
     return traces[0] if traces and all(trace == traces[0] for trace in traces) else None
+
+
+def _request_activity(documents):
+    captures = tuple(document.activity for document in documents if document.activity is not None)
+    if not captures or any(capture != captures[0] for capture in captures):
+        return None
+    return StoryRequestActivity(capture=captures[0], evidence_refs=tuple(
+        document.evidence_id for document in documents if document.activity == captures[0]))
+
+
+def _activity_error(documents):
+    errors = {document.activity_error for document in documents if document.activity_error is not None}
+    captures = tuple(document.activity for document in documents if document.activity is not None)
+    if len(errors)>1 or errors and captures or captures and any(item!=captures[0] for item in captures):
+        return 'ACTIVITY_RECORDS_CONFLICT'
+    return next(iter(errors),None)
 
 
 def _execution_path(documents) -> StoryExecutionPath | None:

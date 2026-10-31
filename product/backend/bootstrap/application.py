@@ -17,6 +17,7 @@ from product.backend.infrastructure.runtime.jobs.registration import current_che
 from product.backend.infrastructure.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.backend.infrastructure.maintenance.service import LocalMaintenanceService
+from product.backend.infrastructure.runtime.updates import PortableUpdateService
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.backend.infrastructure.secrets import SecretStore, default_secret_store
 from product.backend.infrastructure.storage import StorageUnitOfWork
@@ -78,7 +79,9 @@ class ApplicationCore:
             self._base_environment["JIEJIAN_CONTROL_ORIGIN"] = control_origin
         database_path = default_database_path(self.var_dir)
         prepare_database(database_path)
-        self.engine = create_sqlite_engine(database_path)
+        self.engine = create_sqlite_engine(database_path, reuse_connections=True)
+        from product.backend.infrastructure.storage.workspace import WorkspaceRevision
+        self.workspace_revision = WorkspaceRevision(database_path)
         factory = partial(StorageUnitOfWork, create_session_factory(self.engine))
         self.uow_factory = factory
         from product.backend.infrastructure.runtime.session_secrets import SessionSecretOverlay
@@ -258,6 +261,7 @@ class ApplicationCore:
             self.var_dir,
             active_runtime_paths=lambda: self.worker.active_runtime_paths() + self.identity_preparations.active_runtime_paths(),
         )
+        self.updates = PortableUpdateService(self.var_dir, self._base_environment)
         self.onboarding = OnboardingWorkflow(
             folder_selector
             or SystemFolderSelector(
@@ -342,7 +346,7 @@ class ApplicationCore:
                 stopping.callback(stop)
         # 任一进程尚未确认退出时，保留共享凭据、数据库及受保护运行目录，允许重试关闭。
         releases=(self.runtime_secrets.clear,
-            self.secret_store.clear,self.engine.dispose,self.maintenance.assets.close,
+            self.secret_store.clear,self.workspace_revision.close,self.engine.dispose,self.maintenance.assets.close,
         )
         with ExitStack() as cleanup:
             for release in reversed(releases):

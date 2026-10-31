@@ -125,6 +125,7 @@ export type WorkspaceViewDto = {
 }
 
 export const workspaceApi = {
+  revision:(projectId:string,signal?:AbortSignal)=>request<{revision:string}>(`/api/projects/${projectId}/workspace/revision`,{signal}),
   current: (projectId: string, signal?:AbortSignal) => request<WorkspaceViewDto>(
     `/api/projects/${projectId}/workspace`,{signal},
   ),

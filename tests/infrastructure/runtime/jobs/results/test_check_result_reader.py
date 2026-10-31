@@ -15,6 +15,44 @@ def published(parts):
     return CheckResultReader(var_dir=var_dir, uow_factory=factory), package
 
 
+def test_same_read_operation_reuses_package_but_independent_read_rejects_tampering(package_parts, monkeypatch):
+    from product.backend.application.reading import projection_read
+    from product.backend.application.checks.reading import results
+    reader, package = published(package_parts)
+    original, reads = results.validate_check_package, []
+    def measured(*args, **kwargs):
+        reads.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(results, 'validate_check_package', measured)
+    @projection_read
+    def operation():
+        assert reader.status(package.result.run_id).result_integrity == 'VALID'
+        return reader.package(package.result.run_id)
+    assert operation() == package
+    assert len(reads) == 1
+    path = package.directory/'result.json'
+    path.write_bytes(path.read_bytes()+b' ')
+    assert reader.status(package.result.run_id).result_integrity == 'INVALID'
+    assert len(reads) == 2
+
+
+def test_bundle_reads_selected_record_in_one_verified_package(package_parts, monkeypatch):
+    from product.backend.application.checks.reading import results
+    from product.backend.application.checks.reading.records import record_index
+    reader, package = published(package_parts)
+    evidence = package.evidence[0]
+    index = record_index(package, evidence.evidence_id, evidence.case.case_id)
+    original, reads = results.validate_check_package, []
+    def measured(*args, **kwargs):
+        reads.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(results, 'validate_check_package', measured)
+    value = reader.evidence_bundle(package.request.project_id, package.result.run_id,
+        evidence.case.case_id, [evidence.evidence_id], record_id=index.records[0].record_id)
+    assert value['items'][0]['record']['record']['record_id'] == index.records[0].record_id
+    assert len(reads) == 1
+
+
 def test_result_reader_only_selects_and_never_recomputes_verdict(package_parts, monkeypatch):
     reader, package = published(package_parts)
     var_dir, factory, job, _, result = package_parts

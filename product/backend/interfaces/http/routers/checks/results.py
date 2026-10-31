@@ -22,8 +22,8 @@ def build_results_router(context: ApplicationCore) -> APIRouter:
         return data_response([item.model_dump(mode="json") for item in context.check_results.evidence_index(run_id)])
 
     @router.get('/api/runs/{run_id}/evidence-bundle', response_model=ApiResponse)
-    def evidence_bundle(run_id: str, project_id: str, case_id: str, evidence_id: Annotated[list[str], Query(min_length=1,max_length=32)]):
-        return data_response(context.check_results.evidence_bundle(project_id,run_id,case_id,evidence_id))
+    def evidence_bundle(run_id: str, project_id: str, case_id: str, evidence_id: Annotated[list[str], Query(min_length=1,max_length=32)], record_id: Annotated[str | None, Query(max_length=128)] = None):
+        return data_response(context.check_results.evidence_bundle(project_id,run_id,case_id,evidence_id,record_id=record_id))
 
     @router.get("/api/runs/{run_id}/evidence/{evidence_id}", response_model=ApiResponse)
     def get_evidence(run_id: str, evidence_id: str):

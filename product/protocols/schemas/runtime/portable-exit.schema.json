@@ -1,0 +1,40 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "document_type": {
+      "const": "jiejian.portable-exit",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "exit_code": {
+      "title": "Exit Code",
+      "type": "integer"
+    },
+    "finished_at": {
+      "title": "Finished At",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "STOPPED",
+        "NEEDS_REVIEW"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "document_type",
+    "state",
+    "finished_at",
+    "exit_code"
+  ],
+  "title": "PortableExitReceipt",
+  "type": "object"
+}

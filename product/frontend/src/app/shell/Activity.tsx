@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
-import { LoadingOutlined, ArrowRightOutlined, ExclamationCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import ExclamationCircleOutlined from '@ant-design/icons/ExclamationCircleOutlined';
+import ClockCircleOutlined from '@ant-design/icons/ClockCircleOutlined';
 import { projectsApi } from '../../entities/application/api/projects';
 import { useRead } from '../../shared/lib/useRead';
 import { assertProject } from '../../shared/model/page';

@@ -1,6 +1,39 @@
 # 验证本地会话、Host、Origin、严格输入和错误回执，不执行任何目标操作。
 import pytest
 
+
+def test_slow_project_read_does_not_block_the_event_loop():
+    import asyncio
+    from threading import Event
+    from types import SimpleNamespace
+    import httpx
+    from fastapi import FastAPI
+    from product.backend.interfaces.http.routers.applications.projects import build_projects_router
+
+    entered, release = Event(), Event()
+    def slow_read(**kwargs):
+        entered.set()
+        assert release.wait(5)
+        return []
+
+    async def run():
+        app = FastAPI()
+        app.include_router(build_projects_router(SimpleNamespace(projects=SimpleNamespace(list_for_display=slow_read))))
+        @app.get('/health')
+        async def health():
+            return {'ready': True}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            reading = asyncio.create_task(client.get('/api/projects'))
+            try:
+                assert await asyncio.to_thread(entered.wait, 3)
+                response = await client.get('/health')
+                assert response.json() == {'ready': True}
+                assert not reading.done()
+            finally:
+                release.set()
+                await reading
+    asyncio.run(run())
+
 def authorize(api):
     response=api.client.get('/')
     assert response.status_code==200

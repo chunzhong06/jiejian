@@ -64,15 +64,15 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
         return data_response(context.application_understanding.connection_preview(body.source_root))
 
     @router.get("/api/projects", response_model=ApiResponse)
-    async def list_projects(include_archived: bool = False):
+    def list_projects(include_archived: bool = False):
         return data_response(context.projects.list_for_display(include_archived=include_archived))
 
     @router.get("/api/projects/{project_id}", response_model=ApiResponse)
-    async def get_project(project_id: str):
+    def get_project(project_id: str):
         return data_response(context.projects.get(project_id).model_dump(mode="json"))
 
     @router.delete("/api/projects/{project_id}", response_model=ApiResponse)
-    async def archive_project(project_id: str):
+    def archive_project(project_id: str):
         """移除普通应用视图，保留 Project 及全部历史结果。"""
 
         return data_response(
