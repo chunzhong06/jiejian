@@ -80,6 +80,21 @@ def install_product(
     prune_installed_runtime(python)
 
 
+def copy_node_runtime(base: Path, executable: Path) -> Path:
+    """交付固定 Node 及其自带 npm；不复制构建机或目标项目安装的依赖。"""
+    npm = executable.parent / 'node_modules' / 'npm'
+    if not (npm / 'bin/npm-cli.js').is_file() or not (npm / 'package.json').is_file():
+        raise RuntimeError('Portable Node 来源缺少自带 npm')
+    target = base / 'runtime/node'
+    target.mkdir(parents=True)
+    shutil.copyfile(executable, target / 'node.exe')
+    shutil.copytree(npm, target / 'node_modules/npm')
+    license_path = executable.parent / 'LICENSE'
+    if license_path.is_file():
+        shutil.copyfile(license_path, target / 'LICENSE.txt')
+    return target
+
+
 def prune_installed_runtime(python: Path) -> None:
     """删除 Wheel 安装带入但发行运行不需要的测试与 Python 生成物。"""
 

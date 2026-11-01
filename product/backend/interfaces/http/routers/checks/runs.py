@@ -12,6 +12,7 @@ from product.backend.domain.identifiers import RUN_ID_PATTERN
 from product.backend.domain.lifecycle import RunLifecycle, RunVerdict
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.application.checks.history import MaintainHistory
+from product.protocols.checks.execution_request import PermissionReference
 
 
 async def require_local_history_session(request:Request):
@@ -24,6 +25,7 @@ class RunCreateRequest(ApiModel):
     expected_plan_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     idempotency_key: str = Field(min_length=1, max_length=128)
     change_id: str | None = Field(default=None,pattern=r"^chg_[0-9a-f]{32}$")
+    selected_permissions: list[PermissionReference] | None = Field(default=None, min_length=1, max_length=4096)
 
 
 def build_runs_router(context: ApplicationCore) -> APIRouter:
@@ -32,7 +34,8 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
     @router.post("/api/projects/{project_id}/runs", response_model=ApiResponse, status_code=202)
     def create_run(project_id: str, body: RunCreateRequest):
         submitted = context.checks.submit(project_id, expected_plan_fingerprint=body.expected_plan_fingerprint,
-            idempotency_key=body.idempotency_key,change_id=body.change_id)
+            idempotency_key=body.idempotency_key,change_id=body.change_id,
+            selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions))
         status = context.check_results.status(submitted.run.run_id, project_id=project_id)
         return data_response({"run": status.run.model_dump(mode="json"),
             "job": status.job.model_dump(mode="json")}, status_code=202)

@@ -21,25 +21,46 @@ beforeEach(() => {
     vi.spyOn(ruleWorkspaceApi, 'read').mockResolvedValue({ schema_version: '1', project_id: 'app', policy_epoch: 1, rules: [rule], change_history_limited: false });
 });
 
-it('从问题进入修复工作面，切换页签不再保留挡住内容的登记表单', async () => {
+it('同一角色的多条条件规则分别对应自己的状态和详情，筛选不丢失关系', async () => {
+    const rows: RuleItem[] = [
+        {...rule, permission:{...permission,intent_id:'archived'}, title:'负责人不得完成工单', subject:'负责人', conditions:{principal:'AUTHENTICATED',tenant:'SAME',resource_states:['archived']},state:'VULNERABLE'},
+        {...rule, permission:{...permission,intent_id:'open'}, title:'负责人可以完成工单', subject:'负责人', expectation:'ALLOW',conditions:{principal:'AUTHENTICATED',tenant:'SAME',resource_states:['open']},state:'SAFE'},
+    ];
+    vi.mocked(ruleWorkspaceApi.read).mockResolvedValue({schema_version:'1',project_id:'app',policy_epoch:1,rules:rows,change_history_limited:false});
+    const boundary={policy_epoch:1,actors:[{actor_id:'owner',revision:1,effective_state:'ACTIVE'}],actions:[{action_id:'action',revision:1,effective_state:'ACTIVE'}],permission_intents:rows.map(item=>({...item.permission,subject_actor_id:'owner',subject_actor_revision:1,resource_owner_actor_id:'owner',resource_owner_actor_revision:1,business_action_id:'action',action_revision:1,effective_state:'ACTIVE'}))} as BusinessBoundaryViewDto;
+    location.hash='/permissions?project_id=app';
+    render(<RuleWorkbench projectId="app" official={false} boundary={boundary} route={readRoute()} refresh={vi.fn()} onError={vi.fn()} onManage={vi.fn()}/>);
+    const archived=(await screen.findByText('数据状态：archived')).closest('tr')!;
+    expect(within(archived).getByText('负责人不得完成工单')).toBeVisible();
+    expect(within(archived).getByText('发现违规')).toBeVisible();
+    expect(within(archived).getByRole('link')).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
+    expect(within(archived).getByRole('link')).toHaveAttribute('href',expect.stringContaining('project_id=app'));
+    fireEvent.change(screen.getByRole('textbox',{name:'查找规则'}),{target:{value:'open'}});
+    expect(screen.queryByText('数据状态：archived')).not.toBeInTheDocument();
+    const open=screen.getByText('数据状态：open').closest('tr')!;
+    expect(within(open).getByText('符合规则')).toBeVisible();
+    expect(within(open).getByRole('link')).toHaveAttribute('href',expect.stringContaining('rule_id=open'));
+});
+
+it('从问题进入同一修复任务，登记和返回都保留准确原题', async () => {
     const props = { projectId: 'app', official: false, boundary: { policy_epoch: 1 } as BusinessBoundaryViewDto, route: readRoute(), refresh: vi.fn(), onError: vi.fn(), onManage: vi.fn() };
     const view = render(<RuleWorkbench {...props}/>);
     await screen.findByRole('heading', { name: '协作者不得完成工单' });
-    fireEvent.click(screen.getByRole('button', { name: '提交修复' }));
-    expect(readRoute().query.get('section')).toBe('changes');
+    fireEvent.click(screen.getByRole('button', { name: '继续处理问题' }));
+    expect(readRoute().query.get('repair_reference')).toBe('repair');
+    expect(readRoute().query.get('view')).toBe('repair');
     const update = () => view.rerender(<RuleWorkbench {...props} route={readRoute()}/>);
     update();
-    const changes = screen.getByRole('tabpanel', { name: '修复与修改' });
-    expect(within(changes).getByRole('heading', { name: '登记本地修改' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: '发现的问题' })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修正协作者的工单权限' } });
-    fireEvent.click(screen.getByRole('tab', { name: '检查历史' })); update();
-    expect(screen.queryByRole('region', { name: '登记本地修改' })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('tabpanel', { name: '检查历史' })).getByRole('heading', { name: '这条规则的检查历史' })).toBeVisible();
-    fireEvent.click(screen.getByRole('tab', { name: '修复与修改' })); update();
-    expect(screen.getByRole('heading', { name: '关联修改' })).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: '登记修改' }));
+    expect(screen.getByRole('heading', {name:'先完成代码修改'})).toBeVisible();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'登记已完成的修改'}));
+    fireEvent.change(screen.getByLabelText('修改说明'), {target:{value:'修正协作者的工单权限'}});
+    fireEvent.click(screen.getByRole('button', {name:'返回修复任务'}));
+    fireEvent.click(screen.getByRole('button', {name:'登记已完成的修改'}));
     expect(screen.getByLabelText('修改说明')).toHaveValue('修正协作者的工单权限');
-    fireEvent.click(screen.getByRole('button', { name: '返回修改记录' }));
-    expect(screen.getByRole('heading', { name: '关联修改' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', {name:'返回修复任务'}));
+    fireEvent.click(screen.getByRole('button', {name:'返回这条权限规则'})); update();
+    fireEvent.click(screen.getByRole('tab', {name:'检查历史'})); update();
+    expect(within(screen.getByRole('tabpanel', {name:'检查历史'})).getByRole('heading', {name:'这条规则的检查历史'})).toBeVisible();
+    expect(screen.queryByRole('heading', {name:'登记本地修改'})).not.toBeInTheDocument();
 });

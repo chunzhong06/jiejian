@@ -113,6 +113,8 @@ def _source_advice(context, source):
         return advice('WAIT_PREFLIGHT', '查看正在进行的预检查',
             '已有预检查正在处理，查询原任务即可，不需要再次提交。',
             'SYSTEM', 'jiejian_proof_preflight_status', 'READ', 'WAITING')
+    if source.get('usable'):
+        return ProofSourceAdvice(source_id=source['source_id'], revision=source['revision'], state='USABLE', next_action=None)
     if attempt and attempt['state'] == 'SUCCEEDED' and attempt['current_basis'] and attempt['report']:
         report = attempt['report']
         if report['assessment'] == 'USABLE':

@@ -10,6 +10,7 @@ from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, ACTOR_
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision
 from product.backend.domain.boundaries.semantics import PermissionExpectation
+from product.protocols.checks.conditions import PermissionConditions
 from product.backend.application.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,
@@ -73,7 +74,7 @@ class BoundaryMaintenanceActorItem(BoundaryWorkflowModel):
     actor_id: str | None = Field(default=None, pattern=ACTOR_ID_PATTERN)
     expected_current_revision: int | None = Field(default=None, ge=1)
     display_name: str = Field(min_length=1, max_length=128)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     effective_state: BusinessRevisionState
     source_candidate_ids: tuple[str, ...] = Field(default=(), max_length=64)
 
@@ -94,7 +95,7 @@ class BoundaryMaintenanceActionItem(BoundaryWorkflowModel):
     action_id: str | None = Field(default=None, pattern=ACTION_ID_PATTERN)
     expected_current_revision: int | None = Field(default=None, ge=1)
     display_name: str = Field(min_length=1, max_length=256)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     primary_resource_concept: str = Field(min_length=1, max_length=128)
     operation_kind: BusinessActionOperationKind
     state_changing: bool
@@ -134,6 +135,7 @@ class BoundaryMaintenancePermissionItem(BoundaryWorkflowModel):
     relation: PermissionIntentRelation
     expectation: PermissionExpectation
     protected_effect_item_ids: tuple[str, ...] = Field(min_length=1, max_length=16)
+    conditions: PermissionConditions | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @field_validator("protected_effect_item_ids")
     @classmethod
@@ -156,7 +158,7 @@ class BoundaryMaintenanceCommand(BoundaryWorkflowModel):
     actors: tuple[BoundaryMaintenanceActorItem, ...] = Field(max_length=256)
     actions: tuple[BoundaryMaintenanceActionItem, ...] = Field(max_length=512)
     permissions: tuple[BoundaryMaintenancePermissionItem, ...] = Field(max_length=1024)
-    provenance: str = Field(min_length=1, max_length=512)
+    provenance: str = Field(default='用户在界鉴中编写的权限要求', min_length=1, max_length=512)
 
     @field_validator("actors", "actions", "permissions")
     @classmethod
@@ -195,7 +197,7 @@ class BoundaryReviewEffect(BoundaryWorkflowModel):
     business_label: str = Field(min_length=1, max_length=256)
     effect_kind: str = Field(min_length=1, max_length=64)
     resource_concept: str = Field(min_length=1, max_length=128)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     expected_state: str | None = None
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
 
@@ -215,6 +217,7 @@ class BoundaryReviewValue(BoundaryWorkflowModel):
     relation: str | None = None
     expectation: str | None = None
     protected_effects: tuple[str, ...] = Field(default=(), max_length=16)
+    conditions: PermissionConditions | None = None
 
 
 class BoundaryReviewItem(BoundaryWorkflowModel):

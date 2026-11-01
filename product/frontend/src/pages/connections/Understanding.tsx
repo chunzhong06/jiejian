@@ -28,7 +28,7 @@ export function Understanding({ projectId, onError }: {
     const value = state.data;
     return <>
     <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go('/application')}>应用连接</Button></div>
-    <Heading title="核对业务名称"/>
+    <Heading title="核对业务名称">将源码中的角色和接口整理为业务名称，选择哪些与本次权限检查有关。</Heading>
     <section className="jj-understanding-workspace">
       {([{ kind: 'ROLE', label: '业务角色', items: value.role_candidates }, { kind: 'ACTION', label: '业务操作', items: value.action_candidates }] as const).map(group => <section className="jj-understanding-group" key={group.kind}>
         <header><h2>{group.label}</h2><span>{group.items.length} 项源码线索</span></header>
@@ -36,7 +36,7 @@ export function Understanding({ projectId, onError }: {
                 const selection = choices[item.candidate_id] ?? { kind: group.kind, candidate_id: item.candidate_id, decision: item.decision === 'CONFIRMED' ? 'CONFIRMED' : item.decision === 'REJECTED' ? 'REJECTED' : 'PROPOSED', display_name: item.display_name };
                 return <div className="jj-understanding-row" key={item.candidate_id}>
           <input disabled={busy} aria-label={group.label + '名称'} value={selection.display_name} onChange={event => setChoices(current => ({ ...current, [item.candidate_id]: { ...selection, display_name: event.target.value } }))}/>
-          <Choice disabled={busy} aria-label={text(item.display_name) + '的处理方式'} value={selection.decision} onValueChange={value => setChoices(current => ({ ...current, [item.candidate_id]: { ...selection, decision: value as CandidateSelection['decision'] } }))}><option value="PROPOSED">暂不决定</option><option value="CONFIRMED">确认采用</option><option value="REJECTED">不属于当前业务</option></Choice>
+          <Choice disabled={busy} aria-label={text(item.display_name) + '的处理方式'} value={selection.decision} onValueChange={value => setChoices(current => ({ ...current, [item.candidate_id]: { ...selection, decision: value as CandidateSelection['decision'] } }))}><option value="PROPOSED">暂不决定</option><option value="CONFIRMED">与检查有关</option><option value="REJECTED">不属于当前业务</option></Choice>
           <details><summary>源码线索{item.stale ? '需要更新' : ''}</summary>{item.evidence.map((evidence, index) => <p className="jj-small" key={index}>{evidence.relative_path}，第 {evidence.line_start} 行</p>)}</details>
         </div>;
             })}</div>{!group.items.length && <p className="jj-small jj-muted">尚未识别到可确认的线索。</p>}

@@ -1,7 +1,7 @@
 # 将受控记录投影为已采用字段、身份核对和请求窗；受保护正文与原始nonce不进入Evidence。
 from product.backend.infrastructure.observers.records.record_facts import record_value,request_fact
 from product.protocols.checks.business_facts import (FactProofReference,CommittedFieldChange,CommittedStateFact,
-    IdentityCheckFact,RecordObservationWindow,ObservationFactReference,seal_business_fact)
+    IdentityCheckFact,AnonymousCheckFact,RecordObservationWindow,ObservationFactReference,seal_business_fact)
 
 
 def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,target,clock,marker,claims):
@@ -23,7 +23,7 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
         if target is None:raise ValueError('missing target receipt')
         checked=request_fact(before,view,path=path,expected_state=proof.expected_state,
             request_nonce=target.request_nonce,request_digest=target.request_digest,
-            subject_id=claims[case.subject_test_identity_id].application_subject_id,resource_id=case.resource_id,
+            subject_id='anonymous' if case.subject_test_identity_id is None else claims[case.subject_test_identity_id].application_subject_id,resource_id=case.resource_id,
             owner_id=claims[case.resource_owner_test_identity_id].application_subject_id,collection=config.collection)
         # 不能为失配/不连续记录封装肯定事实；单纯未闭合仍可保存已采集的关联片段。
         matched=checked.state!='UNKNOWN' or checked.reason_codes==('RECORD_REQUEST_INCOMPLETE',)
@@ -54,6 +54,9 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
 
 
 def identity_facts(common,case,proof):
-    return [seal_business_fact(**common,collector_kind='IDENTITY_READER',
+    facts = [seal_business_fact(**common,collector_kind='IDENTITY_READER',
         data=IdentityCheckFact(identity_id=identity_id,subject_match='MATCH',role_match='MATCH'))
-        for identity_id in sorted({case.subject_test_identity_id,case.resource_owner_test_identity_id,proof.observation_identity_id})]
+        for identity_id in sorted({case.subject_test_identity_id,case.resource_owner_test_identity_id,proof.observation_identity_id}-{None})]
+    if case.subject_test_identity_id is None:
+        facts.append(seal_business_fact(**common,collector_kind='IDENTITY_READER',data=AnonymousCheckFact(unauthenticated=True)))
+    return facts

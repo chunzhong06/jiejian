@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from scripts.build.common import FORBIDDEN_PARTS, TEXT_SUFFIXES, run
+from scripts.build.common import excluded_from_release, TEXT_SUFFIXES, run
 from scripts.build.runtime import portable_environment
 
 
@@ -15,7 +15,7 @@ def validate_tree_content(base: Path, project_root: Path) -> None:
         str(project_root.resolve()).replace("\\", "/"),
     }
     for path in base.rglob("*"):
-        if any(part.casefold() in FORBIDDEN_PARTS for part in path.parts) or path.suffix.lower() in {".pyc", ".pyo"}:
+        if excluded_from_release(path.relative_to(base), allow_node_npm=True):
             raise RuntimeError(f"Portable Tree 含禁止生成物: {path.relative_to(base)}")
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
             continue
@@ -39,12 +39,16 @@ def validate_base(base: Path, project_root: Path) -> None:
         python,
         frontend,
         base / "runtime" / "node" / "node.exe",
+        base / "runtime" / "node" / "node_modules" / "npm" / "bin" / "npm-cli.js",
+        base / "runtime" / "node" / "node_modules" / "npm" / "package.json",
     )
     if not all(path.is_file() for path in required):
         raise RuntimeError("Base Portable Tree 缺少必需文件")
     if set(path.name for path in base.iterdir()) != {"README.txt", "runtime", "app", "docs", "界鉴.exe"}:
         raise RuntimeError("Base Portable Tree 根目录包含职责外文件")
     environment = portable_environment(base, python, playwright_root)
+    run((base / 'runtime/node/node.exe', base / 'runtime/node/node_modules/npm/bin/npm-cli.js', '--version'),
+        cwd=base, environment=environment)
     probe = (
         "import json; from pathlib import Path;"
         "from product.backend.infrastructure.runtime.process.controlled.identity import python_environment_report;"

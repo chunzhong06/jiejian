@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import Field
 from product.backend.domain.boundaries.entities import BoundaryModel, BusinessActionRevision
 from product.backend.domain.preparation.requirements import ActionAssuranceContract
-from product.backend.domain.preparation.bindings import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding, ActionRecoveryBinding
+from product.backend.domain.preparation.bindings import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding, ActionRecoveryBinding, RuleCaseDataBinding, rule_case_resource
 from product.backend.domain.boundaries.permissions import PermissionIntentRevision
 from product.protocols.checks.execution_request import WireModel, Hash, LogicalId, ActorId, EffectId, IdentityId, CaseRole, FrozenPermission, ExecutionAssetReference, RecordedProofReference, ObserverProofReference, EffectProofRequirement, RecoveryReference, ExecutionCase, ExecutionTwin, case_invariants, content_hash
 from typing import Literal
@@ -72,6 +72,7 @@ class PreparedActionInput(BoundaryModel):
     identities: tuple[PreparedIdentityAssignment, ...]
     execution: ActionExecutionBinding | None = None
     resources: tuple[ActionResourceBinding, ...] = ()
+    case_data: tuple[RuleCaseDataBinding, ...] = ()
     evidence: tuple[ActionEvidenceBinding, ...] = ()
     recovery: ActionRecoveryBinding | None = None
     observer_capabilities: tuple[RegisteredEffectProofCapability, ...] = ()
@@ -155,13 +156,21 @@ def _compile_action(prepared, source_fingerprint, config_fingerprint):
         position = positions.get(permission.intent_id)
         subject = None if position is None else identities.get(position.subject_slot_id)
         owner = None if position is None else identities.get(position.resource_owner_slot_id)
-        if subject is None or owner is None:
+        anonymous = permission.conditions is not None and permission.conditions.principal == 'ANONYMOUS'
+        if (subject is None and not anonymous) or owner is None:
             gap("TEST_IDENTITY_REQUIRED", permission)
             return None
         resource = next((item for item in prepared.resources if item.resource_owner_test_identity_id == owner.identity_id), None)
         if resource is None or resource.owner_identity_fingerprint != owner.identity_fingerprint:
             gap("ACTION_RESOURCE_REQUIRED", permission)
             return None
+        case_data = next((item for item in prepared.case_data if item.permission.intent_id == permission.intent_id), None)
+        if case_data is not None:
+            try:
+                resource = rule_case_resource(resource, permission, case_data)
+            except ValueError:
+                gap('RULE_CASE_DATA_STALE', permission)
+                return None
         execution = prepared.execution
         if execution is None or resource.resource_injection != execution.resource_injection:
             gap("ACTION_EXECUTION_REQUIRED", permission)
@@ -197,12 +206,13 @@ def _compile_action(prepared, source_fingerprint, config_fingerprint):
             # 恢复模板含 case_resource_id，实际恢复仍需由执行器按当前资源核实基线。
             recovery = RecoveryReference(recording_id=binding.source_recording_id,
                 draft_revision=binding.source_draft_revision, draft_sha256=binding.source_draft_sha256,
+                operation_flow_id=binding.operation_flow_id, operation_flow_revision=binding.operation_flow_revision,
                 step_id=binding.step_id, binding_fingerprint=binding.binding_fingerprint,
                 request_template_fingerprint=content_hash("RecordedRequestTemplate", binding.request_template.model_dump(mode="json")))
         frozen = FrozenPermission.model_validate_json(permission.model_dump_json(include=set(FrozenPermission.model_fields)), strict=True)
-        payload = dict(permission=frozen, subject_test_identity_id=subject.identity_id,
-            subject_actor_id=subject.actor_id, subject_actor_revision=subject.actor_revision,
-            subject_identity_fingerprint=subject.identity_fingerprint, resource_owner_test_identity_id=owner.identity_id,
+        payload = dict(permission=frozen, subject_test_identity_id=None if anonymous else subject.identity_id,
+            subject_actor_id=permission.subject_actor_id, subject_actor_revision=permission.subject_actor_revision,
+            subject_identity_fingerprint=None if anonymous else subject.identity_fingerprint, resource_owner_test_identity_id=owner.identity_id,
             resource_owner_actor_id=owner.actor_id, resource_owner_actor_revision=owner.actor_revision,
             owner_identity_fingerprint=owner.identity_fingerprint, resource_id=resource.actual_resource_id,
             resource_binding_fingerprint=resource.binding_fingerprint,
@@ -235,12 +245,16 @@ def _compile_action(prepared, source_fingerprint, config_fingerprint):
         allow = make_case(allow_permission, control.protected_effect_ids, CaseRole.ALLOW_CONTROL)
         if deny is None or allow is None:
             continue
-        if case_invariants(deny) != case_invariants(allow):
+        from product.protocols.checks.execution_request import conditional_resource_twin
+        condition_difference = 'RESOURCE_STATE' if conditional_resource_twin(deny, allow) else None
+        if case_invariants(deny) != case_invariants(allow) and condition_difference is None:
             gap("CHECK_TWIN_INVARIANT_REQUIRED", deny_permission)
             continue
         raw = dict(deny_case_id=deny.case_id, allow_case_id=allow.case_id,
             selected_allow_permission=control.resolved_allow_permission.model_dump(mode="json"),
             protected_effect_ids=control.protected_effect_ids, invariants=case_invariants(deny).model_dump(mode="json"))
+        if condition_difference is not None:
+            raw['condition_difference'] = condition_difference
         raw["twin_id"] = "twin_" + content_hash("CheckTwinIdentity", raw)[:32]
         raw["fingerprint"] = content_hash("CheckTwin", raw)
         import json

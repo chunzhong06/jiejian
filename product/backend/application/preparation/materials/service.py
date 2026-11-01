@@ -67,6 +67,8 @@ class PreparationMaterialService:
             if resource is None or self._source_inspector.reasons(work, resource, action, understanding):
                 return None
             parent = resource.source_recording_id
+            if parent is None:
+                return None
         pending = [item for item in work.recordings.list_for_project(project_id)
             if (item.business_action_id, item.action_revision, item.purpose.value, item.parent_recording_id, item.effect_id,
                 item.subject_test_identity_id, item.resource_owner_test_identity_id) ==

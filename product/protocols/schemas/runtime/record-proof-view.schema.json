@@ -411,11 +411,12 @@
               "node:https",
               "node:sqlite",
               "node:fs",
-              "node:fs/promises"
+              "node:fs/promises",
+              "better-sqlite3"
             ],
             "type": "string"
           },
-          "maxItems": 5,
+          "maxItems": 6,
           "title": "Adapters",
           "type": "array"
         },

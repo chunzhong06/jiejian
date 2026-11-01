@@ -27,6 +27,15 @@
           "title": "Baseline Trusted",
           "type": "boolean"
         },
+        "condition_observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservedPermissionConditions"
+          },
+          "maxItems": 48,
+          "title": "Condition Observations",
+          "type": "array"
+        },
         "execution_outcome": {
           "enum": [
             "ACCEPTED",
@@ -271,6 +280,19 @@
     "NodeRuntimeReference": {
       "additionalProperties": false,
       "properties": {
+        "execution_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Fingerprint"
+        },
         "instance_id": {
           "pattern": "^rti_[0-9a-f]{32}$",
           "title": "Instance Id",
@@ -324,6 +346,98 @@
         "port"
       ],
       "title": "NodeRuntimeReference",
+      "type": "object"
+    },
+    "ObservedPermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Tenant"
+        },
+        "principal": {
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "resource_state": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource State"
+        },
+        "resource_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource Tenant"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^psr_[0-9a-f]{32}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "subject_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Tenant"
+        }
+      },
+      "required": [
+        "proof_fingerprint",
+        "source_id",
+        "source_fingerprint",
+        "principal"
+      ],
+      "title": "ObservedPermissionConditions",
       "type": "object"
     },
     "PythonRuntime": {

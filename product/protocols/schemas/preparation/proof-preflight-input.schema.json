@@ -77,6 +77,8 @@
               "resource_id",
               "owner_id",
               "state",
+              "tenant",
+              "condition_state",
               "version",
               "effect_count",
               "history_generation",
@@ -429,6 +431,8 @@
               "resource_id",
               "owner_id",
               "state",
+              "tenant",
+              "condition_state",
               "version",
               "effect_count",
               "history_generation",
@@ -650,6 +654,8 @@
               "resource_id",
               "owner_id",
               "state",
+              "tenant",
+              "condition_state",
               "version",
               "effect_count",
               "history_generation",
@@ -1076,6 +1082,24 @@
           "minItems": 1,
           "title": "Subject Path",
           "type": "array"
+        },
+        "tenant_path": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Path"
         }
       },
       "required": [
@@ -1202,6 +1226,19 @@
     "NodeRuntimeReference": {
       "additionalProperties": false,
       "properties": {
+        "execution_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Fingerprint"
+        },
         "instance_id": {
           "pattern": "^rti_[0-9a-f]{32}$",
           "title": "Instance Id",
@@ -1358,7 +1395,9 @@
           "enum": [
             "CONTROLLED_TRANSACTION_RECORDS_V2",
             "CONTROLLED_FILE_RECEIPT_V1",
-            "CONTROLLED_CREATION_V1"
+            "CONTROLLED_CREATION_V1",
+            "SQLITE_ROW_HISTORY_V1",
+            "SQLITE_CREATION_HISTORY_V1"
           ],
           "title": "Implementation Profile",
           "type": "string"
@@ -1549,6 +1588,15 @@
           "title": "Scope Id",
           "type": "string"
         },
+        "sqlite": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SqliteReadSelection"
+          },
+          "maxItems": 4,
+          "title": "Sqlite",
+          "type": "array"
+        },
         "timeout_us": {
           "maximum": 5000000,
           "minimum": 1000,
@@ -1568,6 +1616,541 @@
         "created_at_us"
       ],
       "title": "SourceReadScope",
+      "type": "object"
+    },
+    "SqliteCreationProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "database_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Database Path",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/ManagedIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "tenant",
+              "condition_state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "observed_columns": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Observed Columns",
+          "type": "array"
+        },
+        "owner_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Owner Column",
+          "type": "string"
+        },
+        "protected_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Protected Column",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "resource_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Resource Column",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "const": "OBJECT_CREATION_V1",
+          "default": "OBJECT_CREATION_V1",
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "SQLITE_OBJECTS",
+          "default": "SQLITE_OBJECTS",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Table",
+          "type": "string"
+        },
+        "target_data_path": {
+          "default": [
+            "data"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Target Data Path",
+          "type": "array"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "target_owner_path": {
+          "default": [
+            "owner_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Owner Path",
+          "type": "array"
+        },
+        "target_resource_path": {
+          "default": [
+            "resource_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Resource Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "identity_claims",
+        "collection",
+        "database_path",
+        "table",
+        "resource_column",
+        "owner_column",
+        "protected_column"
+      ],
+      "title": "SqliteCreationProofSourceConfig",
+      "type": "object"
+    },
+    "SqliteProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "database_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Database Path",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/ManagedIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "tenant",
+              "condition_state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "observed_columns": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Observed Columns",
+          "type": "array"
+        },
+        "owner_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Owner Column",
+          "type": "string"
+        },
+        "protected_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Protected Column",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "resource_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Resource Column",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "const": "TRANSACTION_HISTORY_V2",
+          "default": "TRANSACTION_HISTORY_V2",
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "SQLITE_AUDIT",
+          "default": "SQLITE_AUDIT",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Table",
+          "type": "string"
+        },
+        "target_data_path": {
+          "default": [
+            "data"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Target Data Path",
+          "type": "array"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "target_owner_path": {
+          "default": [
+            "owner_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Owner Path",
+          "type": "array"
+        },
+        "target_resource_path": {
+          "default": [
+            "resource_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Resource Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "identity_claims",
+        "collection",
+        "database_path",
+        "table",
+        "resource_column",
+        "owner_column",
+        "protected_column"
+      ],
+      "title": "SqliteProofSourceConfig",
+      "type": "object"
+    },
+    "SqliteReadSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "database_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Database Path",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "database_path",
+        "table",
+        "columns"
+      ],
+      "title": "SqliteReadSelection",
       "type": "object"
     },
     "ValueSlot": {
@@ -1819,7 +2402,9 @@
         "mapping": {
           "CREATED_OBJECT_RECORDS": "#/$defs/CreationProofSourceConfig",
           "MANAGED_TRANSACTION_RECORDS": "#/$defs/AtomicProofSourceConfig",
-          "REFERENCE_FILE": "#/$defs/FileProofSourceConfig"
+          "REFERENCE_FILE": "#/$defs/FileProofSourceConfig",
+          "SQLITE_AUDIT": "#/$defs/SqliteProofSourceConfig",
+          "SQLITE_OBJECTS": "#/$defs/SqliteCreationProofSourceConfig"
         },
         "propertyName": "source_kind"
       },
@@ -1832,6 +2417,12 @@
         },
         {
           "$ref": "#/$defs/CreationProofSourceConfig"
+        },
+        {
+          "$ref": "#/$defs/SqliteProofSourceConfig"
+        },
+        {
+          "$ref": "#/$defs/SqliteCreationProofSourceConfig"
         }
       ],
       "title": "Config"

@@ -20,6 +20,8 @@ METHODS={
 }
 
 REASONS={
+    'PERMISSION_CONDITION_UNKNOWN':'执行前未能确认规则所需的身份、租户或数据状态，本项未执行目标操作。',
+    'PERMISSION_CONDITION_MISMATCH':'执行前读取的实际身份、租户或数据状态不符合这条规则，本项未执行目标操作。',
     'ORPHAN_EFFECT_CONFIRMED':'已确认禁止的业务后果发生，且实际账号、请求和资源均能对应。之后的拒绝或恢复不会撤销这条事实。',
     'ACTUAL_IDENTITY_MISMATCH':'实际账号与本题计划不一致，不能据此完成原要求的验证。',
     'ACTUAL_IDENTITY_UNKNOWN':'未能独立确认实际账号。',
@@ -161,7 +163,8 @@ def record_view(package,evidence_id,case_id,record_id):
     link,value,pointer=entry;case=document.case;outcome=document.outcome
     configuration=next(action for action in package.bundle.actions if action.action_id==document.action_id)
     identities={item.identity_id:item for item in package.bundle.identities}
-    subject=identities[case.subject_test_identity_id];owner=identities[case.resource_owner_test_identity_id]
+    subject_label='未登录访客' if case.subject_test_identity_id is None else identities[case.subject_test_identity_id].label
+    owner=identities[case.resource_owner_test_identity_id]
     proof_refs=getattr(document,'fact_references',())
     refs=tuple(ref for ref in proof_refs if (link.kind=='FACT' and record_id in ref.fact_ids) or
         (link.kind=='OBSERVATION' and (ref.proof_fingerprint,ref.observer_id,ref.phase)==(value.proof_fingerprint,value.observer_id,value.phase)))
@@ -195,9 +198,9 @@ def record_view(package,evidence_id,case_id,record_id):
         association='宿主已将本条调用关联到实际请求；调用记录不包含业务资源归属，不能替代业务记录的账号与资源核对。'
     resource_label='本次请求新建的对象' if getattr(configuration,'created_resource',None) is not None else f'资源“{case.resource_id}”'
     sections=(
-        VerificationSection(key='rule',title='检查要求',status='CONFIRMED',text=f'{subject.label}对{owner.label}拥有的{resource_label}，'+('不得' if case.permission.expectation=='DENY' else '可以')+configuration.display_name+f'。采用权限修订 {case.permission.revision}。',record_refs=(outcome_ref,)),
+        VerificationSection(key='rule',title='检查要求',status='CONFIRMED',text=f'{subject_label}对{owner.label}拥有的{resource_label}，'+('不得' if case.permission.expectation=='DENY' else '可以')+configuration.display_name+f'。采用权限修订 {case.permission.revision}。',record_refs=(outcome_ref,)),
         VerificationSection(key='experiment',title='实际操作',status='CONFIRMED' if outcome.actual_identity_status=='MATCH' else 'LIMITED',
-            text=f'计划使用{subject.label}执行“{configuration.display_name}”；实际账号{actual}。'+('未取得HTTP状态。' if outcome.http_status is None else f'请求返回HTTP {outcome.http_status}。')+'接口状态只说明请求如何被处理，实际结果还要看下面的业务记录。',record_refs=(outcome_ref,)),
+            text=f'计划使用{subject_label}执行“{configuration.display_name}”；实际主体{actual}。'+('未取得HTTP状态。' if outcome.http_status is None else f'请求返回HTTP {outcome.http_status}。')+'接口状态只说明请求如何被处理，实际结果还要看下面的业务记录。',record_refs=(outcome_ref,)),
         VerificationSection(key='method',title='取证与比较方法',status='CONFIRMED' if refs or link.kind in {'TRACE','ACTIVITY','OUTCOME'} else 'UNKNOWN',text=method,record_refs=(record_id,)),
         VerificationSection(key='association',title='账号、请求与资源对应',status='CONFIRMED' if link.kind!='ACTIVITY' and outcome.actual_identity_status=='MATCH' and outcome.run_correlated and outcome.resource_correlated else 'LIMITED',text=association,record_refs=(record_id,) if link.kind=='ACTIVITY' else (outcome_ref,)),
         VerificationSection(key='reason',title='判断依据',status='CONFIRMED' if all(code in REASONS for code in result.reason_codes) and (result.reason_codes or result.verdict.value=='SAFE') else 'UNKNOWN',text=' '.join(reasons),record_refs=relevant_reasons),

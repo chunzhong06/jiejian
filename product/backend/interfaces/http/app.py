@@ -108,6 +108,8 @@ def create_app(
             cleanup.push_async_callback(asyncio.to_thread, context.official_experience.close)
             cleanup.push_async_callback(asyncio.to_thread, context.worker.stop)
             cleanup.push_async_callback(finish_batches)
+            # 先停止 Agent 接收和提交工作，再关闭其可能使用的 MCP、Worker 与数据库。
+            cleanup.push_async_callback(asyncio.to_thread, context.agent_execution.close)
             ready_started = perf_counter()
             if start_worker:
                 context.worker.start()
@@ -167,6 +169,8 @@ def create_app(
     app.include_router(build_development_router(context))
     from product.backend.application.agent_access.connections import AgentConnections
     app.state.agent_connections = AgentConnections(var_dir, mcp_access)
+    from product.backend.application.agent_access.execution import AgentExecution
+    context.agent_execution = AgentExecution(context, mcp_access, app.state.agent_connections)
     app.include_router(build_mcp_access_router(context, mcp_access, app.state.agent_connections))
     app.include_router(build_onboarding_router(context))
 

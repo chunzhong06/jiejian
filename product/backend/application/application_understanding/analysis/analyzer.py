@@ -19,6 +19,7 @@ from product.backend.application.application_understanding.analysis.javascript i
 )
 from product.backend.application.application_understanding.analysis.openapi import analyze_openapi
 from product.backend.application.application_understanding.analysis.python import analyze_python
+from product.backend.application.application_understanding.analysis.sqlite_setup import sqlite_setup_suggestions
 
 
 _IGNORED_DIRECTORIES = frozenset(
@@ -37,7 +38,8 @@ _IGNORED_DIRECTORIES = frozenset(
     }
 )
 
-_SOURCE_SUFFIXES = frozenset({".py", ".js", ".mjs", ".jsx", ".ts", ".tsx"})
+_SOURCE_SUFFIXES = frozenset({".py", ".js", ".mjs", '.cjs', ".jsx", ".ts", ".tsx"})
+_PACKAGE_NAMES = frozenset({'package.json', 'package-lock.json','tsconfig.json','jsconfig.json'})
 
 _OPENAPI_NAMES = frozenset(
     {"openapi.json", "openapi.yaml", "openapi.yml", "swagger.json", "swagger.yaml", "swagger.yml"}
@@ -79,7 +81,7 @@ class ApplicationUnderstandingAnalyzer:
                 )
             elif Path(relative).suffix.casefold() == ".py":
                 analyze_python(findings, relative, text, content_hash)
-            else:
+            elif Path(relative).name.casefold() not in _PACKAGE_NAMES:
                 analyze_javascript(findings, relative, text, content_hash)
         # 摘要覆盖本次成功读取的相对路径和原始内容；它不表示忽略目录或不可读文件的完整快照。
         # 文件排序和路径分隔参与身份，不能只对检测出的候选做摘要。
@@ -97,6 +99,7 @@ class ApplicationUnderstandingAnalyzer:
             action_candidates=findings.action_candidates(self.limits.max_actions),
             files_read=len(files),
             total_bytes=sum((len(raw) for _, raw in files)),
+            sqlite_setup=sqlite_setup_suggestions(files),
         )
 
     def _read_sources(self, root: Path) -> tuple[tuple[str, bytes], ...]:
@@ -137,6 +140,7 @@ class ApplicationUnderstandingAnalyzer:
                 if (
                     path.suffix.casefold() not in _SOURCE_SUFFIXES
                     and lower_name not in _OPENAPI_NAMES
+                    and lower_name not in _PACKAGE_NAMES
                 ):
                     continue
                 try:

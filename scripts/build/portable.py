@@ -3,16 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from scripts.build.common import RELEASE_VERSION, RELEASE_NAME, FULL_ARCHIVE, NOSAMPLES_ARCHIVE, inside, reset_directory, run, sha256
-from scripts.build.runtime import runtime_environment, copy_runtime, install_product, metadata, place_product
+from scripts.build.runtime import runtime_environment, copy_runtime, copy_node_runtime, install_product, metadata, place_product
 from scripts.build.resources import write_runtime_files, write_update_manifest
 from scripts.build.launcher import compile_launcher
 from scripts.build.validation import validate_base
-from scripts.build.archive import write_zip, archive_content
+from scripts.build.archive import write_zip, archive_content, iter_files
 
 
 def _arguments() -> argparse.Namespace:
@@ -79,12 +78,7 @@ def build(arguments: argparse.Namespace) -> None:
         python_source=arguments.python_source.resolve(),
         playwright_source=arguments.playwright_source.resolve(),
     )
-    node_root = base / 'runtime' / 'node'
-    node_root.mkdir()
-    shutil.copyfile(arguments.node_executable, node_root / 'node.exe')
-    license_path = arguments.node_executable.parent / 'LICENSE'
-    if license_path.is_file():
-        shutil.copyfile(license_path,node_root / 'LICENSE.txt')
+    node_root = copy_node_runtime(base, arguments.node_executable.resolve())
     node_version = run((node_root / 'node.exe','--version'),cwd=base,environment=environment).strip().removeprefix('v')
     if node_version != toolchain['node']['build_version']:
         raise RuntimeError('Portable Node 版本与冻结工具链不一致')
@@ -118,10 +112,11 @@ def build(arguments: argparse.Namespace) -> None:
     _progress(5, "生成不包含 Sample 的 nosamples ZIP")
     write_zip(nosamples, base, None)
     _progress(6, "核对双包产品树并写入 SHA256")
-    if archive_content(full, without_samples=False) != archive_content(
-        nosamples, without_samples=True
-    ):
-        raise RuntimeError("full 与 nosamples 的产品文件不一致")
+    expected = {(Path(RELEASE_NAME) / path.relative_to(base)).as_posix(): sha256(path)
+        for path in iter_files(base, allow_node_npm=True)}
+    if any(archive_content(path, without_samples=without_samples) != expected
+        for path, without_samples in ((full, False), (nosamples, True))):
+        raise RuntimeError("Portable 归档与已核验 Base Tree 的产品文件不一致")
     sums = artifacts / "SHA256SUMS.txt"
     sums.write_text(
         f"{sha256(full)}  {full.name}\n{sha256(nosamples)}  {nosamples.name}\n",

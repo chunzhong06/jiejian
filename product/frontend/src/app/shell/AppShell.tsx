@@ -15,6 +15,7 @@ import {preloadRoute} from '../Router'
 import {Shutdown} from '../Shutdown'
 import {RuntimeStatus} from './RuntimeStatus'
 import {Activity} from './Activity'
+import {CollaborationEntry} from '../../entities/runtime/ui/CollaborationEntry'
 
 type Props={route:Route;current:string;project?:ProjectDto;projects?:ProjectDto[];choose:(id:string)=>void;appearance:'light'|'dark';toggleAppearance:()=>void;children:ReactNode}
 
@@ -43,6 +44,7 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
         <Button kind="quiet" className="jj-mobile-toggle" aria-label="打开导航" icon={<MenuOutlined aria-hidden="true"/>} onClick={()=>setMobile(true)}/>
         <Breadcrumbs route={route} projectName={project?.name} projectId={project?.project_id}/>
         <nav className="jj-toolbar" aria-label="全局工具">
+          {project&&<CollaborationEntry key={project.project_id} projectId={project.project_id} route={route.path+'?'+route.query.toString()} viewedTaskId={current==='/workspace'&&route.query.get('view')==='collaboration'?route.query.get('task_id'):null}/>}
           <Hint label="开发工具"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/tools',project?.project_id)} aria-label="开发工具" aria-current={current==='/tools'?'page':undefined} onPointerEnter={()=>preloadRoute('/tools')} onFocus={()=>preloadRoute('/tools')}><ApiOutlined aria-hidden="true"/></ActionLink></Hint>
           <Hint label="本地存储"><ActionLink className="jj-toolbar-action" href={'#'+scopedPath('/storage',project?.project_id)} aria-label="本地存储" aria-current={current==='/storage'?'page':undefined} onPointerEnter={()=>preloadRoute('/storage')} onFocus={()=>preloadRoute('/storage')}><DatabaseOutlined aria-hidden="true"/></ActionLink></Hint>
           <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/><span className="jj-toolbar-divider" aria-hidden="true"/><RuntimeStatus projectId={project?.project_id}/>

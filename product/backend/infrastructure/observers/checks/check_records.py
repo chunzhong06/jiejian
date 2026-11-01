@@ -20,11 +20,17 @@ def observe_records(owner, *, source, case, action_id, requirement, proof, phase
     claims = {item.identity_id:item for item in config.identity_claims}
     subject = claims.get(case.subject_test_identity_id)
     resource_owner = claims.get(case.resource_owner_test_identity_id)
-    if subject is None or resource_owner is None:
+    anonymous = case.subject_test_identity_id is None
+    if (subject is None and not anonymous) or resource_owner is None:
         return owner._unknown(common,'RESOURCE_OWNER_UNCONFIRMED')
     try:
+        if anonymous and owner.web.verify_identity(None, case, cleanup=cleanup) != 'MATCH':
+            return owner._unknown(common, 'ANONYMOUS_PRINCIPAL_UNCONFIRMED')
+        actual_identities = {}
         # 预检查不代替正式执行时的身份事实；接口与角色字段均来自用户采用的配置。
         for identity_id in dict.fromkeys((case.subject_test_identity_id,case.resource_owner_test_identity_id,proof.observation_identity_id)):
+            if identity_id is None:
+                continue
             claim = claims[identity_id]
             response = owner.web.request(HttpRequestTemplate(method='GET',path=claim.request_path),
                 case=case,action_id=action_id,identity_id=identity_id,cleanup=cleanup)
@@ -32,17 +38,47 @@ def observe_records(owner, *, source, case, action_id, requirement, proof, phase
             if (response.status_code != 200 or record_value(data,claim.subject_path) != claim.application_subject_id
                     or record_value(data,claim.role_path) != source.identity_roles[identity_id]):
                 return owner._unknown(common,'ACTUAL_IDENTITY_MISMATCH')
-        if config.source_kind=='CREATED_OBJECT_RECORDS':
+            actual_identities[identity_id] = data
+        if config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}:
+            if case.permission.conditions is not None and phase in {'BASELINE', 'BEFORE'}:
+                from product.protocols.checks.conditions import ObservedPermissionConditions
+                owner.condition_observations[(case.case_id, requirement.proof_fingerprint)] = ObservedPermissionConditions(
+                    proof_fingerprint=requirement.proof_fingerprint, source_id=source.source_id,
+                    source_fingerprint=source.source_fingerprint,
+                    principal='ANONYMOUS' if anonymous else 'AUTHENTICATED')
             from product.backend.infrastructure.observers.checks.creation_evidence import observe_creation
             return observe_creation(owner,source=source,case=case,action_id=action_id,requirement=requirement,
                 proof=proof,phase=phase,cleanup=cleanup,common=common,claims=claims)
         target = owner.web.target_response(case.case_id) if phase in {'AFTER','EVENTUAL'} else None
         view = read_record_source(owner.var_dir,owner.bundle.runtime.reference,config,case.resource_id,
             request_nonce=target.request_nonce if target is not None else None,
-            cancelled=lambda:owner.cancelled() and not cleanup)
+            cancelled=lambda:owner.cancelled() and not cleanup,verified_subject='anonymous' if anonymous else subject.application_subject_id)
         snapshot = view.snapshot
         if snapshot.owner_id != resource_owner.application_subject_id:
             return owner._unknown(common,'RESOURCE_OWNER_UNCONFIRMED')
+        if case.permission.conditions is not None and phase in {'BASELINE','BEFORE'}:
+            from product.protocols.checks.conditions import ObservedPermissionConditions
+            def field(data, path):
+                if path is None:
+                    return None
+                try:
+                    value = record_value(data, path)
+                    return value if isinstance(value, str) else None
+                except SourceReadError:
+                    return None
+            expected = case.permission.conditions
+            supported = ((not expected.resource_states or 'condition_state' in config.mappings)
+                and (expected.tenant is None or ('tenant' in config.mappings and resource_owner.tenant_path is not None
+                    and subject is not None and subject.tenant_path is not None)))
+            context = ObservedPermissionConditions(proof_fingerprint=requirement.proof_fingerprint,
+                source_id=source.source_id, source_fingerprint=source.source_fingerprint,
+                principal='ANONYMOUS' if anonymous else 'AUTHENTICATED',
+                subject_tenant=None if anonymous else field(actual_identities[case.subject_test_identity_id], subject.tenant_path),
+                owner_tenant=field(actual_identities[case.resource_owner_test_identity_id], resource_owner.tenant_path),
+                resource_tenant=field(snapshot.data, config.mappings.get('tenant', ())[1:] or None),
+                resource_state=field(snapshot.data, config.mappings.get('condition_state', ())[1:] or None))
+            if supported:
+                owner.condition_observations[(case.case_id, requirement.proof_fingerprint)] = context
         key = (case.case_id,proof.binding_fingerprint)
         if phase in {'BASELINE','BEFORE'}:
             owner._json_histories[key] = snapshot

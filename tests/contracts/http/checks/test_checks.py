@@ -54,6 +54,40 @@ def test_current_submit_rejects_legacy_or_arbitrary_execution_shape(check_api, e
     assert client.post(f"/api/projects/{harness.project_id}/runs", json=body).status_code == 422
 
 
+def test_selected_scope_accepts_json_arrays_and_freezes_the_selected_rule(check_api):
+    app, harness, client = check_api
+    prefix = f'/api/projects/{harness.project_id}'
+    boundary = app.state.context.business_boundaries.view(harness.project_id)
+    rule = boundary.permission_intents[0]
+    selected = [{key:getattr(rule,key) for key in ('intent_id','revision','intent_hash')}]
+    response = client.post(prefix + '/check-preview', json={'selected_permissions':selected})
+    assert response.status_code == 200, response.text
+    preview = response.json()['data']
+    assert preview['can_execute'] and preview['selection']['selected'] == selected
+    assert preview['case_count'] == 1
+    started = client.post(prefix + '/runs', json=dict(schema_version='2',
+        expected_plan_fingerprint=preview['plan_fingerprint'], idempotency_key='selected-json-array',
+        selected_permissions=selected))
+    assert started.status_code == 202, started.text
+
+
+def test_rule_data_survives_a_new_read_and_same_selection_preserves_confirmation(check_api):
+    app,harness,client=check_api
+    core=app.state.context
+    rule=core.business_boundaries.view(harness.project_id).permission_intents[0]
+    with core.uow_factory() as work:
+        base=work.action_preparation.resources(rule.business_action_id,rule.action_revision)[0]
+    path=f'/api/projects/{harness.project_id}/preparation/rule-data'
+    body=dict(permission={key:getattr(rule,key) for key in ('intent_id','revision','intent_hash')},
+        resource_id='another-resource',owner_identity_id=base.resource_owner_test_identity_id,expected_binding_fingerprint=base.binding_fingerprint)
+    response=client.put(path,json=body)
+    assert response.status_code==200,response.text
+    saved=response.json()['data']
+    assert client.get(path).json()['data']==[saved]
+    assert client.put(path,json=body).json()['data']==saved
+    assert core.checks.preview(harness.project_id).actions[0].cases[0].resource_id=='another-resource'
+
+
 def test_current_submit_enforces_fingerprint_and_local_control(check_api):
     app, harness, client = check_api
     path = f"/api/projects/{harness.project_id}/runs"

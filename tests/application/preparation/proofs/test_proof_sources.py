@@ -68,3 +68,44 @@ def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_pat
 
 # 该模块启动真实 Node、Worker 与 Runner，不进入普通 L2。
 pytestmark = [pytest.mark.level4, pytest.mark.process, pytest.mark.slow]
+
+
+def test_selected_check_reuses_source_without_unrelated_account_and_still_honors_revocation(tmp_path):
+    from product.backend.domain.checks.selection import references, permission_key
+    from product.backend.domain.lifecycle import RunLifecycle
+    harness = ordinary_application(tmp_path)
+    core, project, service = harness.core, harness.project_id, harness.core.proof_preparation
+    try:
+        basis = service.context(project)['basis_id']
+        source = service.save(project, SaveProofSource(operation_id=uuid4().hex, basis_id=basis,
+            config=source_configuration(harness)))['result']['source_id']
+        common = dict(basis_id=basis, source_id=source, revision=1)
+        scope = service.grant_scope(project, GrantProofScope(operation_id=uuid4().hex, confirmed=True, **common))
+        core.worker.start()
+        preflight = service.start(project, StartProofPreflight(operation_id=uuid4().hex, **common))['result']['preflight_id']
+        assert wait_for(lambda: service.status(project, preflight))['report']['assessment'] == 'USABLE'
+        service.adopt(project, AdoptProofSource(operation_id=uuid4().hex, preflight_id=preflight, confirmed=True, **common))
+        allow = next(item for item in core.business_boundaries.view(project).permission_intents if item.expectation.value == 'ALLOW')
+        selected = references({permission_key(allow)})
+        core.test_identities.reset(harness.identities[1].identity_id)
+        assert service.show(project, source)['usable']
+        assert core.preparation_guidance.context(project)['guidance']['sources'][0]['state'] == 'USABLE'
+        assert not core.checks.preview(project).can_execute
+        preview = core.checks.preview(project, selected_permissions=selected)
+        assert preview.can_execute, preview.gaps
+        submitted = core.checks.submit(project, expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key=uuid4().hex, selected_permissions=selected)
+        import time
+        deadline = time.monotonic()+40
+        while time.monotonic() < deadline:
+            result = core.check_results.status(submitted.run.run_id, project_id=project)
+            if result.run.lifecycle in {RunLifecycle.COMPLETED, RunLifecycle.FAILED, RunLifecycle.SAFETY_STOPPED}:
+                break
+            time.sleep(.1)
+        assert result.run.lifecycle is RunLifecycle.COMPLETED and result.run.verdict.value == 'PASS', result
+        assert core.check_story.build(submitted.run.run_id).selection.omitted
+        service.revoke_scope(project, RevokeProofScope(operation_id=uuid4().hex, scope_id=scope['result']['scope_id']))
+        assert not core.checks.preview(project, selected_permissions=selected).can_execute
+        assert core.check_story.build(submitted.run.run_id).verdict.value == 'PASS'
+    finally:
+        harness.close()

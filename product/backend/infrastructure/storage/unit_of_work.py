@@ -38,6 +38,8 @@ from product.backend.infrastructure.storage.changes.source_changes import Source
 from product.backend.infrastructure.storage.execution.runs import RunRepository
 from product.backend.infrastructure.storage.boundaries.permission_intents import PermissionIntentRepository
 from product.backend.infrastructure.storage.preparation.test_identities import TestIdentityRepository
+from product.backend.infrastructure.storage.preparation.operation_flows import OperationFlowRepository
+from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRepository
 
 
 class StorageUnitOfWork:
@@ -88,6 +90,7 @@ class StorageUnitOfWork:
         self._session = session
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
+        self.collaboration = CollaborationRepository(session, self._known_secrets)
         self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
         self.application_understanding = ApplicationUnderstandingRepository(
             session,
@@ -103,6 +106,7 @@ class StorageUnitOfWork:
         self.proof_sources = ProofSourceRepository(session, self._known_secrets)
         self.proof_artifacts = ProofArtifactRepository(session,self._known_secrets)
         self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
+        self.operation_flows = OperationFlowRepository(session,self._known_secrets)
         self.runs = RunRepository(session, self._known_secrets)
         self.recordings = RecordingRepository(session, self._known_secrets)
         self.flow_drafts = FlowDraftRevisionRepository(

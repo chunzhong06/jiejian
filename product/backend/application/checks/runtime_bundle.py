@@ -14,16 +14,13 @@ from product.backend.domain.preparation.bindings import ActionEvidenceKind
 from product.backend.domain.checks.plan import derive_effect_proof
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.artifacts.checks.check_packages import read_check_bytes, reject_check_links
-from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.protocols.checks.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle,  async_completion_candidates
 from product.protocols.runtime.node_runtime import NodeRuntimeReference
 from product.protocols.observer.config import ObserverSpec
 from product.protocols.web.response import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
 from product.protocols.recording.flow_draft import canonical_flow_draft_json_bytes
-from product.protocols.recording.recording_flow import Flow
 from product.protocols.web.request import HttpRequestTemplate
 from product.backend.domain.identities.models import identity_source_fingerprint
-from product.backend.infrastructure.recording.flows import recorded_flow_path
 
 
 def _incomplete(reason):
@@ -84,14 +81,17 @@ class CheckRuntimeBuilder:
         if self._runtime_reference_reader is None or self._json_sources_reader is None:
             raise ValueError("生产检查的运行与来源读取者尚未连接")
 
-    def build(self, project_id, *, work=None):
+    def build(self, project_id, *, work=None, selected_permissions=None):
         if work is None:
             with self._uow_factory() as current:
-                return self.build(project_id, work=current)
+                return self.build(project_id, work=current, selected_permissions=selected_permissions)
         from product.backend.application.preparation.proofs.capture_jobs import capture_recovery_gaps
         capture_gaps=capture_recovery_gaps(self._var_dir,work,project_id)
         if capture_gaps:raise _incomplete(capture_gaps[0]['reason'])
         boundary = self._boundaries.view(project_id, work=work)
+        from product.backend.domain.checks.selection import resolve_selected_permissions, select_assurance
+        from product.backend.domain.preparation.requirements import compile_action_assurance
+        selected = None if selected_permissions is None else resolve_selected_permissions(boundary.permission_intents, selected_permissions)
         understanding = work.application_understanding.get(project_id)
         if understanding is None or not understanding.source_fingerprint or not understanding.confirmed_endpoint:
             raise _incomplete("CHECK_SOURCE_UNAVAILABLE")
@@ -99,26 +99,29 @@ class CheckRuntimeBuilder:
         if registered is not None and registered.source_fingerprint != understanding.source_fingerprint:
             raise _incomplete("CHECK_RUNTIME_SOURCE_STALE")
         identity_ids, configs, specs, target = set(), [], {}, None
+        condition_inputs = []
         preparation = {item.action_id: item for item in self._preparation.get(project_id).actions}
         resource_windows = {} if registered is None else {item.binding_fingerprint: item.exclusive_resource_window
             for item in registered.resource_windows}
         for action in boundary.actions:
+            permissions = tuple(item for item in boundary.permission_intents if item.business_action_id == action.action_id)
+            selected_slots = None
+            if selected is not None:
+                full = compile_action_assurance(action, permissions, work.action_preparation.allow_controls(project_id))
+                projected = select_assurance(action, permissions, full, selected)
+                if projected is None:
+                    continue
+                permissions, contract = projected
+                selected_slots = {slot.slot_id for slot in contract.identity_requirements.slots}
             execution = work.action_preparation.execution(action.action_id, action.revision)
             if execution is None:
                 raise _incomplete("ACTION_EXECUTION_MISSING")
             self._check_binding(work, execution, action, understanding)
-            recording = work.recordings.get(execution.source_recording_id)
-            source_job = work.jobs.get_by_recording(recording.recording_id)
-            source = RecordingRequestStore(self._var_dir).load(source_job.job_id, expected_hash=source_job.request_hash)
-            if target is not None and target != source.target_scope:
+            from product.backend.application.preparation.operation_flows import execution_material
+            flow,flow_scope=execution_material(work,self._var_dir,execution)
+            if target is not None and target != flow_scope:
                 raise _incomplete("CHECK_TARGET_SCOPE_CONFLICT")
-            target = source.target_scope
-            flow_path = recorded_flow_path(self._var_dir, recording)
-            reject_check_links(self._var_dir, flow_path)
-            raw = read_check_bytes(flow_path)
-            if len(raw) > 1_048_576 or hashlib.sha256(raw).hexdigest() != execution.flow_sha256:
-                raise _incomplete("ACTION_FLOW_STALE")
-            flow = Flow.model_validate_json(raw, strict=True)
+            target = flow_scope
             if flow.id != execution.flow_id or (flow.business_action_id, flow.action_revision, flow.subject_test_identity_id,
                 flow.resource_owner_test_identity_id) != (action.action_id, action.revision,
                 execution.subject_test_identity_id, execution.resource_owner_test_identity_id):
@@ -135,7 +138,6 @@ class CheckRuntimeBuilder:
             if created_resource is not None:
                 config['created_resource'] = created_resource.model_dump(mode='json')
             effects = {effect.effect_id: effect for effect in action.effect_catalog}
-            permissions = tuple(item for item in boundary.permission_intents if item.business_action_id == action.action_id)
             protected = {effect for permission in permissions for effect in permission.protected_effect_ids}
             for effect_id in sorted(protected):
                 binding = work.action_preparation.evidence(action.action_id, action.revision, effect_id)
@@ -183,7 +185,10 @@ class CheckRuntimeBuilder:
             if prepared is None:
                 raise _incomplete("CHECK_PLAN_INCOMPLETE")
             identity_ids.update(slot.test_identity_id for slot in prepared.identity_requirements.slots
-                if slot.test_identity_id is not None and slot.status.value == "SATISFIED")
+                if slot.test_identity_id is not None and slot.status.value == "SATISFIED"
+                and (selected_slots is None or slot.requirement.slot_id in selected_slots))
+            if any(rule.conditions is not None for rule in permissions):
+                condition_inputs.append((action.action_id, permissions, prepared))
             configs.append(config)
         if target is None:
             raise _incomplete("CHECK_PLAN_INCOMPLETE")
@@ -225,6 +230,26 @@ class CheckRuntimeBuilder:
             kind="MANAGED_NODE" if isinstance(reference, NodeRuntimeReference) else "MANAGED_PYTHON",
             reference=reference.model_dump(mode="json"))
         sources = () if self._json_sources_reader is None else self._json_sources_reader(project_id)
+        used_proofs = {(config['action_id'], proof['effect_id']) for config in configs for proof in config['proofs']}
+        sources = tuple(item for item in sources if (item.config.action_id, item.config.effect_id) in used_proofs)
+        from product.protocols.preparation.proof_sources import AtomicProofSourceConfig
+        for action_id, current, prepared in condition_inputs:
+            slots = {item.requirement.slot_id:item.test_identity_id for item in prepared.identity_requirements.slots}
+            positions = {item.permission.intent_id:item for item in prepared.assurance_contract.identity_requirements.permissions}
+            for rule in current:
+                if rule.conditions is None:
+                    continue
+                position = positions.get(rule.intent_id)
+                participants = set() if position is None else {slots.get(position.subject_slot_id), slots.get(position.resource_owner_slot_id)} - {None}
+                required = ({'tenant'} if rule.conditions.tenant is not None else set()) | ({'condition_state'} if rule.conditions.resource_states else set())
+                candidates = [source for source in sources if source.config.action_id == action_id
+                    and source.config.effect_id in rule.protected_effect_ids and isinstance(source.config, AtomicProofSourceConfig)
+                    and (not required or source.config.source_kind not in {'CREATED_OBJECT_RECORDS', 'SQLITE_OBJECTS'})
+                    and required <= set(source.config.mappings)
+                    and (rule.conditions.tenant is None or participants <= {
+                        claim.identity_id for claim in source.config.identity_claims if claim.tenant_path is not None})]
+                if not candidates:
+                    raise _incomplete('CONDITION_SOURCE_REQUIRED')
         return CheckRuntimeBundle.model_validate_json(json.dumps(payload | dict(runtime=runtime,
             proof_sources=[item.model_dump(mode="json") for item in sources])), strict=True)
 

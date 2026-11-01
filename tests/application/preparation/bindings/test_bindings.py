@@ -706,4 +706,46 @@ def test_deleted_identity_preserves_recordings_flows_and_all_bindings_but_invali
     assert view.actions[0].recovery.status is PreparationStatus.STALE
     assert all(item.status is PreparationStatus.STALE for item in view.actions[0].effect_evidence)
 
+def test_reusing_operation_flow_preserves_configuration_but_still_requires_prepared_accounts(tmp_path):
+    from uuid import uuid4
+    from product.protocols.preparation.operation_flow import OperationFlowDraft
+    harness = build_preparation_harness(tmp_path)
+    core, project = harness.core, harness.project_id
+    try:
+        current = core.application_understanding.get(project)
+        identity = harness.identities[0]
+        draft = OperationFlowDraft.model_validate_json(json.dumps(dict(
+            id='ofl_'+uuid4().hex,revision=1,business_action_id=harness.action.action_id,action_revision=1,
+            subject_test_identity_id=identity.identity_id,resource_owner_test_identity_id=identity.identity_id,
+            source_fingerprint=current.source_fingerprint,actual_resource_id='document-1',target_step_id='update',
+            steps=[dict(id='update',purpose='TARGET',identity_id='CASE_SUBJECT',request_template=dict(method='PATCH',path='/documents/{case_resource_id}',
+                body=dict(kind='JSON',value={'title':'changed'}),input_slots=[dict(slot_id='case_resource_id',source='CASE_RESOURCE_ID',consumer='PATH')]),
+                classifier=dict(accepted=[dict(kind='STATUS_IN',statuses=[200])],denied=[]))],
+            recovery=dict(method='POST',relative_path='/restore/{case_resource_id}',json_body={}))))
+        flow = core.operation_flows.candidate(project,draft)
+        core.operation_flows.save(project,flow)
+        core.operation_flows.adopt(project,flow.id,1)
+        with core.uow_factory() as work:
+            original = work.action_preparation.execution(harness.action.action_id,1)
+        assert core.operation_flows.adopt(project,flow.id,1)['reused'] is True
+        with core.uow_factory() as work:
+            assert work.action_preparation.execution(harness.action.action_id,1) == original
+            latest = work.test_identities.get(identity.identity_id)
+            now = latest.updated_at_us + 100
+            work.test_identities.replace(latest.model_copy(update={'prepared_at_us':now,'refreshed_at_us':now,'updated_at_us':now}))
+            work.commit()
+        assert core.operation_flows.adopt(project,flow.id,1)['reused'] is True
+        with core.uow_factory() as work:
+            assert work.action_preparation.execution(harness.action.action_id,1) == original
+            current_identity = work.test_identities.get(identity.identity_id)
+            work.test_identities.replace(current_identity.model_copy(update={'auth_method':None,'bearer_secret_ref':None,'prepared_at_us':None,'refreshed_at_us':None}))
+            work.commit()
+        with pytest.raises(JiejianError,match='账号'):
+            core.operation_flows.adopt(project,flow.id,1)
+        entry = core.operation_flows.context(project)['flows'][0]
+        assert entry['in_use'] and entry['configuration_current']
+    finally:
+        harness.close()
+
+
 pytestmark = [pytest.mark.level3]

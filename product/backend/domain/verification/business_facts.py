@@ -1,5 +1,15 @@
 # 将封存的有限提交事实归约为观察；执行与发布读取共用，不访问目标、不裁决Verdict。
 from product.protocols.checks.business_facts import CommittedStateFact,IdentityCheckFact,FieldDisclosureFact,ReferenceArtifactFact,FileReceiptFact
+from product.protocols.checks.business_facts import AnonymousCheckFact
+
+
+def verified_principals(case, facts, identities):
+    if case.resource_owner_test_identity_id not in identities:
+        return False
+    if case.subject_test_identity_id is not None:
+        return case.subject_test_identity_id in identities
+    return (case.permission.conditions is not None and case.permission.conditions.principal == 'ANONYMOUS'
+        and any(isinstance(fact.data,AnonymousCheckFact) and fact.complete and fact.data.unauthenticated for fact in facts))
 
 
 def reduce_creation_facts(reference,facts,*,case):
@@ -11,7 +21,7 @@ def reduce_creation_facts(reference,facts,*,case):
         return 'UNKNOWN','OPEN',False
     identities={fact.data.identity_id for fact in selected if isinstance(fact.data,IdentityCheckFact)
         and fact.complete and fact.data.subject_match==fact.data.role_match=='MATCH'}
-    if not {case.subject_test_identity_id,case.resource_owner_test_identity_id}<=identities:
+    if not verified_principals(case, selected, identities):
         return 'UNKNOWN','OPEN',False
     if reference.method=='CREATION_SNAPSHOT':
         return ('ABSENT','CLOSED',True) if window.source_complete else ('UNKNOWN','OPEN',False)
@@ -38,7 +48,7 @@ def reduce_record_facts(reference,facts,*,case,expected_state):
     if len(records)!=len(reference.fact_ids):return 'UNKNOWN','OPEN',False
     identities={fact.data.identity_id for fact in records if isinstance(fact.data,IdentityCheckFact)
         and fact.complete and fact.data.subject_match==fact.data.role_match=='MATCH'}
-    if not {case.subject_test_identity_id,case.resource_owner_test_identity_id}<=identities:
+    if not verified_principals(case, records, identities):
         return 'UNKNOWN','OPEN',False
     if reference.method=='STATE_SNAPSHOT':
         if not window.source_complete:return 'UNKNOWN','OPEN',False
@@ -72,7 +82,7 @@ def reduce_disclosure_facts(reference,facts,*,case):
         return 'UNKNOWN','OPEN',False
     identities={fact.data.identity_id for fact in selected if isinstance(fact.data,IdentityCheckFact)
         and fact.complete and fact.data.subject_match==fact.data.role_match=='MATCH'}
-    if not {case.subject_test_identity_id,case.resource_owner_test_identity_id}<=identities:
+    if not verified_principals(case, selected, identities):
         return 'UNKNOWN','OPEN',False
     if reference.method=='FIELD_SNAPSHOT':
         return ('CONFIRMED','CLOSED',True) if window.current_digest is not None else ('UNKNOWN','OPEN',False)
@@ -103,7 +113,7 @@ def reduce_file_facts(reference,facts,*,case):
         return 'UNKNOWN','OPEN',False
     identities={fact.data.identity_id for fact in selected if isinstance(fact.data,IdentityCheckFact)
         and fact.complete and fact.data.subject_match==fact.data.role_match=='MATCH'}
-    if not {case.subject_test_identity_id,case.resource_owner_test_identity_id}<=identities or not any(
+    if not verified_principals(case, selected, identities) or not any(
         isinstance(fact.data,ReferenceArtifactFact) and fact.data.manifest==window.expected and fact.complete for fact in selected):
         return 'UNKNOWN','OPEN',False
     if reference.method=='FILE_SNAPSHOT':return 'CONFIRMED','CLOSED',True

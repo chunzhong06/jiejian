@@ -1,15 +1,17 @@
 .jj-choice:where(.ant-select) { width: 100%; min-width: 0; height: 40px; font: inherit; }
-.jj-choice.ant-select .ant-select-selector { min-height: 40px; border-radius: var(--radius-control); border-color: var(--line-strong); background: var(--surface); color: var(--ink); padding-inline: 12px 34px; box-shadow: var(--control-shadow); }
+.jj-choice.ant-select .ant-select-selector { min-height: 40px; border-radius: var(--radius-control); border-color: var(--line-strong); background: var(--surface); color: var(--ink); padding-inline: 14px 42px; box-shadow: var(--control-shadow); }
 .jj-choice.ant-select .ant-select-selection-item { font-weight: 450; line-height: 38px; padding-inline-end: 0; }
 .jj-choice.ant-select-open .ant-select-selection-item { color: var(--ink); opacity: 1; }
-.jj-choice.ant-select .ant-select-arrow { color: var(--muted); font-size: var(--text-meta); }
+.jj-choice.ant-select .ant-select-arrow { inset-inline-end: 15px; color: var(--muted); font-size: var(--text-meta); pointer-events: none; }
+.jj-choice.ant-select .ant-select-selection-search { inset-inline: 14px 42px; }
+.jj-choice.ant-select .ant-select-selection-placeholder { padding-inline-end: 0; color: var(--muted); }
 .jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { border-color: var(--accent); }
 .jj-choice.ant-select-focused .ant-select-selector { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .jj-choice:has(input:focus-visible) .ant-select-selector { outline: 2px solid var(--focus); outline-offset: 3px; box-shadow: none; }
 .jj-choice.ant-select-disabled .ant-select-selector { opacity: .5; cursor: default; }
-.jj-choice input.ant-select-selection-search-input { border: 0; min-height: 0; box-shadow: none; background: transparent; outline: 0; }
+.jj-choice input.ant-select-selection-search-input { border: 0; min-height: 0; padding: 0; box-shadow: none; background: transparent; outline: 0; }
 .jj-choice-menu.ant-select-dropdown { padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--popover-shadow); }
-.jj-choice-menu .ant-select-item { border-radius: 7px; min-height: 38px; padding: 9px 11px; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.jj-choice-menu .ant-select-item { border-radius: 7px; min-height: 40px; padding: 10px 14px; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
 .jj-choice-menu .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
 .jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { background: var(--hover); }
 .jj-choice-menu .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { background: var(--accent-soft); color: var(--accent-ink); }
@@ -23,13 +25,12 @@
 .jj-info-popover section { width: min(280px,calc(100vw - 72px)); outline: 0; }
 .jj-info-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .jj-info-heading h3 { margin: 0; }
-.jj-system-facts { display: grid; gap: 12px; }
-.jj-system-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: var(--text-body); }
+.jj-system-facts { display: grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.jj-system-facts > div:first-child { grid-column:1/-1; }
 .jj-system-facts dt { color: var(--muted); }
 .jj-system-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .jj-system-popover-footer { display:flex; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }
 .jj-system-popover-footer > .jj-button { margin-right:-8px; padding-inline:8px; font-size:var(--text-meta); }
-.jj-system-facts > div + div { border-top: 1px solid var(--line); padding-top: 12px; }
 .jj-system-refresh { width: 32px; min-height: 32px; padding: 7px; flex: none; }
 .jj-info-popover .jj-notice { margin-top: 16px; }
 input[type=checkbox], input[type=radio] { appearance: none; width: 18px; height: 18px; min-height: 18px; margin: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); display: inline-grid; place-content: center; vertical-align: middle; cursor: pointer; }

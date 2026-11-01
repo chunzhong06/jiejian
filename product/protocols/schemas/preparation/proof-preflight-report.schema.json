@@ -15,6 +15,8 @@
                 "resource_id",
                 "owner_id",
                 "state",
+                "tenant",
+                "condition_state",
                 "version",
                 "effect_count",
                 "history_generation",

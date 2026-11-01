@@ -510,4 +510,52 @@ def test_manager_journal_protects_committed_and_unrelated_refs(tmp_path, journal
         manager._reconcile_orphaned_attempts()
         assert store.read(ref) is None and not root.exists()
 
+def test_unchanged_authentication_keeps_verification_and_material_identity(tmp_path):
+    from product.backend.domain.identities.models import AuthenticationProfile, IdentityVerificationConfig, IdentityVerificationSnapshot
+    from product.backend.domain.boundaries.entities import boundary_sha256
+    service, store, factory = build_identity_service(tmp_path)
+    identity_id, _ = _prepare(service, store)
+    profile = AuthenticationProfile(verification=IdentityVerificationConfig(
+        path='/api/me', subject_path=('id',), role_path=('role',), expected_subject='owner-1', expected_role='owner'))
+    current = service.get(identity_id)
+    configured = service.configure_authentication(identity_id, profile, expected_updated_at_us=current.updated_at_us)
+    with StorageUnitOfWork(factory) as work:
+        original = work.test_identities.get(identity_id)
+        verification = IdentityVerificationSnapshot(status='VERIFIED', checked_at_us=20, origin='http://127.0.0.1:8865',
+            profile_fingerprint=boundary_sha256(profile.model_dump(mode='json')), session_prepared_at_us=original.prepared_at_us,
+            subject='owner-1', role='owner')
+        original = original.model_copy(update={'verification':verification})
+        work.test_identities.replace(original)
+        work.commit()
+    service.configure_authentication(identity_id, profile, expected_updated_at_us=configured.updated_at_us)
+    with StorageUnitOfWork(factory) as work:
+        assert work.test_identities.get(identity_id) == original
+    changed = profile.model_copy(update={'login_path':'/login'})
+    service.configure_authentication(identity_id, changed, expected_updated_at_us=original.updated_at_us)
+    with StorageUnitOfWork(factory) as work:
+        updated = work.test_identities.get(identity_id)
+        assert updated.verification is None
+        assert updated.updated_at_us > original.updated_at_us
+        assert updated.secret_refs == original.secret_refs
+    with pytest.raises(JiejianError):
+        service.configure_authentication(identity_id, changed, expected_updated_at_us=original.updated_at_us)
+
+
+def test_authentication_templates_reuse_structure_without_subject_or_secret(tmp_path):
+    from product.backend.domain.identities.models import AuthenticationProfile, IdentityVerificationConfig
+    service, store, _ = build_identity_service(tmp_path)
+    first_id, _ = _prepare(service, store)
+    profile = AuthenticationProfile(verification=IdentityVerificationConfig(
+        path='/api/me',subject_path=('id',),role_path=('role',),expected_subject='owner-1',expected_role='owner'))
+    first = service.get(first_id)
+    service.configure_authentication(first_id, profile, expected_updated_at_us=first.updated_at_us)
+    second = service.create(PROJECT_ID,actor_id=ACTOR_ID,actor_revision=1,label='另一个所有者')
+    template = service.authentication_options(second.identity_id)['templates'][0]
+    assert template['profile']['verification'] == dict(path='/api/me',subject_path=['id'],role_path=['role'])
+    assert template['expected_role'] == 'owner'
+    assert 'owner-1' not in json.dumps(template)
+    assert 'session-secret-value' not in json.dumps(template)
+    assert service.get(second.identity_id).authentication is None
+
+
 pytestmark = [pytest.mark.level3]

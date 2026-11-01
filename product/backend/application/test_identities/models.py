@@ -1,5 +1,6 @@
 # 登录准备的非秘密状态与页面回读合同。
 from enum import StrEnum
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -25,6 +26,7 @@ class IdentityPreparationView(BaseModel):
     project_id: str | None = None
     job_id: str | None = None
     cleanup_required: bool = False
+    purpose: Literal['LOGIN','VERIFY'] = 'LOGIN'
 
 
 PREPARATION_TERMINAL = frozenset({'PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'})

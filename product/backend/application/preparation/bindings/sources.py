@@ -75,6 +75,17 @@ class BindingSourceInspector:
             if self._registered_observers is None or not self._registered_observers.contains(action.project_id, binding.observer_reference):
                 return ("REGISTERED_OBSERVER_UNAVAILABLE",)
             return ()
+        if getattr(binding,'operation_flow_id',None) is not None:
+            from product.backend.application.preparation.operation_flows import load_operation_material
+            try:
+                flow=load_operation_material(work,binding)
+            except JiejianError:
+                return ('OPERATION_FLOW_UNAVAILABLE',)
+            if (flow.project_id,flow.business_action_id,flow.action_revision,flow.resource_owner_test_identity_id,flow.source_fingerprint)!=(binding.project_id,binding.business_action_id,binding.action_revision,binding.resource_owner_test_identity_id,binding.source_fingerprint):
+                return ('OPERATION_FLOW_SOURCE_STALE',)
+            if isinstance(binding,ActionRecoveryBinding) and binding.request_template!=flow.recovery:
+                return ('OPERATION_RECOVERY_STALE',)
+            return ()
         recording = material_fact(work, work.recordings, ("get", binding.source_recording_id), lambda: work.recordings.get(binding.source_recording_id))
         draft_record = material_fact(work, work.flow_drafts, ("latest", binding.source_recording_id), lambda: work.flow_drafts.latest(binding.source_recording_id))
         expected_purpose = (RecordingPurpose.OBSERVATION if isinstance(binding, ActionEvidenceBinding) else

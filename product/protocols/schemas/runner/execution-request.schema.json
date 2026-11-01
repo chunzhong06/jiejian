@@ -291,14 +291,28 @@
           "type": "integer"
         },
         "subject_identity_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Subject Identity Fingerprint",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Fingerprint"
         },
         "subject_test_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Test Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Test Identity Id"
         }
       },
       "required": [
@@ -332,6 +346,19 @@
           "pattern": "^case_[0-9a-f]{32}$",
           "title": "Allow Case Id",
           "type": "string"
+        },
+        "condition_difference": {
+          "anyOf": [
+            {
+              "const": "RESOURCE_STATE",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition Difference"
         },
         "deny_case_id": {
           "pattern": "^case_[0-9a-f]{32}$",
@@ -377,9 +404,75 @@
       "title": "ExecutionTwin",
       "type": "object"
     },
+    "FrozenCheckSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "added_controls": {
+          "items": {
+            "$ref": "#/$defs/PermissionReference"
+          },
+          "maxItems": 4096,
+          "title": "Added Controls",
+          "type": "array"
+        },
+        "omitted": {
+          "items": {
+            "$ref": "#/$defs/PermissionReference"
+          },
+          "maxItems": 4096,
+          "title": "Omitted",
+          "type": "array"
+        },
+        "pending_review_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Pending Review Ids",
+          "type": "array"
+        },
+        "selected": {
+          "items": {
+            "$ref": "#/$defs/PermissionReference"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Selected",
+          "type": "array"
+        },
+        "uncovered_requirements": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Uncovered Requirements",
+          "type": "array"
+        }
+      },
+      "required": [
+        "selected",
+        "added_controls",
+        "omitted",
+        "uncovered_requirements",
+        "pending_review_ids"
+      ],
+      "title": "FrozenCheckSelection",
+      "type": "object"
+    },
     "FrozenPermission": {
       "additionalProperties": false,
       "properties": {
+        "conditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionConditions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "expectation": {
           "enum": [
             "ALLOW",
@@ -573,6 +666,49 @@
       "title": "ObserverProofReference",
       "type": "object"
     },
+    "PermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "principal": {
+          "default": "AUTHENTICATED",
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "resource_states": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Resource States",
+          "type": "array"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "enum": [
+                "SAME",
+                "DIFFERENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        }
+      },
+      "title": "PermissionConditions",
+      "type": "object"
+    },
     "PermissionReference": {
       "additionalProperties": false,
       "properties": {
@@ -654,19 +790,69 @@
           "type": "string"
         },
         "draft_revision": {
-          "minimum": 1,
-          "title": "Draft Revision",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Draft Revision"
         },
         "draft_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Draft Sha256",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Draft Sha256"
+        },
+        "operation_flow_id": {
+          "anyOf": [
+            {
+              "pattern": "^ofl_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Id"
+        },
+        "operation_flow_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Revision"
         },
         "recording_id": {
-          "pattern": "^rec_[0-9a-f]{32}$",
-          "title": "Recording Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recording Id"
         },
         "request_template_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
@@ -680,9 +866,6 @@
         }
       },
       "required": [
-        "recording_id",
-        "draft_revision",
-        "draft_sha256",
         "step_id",
         "binding_fingerprint",
         "request_template_fingerprint"
@@ -934,6 +1117,17 @@
       "default": "1",
       "title": "Schema Version",
       "type": "string"
+    },
+    "selection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FrozenCheckSelection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "source_fingerprint": {
       "pattern": "^[0-9a-f]{64}$",

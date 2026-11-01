@@ -185,4 +185,18 @@ def test_list_shares_only_this_reads_plan_and_change_preview_does_not_recurse(tm
     finally:
         current.close()
 
+def test_anonymous_mapping_exemption_keeps_owner_and_authenticated_roles():
+    from product.backend.application.changes.service import _implementation_actor_refs
+    from product.backend.domain.boundaries.permissions import PermissionIntentRelation
+    from product.protocols.checks.conditions import PermissionConditions
+    from tests.support.builders.checks.assurance import permission
+
+    guest, owner = 'bar_' + '2' * 32, 'bar_' + '1' * 32
+    anonymous = permission(1, subject=guest, relation=PermissionIntentRelation.OTHER_ROLE,
+        conditions=PermissionConditions(principal='ANONYMOUS'))
+    assert _implementation_actor_refs((anonymous,)) == {(owner, 1)}
+    authenticated = permission(2, subject=guest, relation=PermissionIntentRelation.OTHER_ROLE)
+    assert _implementation_actor_refs((anonymous, authenticated)) == {(guest, 1), (owner, 1)}
+
+
 pytestmark = [pytest.mark.level3]

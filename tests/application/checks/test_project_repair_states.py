@@ -128,6 +128,33 @@ def test_problem_history_keeps_failed_attempt_resolution_and_recurrence():
     assert task.status == 'VERIFIED' and task.run_id == fixed.result.run_id
 
 
+def test_explicit_repair_of_repeated_discovery_resolves_same_problem_and_keeps_first_origin():
+    from product.backend.domain.checks.repair import verify_current_repair
+    from product.protocols.checks.execution_request import ChangeContext
+    first, repeated, fixed = [package(forbidden=bad, run_id='run_' + str(index) * 32)
+        for index, bad in enumerate((True, True, False), start=1)]
+    contracts = {item.result.run_id: build_current_repair_contract(item,
+        next(case.case_id for case in item.result.case_results if case.verdict == 'VULNERABLE'))
+        for item in (first, repeated)}
+    original = contracts[repeated.result.run_id]
+    change = ChangeContext(change_id='chg_'+'8'*32, impact_fingerprint='8'*64,
+        required_intent_ids=tuple(sorted(item.intent_id for item in original.original_intents)))
+    fixed.request = fixed.request.model_copy(update={'repair_context':repair_context(original),'change_context':change})
+    values = (first, repeated, fixed)
+    service = CurrentProjectRepairService(reader=N(project_readings=lambda _:tuple(
+        (N(run=N(run_id=item.result.run_id,created_at_us=index,lifecycle='COMPLETED'),result_integrity='VALID'),item)
+        for index,item in enumerate(values)),package=lambda run,**_:next(item for item in values if item.result.run_id==run)),
+        repairs=N(contracts_from_verified_package=lambda item:(contracts[item.result.run_id],),
+            verification_for_contract=lambda item,contract:verify_current_repair(contract,request=item.request,
+                bundle=item.bundle,result=item.result,evidence=item.evidence,expected_change_context=item.request.change_context)),
+        changes=N(repair_references=lambda *_:(original.reference(),),targets=lambda *_:(),latest_for_repair=lambda *_:None),
+        boundaries=N(view=lambda _:N(policy_epoch=1,permission_intents=original.original_intents)),pending_request_reader=None)
+    task=service.evaluate(first.request.project_id).tasks[0]
+    assert task.status=='VERIFIED' and task.contract.source_run_id==repeated.result.run_id
+    assert task.first_source_run_id==first.result.run_id and task.last_verified_run_id==fixed.result.run_id
+    assert task.recurrence_count==0
+
+
 def test_new_proof_conditions_do_not_claim_recurrence():
     from product.backend.application.projects.repair import _same_conditions
     source = package()

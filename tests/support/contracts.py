@@ -12,9 +12,12 @@ MCP_TOOL_LEVELS = dict.fromkeys((
     'jiejian_rule_preview','jiejian_intent_show','jiejian_identity_list','jiejian_system_status','jiejian_change_show',
     'jiejian_check_status','jiejian_result_show','jiejian_evidence_show','jiejian_repair_show',
     'jiejian_change_registration_preview','jiejian_task_list','jiejian_task_show','jiejian_task_context','jiejian_receipt_show',
+    'jiejian_collaboration_list','jiejian_collaboration_context','jiejian_collaboration_capability','jiejian_collaboration_read',
 ), 'READ') | dict.fromkeys((
     'jiejian_proof_source_save','jiejian_preparation_suggestion_save','jiejian_rule_candidate_save',
     'jiejian_change_submit','jiejian_change_register','jiejian_task_create','jiejian_task_accept',
+    'jiejian_collaboration_create','jiejian_collaboration_action','jiejian_collaboration_question',
+    'jiejian_collaboration_receipt','jiejian_collaboration_control',
 ), 'PREPARE') | dict.fromkeys((
     'jiejian_preparation_batch_cancel','jiejian_proof_preflight_start','jiejian_proof_preflight_cancel','jiejian_check_run','jiejian_check_cancel',
 ), 'EXECUTE')

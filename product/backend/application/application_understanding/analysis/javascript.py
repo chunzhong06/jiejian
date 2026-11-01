@@ -15,6 +15,7 @@ _JS_ROLE_STRUCTURE = re.compile(
 
 
 _JS_STRING = re.compile("(['\\\"])([A-Za-z][A-Za-z0-9_.:-]{0,63})\\1")
+_JS_ROLE_VALUE = re.compile(r'''\brole\s*:\s*(['"])([A-Za-z][A-Za-z0-9_.:-]{0,63})\1''')
 
 
 _JS_ROUTE = re.compile(
@@ -36,6 +37,9 @@ def analyze_javascript(
     findings: CandidateCollector, relative: str, text: str, content_hash: str
 ) -> None:
     for line_number, line in enumerate(text.splitlines(), start=1):
+        for match in _JS_ROLE_VALUE.finditer(line):
+            findings.add_role(match.group(2),CandidateConfidence.LOW,
+                findings.evidence(relative,line_number,None,'javascript-role-property',content_hash))
         if _JS_ROLE_STRUCTURE.search(line):
             for match in _JS_STRING.finditer(line):
                 findings.add_role(

@@ -5,10 +5,84 @@
         "PREPARED",
         "UNSUPPORTED",
         "CANCELLED",
-        "FAILED"
+        "FAILED",
+        "CHECKED"
       ],
       "title": "IdentityPreparationResultType",
       "type": "string"
+    },
+    "IdentityVerificationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "checked_at_us": {
+          "minimum": 0,
+          "title": "Checked At Us",
+          "type": "integer"
+        },
+        "origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "profile_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Profile Fingerprint",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "session_prepared_at_us": {
+          "minimum": 0,
+          "title": "Session Prepared At Us",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "VERIFIED",
+            "AUTH_EXPIRED",
+            "SUBJECT_MISMATCH",
+            "ROLE_MISMATCH",
+            "FIELD_MISSING",
+            "UNAVAILABLE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        }
+      },
+      "required": [
+        "status",
+        "checked_at_us",
+        "origin",
+        "profile_fingerprint",
+        "session_prepared_at_us"
+      ],
+      "title": "IdentityVerificationSnapshot",
+      "type": "object"
     },
     "PreparedCookieRef": {
       "additionalProperties": false,
@@ -170,6 +244,17 @@
       "const": "1",
       "title": "Schema Version",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IdentityVerificationSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

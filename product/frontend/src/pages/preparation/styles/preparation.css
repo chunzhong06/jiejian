@@ -1,4 +1,4 @@
-.jj-preparation-workbench { display: grid; grid-template-columns: 248px minmax(0,1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; }
+.jj-preparation-workbench { display: grid; grid-template-columns: 272px minmax(0,1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; }
 .jj-preparation-context { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 22px 26px; border-bottom: 1px solid var(--line); }
 .jj-preparation-context .jj-action-tabs { max-width: 100%; }
 .jj-material-index { background: var(--inset); border-right: 1px solid var(--line); padding: 22px 14px; }
@@ -6,23 +6,23 @@
 .jj-material-index-heading h2 { font-size: var(--text-body); }
 .jj-material-section { margin-top: 6px; }
 .jj-material-section > h3 { padding: 10px 12px 6px; color: var(--muted); font-size: var(--text-meta); font-weight: 450; }
-.jj-material-select { display: flex; align-items: center; width: 100%; gap: 10px; padding: 11px 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; }
+.jj-material-select { display: grid; grid-template-columns: 28px minmax(0,1fr) auto 12px; align-items: center; width: 100%; gap: 8px; padding: 11px 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; }
 .jj-material-select[aria-pressed=true] { background: var(--surface); border-color: var(--line); box-shadow: inset 3px 0 var(--accent); }
 .jj-material-select > .anticon { font-size: var(--text-meta); color: var(--muted); margin-left: auto; opacity: .5; }
 .jj-material-icon { display: flex; justify-content: center; align-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--soft); color: var(--muted); flex: none; }
 .jj-material-select[aria-pressed=true] .jj-material-icon { background: var(--accent-soft); color: var(--accent-ink); }
-.jj-material-select-label { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 3px 8px; }
-.jj-material-select-label strong { font-weight: 550; }
-.jj-material-select-label > span { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--text-meta); }
-.jj-material-select-label > span[data-tone=positive] { color: var(--good); }
-.jj-material-select-label > span[data-tone=caution] { color: var(--warn); }
+.jj-material-select-label { min-width: 0; font-weight: 550; }
+.jj-material-select-status { display: inline-flex; justify-content: flex-end; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-meta); white-space: nowrap; }
+.jj-material-select-status[data-tone=positive] { color: var(--good); }
+.jj-material-select-status[data-tone=caution] { color: var(--warn); }
 .jj-material-detail { padding: 24px 28px; min-width: 0; container: material-detail / inline-size; }
-.jj-material-detail > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.jj-material-detail > header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .jj-material-reading { display: grid; grid-template-columns: minmax(0,1fr) minmax(210px,.6fr); gap: 28px; margin-top: 24px; align-items: start; }
 .jj-material-primary { min-width: 0; }
 .jj-material-primary > details { margin-top: 22px; padding-bottom: 0; }
 .jj-material-requirements { min-width: 0; }
-.jj-material-requirement { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.jj-material-requirement { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.jj-material-requirement > .jj-button { margin-left: auto; }
 .jj-material-requirement > span:first-child { display: flex; align-items: center; gap: 10px; }
 .jj-material-requirement > span:last-child { font-size: var(--text-meta); color: var(--muted); white-space: nowrap; }
 .jj-material-requirement > span[data-tone=positive] { color: var(--good); }
@@ -52,8 +52,8 @@
 .jj-batch-items { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 28px; margin: 20px 0 12px; }
 .jj-batch-items > div { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--line); padding: 12px 0; }
 .jj-batch-items > div > span:last-child { color: var(--muted); font-size: var(--text-meta); }
-@media(max-width:1050px) and (min-width:801px) { .jj-preparation-workbench { grid-template-columns: 240px minmax(0,1fr); } .jj-material-detail { padding: 26px 24px; } .jj-material-select { padding-inline: 9px; gap: 10px; } }
-@media(max-width:650px) { .jj-preparation-workbench { grid-template-columns: minmax(0,1fr); } .jj-material-index { border-right: 0; border-bottom: 1px solid var(--line); padding: 18px 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; } .jj-material-index-heading { grid-column: 1/-1; padding-bottom: 0; } .jj-material-index-heading > span { display: none; } .jj-material-section { margin: 0; } .jj-material-select { padding: 10px; gap: 8px; } .jj-material-icon { width: 27px; height: 27px; border-radius: 7px; } .jj-material-select > .anticon { display: none; } .jj-material-detail { padding: 24px 20px; } .jj-material-detail > header { align-items: flex-start; } .jj-preparation-footer { flex-wrap: wrap; padding: 20px; } .jj-preparation-footer > .jj-button { margin-left: auto; } .jj-batch-items, .jj-preparation-consent ul { grid-template-columns: minmax(0,1fr); } .jj-consent-review > .jj-panel { padding: 24px 20px; } }
+@media(max-width:1050px) and (min-width:801px) { .jj-preparation-workbench { grid-template-columns: 264px minmax(0,1fr); } .jj-material-detail { padding: 26px 24px; } .jj-material-select { padding-inline: 9px; gap: 10px; } }
+@media(max-width:650px) { .jj-preparation-workbench { grid-template-columns: minmax(0,1fr); } .jj-material-index { border-right: 0; border-bottom: 1px solid var(--line); padding: 18px 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; } .jj-material-index-heading { grid-column: 1/-1; padding-bottom: 0; } .jj-material-index-heading > span { display: none; } .jj-material-section { margin: 0; } .jj-material-select { grid-template-columns: 28px minmax(0,1fr) auto; padding: 10px; gap: 8px; } .jj-material-icon { width: 27px; height: 27px; border-radius: 7px; } .jj-material-select > .anticon { display: none; } .jj-material-detail { padding: 24px 20px; } .jj-material-detail > header { align-items: flex-start; } .jj-preparation-footer { flex-wrap: wrap; padding: 20px; } .jj-preparation-footer > .jj-button { margin-left: auto; } .jj-batch-items, .jj-preparation-consent ul { grid-template-columns: minmax(0,1fr); } .jj-consent-review > .jj-panel { padding: 24px 20px; } }
 
 .jj-account-entities { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,230px),1fr)); gap: 16px; }
 .jj-account-entity { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
@@ -70,6 +70,7 @@
 .jj-preparation-impact[open] > div { padding: 0 16px 16px; }
 .jj-preparation-impact article { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:20px; align-items:center; border-top:1px solid var(--line); padding-top:16px; margin-top:16px; }
 .jj-preparation-impact article p { margin-top:6px; }
+.jj-preparation-impact article:first-child { margin-top:0; padding-top:0; border-top:0; }
 @media(max-width:700px) { .jj-preparation-impact article { grid-template-columns:minmax(0,1fr) auto; } .jj-preparation-impact article > span { grid-column:1;grid-row:2; } }
 @container material-detail (max-width:740px) { .jj-material-reading { grid-template-columns: minmax(0,1fr); gap: 24px; } .jj-material-used-by { padding: 20px 0 0; border-left: 0; border-top: 1px solid var(--line); } .jj-material-used-by ul { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; } }
 @container material-detail (max-width:420px) { .jj-material-used-by ul { grid-template-columns: minmax(0,1fr); } }

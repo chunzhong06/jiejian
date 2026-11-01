@@ -54,7 +54,7 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
                 const id = item.manifest.change_id, open = expanded === id, verification = open ? detail.data?.verification : undefined;
                 return <article className="jj-change-entry" key={id}>
         <button className="jj-change-select" aria-expanded={open} aria-controls={'change-' + id} onClick={() => setFocused(open ? undefined : id)} disabled={Boolean(selected)}>
-          <span className="jj-change-time"><time>{date(item.manifest.created_at_us)}</time><small>{text(item.manifest.submitted_by || '本地登记')}</small></span>
+          <span className="jj-change-time"><time>{date(item.manifest.created_at_us)}</time><small>{text(item.manifest.submitted_by === 'LOCAL_GUI' ? '在界鉴中登记' : item.manifest.submitted_by === 'MCP' ? '通过开发工具登记' : item.manifest.submitted_by || '本地登记')}</small></span>
           <span className="jj-change-name"><strong>{changeTitle(item.manifest.reason, official)}</strong><small>{item.change_set.status === 'NO_BASELINE' ? '尚无可比较的源码起点' : `${item.change_set.added_paths.length + item.change_set.modified_paths.length + item.change_set.removed_paths.length} 个文件发生变化`}{item.manifest.repair_reference ? '，按原题复验' : ''}</small></span>
           <Badge tone={item.revalidation.can_execute ? 'neutral' : 'caution'}>{readiness[item.revalidation.status]}</Badge><DownOutlined aria-hidden="true"/>
         </button>

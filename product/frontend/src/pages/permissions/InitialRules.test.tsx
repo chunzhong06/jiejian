@@ -13,6 +13,16 @@ const basis: BoundaryMaintenanceDraftDto = { project_id: 'app', boundary_state_f
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
+it('未完成清单按需展开，具体缺口可以带回对应编辑区', () => {
+    const create = vi.spyOn(api, 'createMaintenanceProposal');
+    render(<InitialRules projectId="app" basis={basis} onBack={() => {}} onProposal={vi.fn()} onError={vi.fn()} />);
+    expect(screen.getByRole('button', { name: '生成完整提案' })).toBeDisabled();
+    fireEvent.click(screen.getByText(/^仍需填写/));
+    fireEvent.click(screen.getByRole('button', { name: '业务操作与结果依据' }));
+    expect(screen.getByRole('tab', { name: /^操作与结果/ })).toHaveAttribute('aria-selected', 'true');
+    expect(create).not.toHaveBeenCalled();
+});
+
 it('跨分区编辑保留输入，预览随草稿更新，只有明确提交才创建完整提案', async () => {
     sessionStorage.setItem('jiejian.studio.initial-rules:app', JSON.stringify(draft));
     const create = vi.spyOn(api, 'createMaintenanceProposal').mockResolvedValue({ proposal: { proposal_id: 'proposal' } } as never);
@@ -43,4 +53,18 @@ it('提案回执未知时保留草稿并阻止切换分区后重复提交', asyn
     expect(screen.getByLabelText('权限要求的依据')).toHaveValue(draft.provenance);
     expect(screen.getByRole('button', { name: '查询已接收的提案' })).toBeEnabled();
     expect(create).toHaveBeenCalledTimes(1);
+});
+
+it('只填写权限含义即可生成提案，说明与来源补充保持选填', async () => {
+    const minimal={...draft,provenance:'',actors:draft.actors.map(actor=>({...actor,description:''})),actions:draft.actions.map(action=>({...action,description:'',effects:action.effects.map(effect=>({...effect,description:''}))}))};
+    sessionStorage.setItem('jiejian.studio.initial-rules:app',JSON.stringify(minimal));
+    const create=vi.spyOn(api,'createMaintenanceProposal').mockResolvedValue({proposal:{proposal_id:'minimal'}} as never);
+    const opened=vi.fn().mockResolvedValue(undefined);
+    render(<InitialRules projectId="app" basis={basis} onBack={()=>{}} onProposal={opened} onError={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button',{name:'生成完整提案'}));
+    await waitFor(()=>expect(opened).toHaveBeenCalledWith('minimal'));
+    const submitted=create.mock.calls[0][1];
+    expect(submitted).not.toHaveProperty('provenance');
+    expect(submitted.actors[0].description).toBe('');
+    expect(submitted.permissions[0].protected_effect_item_ids).toEqual(['done']);
 });

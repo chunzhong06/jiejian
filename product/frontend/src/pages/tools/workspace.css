@@ -21,9 +21,9 @@
 .jj-tools-service strong { font-weight:500; }
 .jj-status-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--muted); flex:none; }
 .jj-status-dot[data-ready=true] { background:var(--good); }
-.jj-tools-service > .jj-button { font-size:var(--text-meta); min-height:30px; padding:4px 8px; }
+.jj-tools-service > .jj-button { margin-left:auto; font-size:var(--text-meta); min-height:30px; padding:4px 8px; }
 .jj-tools-service > details { width:100%; border:0; padding:4px 0 0; }
-.jj-tools-access { padding:26px; background:var(--inset); border-left:1px solid var(--line); }
+.jj-tools-access { display:grid; align-content:start; padding:26px; background:var(--inset); border-left:1px solid var(--line); }
 .jj-tools-access > header { display:flex; align-items:center; gap:11px; }
 .jj-tools-access > header > .anticon { color:var(--muted); }
 .jj-tools-access h2 { font-size:var(--text-body); }
@@ -32,8 +32,9 @@
 .jj-current-grant > p:last-child { font-size:var(--text-meta); color:var(--muted); margin-top:8px; }
 .jj-access-explanation { font-size:var(--text-meta); color:var(--muted); margin:12px 0 20px; }
 .jj-tools-access > .jj-small { margin-bottom:20px; }
+.jj-tools-access > .jj-button { justify-self:end; }
 .jj-tools-access > .jj-button + .jj-button { margin-top:12px; }
 @media(max-width:1150px) { .jj-tools-access > .jj-field { margin-top:24px; } }
 @container tools-workspace (max-width:620px) { .jj-tool-configure { grid-template-columns:minmax(0,1fr); gap:20px; } }
-@media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); } .jj-tools-access { border-left:0; border-top:1px solid var(--line); display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 24px; } .jj-tools-access > header { grid-column:1/-1; margin-bottom:20px; } .jj-current-grant { grid-column:1; grid-row:2/6; margin:0; border:0; padding:0; } .jj-tools-access > .jj-field,.jj-access-explanation,.jj-tools-access > .jj-small,.jj-tools-access > .jj-button { grid-column:2; } .jj-tools-access > .jj-button { justify-self:start; } }
+@media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); } .jj-tools-access { border-left:0; border-top:1px solid var(--line); display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 24px; } .jj-tools-access > header { grid-column:1/-1; margin-bottom:20px; } .jj-current-grant { grid-column:1; grid-row:2/6; margin:0; border:0; padding:0; } .jj-tools-access > .jj-field,.jj-access-explanation,.jj-tools-access > .jj-small,.jj-tools-access > .jj-button { grid-column:2; } }
 @media(max-width:600px) { .jj-tools-body { grid-template-columns:minmax(0,1fr); padding:20px; } .jj-tool-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:0 0 20px; border-right:0; border-bottom:1px solid var(--line); } .jj-tools-access { display:block; padding:24px 20px; } .jj-current-grant { margin:20px 0; border-bottom:1px solid var(--line); padding-bottom:20px; } .jj-tools-service { padding-inline:20px; } }

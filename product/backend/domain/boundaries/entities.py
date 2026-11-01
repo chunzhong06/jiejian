@@ -74,7 +74,7 @@ def boundary_sha256(payload: dict[str, Any]) -> str:
 
 
 def _trimmed_text(value: str, field_name: str) -> str:
-    if value != value.strip() or not value or any(ord(char) < 32 for char in value):
+    if value != value.strip() or (not value and field_name != 'description') or any(ord(char) < 32 for char in value):
         raise ValueError(f"{field_name} must be trimmed printable text")
     return value
 
@@ -86,7 +86,7 @@ class BusinessEffectDefinition(BoundaryModel):
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
 
     @field_validator("business_label", "resource_concept", "expected_state", "description")
     @classmethod
@@ -134,7 +134,7 @@ class BusinessActorRevision(BoundaryModel):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     revision: int = Field(ge=1)
     display_name: str = Field(min_length=1, max_length=128)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     semantic_fingerprint: str = Field(pattern=SHA256_PATTERN)
     effective_state: BusinessRevisionState
     approval: HumanApproval
@@ -182,7 +182,7 @@ class BusinessActionRevision(BoundaryModel):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     revision: int = Field(ge=1)
     display_name: str = Field(min_length=1, max_length=256)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     primary_resource_concept: str = Field(min_length=1, max_length=128)
     operation_kind: BusinessActionOperationKind
     state_changing: bool

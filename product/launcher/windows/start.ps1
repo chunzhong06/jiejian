@@ -56,6 +56,9 @@ try {
     $env:PYTHONIOENCODING = "utf-8"
     $env:TEMP = [IO.Path]::GetFullPath($temporary)
     $env:TMP = [IO.Path]::GetFullPath($temporary)
+    # Agent 使用用户已安装的客户端；先保留准确入口，目标 Worker 仍只继承冻结环境。
+    $codexCommand = Get-Command codex.exe -CommandType Application -ErrorAction SilentlyContinue
+    if ($codexCommand) { $env:JIEJIAN_CODEX_EXECUTABLE = $codexCommand.Source }
     $env:PATH = "$pythonRoot;$env:SystemRoot\System32"
     foreach ($name in @("PYTHONHOME", "PYTHONPATH", "JIEJIAN_PROJECT_ROOT", "JIEJIAN_RUNTIME_FINGERPRINT", "JIEJIAN_SERVE_LOCK_PATH", "JIEJIAN_SERVE_OWNER_TOKEN")) {
         Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue

@@ -153,7 +153,8 @@ class ExecutionTrace(_TraceModel):
     schema_version: Literal["1"] = "1"
     case_id: str = Field(pattern=_PUBLIC_ID)
     action_id: str = Field(pattern=_PUBLIC_ID)
-    planned_subject_id: str = Field(pattern=_PUBLIC_ID)
+    # 匿名场景没有账号 ID；其未登录事实由正式 Case 的身份观察证明。
+    planned_subject_id: str | None = Field(pattern=_PUBLIC_ID)
     events: tuple[TraceEvent, ...] = Field(default=(), max_length=512)
     complete: bool
     reason_codes: tuple[str, ...] = Field(default=(), max_length=64)

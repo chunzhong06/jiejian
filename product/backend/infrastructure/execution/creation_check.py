@@ -29,6 +29,11 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
         baseline=bool(values) and all(value is not None for value in original)
         if not baseline:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'新对象的独立观察基线尚未就绪')
+        if case.permission.conditions is not None:
+            from product.protocols.checks.conditions import collected_conditions_status
+            status = collected_conditions_status(case.permission.conditions, executor._condition_facts(case))
+            if status != 'MATCH':
+                raise JiejianError('PERMISSION_CONDITION_' + status, '创建前尚未确认规则的适用条件')
 
     if executor._stopped is None:
         try:
@@ -36,7 +41,8 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
             execution,status=fact.outcome.value,response.status_code
         except JiejianError as error:
             identity=web.actual_identity_status(case.case_id)
-            executor._stop(error.code,'EXECUTION')
+            if not error.code.startswith('PERMISSION_CONDITION_'):
+                executor._stop(error.code,'EXECUTION')
         finally:
             if web.target_attempted(case.case_id):
                 # 失败、取消、403和无响应都继续只读取证；异常状态不能掩盖已经提交的禁止创建。
@@ -61,10 +67,12 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
                     executor._stop('CREATION_RECOVERY_UNVERIFIED','RECOVERY')
     observations,facts,references=finalize_facts(tuple(observations),observers._evidence_sources)
     outcome=CheckCaseOutcome(execution_outcome=execution,http_status=status,actual_identity_status=identity,
-        baseline_trusted=baseline,recovery_verified=recovered,run_correlated=correlated,resource_correlated=correlated)
+        baseline_trusted=baseline,recovery_verified=recovered,run_correlated=correlated,resource_correlated=correlated,
+        condition_observations=executor._condition_facts(case))
     decision=evaluate_check_case(CheckDecisionInput(case=case,execution=execution,actual_identity=identity,
         run_correlated=correlated,resource_correlated=correlated,baseline_trusted=baseline,
-        recovery_verified=recovered,allow_control_verdict=allow_verdict,effects=project_check_effect_facts(case,observations)))
+        recovery_verified=recovered,allow_control_verdict=allow_verdict,effects=project_check_effect_facts(case,observations),
+        condition_observations=outcome.condition_observations))
     document=seal_check_evidence(run_id=executor.input.run_id,job_id=executor.input.job_id,
         attempt=executor.input.attempt,action_id=action.action_id,action_revision=action.action_revision,
         request_hash=executor.input.request_hash,config_hash=executor.input.config_hash,case=case,outcome=outcome,

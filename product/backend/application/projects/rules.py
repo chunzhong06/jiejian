@@ -57,13 +57,13 @@ class RuleWorkspaceService:
                 state = 'UNCONFIRMED'
             if state == 'SAFE' and current_issues:
                 state = 'REPAIR_PENDING'
-            subject = actors.get(rule.subject_actor_id, '未命名角色')
+            subject = '未登录访客' if rule.conditions is not None and rule.conditions.principal == 'ANONYMOUS' else actors.get(rule.subject_actor_id, '未命名角色')
             action = actions.get(rule.business_action_id, '未命名操作')
             owner = actors.get(rule.resource_owner_actor_id, '资源所有者')
             relation = '自己的资源' if rule.relation == 'OWNS' else f'其他{owner}账号的资源' if rule.relation == 'SAME_ROLE_OTHER_ACCOUNT' else f'{owner}的资源'
             rules.append(dict(permission=dict(intent_id=rule.intent_id, revision=rule.revision, intent_hash=rule.intent_hash),
                 title=f'{subject}{"可以" if rule.expectation == "ALLOW" else "不得"}{action}',
-                expectation=rule.expectation, subject=subject, action=action, resource_scope=relation,
+                expectation=rule.expectation, conditions=None if rule.conditions is None else rule.conditions.model_dump(mode='json'), subject=subject, action=action, resource_scope=relation,
                 state=state, latest=latest, issues=[item.model_dump(mode='json') for item in issues],
                 changes=linked, history=history[:20], history_has_more=len(history)>20))
         ranking = {'VULNERABLE':0, 'REPAIR_PENDING':1, 'INCONCLUSIVE':2, 'STALE':3, 'UNCONFIRMED':3, 'UNTESTED':4, 'SAFE':5}

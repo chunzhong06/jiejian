@@ -14,10 +14,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.domain.boundaries.entities import BusinessActorRevision, BusinessRevisionState
+from product.backend.domain.boundaries.entities import BusinessActorRevision, BusinessRevisionState, boundary_sha256
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.domain.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.domain.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie, AuthenticationProfile, IdentityVerificationSnapshot
 from product.backend.infrastructure.secrets.store import SecretStore
 from product.backend.infrastructure.storage import StorageUnitOfWork
 
@@ -40,6 +40,7 @@ class PreparedLoginState(_IdentityModel):
     cookies: tuple[TestIdentityCookie, ...] = Field(default=(), max_length=32)
     bearer_secret_ref: str | None = Field(default=None, max_length=512)
     prepared_at_us: int = Field(ge=0)
+    verification: IdentityVerificationSnapshot | None = None
 
 
 class TestIdentityView(_IdentityModel):
@@ -57,6 +58,8 @@ class TestIdentityView(_IdentityModel):
     refreshed_at_us: int | None = Field(default=None, ge=0)
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
+    authentication: AuthenticationProfile | None = None
+    verification: IdentityVerificationSnapshot | None = None
 
 
 class TestIdentityService:
@@ -186,11 +189,52 @@ class TestIdentityService:
                     "prepared_at_us": state.prepared_at_us,
                     "refreshed_at_us": state.prepared_at_us,
                     "updated_at_us": max(self._clock_us(), state.prepared_at_us),
+                    'verification':state.verification,
                 }
             )
         )
         work.test_identities.replace(prepared)
         return self._view(prepared, actor)
+
+    def configure_authentication(self, identity_id, profile, *, expected_updated_at_us):
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            current = work.test_identities.get(identity_id)
+            if current is None or current.updated_at_us != expected_updated_at_us:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'账号已变化，请读取后再保存认证配置')
+            actor = self._actor_for_record(work,current)
+            if current.authentication == profile:
+                # 配置未变时不清除身份核验，也不改变依赖该主体的材料依据。
+                return self._view(current,actor)
+            self._require_preparation_closed(work,identity_id)
+            record = TestIdentity(**(current.model_dump()|dict(authentication=profile,verification=None,updated_at_us=max(self._clock_us(),current.updated_at_us+1))))
+            work.test_identities.replace(record)
+            work.commit()
+            return self._view(record,actor)
+
+    def authentication_options(self, identity_id):
+        with self._uow_factory() as work:
+            current = work.test_identities.get(identity_id)
+            if current is None:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
+            self._actor_for_record(work, current)
+            choices = []
+            seen = set()
+            for peer in work.test_identities.list_for_project(current.project_id):
+                if peer.identity_id == identity_id or peer.authentication is None:
+                    continue
+                profile = peer.authentication.model_dump(mode='json')
+                verification = profile['verification']
+                # 模板只共享登录结构；真实账号与跨角色的身份值不能随之复制。
+                verification.pop('expected_subject')
+                role = verification.pop('expected_role')
+                expected_role = role if (peer.actor_id, peer.actor_revision) == (current.actor_id, current.actor_revision) else None
+                fingerprint = boundary_sha256(dict(profile=profile, expected_role=expected_role))
+                if fingerprint in seen:
+                    continue
+                seen.add(fingerprint)
+                choices.append(dict(identity_id=peer.identity_id,label=peer.label,profile=profile,expected_role=expected_role))
+            return dict(identity_id=identity_id, templates=choices)
 
     def reset(self, identity_id: str) -> TestIdentityView:
         # 先拒绝活动或未清理的准备任务，再删除已知引用；不得让迟到结果复活刚重置的会话。
@@ -211,6 +255,7 @@ class TestIdentityService:
                         "bearer_secret_ref": None,
                         "prepared_at_us": None,
                         "refreshed_at_us": None,
+                        "verification": None,
                         "updated_at_us": max(self._clock_us(), current.updated_at_us),
                     }
                 )
@@ -260,9 +305,15 @@ class TestIdentityService:
     def _view(self, record: TestIdentity, actor: BusinessActorRevision) -> TestIdentityView:
         reasons: tuple[str, ...] = ()
         if record.auth_method is not None:
+            if record.authentication is not None:
+                verification = record.verification
+                if verification is None or verification.profile_fingerprint != boundary_sha256(record.authentication.model_dump(mode='json')) or verification.session_prepared_at_us != record.prepared_at_us:
+                    reasons += ('IDENTITY_NOT_VERIFIED',)
+                elif verification.status != 'VERIFIED':
+                    reasons += (verification.status,)
             try:
                 if any(not self._secret_store.configured(ref) for ref in record.secret_refs):
-                    reasons = ("SECRET_STATE_UNAVAILABLE",)
+                    reasons += ("SECRET_STATE_UNAVAILABLE",)
             except (JiejianError, OSError, RuntimeError, ValueError):
                 reasons = ("SECRET_STATE_UNAVAILABLE",)
         status = (
@@ -287,6 +338,8 @@ class TestIdentityService:
             refreshed_at_us=record.refreshed_at_us,
             created_at_us=record.created_at_us,
             updated_at_us=record.updated_at_us,
+            authentication=record.authentication,
+            verification=record.verification,
         )
 
     @staticmethod

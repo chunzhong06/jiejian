@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from contextlib import nullcontext
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -51,6 +52,7 @@ class RuleCandidateService:
                 "supported_expectations": ["ALLOW", "DENY"],
                 "limitations": ["不支持任意时间、金额、唯一性或并发约束", "保存候选不批准权限，不表示能够执行检查"],
                 "modeling_guidance": [
+                    "权限条件用conditions明确表达：principal可为AUTHENTICATED或ANONYMOUS，tenant可为SAME、DIFFERENT或null，resource_states为有限公开状态值。匿名不建立账号；同一资源的同租户与跨租户主体独立分配。状态样本经materials.select_data选择，来源映射tenant、condition_state及identity_claims.tenant_path只读取已声明字段。缺少实际条件不产生通过。",
                     "可一次保存权限候选与requirement_sources清单，不强制先提交空权限。区分USER原话、SOURCE源码线索、AGENT推断，由用户确认含义和本轮范围后审阅最终提案。发现接口不等于必须新增权限。",
                     "按可独立决定的业务目标组织来源，不按每个角色定义、接口或证据重复拆项。补充源码线索优先写入对应要求的解释；已保存的重复或辅助来源由用户在核对清单关联为补充依据，不静默删除。USER/SOURCE/AGENT只是来源标记，不等于已获用户确认。",
                     "界鉴支持集中勾选明确要求并一次保存；歧义单独核对。补充依据必须由用户关联到已确认业务要求，不为消除阻塞强迫源码线索选择IN_SCOPE。MCP不能代用户确认或提交scope-batch。",
@@ -223,6 +225,21 @@ class RuleCandidateService:
     def show(self, project_id: str, candidate_id: str, revision: int | None = None):
         with self._uow_factory() as work:
             return self._view(work, self._required(work, project_id, candidate_id, revision))
+
+    def pending_reviews(self, project_id, candidate_ids, *, work=None):
+        """投影仍需人的业务决定，不为任务进度重复展开材料库存和源码分析。"""
+        pending = []
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
+            for identifier in sorted(set(candidate_ids)):
+                value = self._required(work, project_id, identifier, None)
+                if only_auxiliary_scope(value):
+                    continue
+                proposal = work.rule_candidates.proposal_id(identifier, value.revision)
+                decision = None if proposal is None else work.business_boundaries.decision_for_proposal(proposal)
+                if decision is None:
+                    pending.append(dict(id=identifier, title='审阅这次整理的权限要求',
+                        destination='/permissions?candidate_id=' + identifier))
+        return pending
 
     def decide_scope(self, project_id, candidate_id, command):
         return decide_scope(self, project_id, candidate_id, command)

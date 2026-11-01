@@ -285,14 +285,14 @@ class CheckResultReader:
             identities = {item.identity_id: item for item in bundle.identities}
             subject = identities.get(case.subject_test_identity_id)
             owner = identities.get(case.resource_owner_test_identity_id)
-            if configured is None or subject is None or owner is None:
+            if configured is None or (subject is None and case.subject_test_identity_id is not None) or owner is None:
                 return None
             proofs = {item.binding_fingerprint: item for item in configured.proofs}
             if any(item.binding_fingerprint not in proofs for item in case.proof_requirements):
                 return None
             labels = tuple(dict.fromkeys(proofs[item.binding_fingerprint].business_label for item in case.proof_requirements))
             return CheckProgressCaseView(case_id=case.case_id, action_label=configured.display_name,
-                expectation=case.permission.expectation, planned_subject_label=subject.label,
+                expectation=case.permission.expectation, planned_subject_label='未登录访客' if subject is None else subject.label,
                 planned_resource_owner_label=owner.label, resource_id='由本次创建后独立识别' if getattr(configured,'created_resource',None) is not None else case.resource_id, effect_labels=labels)
         except (ValueError, OSError, JiejianError):
             # 冻结资产不可读或关联失效只降级本说明；原有效阶段/计数继续保留，编程错误不宽泛吞掉。

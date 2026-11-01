@@ -5,3 +5,10 @@
 .jj-rule-editor-controls > .jj-choice { width: 170px; }
 .jj-rule-editor-reason { margin-top: 24px; }
 @media(max-width:700px) { .jj-rule-editor-list { grid-template-columns: minmax(0,1fr); } }
+
+.jj-rule-conditions { margin-top:16px; min-width:0; grid-column:1/-1; }
+.jj-rule-conditions > summary { cursor:pointer; padding-block:8px; }
+.jj-rule-conditions > summary > span { margin-inline-start:12px; }
+.jj-condition-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding-block:16px; }
+.jj-condition-fields > :last-child { grid-column:1/-1; }
+@media(max-width:650px) { .jj-condition-fields { grid-template-columns:minmax(0,1fr); } .jj-rule-conditions > summary > span { display:block; margin:6px 0 0 20px; } }

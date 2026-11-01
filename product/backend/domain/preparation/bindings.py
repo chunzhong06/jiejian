@@ -14,6 +14,7 @@ from pydantic import Field, field_validator, model_validator
 from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN, BoundaryModel, boundary_sha256
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, SHA256_PATTERN, TEST_IDENTITY_ID_PATTERN
 from product.backend.domain.redaction import REDACTED
+from product.protocols.checks.execution_request import PermissionReference
 
 
 _UNSAFE_TEXT = re.compile(
@@ -137,9 +138,19 @@ class _ActionBinding(BoundaryModel):
 
 
 class _RecordedBinding(_ActionBinding):
-    source_recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
-    source_draft_revision: int = Field(ge=1)
-    source_draft_sha256: str = Field(pattern=SHA256_PATTERN)
+    source_recording_id: str | None = Field(default=None,pattern=RECORDING_ID_PATTERN,exclude_if=lambda value:value is None)
+    source_draft_revision: int | None = Field(default=None,ge=1,exclude_if=lambda value:value is None)
+    source_draft_sha256: str | None = Field(default=None,pattern=SHA256_PATTERN,exclude_if=lambda value:value is None)
+    operation_flow_id: str | None = Field(default=None,pattern=r'^ofl_[0-9a-f]{32}$',exclude_if=lambda value:value is None)
+    operation_flow_revision: int | None = Field(default=None,ge=1,exclude_if=lambda value:value is None)
+
+    @model_validator(mode='after')
+    def material_origin(self):
+        recorded=(self.source_recording_id,self.source_draft_revision,self.source_draft_sha256)
+        defined=(self.operation_flow_id,self.operation_flow_revision)
+        if not (all(value is not None for value in recorded) and all(value is None for value in defined) or all(value is None for value in recorded) and all(value is not None for value in defined)):
+            raise ValueError('material requires exactly one complete capture or operation definition')
+        return self
 
 
 class ActionExecutionBinding(_RecordedBinding):
@@ -161,6 +172,32 @@ class ActionResourceBinding(_RecordedBinding):
                 or REDACTED in value or _UNSAFE_TEXT.search(value)):
             raise ValueError("resource value must be a bounded non-secret identifier")
         return value
+
+
+class RuleCaseDataBinding(BoundaryModel):
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    permission: PermissionReference
+    resource_id: str = Field(min_length=1, max_length=256)
+    owner_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    base_binding_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    confirmed_at_us: int = Field(ge=0)
+
+    @field_validator('resource_id')
+    @classmethod
+    def resource_identifier(cls, value):
+        return ActionResourceBinding.validate_resource_id(value)
+
+
+def rule_case_resource(base, permission, selection):
+    if selection is None:
+        return base
+    if ((selection.permission.intent_id, selection.permission.revision, selection.permission.intent_hash)
+            != (permission.intent_id, permission.revision, permission.intent_hash)
+            or selection.owner_identity_id != base.resource_owner_test_identity_id
+            or selection.base_binding_fingerprint != base.binding_fingerprint):
+        raise ValueError('RULE_CASE_DATA_STALE')
+    values = {key:getattr(base,key) for key in ActionResourceBinding.model_fields if key != 'binding_fingerprint'}
+    return seal_binding(ActionResourceBinding, **(values | {'actual_resource_id':selection.resource_id}))
 
 
 

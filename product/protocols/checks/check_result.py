@@ -7,6 +7,7 @@ import re
 from typing import Annotated, Literal, TypeVar
 
 from pydantic import Field, model_validator
+from product.protocols.checks.conditions import ObservedPermissionConditions
 
 from product.backend.domain.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
 from product.backend.domain.verification.trace import ExecutionTrace
@@ -108,6 +109,7 @@ class CheckCaseOutcome(WireModel):
     recovery_verified: bool
     run_correlated: bool
     resource_correlated: bool
+    condition_observations: tuple[ObservedPermissionConditions, ...] = Field(default=(), max_length=48, exclude_if=lambda value: not value)
 
 
 class CheckEvidence(WireModel):

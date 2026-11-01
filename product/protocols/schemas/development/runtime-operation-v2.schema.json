@@ -3,6 +3,19 @@
     "NodeRuntimeReference": {
       "additionalProperties": false,
       "properties": {
+        "execution_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Fingerprint"
+        },
         "instance_id": {
           "pattern": "^rti_[0-9a-f]{32}$",
           "title": "Instance Id",

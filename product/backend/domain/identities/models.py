@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -31,6 +32,49 @@ class TestIdentityModel(BaseModel):
 class TestIdentityAuthMethod(StrEnum):
     COOKIE_SESSION = "COOKIE_SESSION"
     BEARER = "BEARER"
+
+
+IdentityField = Annotated[str, Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')]
+IdentityPublicValue = Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')]
+
+
+class IdentityVerificationConfig(TestIdentityModel):
+    path: str = Field(pattern=r'^/[A-Za-z0-9_/-]{0,510}$')
+    subject_path: tuple[IdentityField, ...] = Field(min_length=1,max_length=8)
+    role_path: tuple[IdentityField, ...] = Field(min_length=1,max_length=8)
+    expected_subject: IdentityPublicValue
+    expected_role: IdentityPublicValue
+
+    @model_validator(mode='after')
+    def nonsecret_fields(self):
+        if self.path.startswith('//') or any(part.casefold() in {'password','token','cookie','secret','authorization','api_key'} for part in (*self.subject_path,*self.role_path)):
+            raise ValueError('verification requires a local identity path and nonsecret fields')
+        return self
+
+
+class AuthenticationProfile(TestIdentityModel):
+    method: Literal['BROWSER_SESSION','BEARER','API_LOGIN'] = 'BROWSER_SESSION'
+    login_path: str = Field(default='/',pattern=r'^/[A-Za-z0-9_/-]{0,510}$')
+    username_field: IdentityField = 'username'
+    password_field: IdentityField = 'password'
+    token_path: tuple[IdentityField, ...] = Field(default=('token',),min_length=1,max_length=8)
+    verification: IdentityVerificationConfig
+
+    @model_validator(mode='after')
+    def local_login(self):
+        if self.login_path.startswith('//') or self.username_field == self.password_field:
+            raise ValueError('login path and credential field names are invalid')
+        return self
+
+
+class IdentityVerificationSnapshot(TestIdentityModel):
+    status: Literal['VERIFIED','AUTH_EXPIRED','SUBJECT_MISMATCH','ROLE_MISMATCH','FIELD_MISSING','UNAVAILABLE']
+    checked_at_us: int = Field(ge=0)
+    origin: str = Field(min_length=1,max_length=2048)
+    profile_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+    session_prepared_at_us: int = Field(ge=0)
+    subject: IdentityPublicValue | None = None
+    role: IdentityPublicValue | None = None
 
 
 class TestIdentityCookie(TestIdentityModel):
@@ -69,6 +113,8 @@ class TestIdentity(TestIdentityModel):
     refreshed_at_us: int | None = Field(default=None, ge=0)
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
+    authentication: AuthenticationProfile | None = Field(default=None,exclude_if=lambda value:value is None)
+    verification: IdentityVerificationSnapshot | None = Field(default=None,exclude_if=lambda value:value is None)
 
     @model_validator(mode="after")
     def validate_login_state(self) -> TestIdentity:

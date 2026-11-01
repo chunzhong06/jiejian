@@ -33,6 +33,20 @@ class SavePreparationSuggestionRequest(ApiModel):
         return SavePreparationSuggestion.model_validate_json(self.model_dump_json())
 
 
+class SqliteCandidateRequest(ApiModel):
+    schema_version:Literal['1']
+    basis_id:str
+    action_id:str
+    effect_id:str
+    resource_binding_id:str
+    database_path:str
+    table:str
+    protected_column:str
+    tenant_column:str|None=None
+    condition_state_column:str|None=None
+    identity_tenant_path:str|None=None
+
+
 def json_command(model):
     # HTTP数组按JSON语义进入冻结tuple；仍严格拒绝数字字符串、未知字段和无效嵌套值。
     def parse(value):
@@ -50,6 +64,10 @@ def build_proof_sources_router(context):
     router = APIRouter(prefix='/api/projects/{project_id}/proof-preparation',
         dependencies=[Depends(require_local_proof_session)])
     service = context.proof_preparation
+
+    @router.post('/sqlite-candidate',response_model=ApiResponse)
+    def sqlite_candidate(project_id:str,body:SqliteCandidateRequest):
+        return data_response(service.sqlite_candidate(project_id,**body.model_dump(exclude={'schema_version'})).model_dump(mode='json'))
 
     @router.post('/batches/preview', response_model=ApiResponse)
     def batch_preview(project_id: str, mode: Literal['OFFICIAL','REVIEWED']='REVIEWED'):

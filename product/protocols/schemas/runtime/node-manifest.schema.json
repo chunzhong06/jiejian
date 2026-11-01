@@ -1,5 +1,42 @@
 {
   "$defs": {
+    "NodePackagePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_install_scripts": {
+          "default": false,
+          "title": "Allow Install Scripts",
+          "type": "boolean"
+        },
+        "build_script": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9:_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Build Script"
+        },
+        "lockfile": {
+          "const": "package-lock.json",
+          "default": "package-lock.json",
+          "title": "Lockfile",
+          "type": "string"
+        },
+        "manager": {
+          "const": "npm",
+          "default": "npm",
+          "title": "Manager",
+          "type": "string"
+        }
+      },
+      "title": "NodePackagePlan",
+      "type": "object"
+    },
     "RuntimeFile": {
       "additionalProperties": false,
       "properties": {
@@ -27,6 +64,70 @@
         "size"
       ],
       "title": "RuntimeFile",
+      "type": "object"
+    },
+    "SqliteDatabaseCapture": {
+      "additionalProperties": false,
+      "properties": {
+        "relative_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "tables": {
+          "items": {
+            "$ref": "#/$defs/SqliteTableCapture"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Tables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "relative_path",
+        "tables"
+      ],
+      "title": "SqliteDatabaseCapture",
+      "type": "object"
+    },
+    "SqliteTableCapture": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "owner_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Owner Column",
+          "type": "string"
+        },
+        "resource_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Resource Column",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "table",
+        "resource_column",
+        "owner_column",
+        "fields"
+      ],
+      "title": "SqliteTableCapture",
       "type": "object"
     }
   },
@@ -68,6 +169,26 @@
       "title": "Mode",
       "type": "string"
     },
+    "module_loader": {
+      "default": "STATIC_ESM",
+      "enum": [
+        "STATIC_ESM",
+        "NODE_STANDARD"
+      ],
+      "title": "Module Loader",
+      "type": "string"
+    },
+    "package": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NodePackagePlan"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "port": {
       "maximum": 65535,
       "minimum": 1024,
@@ -89,6 +210,28 @@
       "pattern": "^[0-9a-f]{64}$",
       "title": "Source Fingerprint",
       "type": "string"
+    },
+    "sqlite": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SqliteDatabaseCapture"
+      },
+      "maxItems": 4,
+      "title": "Sqlite",
+      "type": "array"
+    },
+    "sqlite_source_root": {
+      "anyOf": [
+        {
+          "maxLength": 32768,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sqlite Source Root"
     }
   },
   "required": [

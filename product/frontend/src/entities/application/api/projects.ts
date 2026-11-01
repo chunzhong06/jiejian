@@ -83,9 +83,13 @@ export type ApplicationConnectionDto = {
 }
 export type ConnectionPreview = {source_root:string;snapshot:string;projects:ProjectDto[]}
 export type ConnectionChoice = {mode:'RESUME'|'NEW';existing_project_id?:string;expected_snapshot:string;operation_id?:string}
-export type RuntimePreview = { project_id: string; revision: number; entry: string; port: number; preview_fingerprint: string; files: Array<{ relative_path: string }> }
+export type SqliteCapture = {relative_path:string;tables:Array<{table:string;resource_column:string;owner_column:string;fields:string[]}>}
+export type RuntimeSettings = {build_script?:string|null;allow_install_scripts?:boolean;sqlite?:SqliteCapture[]}
+export type RuntimePackage = {manager:'npm';lockfile:string;build_script:string|null;allow_install_scripts:boolean}
+export type RuntimeCapabilities = {project_id:string;source_read_authorized:boolean;entries:string[];package:string|null;dependencies:string;build_scripts:string[];sqlite_setup?:{paths:string[];tables:Array<{name:string;columns:string[];primary_key:string|null;source:string}>};supported_database_driver?:string;node?:string}
+export type RuntimePreview = { project_id: string; revision: number; entry: string; port: number; preview_fingerprint: string; files: Array<{ relative_path: string }>;package?:RuntimePackage|null;sqlite?:SqliteCapture[] }
 export type RuntimeOperation = { project_id: string; operation_id: string; instance_id: string; state: string }
-export type RuntimeState = { project_id: string; running: boolean; source_matches: boolean; configuration: { entry: string; port: number } | null; operation: RuntimeOperation | null }
+export type RuntimeState = { project_id: string; running: boolean; source_matches: boolean; configuration: { entry: string; port: number;package?:RuntimePackage|null;sqlite?:SqliteCapture[] } | null; operation: RuntimeOperation | null;preparation?:{stage:string;cache_reused:boolean}|null }
 const runtimePath = (id: string) => `/api/projects/${encodeURIComponent(id)}/controlled-runtime`
 
 export type CandidateSelection = { kind: 'ROLE' | 'ACTION'; candidate_id: string; decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED'; display_name: string }
@@ -94,8 +98,9 @@ export const projectsApi = {
   readiness: (id: string, signal?: AbortSignal) => request<ApplicationReadiness>(`/api/projects/${id}/readiness`, {signal}),
   activity: (id: string, signal?: AbortSignal) => request<ApplicationActivity>(`/api/projects/${id}/activity`, {signal}),
   runtime: (id: string) => request<RuntimeState>(runtimePath(id)),
-  runtimePreview: (id: string, body: { entry: string; port: number; revision: number }) => request<RuntimePreview>(runtimePath(id) + '/preview', { method: 'POST', body: JSON.stringify(body) }),
-  runtimeStart: (id: string, body: { entry: string; port: number; revision: number; preview_fingerprint: string; operation_id: string; consent_execute: true }) => request<RuntimeOperation>(runtimePath(id) + '/start', { method: 'POST', body: JSON.stringify(body) }),
+  runtimeCapabilities: (id:string)=>request<RuntimeCapabilities>(runtimePath(id)+'/capabilities'),
+  runtimePreview: (id: string, body: { entry: string; port: number; revision: number }&RuntimeSettings) => request<RuntimePreview>(runtimePath(id) + '/preview', { method: 'POST', body: JSON.stringify(body) }),
+  runtimeStart: (id: string, body: { entry: string; port: number; revision: number; preview_fingerprint: string; operation_id: string; consent_execute: true }&RuntimeSettings) => request<RuntimeOperation>(runtimePath(id) + '/start', { method: 'POST', body: JSON.stringify(body) }),
   runtimeOperation: (id: string, operation: string) => request<RuntimeOperation | null>(runtimePath(id) + '/operations/' + operation),
   runtimeCancel: (id: string, operation: string) => request<RuntimeOperation>(runtimePath(id) + '/operations/' + operation + '/cancel', { method: 'POST' }),
   runtimeStop: (id: string, instance: string) => request<RuntimeState>(runtimePath(id) + '/stop', { method: 'POST', body: JSON.stringify({ instance_id: instance }) }),

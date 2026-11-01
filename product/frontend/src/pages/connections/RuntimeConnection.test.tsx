@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RuntimeConnection } from './RuntimeConnection';
 import { projectsApi as api } from '../../entities/application/api/projects';
 
 const idle = { project_id: 'app', running: false, source_matches: false, configuration: { entry: 'app.mjs', port: 3000 }, operation: null };
 const preview = { project_id: 'app', entry: 'app.mjs', port: 3000, revision: 1, preview_fingerprint: 'preview', files: [{ relative_path: 'app.mjs' }] };
 const props = { projectId: 'app', revision: 1, confirmedEndpoint: 'http://127.0.0.1:4000', canStart: true, onChanged: vi.fn(), onError: vi.fn() };
+
+beforeEach(()=>{vi.spyOn(api,'runtimeCapabilities').mockResolvedValue({project_id:'app',source_read_authorized:true,entries:['app.mjs'],package:null,dependencies:'NOT_REQUIRED',build_scripts:[]});});
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
@@ -16,12 +18,12 @@ it('切换运行方式保留草稿，不提交地址或启动进程', async () =
     render(<RuntimeConnection {...props}/>);
     fireEvent.change(screen.getByRole('textbox', { name: '应用地址' }), { target: { value: 'http://127.0.0.1:5000' } });
     fireEvent.click(screen.getByRole('radio', { name: '由界鉴启动' }));
-    const entry = await screen.findByRole('textbox', { name: 'Node 入口文件' });
+    const entry = await screen.findByRole('textbox', { name: '启动文件' });
     fireEvent.change(entry, { target: { value: 'server.mjs' } });
     fireEvent.click(screen.getByRole('radio', { name: '连接已有应用' }));
     expect(screen.getByRole('textbox', { name: '应用地址' })).toHaveValue('http://127.0.0.1:5000');
     fireEvent.click(screen.getByRole('radio', { name: '由界鉴启动' }));
-    expect(screen.getByRole('textbox', { name: 'Node 入口文件' })).toHaveValue('server.mjs');
+    expect(screen.getByRole('textbox', { name: '启动文件' })).toHaveValue('server.mjs');
     expect(confirm).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
 });
@@ -51,16 +53,16 @@ it('启动完成后展示实例，采用为检查目标仍由用户明确提交'
     const confirm = vi.spyOn(api, 'confirmEndpoint').mockResolvedValue({} as never);
     render(<RuntimeConnection {...props}/>);
     fireEvent.click(screen.getByRole('radio', { name: '由界鉴启动' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '预览启动' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: '预览启动' }));
-    const consent = await screen.findByRole('checkbox', { name: '允许执行这份源码并使用上述端口' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '核对启动设置' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '核对启动设置' }));
+    const consent = await screen.findByRole('checkbox', { name: '允许按上述设置安装依赖、建立测试副本并启动应用' });
     expect(consent).not.toBeChecked();
-    expect(screen.getByRole('button', { name: '启动应用' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '启动测试实例' })).toBeDisabled();
     fireEvent.click(consent);
-    fireEvent.click(screen.getByRole('button', { name: '启动应用' }));
+    fireEvent.click(screen.getByRole('button', { name: '启动测试实例' }));
     expect(await screen.findByRole('button', { name: '停止应用' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: '启动应用' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '允许执行这份源码并使用上述端口' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '启动测试实例' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '允许按上述设置安装依赖、建立测试副本并启动应用' })).not.toBeInTheDocument();
     expect(start).toHaveBeenCalledTimes(1);
     expect(confirm).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('radio', { name: '连接已有应用' }));
@@ -91,8 +93,8 @@ it.each(['FAILED', 'CANCELLED'])('启动终态 %s 清除旧确认，不改变检
     const confirm = vi.spyOn(api, 'confirmEndpoint');
     render(<RuntimeConnection {...props}/>);
     expect(await screen.findByText(state === 'FAILED' ? /本次启动未完成/ : '本次启动已取消。')).toBeVisible();
-    expect(screen.queryByRole('button', { name: '启动应用' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '允许执行这份源码并使用上述端口' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '启动测试实例' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '允许按上述设置安装依赖、建立测试副本并启动应用' })).not.toBeInTheDocument();
     expect(sessionStorage.getItem('jiejian.studio.start-runtime:app')).toBeNull();
     expect(confirm).not.toHaveBeenCalled();
 });

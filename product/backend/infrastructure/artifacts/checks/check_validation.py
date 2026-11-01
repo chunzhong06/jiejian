@@ -13,7 +13,9 @@ def check_publication_budget_reason(actions, bundle) -> str | None:
     """提交前为固定单 Case 结果及主/辅助观察预留空间，避免执行后才发现发布上限。"""
     count = sum(len(action.cases) for action in actions)
     # 结果根上限 1 MiB；每 Case 预留 4 KiB，涵盖全部原因码与唯一 Evidence 引用。
-    if count > bundle.budget.max_cases or count * 4096 + 8192 > 1_048_576:
+    condition_bytes = sum(4096 * len(case.proof_requirements) for action in actions for case in action.cases
+                          if case.permission.conditions is not None)
+    if count > bundle.budget.max_cases or count * 4096 + condition_bytes + 8192 > 1_048_576:
         return "CHECK_CASE_BUDGET_EXCEEDED"
     configured = {action.action_id: action for action in bundle.actions}
     for action in actions:
@@ -65,6 +67,8 @@ def validate_check_inputs(request: ExecutionRequest, bundle: CheckRuntimeBundle,
                     (case.subject_test_identity_id, case.subject_actor_id, case.subject_actor_revision, case.subject_identity_fingerprint),
                     (case.resource_owner_test_identity_id, case.resource_owner_actor_id, case.resource_owner_actor_revision, case.owner_identity_fingerprint),
                 ):
+                    if identity_id is None:
+                        continue
                     identity = identities.get(identity_id)
                     if identity is None or (identity.actor_id, identity.actor_revision, identity.identity_fingerprint) != (actor, revision, fingerprint):
                         raise ValueError("runtime identity association")
@@ -104,6 +108,7 @@ def validate_check_decisions(package) -> None:
                 actual_identity=outcome.actual_identity_status, run_correlated=outcome.run_correlated,
                 resource_correlated=outcome.resource_correlated, baseline_trusted=outcome.baseline_trusted,
                 recovery_verified=outcome.recovery_verified,
+                condition_observations=outcome.condition_observations,
                 allow_control_verdict=None if control is None else results[control].verdict,
                 effects=project_check_effect_facts(case, observations)))
             if decision.verdict is not result.verdict:

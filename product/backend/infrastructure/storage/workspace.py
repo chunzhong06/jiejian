@@ -73,19 +73,20 @@ def current_schema_digest() -> str:
         separators=(",", ":")).encode()).hexdigest()
 
 
+def workspace_matches(connection,revision):
+    identity=connection.execute('SELECT singleton,format,generation,schema_digest FROM workspace_schema').fetchall()
+    versions=connection.execute('SELECT version_num FROM alembic_version').fetchall()
+    return (identity==[(1,WORKSPACE_FORMAT,WORKSPACE_GENERATION,current_schema_digest())]
+        and versions==[(revision,)] and sqlite_schema_signature(connection)==current_schema_signature()
+        and connection.execute('PRAGMA foreign_key_check').fetchone() is None)
+
+
 def require_workspace(path: Path, *, revision: str) -> None:
     if not path.is_file() or path.stat().st_size == 0:
         raise JiejianError(ErrorCode.STORAGE_MIGRATION, "工作区数据库尚未初始化")
     try:
         with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as connection:
-            identity = connection.execute(
-                "SELECT singleton, format, generation, schema_digest FROM workspace_schema"
-            ).fetchall()
-            versions = connection.execute("SELECT version_num FROM alembic_version").fetchall()
-            if (identity != [(1, WORKSPACE_FORMAT, WORKSPACE_GENERATION, current_schema_digest())]
-                    or versions != [(revision,)]
-                    or sqlite_schema_signature(connection) != current_schema_signature()
-                    or connection.execute("PRAGMA foreign_key_check").fetchone() is not None):
+            if not workspace_matches(connection,revision):
                 raise ValueError("workspace identity or structure mismatch")
     except (OSError, sqlite3.Error, ValueError):
         raise JiejianError(ErrorCode.STORAGE_MIGRATION,

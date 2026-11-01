@@ -15,7 +15,7 @@ from product.backend.application.checks.reading.observation_reading import Obser
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
 from product.protocols.runtime.request_activity import RequestActivity
 from product.backend.application.reading import projection_read
-from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, WireModel
+from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, FrozenCheckSelection, WireModel
 
 
 JUDGEMENTS = {
@@ -138,6 +138,7 @@ class ActionResultStory(WireModel):
     case_id: str
     permission: FrozenPermission
     judgement: str
+    reason_codes: tuple[str, ...] = ()
     fact_comparison: FactComparison
     breakpoint: BreakpointResult | None
     decisive_proof_chain: tuple[EvidenceExplanation, ...] = Field(max_length=4)
@@ -169,6 +170,7 @@ class ResultStory(WireModel):
     runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
     runtime_instance_id: str | None = None
     requirement_scope: tuple[FrozenRequirementScope, ...] = ()
+    selection: FrozenCheckSelection | None = None
 
 
 class CheckStoryBuilder:
@@ -189,8 +191,8 @@ class CheckStoryBuilder:
             raise ValueError("生产结果故事尚未连接原题读取者")
 
     @projection_read
-    def build(self, run_id: str, *, include_repair=True) -> ResultStory:
-        package = self._reader.package(run_id)
+    def build(self, run_id: str, *, include_repair=True, project_id: str | None = None) -> ResultStory:
+        package = self._reader.package(run_id, project_id=project_id)
         return self._from_verified_package(package, include_repair=include_repair)
 
     def breakpoints_from_verified_package(self, package):
@@ -217,15 +219,17 @@ class CheckStoryBuilder:
                 documents = tuple(evidence[ref] for ref in result.evidence_ids)
                 observations = tuple(item for document in documents for item in document.observations)
                 facts = project_check_effect_facts(case, observations)
-                identity = identities[case.subject_test_identity_id]
-                planned = StoryIdentity(identity_id=identity.identity_id, label=identity.label,
-                    actor_id=identity.actor_id, actor_label=identity.actor_label, verification_status="PLANNED")
+                identity = identities.get(case.subject_test_identity_id)
+                planned = StoryIdentity(identity_id=None if identity is None else identity.identity_id,
+                    label='未登录访客' if identity is None else identity.label,
+                    actor_id=case.subject_actor_id, actor_label='未登录访客' if identity is None else identity.actor_label,
+                    verification_status="PLANNED")
                 # 资源归属同样来自本轮冻结身份，不能冒充目标实际识别的操作人。
                 owner = identities[case.resource_owner_test_identity_id]
                 planned_owner = StoryIdentity(identity_id=owner.identity_id, label=owner.label,
                     actor_id=owner.actor_id, actor_label=owner.actor_label, verification_status="PLANNED")
                 status = result.outcome.actual_identity_status
-                verification = identity.verification if status == "MATCH" else None
+                verification = identity.verification if status == "MATCH" and identity is not None else None
                 actual = planned.model_copy(update=dict(verification_status=status,
                     identity_id=identity.identity_id if verification is not None else None,
                     label=identity.label if verification is not None else None,
@@ -233,6 +237,8 @@ class CheckStoryBuilder:
                     actor_label=identity.actor_label if verification is not None else None,
                     namespace=verification.namespace if verification is not None else None,
                     application_subject_id=verification.expected_application_subject_id if verification is not None else None))
+                if identity is None and status == 'MATCH':
+                    actual = planned.model_copy(update={'verification_status':'MATCH'})
                 control, breakpoint = None, None
                 twin = twins.get(case.case_id)
                 if twin is not None:
@@ -285,7 +291,7 @@ class CheckStoryBuilder:
                             if any(item.proof_fingerprint == fact.proof_fingerprint for item in document.observations))))
                 judgement = JUDGEMENTS[{CaseVerdict.SAFE: "PASS", CaseVerdict.VULNERABLE: "BLOCK"}.get(result.verdict, "INCONCLUSIVE")]
                 stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
-                    display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement,
+                    display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement, reason_codes=result.reason_codes,
                     fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
                         planned_resource_owner=planned_owner, resource_id=(
                             '、'.join(sorted({fact.data.resource_id for document in documents for fact in getattr(document,'business_facts',()) if fact.data.kind=='OBJECT_CREATION'})) or '本次未确认创建对象'
@@ -312,6 +318,7 @@ class CheckStoryBuilder:
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
             requirement_scope=getattr(package.request, 'requirement_scope', ()),
+            selection=package.request.selection,
             runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.runtime.reference.instance_id,
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
@@ -356,7 +363,7 @@ def _decision_input(case, result, facts, control):
     return CheckDecisionInput(case=case, execution=outcome.execution_outcome, actual_identity=outcome.actual_identity_status,
         run_correlated=outcome.run_correlated, resource_correlated=outcome.resource_correlated,
         baseline_trusted=outcome.baseline_trusted, recovery_verified=outcome.recovery_verified,
-        allow_control_verdict=control, effects=facts)
+        allow_control_verdict=control, effects=facts, condition_observations=outcome.condition_observations)
 
 
 def _single_trace(documents):

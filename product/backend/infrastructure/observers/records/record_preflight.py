@@ -5,11 +5,11 @@ from product.protocols.preparation.proof_sources import ProofCheckItem
 
 
 def managed_source_checks(view, config, *, resource_id, owner_subject_id, contract):
-    if config.source_kind == 'CREATED_OBJECT_RECORDS':
-        valid = view.collection == config.collection and contract is not None and contract.implementation_profile == 'CONTROLLED_CREATION_V1'
+    if config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}:
+        valid = view.collection == config.collection and contract is not None and contract.implementation_profile in {'CONTROLLED_CREATION_V1','SQLITE_CREATION_HISTORY_V1'}
         return (ProofCheckItem(code='CREATION_COLLECTION_VERIFIED' if valid else 'CREATION_SOURCE_UNAVAILABLE',
             status='CONFIRMED' if valid else 'UNSUPPORTED'),)
-    if view.schema_version!='2' or (contract is not None and contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1'}):
+    if view.schema_version!='2' or (contract is not None and contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','SQLITE_ROW_HISTORY_V1'}):
         return (ProofCheckItem(code='SOURCE_REQUIRES_MIGRATION',status='UNSUPPORTED'),)
     checks = []
     snapshot = view.snapshot

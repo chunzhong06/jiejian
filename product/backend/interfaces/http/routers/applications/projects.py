@@ -12,6 +12,7 @@ from product.backend.domain.applications.models import ActionRiskHint, Candidate
 from product.backend.interfaces.http.envelope import data_response
 from product.backend.interfaces.http.envelope import ApiResponse
 from product.backend.interfaces.http.envelope import ApiModel
+from product.protocols.runtime.node_runtime import SqliteDatabaseCapture, SqliteTableCapture, SqliteIdentifier
 
 
 def build_projects_router(context: ApplicationCore) -> APIRouter:
@@ -27,15 +28,19 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
 
     @router.post('/api/projects/{project_id}/controlled-runtime/preview', response_model=ApiResponse)
     def runtime_preview(project_id: str, body: RuntimePreviewRequest):
-        return data_response(context.node_runtime.preview(project_id,**body.model_dump()).model_dump(mode='json'))
+        return data_response(context.node_runtime.preview(project_id,**body.model_dump(exclude={'sqlite'}),sqlite=tuple(item.capture() for item in body.sqlite)).model_dump(mode='json'))
 
     @router.post('/api/projects/{project_id}/controlled-runtime/start', response_model=ApiResponse)
     def runtime_start(project_id: str, body: RuntimeStartRequest):
-        return data_response(context.node_runtime.start(project_id,**body.model_dump()),status_code=202)
+        return data_response(context.node_runtime.start(project_id,**body.model_dump(exclude={'sqlite'}),sqlite=tuple(item.capture() for item in body.sqlite)),status_code=202)
 
     @router.get('/api/projects/{project_id}/controlled-runtime', response_model=ApiResponse)
     def runtime_state(project_id: str):
-        return data_response(context.node_runtime.state(project_id))
+        return data_response(context.node_runtime.state(project_id,verify_artifacts=False))
+
+    @router.get('/api/projects/{project_id}/controlled-runtime/capabilities', response_model=ApiResponse)
+    def runtime_capabilities(project_id: str):
+        return data_response(context.node_runtime.capabilities(project_id))
 
     @router.get('/api/projects/{project_id}/controlled-runtime/operations/{operation_id}', response_model=ApiResponse)
     def runtime_operation(project_id: str, operation_id: str):
@@ -215,11 +220,30 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
     return router
 
 
+class RuntimeSqliteTableInput(ApiModel):
+    table: SqliteIdentifier
+    resource_column: SqliteIdentifier
+    owner_column: SqliteIdentifier
+    fields: list[SqliteIdentifier] = Field(min_length=1,max_length=8)
+
+
+class RuntimeSqliteInput(ApiModel):
+    relative_path: str = Field(min_length=1,max_length=512)
+    tables: list[RuntimeSqliteTableInput] = Field(min_length=1,max_length=8)
+
+    def capture(self):
+        return SqliteDatabaseCapture(relative_path=self.relative_path,tables=tuple(
+            SqliteTableCapture(**(item.model_dump()|{'fields':tuple(item.fields)})) for item in self.tables))
+
+
 class RuntimePreviewRequest(ApiModel):
     entry: str = Field(min_length=1,max_length=512)
     port: int = Field(ge=1024,le=65535)
     revision: int = Field(ge=0)
     consent_source_read: bool = False
+    build_script: str | None = Field(default=None, pattern=r'^[A-Za-z0-9:_-]{1,64}$')
+    allow_install_scripts: bool = False
+    sqlite: list[RuntimeSqliteInput] = Field(default_factory=list, max_length=4)
 
 
 class RuntimeStartRequest(ApiModel):
@@ -229,6 +253,9 @@ class RuntimeStartRequest(ApiModel):
     preview_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
     operation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
     consent_execute: bool
+    build_script: str | None = Field(default=None, pattern=r'^[A-Za-z0-9:_-]{1,64}$')
+    allow_install_scripts: bool = False
+    sqlite: list[RuntimeSqliteInput] = Field(default_factory=list, max_length=4)
 
 
 class RuntimeStopRequest(ApiModel):

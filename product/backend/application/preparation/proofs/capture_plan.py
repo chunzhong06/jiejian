@@ -5,12 +5,10 @@ from types import SimpleNamespace
 from pydantic import Field
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.application.checks.runtime_bundle import CheckRuntimeBuilder,recorded_request_template
-from product.backend.infrastructure.recording.request_store import RecordingRequestStore
 from product.protocols.runtime.runtime_identity import RuntimeModel
 from product.protocols.preparation.proof_sources import ManagedIdentityClaim,proof_fingerprint
 from product.protocols.preparation.reference_capture import ReferenceCapturePlan
 from product.protocols.checks.execution_request import FrozenPermission
-from product.backend.infrastructure.recording.flows import recorded_flow_path, read_recorded_flow
 
 
 class CaptureSelection(RuntimeModel):
@@ -64,10 +62,8 @@ def build_capture_plan(proofs,inspector,work,project_id,selection,*,created_at_u
     if {item.identity_id for item in selection.identity_claims}!=selected:
         raise JiejianError(ErrorCode.STATE_PRECONDITION,'请为本次实际使用的账号提供准确身份核对方式')
     identities,_=proofs._identities(work,SimpleNamespace(config=selection),facts,known)
-    recording=work.recordings.get(execution.source_recording_id)
-    job=work.jobs.get_by_recording(recording.recording_id)
-    recorded=RecordingRequestStore(proofs.var_dir).load(job.job_id,expected_hash=job.request_hash)
-    flow=read_recorded_flow(recorded_flow_path(proofs.var_dir,recording),expected_hash=execution.flow_sha256)
+    from product.backend.application.preparation.operation_flows import execution_material
+    flow,flow_scope=execution_material(work,proofs.var_dir,execution)
     config=dict(action_id=action.action_id,action_revision=action.revision,action_semantic_fingerprint=action.semantic_fingerprint,
         display_name=action.display_name,primary_resource_concept=action.primary_resource_concept,state_changing=action.state_changing,
         flow_id=flow.id,flow_sha256=execution.flow_sha256,execution_binding_fingerprint=execution.binding_fingerprint,
@@ -78,7 +74,7 @@ def build_capture_plan(proofs,inspector,work,project_id,selection,*,created_at_u
     # 直接返回文件的TARGET才可取样；原有SETUP和分类器照常冻结，202不能转成后台轮询。
     if config['steps'][-1]['classifier'].get('completion_binding') is not None:
         raise JiejianError(ErrorCode.STATE_PRECONDITION,'请录制实际下载动作，取样不代替异步生成与轮询')
-    target=recorded.target_scope
+    target=flow_scope
     if target.base_url!=f'http://127.0.0.1:{facts.runtime.port}':raise JiejianError(ErrorCode.STATE_PRECONDITION,'录制地址与当前实例不一致')
     payload=dict(schema_version='1',project_id=project_id,basis_id=facts.basis_id,
         permission=permission.model_dump(mode='json',include=set(FrozenPermission.model_fields)),

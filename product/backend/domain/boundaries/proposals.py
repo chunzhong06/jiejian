@@ -15,6 +15,7 @@ from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, ACTOR_
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation
 from product.backend.domain.boundaries.semantics import PermissionExpectation, BusinessEffectKind
+from product.protocols.checks.conditions import PermissionConditions
 
 
 PROPOSAL_ID_PATTERN = r"^bpr_[0-9a-f]{32}$"
@@ -43,7 +44,7 @@ class BoundaryDecisionKind(StrEnum):
 
 
 def _text(value: str, field_name: str) -> str:
-    if value != value.strip() or not value or any(ord(char) < 32 for char in value):
+    if value != value.strip() or (not value and field_name != 'description') or any(ord(char) < 32 for char in value):
         raise ValueError(f"{field_name} must be trimmed printable text")
     return value
 
@@ -99,7 +100,7 @@ class ProposedEffectItem(BoundaryModel):
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64,
         description="DATA_DISCLOSURE必须填写实际受保护的业务字段；其他效果类型留空。字段来自真实数据含义，不为通过校验编造。",
         json_schema_extra={"uniqueItems": True, "items": {"type": "string", "pattern": r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"}})
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
 
     @field_validator("business_label", "resource_concept", "expected_state", "description")
     @classmethod
@@ -143,7 +144,7 @@ class ProposedActorItem(_ProposedRevisionItem):
     item_id: str = Field(pattern=ACTOR_ITEM_ID_PATTERN)
     actor_id: str | None = Field(default=None, pattern=ACTOR_ID_PATTERN)
     display_name: str = Field(min_length=1, max_length=128)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     effective_state: BusinessRevisionState
 
     @field_validator("display_name", "description")
@@ -170,7 +171,7 @@ class ProposedActionItem(_ProposedRevisionItem):
     item_id: str = Field(pattern=ACTION_ITEM_ID_PATTERN)
     action_id: str | None = Field(default=None, pattern=ACTION_ID_PATTERN)
     display_name: str = Field(min_length=1, max_length=256)
-    description: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=1024)
     primary_resource_concept: str = Field(min_length=1, max_length=128)
     operation_kind: BusinessActionOperationKind
     state_changing: bool
@@ -216,6 +217,7 @@ class ProposedPermissionItem(BoundaryModel):
     relation: PermissionIntentRelation
     expectation: PermissionExpectation
     protected_effect_item_ids: tuple[str, ...] = Field(min_length=1, max_length=16)
+    conditions: PermissionConditions | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @field_validator("protected_effect_item_ids")
     @classmethod

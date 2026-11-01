@@ -126,6 +126,10 @@ class AuthTargetScope(ProtocolModel):
         return self
 
 
+class AnonymousIdentityBinding(ProtocolModel):
+    kind: Literal['ANONYMOUS'] = 'ANONYMOUS'
+
+
 class BearerIdentityBinding(ProtocolModel):
     kind: Literal[HttpIdentityKind.BEARER] = HttpIdentityKind.BEARER
     secret_ref: str = Field(pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$")

@@ -16,6 +16,7 @@ import { Badge, Empty, ErrorNote, Loading, Notice } from "../../../shared/ui/fee
 import { Button } from "../../../shared/ui/actions";
 import { Heading } from "../../../shared/ui/layout";
 import { Dialog } from "../../../shared/ui/Dialog";
+import {AccountAuthentication} from './AccountAuthentication';
 export function Accounts({ projectId, actions, requestedPreparation, onBack, onError }: {
     projectId: string;
     actions: ActionPreparation[];
@@ -32,8 +33,10 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
         return { identities, actions: preparation.actions, preparations };
     });
     const pendingKey = 'jiejian.studio.login:' + projectId;
-    type Pending = { kind: 'create'; operation: string; actor: string; revision: number; label: string } | { kind: 'login'; operation: string; identity: string };
+    type Pending = { kind: 'create'; operation: string; actor: string; revision: number; label: string } | { kind: 'login'; operation: string; identity: string; verifyOnly?: boolean };
     const [reset, setReset] = useState<string>(), [busy, setBusy] = useState(false), [login, setLogin] = useState<IdentityPreparationDto>(), [pending, setPending] = useState(() => readPending<Pending>(pendingKey));
+    const [authentication,setAuthentication]=useState<TestIdentityDto>();
+    const [selectedAccount, setSelectedAccount] = useState<string>();
     const remember = (value?: Pending) => { savePending(pendingKey, value); setPending(value); };
     // React busy 尚未提交时也要挡住第二次点击；真正的跨刷新去重仍依赖持久操作标识。
     const lock = useRef(false);
@@ -83,7 +86,7 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
             const latest = await api.requestedPreparation(saved.identity, saved.operation);
             if (latest) { setLogin(latest); remember(); }
             else if (identity?.status === 'PREPARED') remember();
-            else if (retry) { setLogin(await api.startPreparation(saved.identity, saved.operation)); remember(); }
+            else if (retry) { setLogin(await api.startPreparation(saved.identity, saved.operation, saved.verifyOnly)); remember(); }
         }
         state.reload();
     };
@@ -164,36 +167,46 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
             accounts.set(id, entry);
         }
     const loginAccount = [...accounts.values()].find(item => item.identity?.identity_id === current?.identity_id);
+    const accountEntries = [...accounts];
+    const selectedId = accountEntries.find(([id]) => id === selectedAccount)?.[0]
+        ?? accountEntries.find(([, item]) => item.identity?.identity_id === current?.identity_id)?.[0]
+        ?? accountEntries.find(([, item]) => item.identity?.status !== 'PREPARED')?.[0] ?? accountEntries[0]?.[0];
+    const readyCount = accountEntries.filter(([, item]) => item.identity?.status === 'PREPARED').length;
     const loginTitle = loginAccount ? text(loginAccount.slot.actor_display_name) + '账号登录' : '测试账号登录';
     const loginStep = current ? ({ STARTING: 0, WAITING_FOR_LOGIN: 1, SAVING: 2, PREPARED: 3, CANCELLING: -1, FAILED: -1, CANCELLED: -1, UNSUPPORTED: -1 })[current.status] : -1;
+    const loginProgress = <>{current?.purpose==='VERIFY'&&<section className="jj-login-progress" aria-live="polite"><header><div><h2>核验已保存会话</h2><p>{text(current.message)}</p></div><Badge tone="neutral">{current.status==='PREPARED'?'已完成':'核验中'}</Badge></header>{active.error&&<ErrorNote error={active.error}/>}</section>}
+    {current && current.purpose!=='VERIFY'&& <section className="jj-login-progress" data-status={current.status} data-terminal={['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status)} aria-label={loginTitle}>
+      <header><span className="jj-login-symbol">{current.status === 'PREPARED' ? <CheckCircleOutlined aria-hidden="true"/> : <GlobalOutlined aria-hidden="true"/>}</span><div><div className="jj-login-heading"><h2>{loginTitle}</h2><span role="status"><Badge tone={current.status === 'PREPARED' ? 'positive' : current.status === 'FAILED' ? 'negative' : current.status === 'WAITING_FOR_LOGIN' ? 'accent' : 'neutral'}>{({ STARTING: '正在打开', WAITING_FOR_LOGIN: '等待登录', SAVING: '正在保存', CANCELLING: '正在取消', PREPARED: '已保存', FAILED: '未完成', CANCELLED: '已取消', UNSUPPORTED: '当前方式不支持' })[current.status]}</Badge></span></div>{!['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <p>{current.status === 'WAITING_FOR_LOGIN' ? '请在已打开的独立浏览器中完成登录，再返回这里保存。' : text(current.message)}</p>}</div></header>
+      {loginStep >= 0 && <ol className="jj-login-stages" aria-label="登录准备步骤">{['打开登录窗口', '在应用中登录', '保存登录状态'].map((label, index) => <li key={label} data-state={index < loginStep ? 'complete' : index === loginStep ? 'current' : 'pending'} aria-current={index === loginStep ? 'step' : undefined}><span aria-hidden="true">{index < loginStep ? <CheckOutlined/> : index + 1}</span><span>{label}</span></li>)}</ol>}
+      {!['PREPARED', 'FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <footer className="jj-login-actions"><Button busy={busy} disabled={current.status === 'CANCELLING'} onClick={() => void act(async () => setLogin(await api.cancelPreparation(current.preparation_id)))}>取消本次登录</Button>{current.status === 'WAITING_FOR_LOGIN' && <Button kind="primary" busy={busy} onClick={() => void act(async () => setLogin(await api.confirmPreparation(current.preparation_id)))}>我已完成登录</Button>}</footer>}
+      {current.status === 'PREPARED' && <footer className="jj-login-actions"><Button kind="primary" onClick={()=>{const next=accountEntries.find(([,item])=>item.identity?.status!=='PREPARED');if(next)setSelectedAccount(next[0]);else onBack()}}>{readyCount<accounts.size?'准备下一个账号':'继续准备其他材料'}</Button></footer>}{current.cleanup_required && <Notice>登录操作已结束，临时资源尚未完成清理，请保留当前账号。<Button busy={busy} onClick={() => void act(async () => setLogin(await api.cleanupPreparation(current.preparation_id)))}>重试清理临时资源</Button></Notice>}{active.error && <ErrorNote error={active.error} onRetry={active.reload}/>}
+      {['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <div className="jj-login-resolution"><p>{text(current.message)}</p>{current.status === 'FAILED' && !current.cleanup_required && loginAccount && <Button kind="primary" busy={busy} disabled={Boolean(pending) || Boolean(state.error)} onClick={() => prepare(loginAccount.identity, loginAccount.slot)}>重新打开登录窗口</Button>}</div>}
+    </section>}</>;
     return <>
     <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>检查准备</Button></div>
-    <Heading title="测试账号" actions={<Button busy={busy} onClick={() => void act(() => recover())}>读取账号状态</Button>}/>
+    <Heading title="准备测试账号" actions={<Button kind="quiet" busy={busy} onClick={() => void act(() => recover())}>刷新状态</Button>}/>
     {state.error && <ErrorNote error={state.error}/>}
     {requested.error && <ErrorNote error={requested.error} onRetry={requested.reload}/>}
     {pending && !current && <Notice>上次账号操作仍待确认。<Button busy={busy} onClick={() => void act(() => recover(true))}>查询并恢复本次操作</Button></Notice>}
     {state.loading ? <Loading page/> : <section className="jj-accounts-workspace">
-      <header><h2>本次需要的账号</h2><span>{accounts.size} 个账号</span></header>
-      <div className="jj-account-list">{[...accounts].map(([id, { slot, identity, actions: usedBy }]) => <article className="jj-account-row" data-current={current?.identity_id === identity?.identity_id && Boolean(identity)} key={id}>
+      <header><div><h2>登录检查所需的账号</h2><p className="jj-small jj-muted">每个账号只需准备一次，可用于多项操作。</p></div><Badge tone={readyCount === accounts.size ? 'positive' : 'neutral'}>{readyCount} / {accounts.size} 已准备</Badge></header>
+      <div className="jj-accounts-console"><nav className="jj-account-index" aria-label="待准备的账号">{accountEntries.map(([id,{slot,identity}])=><Button key={id} kind="quiet" aria-current={selectedId===id?'page':undefined} onClick={()=>setSelectedAccount(id)}><UserOutlined aria-hidden="true"/><span>{text(slot.actor_display_name)}账号{slot.requirement.ordinal>1?' '+slot.requirement.ordinal:''}<small>{identity?.status==='PREPARED'?'已准备':identity?.status==='NEEDS_REVIEW'?'需要重新登录':'待登录'}</small></span>{identity?.status==='PREPARED'&&<CheckOutlined aria-hidden="true"/>}</Button>)}</nav>
+      <div className="jj-account-detail">{accountEntries.filter(([id])=>id===selectedId).map(([id, { slot, identity, actions: usedBy }]) => <article className="jj-account-row" data-current={current?.identity_id === identity?.identity_id && Boolean(identity)} key={id}>
         <header>
         <span className="jj-account-symbol"><UserOutlined aria-hidden="true"/></span>
-        <div className="jj-account-body"><div className="jj-item-heading"><h3>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ' ' + slot.requirement.ordinal : ''}</h3><Badge tone={identity?.status === 'PREPARED' ? 'positive' : identity?.status === 'NEEDS_REVIEW' ? 'caution' : 'neutral'}>{identity?.status === 'PREPARED' ? '已登录' : identity?.status === 'NEEDS_REVIEW' ? '需重新登录' : '待登录'}</Badge></div>{identity && <p className="jj-small jj-muted">{text(identity.label)}</p>}</div>
+        <div className="jj-account-body"><div className="jj-item-heading"><h3>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ' ' + slot.requirement.ordinal : ''}</h3><Badge tone={identity?.status === 'PREPARED' ? 'positive' : identity?.status === 'NEEDS_REVIEW' ? 'caution' : 'neutral'}>{identity?.status === 'PREPARED' ? '已登录' : identity?.status === 'NEEDS_REVIEW' ? '需要核对' : '待登录'}</Badge></div>{identity && <p className="jj-small jj-muted">{text(identity.label)}</p>}</div>
         </header>
         <footer>
-        <p className="jj-account-uses">用于{usedBy.map(text).join('、')}</p>
-        <Button busy={busy} disabled={Boolean(pending) || Boolean(state.error) || !state.data || Boolean(current && !['PREPARED', 'FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status))} onClick={() => prepare(identity, slot)}>{identity?.status === 'PREPARED' ? '重新登录' : identity?.status === 'NEEDS_REVIEW' ? '核对并重新登录' : identity ? '打开登录浏览器' : '建立账号并登录'}</Button>
+        <div className="jj-account-purpose"><span className="jj-eyebrow">这个账号用于</span><p>{usedBy.map(text).join('、')}</p></div>
+        {current&&current.identity_id===identity?.identity_id&&!['CANCELLED','UNSUPPORTED'].includes(current.status)?loginProgress:<div className="jj-account-instruction"><h3>{identity?.status==='PREPARED'?'登录状态已保存':'使用应用自己的账号登录'}</h3><p>{identity?.status==='PREPARED'?'可以继续准备操作和结果证明。': '点击下方按钮，在单独打开的窗口中完成登录，再返回界鉴保存。'}</p>{identity?.verification&&<Badge tone={identity.verification.status==='VERIFIED'?'positive':'caution'}>{({VERIFIED:'登录身份匹配',AUTH_EXPIRED:'登录已失效',SUBJECT_MISMATCH:'登录的不是指定账号',ROLE_MISMATCH:'登录角色不符',FIELD_MISSING:'无法读取账号信息',UNAVAILABLE:'暂时无法核对账号'})[identity.verification.status]}</Badge>}</div>}
+        {identity?.status!=='PREPARED'&&!(current&&current.identity_id===identity?.identity_id&&!['CANCELLED','UNSUPPORTED'].includes(current.status))&&<div className="jj-account-primary"><Button kind="primary" busy={busy} disabled={Boolean(pending) || Boolean(state.error) || !state.data || Boolean(current && !['PREPARED', 'FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status))} onClick={() => prepare(identity, slot)}>{identity?.status === 'NEEDS_REVIEW' ? '重新登录此账号' : '开始登录'}</Button></div>}
+        {identity&&<details className="jj-account-management"><summary>登录设置与管理</summary><div><span className="jj-small jj-muted">登录方式：{({BROWSER_SESSION:'在浏览器中登录',API_LOGIN:'使用账号和密码',BEARER:'使用访问令牌'})[identity.authentication?.method??'BROWSER_SESSION']}</span><div className="jj-inline-actions"><Button disabled={busy} onClick={()=>setAuthentication(identity)}>修改登录设置</Button>{identity.auth_method&&identity.authentication&&<Button disabled={busy} onClick={()=>void act(async()=>{const next={kind:'login' as const,identity:identity.identity_id,operation:operationId(),verifyOnly:true};remember(next);setLogin(await api.startPreparation(identity.identity_id,next.operation,true));remember()})}>检查登录是否有效</Button>}{identity.status==='PREPARED'&&<Button disabled={busy} onClick={()=>prepare(identity,slot)}>重新登录</Button>}</div></div></details>}
         </footer>
-      </article>)}</div>
-      {!accounts.size && <Empty title="当前权限没有账号要求"/>}
-    {current && <section className="jj-login-progress" data-status={current.status} data-terminal={['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status)} aria-label={loginTitle}>
-      <header><span className="jj-login-symbol">{current.status === 'PREPARED' ? <CheckCircleOutlined aria-hidden="true"/> : <GlobalOutlined aria-hidden="true"/>}</span><div><div className="jj-login-heading"><h2>{loginTitle}</h2><span role="status"><Badge tone={current.status === 'PREPARED' ? 'positive' : current.status === 'FAILED' ? 'negative' : current.status === 'WAITING_FOR_LOGIN' ? 'accent' : 'neutral'}>{({ STARTING: '正在打开', WAITING_FOR_LOGIN: '等待登录', SAVING: '正在保存', CANCELLING: '正在取消', PREPARED: '已保存', FAILED: '未完成', CANCELLED: '已取消', UNSUPPORTED: '当前方式不支持' })[current.status]}</Badge></span></div>{!['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <p>{current.status === 'WAITING_FOR_LOGIN' ? '请在已打开的独立浏览器中完成登录，再返回这里保存。' : text(current.message)}</p>}</div></header>
-      {loginStep >= 0 && <ol className="jj-login-stages" aria-label="登录准备步骤">{['打开登录窗口', '在应用中登录', '保存登录状态'].map((label, index) => <li key={label} data-state={index < loginStep ? 'complete' : index === loginStep ? 'current' : 'pending'} aria-current={index === loginStep ? 'step' : undefined}><span aria-hidden="true">{index < loginStep ? <CheckOutlined/> : index + 1}</span><span>{label}</span></li>)}</ol>}
-      {!['PREPARED', 'FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <footer className="jj-login-actions"><Button busy={busy} disabled={current.status === 'CANCELLING'} onClick={() => void act(async () => setLogin(await api.cancelPreparation(current.preparation_id)))}>取消本次登录</Button>{current.status === 'WAITING_FOR_LOGIN' && <Button kind="primary" busy={busy} onClick={() => void act(async () => setLogin(await api.confirmPreparation(current.preparation_id)))}>我已完成登录</Button>}</footer>}
-      {current.status === 'PREPARED' && <footer className="jj-login-actions"><Button kind="primary" onClick={onBack}>返回材料清单</Button></footer>}{current.cleanup_required && <Notice>登录操作已结束，临时资源尚未完成清理，请保留当前账号。<Button busy={busy} onClick={() => void act(async () => setLogin(await api.cleanupPreparation(current.preparation_id)))}>重试清理临时资源</Button></Notice>}{active.error && <ErrorNote error={active.error} onRetry={active.reload}/>}
-      {['FAILED', 'CANCELLED', 'UNSUPPORTED'].includes(current.status) && <div className="jj-login-resolution"><p>{text(current.message)}</p>{current.status === 'FAILED' && !current.cleanup_required && loginAccount && <Button kind="primary" busy={busy} disabled={Boolean(pending) || Boolean(state.error)} onClick={() => prepare(loginAccount.identity, loginAccount.slot)}>重新打开登录窗口</Button>}</div>}
-    </section>}
-      <footer className="jj-account-note">登录信息保存在本地受控存储中，界面只显示准备状态。</footer>
+      </article>)}</div></div>
+      {!accounts.size && <Empty title="当前权限没有账号要求"/>}{current&&!accountEntries.some(([,item])=>item.identity?.identity_id===current.identity_id)&&loginProgress}
+      <footer className="jj-account-note"><span>登录信息仅用于当前应用的检查，保存在本机。</span><Button kind={readyCount===accounts.size?'primary':'quiet'} onClick={onBack}>{readyCount===accounts.size?'继续准备检查材料':'返回材料清单'}</Button></footer>
     </section>}
     {reset && <Dialog title="重新准备这个账号" onClose={() => setReset(undefined)} actions={dismiss => <><Button disabled={busy} onClick={dismiss}>取消</Button><Button kind="primary" busy={busy} onClick={() => void act(async () => { await api.reset(reset); setReset(undefined); setLogin(undefined); state.reload(); })}>清除登录并重新准备</Button></>}><p>清除已保存的登录状态，账号身份和历史记录保留。重新登录后，界鉴会核验已有材料是否仍适用。</p></Dialog>}
+    {authentication&&<AccountAuthentication identity={authentication} onClose={()=>setAuthentication(undefined)} onSaved={()=>state.reload()}/>}
   </>;
 }

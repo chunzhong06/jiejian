@@ -14,6 +14,53 @@ from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN
 from tests.contracts.http.system._support_current_mcp import TOOLS, start_task
 
 
+def test_collaboration_queues_execution_without_machine_approval(tmp_path):
+    from uuid import uuid4
+
+    app = create_app(tmp_path / 'var', start_worker=False, secret_store=MemorySecrets())
+    core, access = app.state.context, app.state.mcp_access
+    harness = ready_check_harness(tmp_path, core=core)
+    project = harness.project_id
+    token = access.pair().access_token
+    access.set_level(project, MCPAccessLevel.PREPARE)
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=TEST_CONTROL_ORIGIN,
+                headers={'Authorization': 'Bearer ' + token, 'Origin': TEST_CONTROL_ORIGIN}) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + '/mcp', http_client=http, terminate_on_close=False)) as client:
+                    created = await client.call_tool('jiejian_collaboration_create', dict(project_id=project,
+                        operation_id=uuid4().hex, goal='检查这项业务权限', purpose='CHECK'))
+                    task = created.structured_content['task_id']
+                    tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+                    assert tools['jiejian_collaboration_context'].annotations.read_only_hint
+                    assert tools['jiejian_collaboration_read'].annotations.read_only_hint
+                    read = await client.call_tool('jiejian_collaboration_read', dict(project_id=project,
+                        task_id=task, capability='application.read', arguments={}))
+                    assert read.structured_content['state'] == 'READ'
+                    with pytest.raises(MCPError):
+                        await client.call_tool('jiejian_collaboration_read', dict(project_id=project,
+                            task_id=task, capability='checks.start', arguments={}))
+                    assert core.collaboration.show(project, task)['operations'] == []
+                    preview = core.checks.preview(project)
+                    operation = uuid4().hex
+                    arguments = dict(project_id=project, task_id=task, operation_id=operation,
+                        capability='checks.start', arguments={'expected_plan_fingerprint': preview.plan_fingerprint})
+                    queued = await client.call_tool('jiejian_collaboration_action', arguments)
+                    assert queued.structured_content['state'] == 'WAITING_USER'
+                    with core.uow_factory() as work:
+                        assert work.jobs.get_by_idempotency(project, 'CHECK', operation) is None
+                    with pytest.raises(MCPError):
+                        await client.call_tool('jiejian_collaboration_action', arguments | {'approved': True})
+                    submitted = core.collaboration.decide(project, task, operation, True)
+                    run = submitted['result']['run_id']
+                    assert core.collaboration.activity(project, task)[0]['phase'] == 'PENDING'
+                    core.collaboration.control(project, task, 'cancel')
+                    assert core.check_results.status(run, project_id=project).job.state.value == 'CANCELLED'
+
+    anyio.run(scenario)
+
+
 def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
     from copy import deepcopy
     from uuid import uuid4

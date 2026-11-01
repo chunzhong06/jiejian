@@ -19,6 +19,18 @@ class SourceAnalysisLimits(AnalysisModel):
     max_actions: int = Field(default=512, ge=1, le=512)
 
 
+class SqliteTableSuggestion(AnalysisModel):
+    name: str
+    columns: tuple[str, ...]
+    primary_key: str | None
+    source: str
+
+
+class SqliteSetupSuggestions(AnalysisModel):
+    paths: tuple[str, ...] = ()
+    tables: tuple[SqliteTableSuggestion, ...] = ()
+
+
 class ApplicationAnalysisResult(AnalysisModel):
     source_fingerprint: str = Field(pattern="^[0-9a-f]{64}$")
     files: tuple[SourceFileFingerprint, ...] = Field(default=(), max_length=512)
@@ -26,3 +38,4 @@ class ApplicationAnalysisResult(AnalysisModel):
     action_candidates: tuple[ActionCandidate, ...] = Field(default=(), max_length=512)
     files_read: int = Field(ge=0, le=512)
     total_bytes: int = Field(ge=0, le=16777216)
+    sqlite_setup: SqliteSetupSuggestions = Field(default_factory=SqliteSetupSuggestions)

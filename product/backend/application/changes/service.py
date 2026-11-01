@@ -21,6 +21,14 @@ from product.backend.domain.changes.models import CurrentActionChangeImpact, Cur
 from product.protocols.checks.execution_request import ChangeContext, LogicalId, PermissionReference, WireModel, content_hash
 
 
+def _implementation_actor_refs(permissions):
+    # 匿名没有登录角色实现；它访问的资源所有者仍须有明确对应。
+    return {(item.resource_owner_actor_id, item.resource_owner_actor_revision) for item in permissions} | {
+        (item.subject_actor_id, item.subject_actor_revision) for item in permissions
+        if item.conditions is None or item.conditions.principal != 'ANONYMOUS'
+    }
+
+
 class SourceRevalidationInspection(WireModel):
     project_id: LogicalId
     change_id: LogicalId
@@ -229,7 +237,11 @@ class CurrentSourceChangeService:
             return result("SOURCE_STALE")
         if snapshot is None or current!=snapshot.source_fingerprint:
             return result("SOURCE_STALE")
-        if any(item.status != "CURRENT" for item in (*boundary.actor_bindings,*boundary.action_bindings)):
+        required_actors = _implementation_actor_refs(boundary.permission_intents)
+        if any(item.status != "CURRENT" for item in boundary.action_bindings) or any(
+            item.status != "CURRENT" and (item.actor_id, item.actor_revision) in required_actors
+            for item in boundary.actor_bindings
+        ):
             return result("MAPPING_REVIEW_REQUIRED")
         if read_plan is None:
             return result("READY")
@@ -252,8 +264,7 @@ class CurrentSourceChangeService:
         impacts = []
         for action in boundary.actions:
             permissions = tuple(item for item in boundary.permission_intents if item.business_action_id == action.action_id)
-            actors = {(item.subject_actor_id,item.subject_actor_revision) for item in permissions} | {
-                (item.resource_owner_actor_id,item.resource_owner_actor_revision) for item in permissions}
+            actors = _implementation_actor_refs(permissions)
             binding = work.business_boundaries.action_binding(action.action_id,action.revision)
             ids = set(() if binding is None else binding.action_candidate_ids)
             for actor_id,revision in actors:

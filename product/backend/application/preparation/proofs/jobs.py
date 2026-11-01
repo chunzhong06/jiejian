@@ -42,7 +42,7 @@ class ProofPreflightJobs:
             if report.assessment == 'USABLE':
                 from collections import Counter
                 from product.protocols.preparation.proof_sources import AtomicProofSourceConfig,FileProofSourceConfig
-                if not isinstance(request.config,AtomicProofSourceConfig) or request.contract is None or request.contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1'}:
+                if not isinstance(request.config,AtomicProofSourceConfig) or request.contract is None or request.contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1','SQLITE_ROW_HISTORY_V1','SQLITE_CREATION_HISTORY_V1'}:
                     raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID,'来源没有当前支持的完整证明依据')
                 required = Counter({('MAPPING_READABLE',key):1 for key in request.config.mappings})
                 required.update({('ACTUAL_IDENTITY_MATCH',None):len(request.identities),
@@ -50,7 +50,7 @@ class ProofPreflightJobs:
                 if request.config.protected_projection:
                     required[('PROTECTED_FIELD_READABLE',None)] = len(request.config.protected_projection)
                 if isinstance(request.config,FileProofSourceConfig):required[('REFERENCE_ARTIFACT_VERIFIED',None)]=1
-                if request.config.source_kind=='CREATED_OBJECT_RECORDS':
+                if request.config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}:
                     required=Counter({('ACTUAL_IDENTITY_MATCH',None):len(request.identities),('CREATION_COLLECTION_VERIFIED',None):1})
                 if request.contract is None or Counter((item.code,item.mapping_key) for item in report.checks) != required:
                     raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID,'预检查报告缺少必须核对的项目')

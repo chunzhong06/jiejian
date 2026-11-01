@@ -157,6 +157,7 @@ def build_maintenance_draft(
                 relation=item.relation,
                 expectation=item.expectation,
                 protected_effect_item_ids=protected_items,
+                conditions=item.conditions,
             )
         )
     options = tuple(
@@ -472,6 +473,7 @@ def maintenance_to_proposal_command(
                 relation=item.relation,
                 expectation=item.expectation,
                 protected_effect_ids=formal_effect_ids,
+                conditions=item.conditions,
             )
             current_semantic = PermissionIntentSemantic.model_validate(
                 current.model_dump(include=set(PermissionIntentSemantic.model_fields))
@@ -497,6 +499,7 @@ def maintenance_to_proposal_command(
                 relation=item.relation,
                 expectation=item.expectation,
                 protected_effect_item_ids=item.protected_effect_item_ids,
+                conditions=item.conditions,
             )
         )
     return BoundaryProposalCommand(
@@ -734,6 +737,7 @@ def _is_carry_forward(
         and item.expectation is current.expectation
         and all(value is not None for value in protected)
         and tuple(sorted(protected)) == current.protected_effect_ids
+        and item.conditions == current.conditions
     )
 
 

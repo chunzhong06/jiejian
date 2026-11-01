@@ -8,7 +8,7 @@ import time
 
 from product.backend.domain.errors import JiejianError
 from product.backend.domain.lifecycle import JobState
-from product.backend.infrastructure.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode
+from product.backend.infrastructure.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode, RenewLease
 from product.backend.infrastructure.runtime.process.controlled.node_owned import start_owned_node
 from product.backend.infrastructure.runtime.worker.lifetime import WorkerLifetimeLock, worker_tree_name
 from product.protocols.runtime.node_runtime import NodeRuntimeLoadReceipt
@@ -34,12 +34,21 @@ def run(var_dir: Path, job_id: str, lease_owner: str, control_session_id: str, n
         if claim is None:
             return 1
 
+        next_renewal = clock() + 10_000_000
+
         def cancelled():
+            nonlocal next_renewal
             with factory() as work:
                 current=work.jobs.get(job_id)
-            return (current is None or current.state is not JobState.RUNNING
+            invalid = (current is None or current.state is not JobState.RUNNING
                 or current.lease_owner != lease_owner or current.fencing_token != claim.job.fencing_token
                 or current.cancel_requested_at_us is not None or current.lease_expires_at_us <= clock())
+            if not invalid and clock() >= next_renewal:
+                now = clock()
+                attempts.renew_lease(RenewLease(job_id=job_id, lease_owner=lease_owner,
+                    fencing_token=claim.job.fencing_token, now_us=now, lease_expires_at_us=now + 60_000_000))
+                next_renewal = now + 10_000_000
+            return invalid
 
         owned=start_owned_node(var_dir,request,node_executable,environ=dict(os.environ),cancelled=cancelled,
             record_owner_identity={'kind':'windows-job','name':worker_tree_name(job_id,lease_owner)})
@@ -69,7 +78,7 @@ def run(var_dir: Path, job_id: str, lease_owner: str, control_session_id: str, n
                         attempts.complete_cancellation(CompleteCancellation(**values))
                     else:
                         attempts.record_fatal_failure(FatalFailure(**values,reason_code=FatalFailureCode.WORKER_FATAL,
-                            error_code=error.code if isinstance(error,JiejianError) else "RUNTIME_LOAD_FAILED"))
+                            error_code=error.to_dict()['details'].get('reason',error.code) if isinstance(error,JiejianError) else "RUNTIME_LOAD_FAILED"))
             except JiejianError:
                 # 过期或丢失租约由控制面确认进程退出后恢复，不用过期执行者改写状态。
                 pass

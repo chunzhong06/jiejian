@@ -86,3 +86,26 @@ def test_two_node_deliveries_and_atomic_runtime_receipt(tmp_path,monkeypatch):
         core.close()
 
 pytestmark = [pytest.mark.level4]
+
+
+def test_missing_declared_sqlite_is_reported_in_preview_before_a_load_is_created(tmp_path):
+    from product.backend.domain.errors import JiejianError
+    from product.protocols.runtime.node_runtime import SqliteDatabaseCapture, SqliteTableCapture
+    var = tmp_path/'var'
+    core = ApplicationCore(var, secret_store=MemorySecrets(), environ=runtime_identity_environment(var))
+    harness = build_preparation_harness(tmp_path, core=core)
+    try:
+        (harness.source_root/'routes.py').unlink()
+        (harness.source_root/'app.mjs').write_text("import http from 'node:http';", encoding='utf-8')
+        current = core.application_understanding.get(harness.project_id)
+        core.application_understanding.analyze_source_for_change(harness.project_id, revision=current.revision)
+        current = core.application_understanding.get(harness.project_id)
+        database = SqliteDatabaseCapture(relative_path='missing.sqlite', tables=(SqliteTableCapture(
+            table='tickets', resource_column='id', owner_column='owner_id', fields=('title',)),))
+        with pytest.raises(JiejianError, match='没有找到所选 SQLite 业务数据库') as failure:
+            core.node_runtime.preview(harness.project_id, entry='app.mjs', port=12597, revision=current.revision, sqlite=(database,))
+        assert failure.value.to_dict()['details']['reason'] == 'SQLITE_SOURCE_REQUIRED'
+        with core.uow_factory() as work:
+            assert work._session.scalar(select(func.count()).select_from(RuntimeLoadRow)) == 0
+    finally:
+        core.close()

@@ -46,8 +46,8 @@ def test_repeat_start_preserves_business_records_and_revision_identity(tmp_path)
 
 @pytest.mark.level3
 @pytest.mark.database
-@pytest.mark.parametrize('interrupt', [False, True])
-@pytest.mark.parametrize('revision', ['workspace_0001', 'workspace_0002'])
+@pytest.mark.parametrize('interrupt', [False, True, 'structure-drift'])
+@pytest.mark.parametrize('revision', [item.revision for item in migration_history().walk_revisions() if item.revision!=migration_head()])
 def test_same_generation_upgrade_preserves_history_and_rolls_back_as_one_unit(tmp_path, monkeypatch, interrupt, revision):
     path = tmp_path / 'published.db'
     with migration_resources() as root:
@@ -63,6 +63,9 @@ def test_same_generation_upgrade_preserves_history_and_rolls_back_as_one_unit(tm
         def fail_after_ddl(*args, **kwargs):
             actual_upgrade(*args, **kwargs)
             if args[1] == migration_head():
+                if interrupt=='structure-drift':
+                    args[0].attributes['connection'].exec_driver_sql('CREATE TABLE unexpected(value TEXT)')
+                    return
                 raise RuntimeError('upgrade interrupted before commit')
         monkeypatch.setattr(command, 'upgrade', fail_after_ddl)
         with pytest.raises(JiejianError):

@@ -60,7 +60,8 @@ def _proposal_payload() -> dict[str, object]:
     }
 
 
-def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_path: Path) -> None:
+@pytest.mark.parametrize('minimal',[False,True])
+def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_path: Path,minimal) -> None:
     source = tmp_path / "source"
     source.mkdir()
     app = create_app(tmp_path / "var", start_worker=False, environ={})
@@ -82,6 +83,14 @@ def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_pa
         for destination, origin in (("actors", "proposed_actors"), ("actions", "proposed_actions"), ("permissions", "proposed_permissions")):
             command[destination] = [{key: value for key, value in item.items() if key != "write_mode"} for item in payload[origin]]
         command["actions"][0]["effects"] = command["actions"][0].pop("effect_catalog")
+        if minimal:
+            command.pop('provenance')
+            for actor in command['actors']:
+                actor.pop('description')
+            for action in command['actions']:
+                action.pop('description')
+                for effect in action['effects']:
+                    effect.pop('description')
         response = client.post(prefix + "/maintenance-proposals", json=command)
         assert response.status_code == 201, response.text
         created = response.json()["data"]

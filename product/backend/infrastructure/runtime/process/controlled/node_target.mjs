@@ -5,8 +5,10 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import vm from 'node:vm'
 import http from 'node:http'
-import { AsyncLocalStorage } from 'node:async_hooks'
+import { AsyncLocalStorage,createHook } from 'node:async_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import {createRequire, registerHooks, syncBuiltinESMExports} from 'node:module'
+import {instrumentDatabase} from './sqlite_capture.mjs'
 
 const fail = () => { throw new Error('NODE_RUNTIME_INPUT_INVALID') }
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
@@ -33,29 +35,44 @@ function bytes(file, limit) {
 }
 
 async function main() {
-  if (process.argv.length !== 5 || !process.execArgv.includes('--permission') || !process.permission?.has('fs.read', process.argv[2])) fail()
-  const [manifestFile, expectedRawHash, dataRoot] = process.argv.slice(2)
+  if (![5,6].includes(process.argv.length) || !process.execArgv.includes('--permission') || !process.permission?.has('fs.read', process.argv[2])) fail()
+  const [manifestFile, expectedRawHash, dataRoot,expectedExecution] = process.argv.slice(2)
   const raw = bytes(manifestFile, 262144)
   if (sha(raw) !== expectedRawHash) fail()
   const manifest = JSON.parse(raw.toString('utf8'))
   const keys = ['schema_version','mode','instance_id','project_id','entry','port','files',
     'source_fingerprint','interpreter_fingerprint','executor_fingerprint']
-  if (Object.keys(manifest).sort().join() !== keys.sort().join() || manifest.schema_version !== '1'
+  const standard=manifest.module_loader==='NODE_STANDARD'
+  if (Object.keys(manifest).some(key=>![...keys,'module_loader','package','sqlite','sqlite_source_root'].includes(key)) || keys.some(key=>!(key in manifest)) || manifest.schema_version !== '1'
       || manifest.mode !== 'CONTROLLED_NODE_ESM' || !Number.isInteger(manifest.port)
       || manifest.port < 1024 || manifest.port > 65535 || !Array.isArray(manifest.files)
       || !manifest.files.length || manifest.files.length > 512) fail()
-  if (sha(bytes(fileURLToPath(import.meta.url), 262144)) !== manifest.executor_fingerprint) fail()
+  if (sha(Buffer.concat([bytes(fileURLToPath(import.meta.url),262144),...(standard?[bytes(fileURLToPath(new URL('./sqlite_capture.mjs',import.meta.url)),262144)]:[])])) !== manifest.executor_fingerprint) fail()
   // 解释器摘要由外层 Worker 启动前核对；执行器不能用自己的声明替代内核所有权。
   const root = path.join(path.dirname(manifestFile), 'source')
+  let executionFiles=manifest.files
+  if(manifest.package) {
+    let material=bytes(path.join(path.dirname(manifestFile),'dependencies.json'),8388608)
+    if(manifest.package.build_script) {
+      const rawExecution=bytes(path.join(path.dirname(manifestFile),'execution.json'),262144)
+      const built=JSON.parse(rawExecution.toString('utf8'))
+      if(built.schema_version!=='1'||built.instance_id!==manifest.instance_id||built.source_fingerprint!==manifest.source_fingerprint)fail()
+      executionFiles=built.files
+      material=Buffer.concat([material,rawExecution])
+    }
+    if(sha(material)!==expectedExecution)fail()
+  } else if(expectedExecution)fail()
   const records = new Map()
   let total = 0
   const sourceHash = crypto.createHash('sha256')
-  for (const item of manifest.files) {
+  for(const item of manifest.files){sourceHash.update(item.relative_path);sourceHash.update('\0');sourceHash.update(Buffer.from(item.sha256,'hex'))}
+  if(sourceHash.digest('hex')!==manifest.source_fingerprint)fail()
+  for (const item of executionFiles) {
     if (Object.keys(item).sort().join() !== ['relative_path','sha256','size'].sort().join()
         || typeof item.relative_path !== 'string' || !Number.isInteger(item.size) || item.size < 0
         || !/^[a-f0-9]{64}$/.test(item.sha256) || records.has(item.relative_path.toLowerCase())) fail()
     const parts = item.relative_path.split('/')
-    if (!/\.(mjs|json|html|css|svg)$/.test(item.relative_path)) fail()
+    if (!/\.(mjs|js|cjs|ts|tsx|jsx|mts|cts|json|html|css|svg|map)$/.test(item.relative_path)) fail()
     if (parts.some(part => !part || part === '.' || part === '..' || /[\\:<>{}"|?*\x00-\x1f]/.test(part)
         || part.trim() !== part || part.endsWith('.'))) fail()
     total += item.size
@@ -64,9 +81,8 @@ async function main() {
     const content = bytes(file, item.size)
     if (content.length !== item.size || sha(content) !== item.sha256) fail()
     records.set(item.relative_path.toLowerCase(), {file, content, relative: item.relative_path})
-    sourceHash.update(item.relative_path); sourceHash.update('\0'); sourceHash.update(Buffer.from(item.sha256,'hex'))
   }
-  if (sourceHash.digest('hex') !== manifest.source_fingerprint || !records.has(manifest.entry.toLowerCase())) fail()
+  if (!records.has(manifest.entry.toLowerCase())) fail()
   const gate = path.join(path.dirname(manifestFile), 'start.gate')
   const deadline = Date.now() + 10000
   while (!fs.existsSync(gate)) {
@@ -75,11 +91,6 @@ async function main() {
   }
   if (bytes(gate, 64).toString('ascii') !== expectedRawHash) fail()
   if (!fs.statSync(dataRoot).isDirectory() || !samePath(fs.realpathSync(dataRoot), path.resolve(dataRoot))) fail()
-  const context = vm.createContext({Buffer, URL, URLSearchParams, TextEncoder, TextDecoder, structuredClone,
-    setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate, queueMicrotask,
-    console, process: Object.freeze({env:Object.freeze({PORT:String(manifest.port),JIEJIAN_DATA_DIR:dataRoot}),
-      pid:process.pid, cwd:()=>dataRoot, argv:Object.freeze(['node', manifest.entry])})},
-    {codeGeneration:{strings:false,wasm:false}})
   const cache = new Map()
   const builtinCache = new Map()
   let recordModule
@@ -94,11 +105,23 @@ async function main() {
   function sourcePosition() {
     const stack = new Error().stack?.split('\n') ?? []
     for (const line of stack) {
-      const match = line.match(/(?:\(|at )([^()]+\.mjs):(\d+):\d+\)?$/)
-      if (match && records.get(match[1].toLowerCase())?.relative === match[1]) return match[1]+':'+match[2]
+      const match = line.match(/(?:\(|at )([^()]+\.(?:mjs|cjs|js)):(\d+):\d+\)?$/)
+      if (!match) continue
+      const filename=match[1].startsWith('file:')?fileURLToPath(match[1]):match[1]
+      const relative=path.isAbsolute(filename)?path.relative(root,filename).split(path.sep).join('/'):filename
+      if (records.get(relative.toLowerCase())?.relative === relative) return relative+':'+match[2]
     }
     return null
   }
+  const scheduled=new Map()
+  createHook({init(id,type,_trigger,resource){
+    const current=requestScopes.getStore()
+    if(current&&!current.ending&&['Timeout','Immediate'].includes(type)&&sourcePosition()){
+      current.pending+=1
+      scheduled.set(id,{scope:current,repeating:Boolean(resource._repeat)})
+    }
+  },before(id){const active=scheduled.get(id);if(active&&!active.repeating){active.scope.pending-=1;scheduled.delete(id)}},
+  destroy(id){const active=scheduled.get(id);if(active){active.scope.pending-=1;scheduled.delete(id)}}}).enable()
   function startCall(scope, kind, operation, extra = {}) {
     const capture = scope?.capture
     if (!capture || scope.ending) return null
@@ -265,7 +288,7 @@ async function main() {
         scope.ending = true
         // 检查请求及真实业务写入仍先确认持久闭合；普通只读请求不创建记录日志。
         if (!scope.opening) return end(...endArgs)
-        const complete=scope.pending===0
+        const complete=scope.pending===0 && !scope.auditIncomplete && (!scope.capture||scope.capture.events.every(event=>event.outcome!=='INCOMPLETE'))
         scope.opening.then(id=>recordRequest('/scope/close',{scope_id:id,complete,
           activity:activitySnapshot(scope,complete)},true)).then(()=>end(...endArgs),()=>response.destroy())
         return response
@@ -284,6 +307,63 @@ async function main() {
     }
   }
   const scopedHttp = Object.freeze({...instrumentClient(http),Server:ScopedServer,createServer:(...args)=>new ScopedServer(...args)})
+  if (standard) {
+    const require=createRequire(import.meta.url)
+    const originals={...fs,promises:{...fs.promises}}
+    const httpOriginals={...http}
+    const capturedHttp=instrumentClient(httpOriginals)
+    Object.assign(http, {request:capturedHttp.request,get:capturedHttp.get,Server:ScopedServer,createServer:(...args)=>new ScopedServer(...args)})
+    const https=require('node:https')
+    const capturedHttps=instrumentClient({...https})
+    Object.assign(https,{request:capturedHttps.request,get:capturedHttps.get})
+    const capturedFiles=instrumentFiles(originals)
+    const capturedPromises=instrumentFiles(originals.promises,true)
+    for(const name of ['readFile','writeFile','appendFile']) {
+      fs[name]=capturedFiles[name]
+      fs[name+'Sync']=capturedFiles[name+'Sync']
+      require('node:fs/promises')[name]=capturedPromises[name]
+    }
+    syncBuiltinESMExports()
+    const bridge=Symbol.for('jiejian.runtime.bridge')
+    globalThis[bridge]={openCollection,sqlite:Database=>instrumentDatabase(Database,{root,dataRoot,
+      databases:manifest.sqlite??[],scope:()=>requestScopes.getStore(),capture:captureSync})}
+    registerHooks({
+      resolve(specifier,context,next) {
+        if(specifier==='jiejian:records')return {url:specifier,shortCircuit:true}
+        const result=next(specifier,context)
+        if(result.url.startsWith('file:')) {
+          const filename=fileURLToPath(result.url)
+          const relative=path.relative(root,filename)
+          if(relative.startsWith('..')||path.isAbsolute(relative))throw Error('NODE_MODULE_OUTSIDE_RUNTIME')
+        }
+        return result
+      },
+      load(url,context,next) {
+        if(url==='jiejian:records')return {format:'module',shortCircuit:true,
+          source:'export const openCollection=globalThis[Symbol.for("jiejian.runtime.bridge")].openCollection'}
+        const result=next(url,context)
+        if(url.replaceAll('\\','/').endsWith('/better-sqlite3/lib/index.js')) {
+          adapterNames.add('better-sqlite3')
+          return {...result,source:String(result.source)+'\nmodule.exports=globalThis[Symbol.for("jiejian.runtime.bridge")].sqlite(module.exports);'}
+        }
+        return result
+      },
+    })
+    delete process.env.JIEJIAN_RECORD_CAPABILITY
+    delete process.env.JIEJIAN_RECORD_CONTROL
+    delete process.env.JIEJIAN_RECORD_ORIGIN
+    process.env.PORT=String(manifest.port)
+    process.env.JIEJIAN_DATA_DIR=dataRoot
+    process.chdir(root)
+    process.argv=[process.execPath,path.join(root,manifest.entry)]
+    await import(pathToFileURL(path.join(root,manifest.entry)).href)
+    return
+  }
+  const context = vm.createContext({Buffer, URL, URLSearchParams, TextEncoder, TextDecoder, structuredClone,
+    setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate, queueMicrotask,
+    console, process: Object.freeze({env:Object.freeze({PORT:String(manifest.port),JIEJIAN_DATA_DIR:dataRoot}),
+      pid:process.pid, cwd:()=>dataRoot, argv:Object.freeze(['node', manifest.entry])})},
+    {codeGeneration:{strings:false,wasm:false}})
   function moduleFor(relative) {
     const record = records.get(relative.toLowerCase())
     if (!record || record.relative !== relative || !relative.endsWith('.mjs')) fail()

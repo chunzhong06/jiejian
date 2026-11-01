@@ -149,3 +149,57 @@ def test_concurrent_duplicate_submission_has_one_job(tmp_path):
         harness.close()
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_selected_scope_freezes_exact_references_and_keeps_old_full_encoding(tmp_path):
+    from product.protocols.checks.execution_request import PermissionReference, parse_execution_request
+    harness = ready_check_harness(tmp_path)
+    try:
+        core, project = harness.core, harness.project_id
+        full, original, _ = core.checks._freeze(project)
+        raw = canonical_execution_request_bytes(original)
+        assert b'"selection"' not in raw
+        assert canonical_execution_request_bytes(parse_execution_request(raw)) == raw
+        permission = original.actions[0].cases[0].permission
+        selected = (PermissionReference(**permission.model_dump(include={'intent_id', 'revision', 'intent_hash'})),)
+        preview, request, _ = core.checks._freeze(project, selected_permissions=selected)
+        assert preview.can_execute and preview.plan_fingerprint != full.plan_fingerprint
+        assert request.selection.selected == selected
+        assert parse_execution_request(canonical_execution_request_bytes(request)).selection == request.selection
+        submitted = core.checks.submit(project, expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key='selected', selected_permissions=selected)
+        assert submitted.created
+        stale = (selected[0].model_copy(update={'intent_hash': 'f'*64}),)
+        with pytest.raises(JiejianError, match='所选权限规则已变化'):
+            core.checks.preview(project, selected_permissions=stale)
+        with pytest.raises(JiejianError, match='原题复验'):
+            core.checks.preview(project, change_id='chg_'+'1'*32, selected_permissions=selected)
+    finally:
+        harness.close()
+
+
+def test_selected_action_does_not_require_unrelated_execution_material(tmp_path):
+    from product.backend.domain.boundaries.entities import BusinessAction, boundary_sha256
+    from product.backend.domain.checks.selection import references, permission_key
+    from tests.support.builders.checks.assurance import permission
+    harness = ready_check_harness(tmp_path)
+    try:
+        core, project = harness.core, harness.project_id
+        with core.uow_factory() as work:
+            original = core.business_boundaries.view(project, work=work).permission_intents[0]
+            other = harness.action.model_copy(update={'action_id': 'bac_'+'f'*32, 'display_name': '另一项操作'})
+            other = other.model_copy(update={'semantic_fingerprint': boundary_sha256(other.semantic_payload())})
+            work.business_boundaries.add_action_revision(other)
+            work.business_boundaries.add_action(BusinessAction(action_id=other.action_id, project_id=project,
+                current_revision=other.revision, created_at_us=other.created_at_us, updated_at_us=other.created_at_us))
+            extra = permission(99, business_action_id=other.action_id).model_copy(update={'project_id': project})
+            work.permission_intents.add_revision(extra)
+            work.commit()
+        full = core.checks.preview(project)
+        assert not full.can_execute
+        selected = core.checks.preview(project, selected_permissions=references({permission_key(original)}))
+        assert selected.can_execute, selected.gaps
+        assert {item.action_id for item in selected.actions} == {harness.action.action_id}
+        assert {item.intent_id for item in selected.selection.omitted} == {extra.intent_id}
+    finally:
+        harness.close()

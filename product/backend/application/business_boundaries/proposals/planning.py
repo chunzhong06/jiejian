@@ -328,6 +328,7 @@ def _plan_permissions(work: StorageUnitOfWork,
             relation=item.relation,
             expectation=item.expectation,
             protected_effect_ids=protected_ids,
+            conditions=item.conditions,
         )
         if item.write_mode is ProposalWriteMode.CREATE:
             intent_id = f"pin_{uuid4().hex}"

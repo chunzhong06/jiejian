@@ -155,6 +155,8 @@ class ApplicationCore:
         self.reference_captures=ReferenceCaptureService(self.proof_preparation,self.binding_sources)
         self.preparation.bind_interruption_reader(self.reference_captures.gaps)
         self.check_registry.bind_persistent_reader(self.proof_preparation.runtime_registration)
+        from product.backend.application.preparation.operation_flows import OperationFlowService
+        self.operation_flows=OperationFlowService(factory,self.business_boundaries,self.test_identities,var_dir=self.var_dir,clock_us=clock_us)
 
     def _configure_checks_and_workspace(self, factory, clock_us) -> None:
         """连接检查、变化、原题修复与只读工作区，使各入口共享同一事实读取者。"""
@@ -327,6 +329,10 @@ class ApplicationCore:
         self.agent_workflow = AgentWorkflowContext(projects=self.projects, rules=self.rule_candidates,
             preparation=self.preparation_guidance, batches=self.preparation_batches, recordings=self.recording_lifecycle,
             results=self.check_results, uow_factory=factory)
+        from product.backend.application.agent_access.capabilities import ProductCapabilities
+        from product.backend.application.agent_access.tasks import CollaborationTasks
+        self.agent_capabilities = ProductCapabilities(self)
+        self.collaboration = CollaborationTasks(factory, self.projects, self.agent_capabilities, clock_us=clock_us)
 
     def _validate_connections(self) -> None:
         """装配结束只核对必需端口；不执行回调，不增加启动目标或秘密访问。"""

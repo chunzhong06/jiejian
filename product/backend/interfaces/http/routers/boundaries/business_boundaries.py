@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter
 from fastapi.encoders import jsonable_encoder
-from pydantic import Field
+from pydantic import Field,ValidationError
 
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
 from product.backend.bootstrap import ApplicationCore
@@ -125,7 +125,7 @@ class BoundaryMaintenanceCreateRequest(ApiModel):
     actors: list[dict[str, object]] = Field(max_length=256)
     actions: list[dict[str, object]] = Field(max_length=512)
     permissions: list[dict[str, object]] = Field(max_length=1024)
-    provenance: str = Field(min_length=1, max_length=512)
+    provenance: str | None = Field(default=None, min_length=1, max_length=512)
 
     def to_command(self) -> BoundaryMaintenanceCommand:
         """只传 desired state；write_mode 始终由服务端维护规划器决定。"""
@@ -148,8 +148,15 @@ class BoundaryMaintenanceCreateRequest(ApiModel):
                 )
                 for item in self.permissions
             ),
-            provenance=self.provenance,
+            **({'provenance': self.provenance} if self.provenance is not None else {}),
         )
+
+
+def _request_command(body):
+    from product.backend.domain.errors import ErrorCode,JiejianError
+    try:return body.to_command()
+    except ValidationError:
+        raise JiejianError(ErrorCode.INPUT_INVALID,'请核对角色、操作和权限要求的输入') from None
 
 
 def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
@@ -160,7 +167,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
 
     @router.post(f"{prefix}/rule-preview", response_model=ApiResponse)
     def rule_preview(project_id: str, body: RulePreviewRequest):
-        return data_response(jsonable_encoder(context.rule_candidates.preview(project_id, body.to_command())))
+        return data_response(jsonable_encoder(context.rule_candidates.preview(project_id, _request_command(body))))
 
     @router.get(f"{prefix}/rules/{{intent_id}}", response_model=ApiResponse)
     def rule_details(project_id: str, intent_id: str, revision: int | None = None):
@@ -174,7 +181,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     @router.post(f"{prefix}/rule-candidates", response_model=ApiResponse, status_code=201)
     def save_rule_candidate(project_id: str, body: RuleCandidateSaveRequest):
         return data_response(jsonable_encoder(context.rule_candidates.save(
-            project_id, body.to_command(), submitted_via="LOCAL_GUI")), status_code=201)
+            project_id, _request_command(body), submitted_via="LOCAL_GUI")), status_code=201)
 
     @router.get(f"{prefix}/rule-candidates/{{candidate_id}}", response_model=ApiResponse)
     def show_rule_candidate(project_id: str, candidate_id: str, revision: int | None = None):
@@ -235,7 +242,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         return data_response(
             context.business_boundaries.create_initial_proposal(
                 project_id,
-                body.to_command(),
+                _request_command(body),
             ).model_dump(mode="json"),
             status_code=201,
         )
@@ -260,7 +267,7 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         return data_response(
             context.business_boundaries.create_maintenance_proposal(
                 project_id,
-                body.to_command(),
+                _request_command(body),
                 allow_initial=True,
             ).model_dump(mode="json"),
             status_code=201,

@@ -41,7 +41,7 @@ class IdentityRequirementSlot(BoundaryModel):
 
 class PermissionIdentitySlots(BoundaryModel):
     permission: PermissionIdentity
-    subject_slot_id: str
+    subject_slot_id: str | None
     resource_owner_slot_id: str
 
 
@@ -160,7 +160,8 @@ class IdentityRequirementPlanner:
         components: dict[tuple[str, int], list[tuple[tuple[str, str], ...]]] = defaultdict(list)
         edges: list[tuple[tuple[str, str], tuple[str, str]]] = []
         parents = {(item.intent_id, role): (item.intent_id, role)
-                   for item in ordered for role in ("subject", "owner")}
+                   for item in ordered for role in ("subject", "owner")
+                   if role == 'owner' or item.conditions is None or item.conditions.principal != 'ANONYMOUS'}
         actors = {(item.intent_id, role): actor for item in ordered for role, actor in (
             ("subject", (item.subject_actor_id, item.subject_actor_revision)),
             ("owner", (item.resource_owner_actor_id, item.resource_owner_actor_revision)),
@@ -182,6 +183,8 @@ class IdentityRequirementPlanner:
             owner = (item.intent_id, "owner")
             subject_actor = (item.subject_actor_id, item.subject_actor_revision)
             owner_actor = (item.resource_owner_actor_id, item.resource_owner_actor_revision)
+            if subject not in parents:
+                continue
             if item.relation is PermissionIntentRelation.OWNS:
                 merge(subject, owner)
             else:
@@ -190,6 +193,13 @@ class IdentityRequirementPlanner:
             if control.resolved_allow_permission is not None:
                 merge((control.deny_permission.intent_id, "owner"),
                       (control.resolved_allow_permission.intent_id, "owner"))
+        # 同一资源的同租户与跨租户场景不能复用实际主体；租户仍是属性，不另造业务角色。
+        for index, left in enumerate(ordered):
+            for right in ordered[index + 1:]:
+                if (left.conditions is not None and right.conditions is not None
+                        and {left.conditions.tenant, right.conditions.tenant} == {'SAME', 'DIFFERENT'}
+                        and root((left.intent_id, 'owner')) == root((right.intent_id, 'owner'))):
+                    edges.append(((left.intent_id, 'subject'), (right.intent_id, 'subject')))
         grouped = defaultdict(list)
         for position in sorted(parents):
             grouped[root(position)].append(position)
@@ -245,7 +255,7 @@ class IdentityRequirementPlanner:
             ) for slot_id, actor_id, revision, ordinal, required_ids in slot_specs),
             permissions=tuple(PermissionIdentitySlots(
                 permission=_permission_identity(item),
-                subject_slot_id=position_slots[(item.intent_id, "subject")],
+                subject_slot_id=position_slots.get((item.intent_id, "subject")),
                 resource_owner_slot_id=position_slots[(item.intent_id, "owner")],
             ) for item in ordered),
         )

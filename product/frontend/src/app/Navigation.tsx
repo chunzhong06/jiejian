@@ -27,6 +27,7 @@ export function normalizedPath(route:Route){
 export function pageTransitionKey(route:Route,projectId?:string){
   const path=normalizedPath(route),query=route.query
   let mode='',object=''
+  if(path==='/workspace'&&query.get('view')==='collaboration'){mode='collaboration';object=query.get('task_id')??''}
   if(path==='/permissions'){mode=query.has('proposal_id')?'review':query.has('candidate_id')?'candidate':query.has('rule_id')?'rule':'';object=query.get('proposal_id')??query.get('candidate_id')??query.get('rule_id')??''}
   if(path==='/preparation')mode=query.has('identities')?'accounts':query.has('proof_sources')||query.has('source_id')?'sources':query.get('material_kind')??''
   if(path==='/reports'||path==='/archive'){mode=query.has('run_id')?'result':query.get('view')??'';object=query.get('run_id')??query.get('change_id')??''}
@@ -51,7 +52,8 @@ export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectNa
     :current==='/preparation'?route.query.has('identities')?'测试账号':route.query.has('proof_sources')||route.query.has('source_id')?'证明来源':undefined
     :current==='/application'&&route.query.get('view')==='business'?'业务名称'
     :current==='/changes'&&route.query.get('view')==='register'?'登记修改'
-    :current==='/archive'&&route.query.has('run_id')?'报告详情':undefined
+    :current==='/archive'&&route.query.has('run_id')?'报告详情'
+    :current==='/workspace'&&route.query.get('view')==='collaboration'?'协作任务':undefined
   const global=['/environment','/tools','/storage','/system','/archive'].includes(current)||!projectName
   const parent=current==='/reports'?historyLocation(projectId):current==='/archive'?'/archive?project_id='+encodeURIComponent(route.query.get('project_id')??''):section?.path
   const levels=[{label:global?'界鉴':projectName!,href:'#'+scopedPath('/workspace',projectId)},...(current==='/archive'?[{label:'官方示例',href:'#/environment'}]:[]),...(section?[{label:section.label,href:detail&&parent?'#'+scopedPath(parent,projectId):undefined}]:[]),...(detail?[{label:detail,href:undefined}]:[])]

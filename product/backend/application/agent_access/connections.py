@@ -39,6 +39,13 @@ class AgentConnections:
     def _profile(self, client):
         return self.root / (client + '.bin')
 
+    def prepare_managed_profile(self, task_id):
+        """只生成所属任务的受保护连接文档，不修改用户的客户端配置或复制凭据。"""
+        profile = self.root / 'tasks' / (task_id + '.bin')
+        value = ConnectionProfile(client='codex', endpoint=self.access.view().endpoint, generation=uuid4().hex)
+        atomic_write(profile, self.protect(value.model_dump_json().encode()))
+        return profile
+
     def _entry(self, client):
         return {'command': str(Path(sys.executable).resolve()), 'args': ['-B', str(Path(__file__).with_name('connector.py').resolve()), '--profile', str(self._profile(client))]}
 

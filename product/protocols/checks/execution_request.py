@@ -8,7 +8,8 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from product.protocols.codec import encode_json, decode_document
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from product.protocols.checks.conditions import PermissionConditions
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
 Hash = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -49,9 +50,15 @@ class FrozenPermission(PermissionReference):
     resource_owner_actor_id: ActorId
     resource_owner_actor_revision: int = Field(ge=1)
     protected_effect_ids: tuple[EffectId, ...] = Field(min_length=1, max_length=16)
+    conditions: PermissionConditions | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def validate_semantics(self):
+        if self.conditions is not None:
+            if self.conditions.principal == 'ANONYMOUS' and self.relation != 'OTHER_ROLE':
+                raise ValueError('anonymous permission actor relation')
+            if self.conditions.tenant == 'DIFFERENT' and self.relation == 'OWNS':
+                raise ValueError('cross-tenant permission actor relation')
         same = (self.subject_actor_id, self.subject_actor_revision) == (self.resource_owner_actor_id, self.resource_owner_actor_revision)
         if self.relation in ("OWNS", "SAME_ROLE_OTHER_ACCOUNT") and not same:
             raise ValueError("permission actor relation")
@@ -107,12 +114,23 @@ class EffectProofRequirement(WireModel):
 
 
 class RecoveryReference(WireModel):
-    recording_id: Annotated[str, Field(pattern=r"^rec_[0-9a-f]{32}$")]
-    draft_revision: int = Field(ge=1)
-    draft_sha256: Hash
+    recording_id: Annotated[str, Field(pattern=r"^rec_[0-9a-f]{32}$")] | None = Field(default=None, exclude_if=lambda value:value is None)
+    draft_revision: int | None = Field(default=None, ge=1, exclude_if=lambda value:value is None)
+    draft_sha256: Hash | None = Field(default=None, exclude_if=lambda value:value is None)
+    operation_flow_id: Annotated[str, Field(pattern=r"^ofl_[0-9a-f]{32}$")] | None = Field(default=None, exclude_if=lambda value:value is None)
+    operation_flow_revision: int | None = Field(default=None, ge=1, exclude_if=lambda value:value is None)
     step_id: LogicalId
     binding_fingerprint: Hash
     request_template_fingerprint: Hash
+
+    @model_validator(mode='after')
+    def validate_origin(self):
+        recorded=(self.recording_id,self.draft_revision,self.draft_sha256)
+        edited=(self.operation_flow_id,self.operation_flow_revision)
+        if not ((all(value is not None for value in recorded) and all(value is None for value in edited))
+            or (all(value is None for value in recorded) and all(value is not None for value in edited))):
+            raise ValueError('recovery requires one complete material origin')
+        return self
 
 
 class CaseRole(StrEnum):
@@ -125,10 +143,10 @@ class ExecutionCase(WireModel):
     case_id: Annotated[str, Field(pattern=r"^case_[0-9a-f]{32}$")]
     roles: tuple[CaseRole, ...] = Field(min_length=1, max_length=2)
     permission: FrozenPermission
-    subject_test_identity_id: IdentityId
+    subject_test_identity_id: IdentityId | None
     subject_actor_id: ActorId
     subject_actor_revision: int = Field(ge=1)
-    subject_identity_fingerprint: Hash
+    subject_identity_fingerprint: Hash | None
     resource_owner_test_identity_id: IdentityId
     resource_owner_actor_id: ActorId
     resource_owner_actor_revision: int = Field(ge=1)
@@ -144,6 +162,11 @@ class ExecutionCase(WireModel):
 
     @model_validator(mode="after")
     def validate_case(self):
+        anonymous = self.permission.conditions is not None and self.permission.conditions.principal == 'ANONYMOUS'
+        if anonymous != (self.subject_test_identity_id is None and self.subject_identity_fingerprint is None):
+            raise ValueError('case principal requires either a real identity or an explicit anonymous condition')
+        if not anonymous and (self.subject_test_identity_id is None or self.subject_identity_fingerprint is None):
+            raise ValueError('authenticated case identity missing')
         if len(set(self.roles)) != len(self.roles) or tuple(sorted(self.roles)) != self.roles:
             raise ValueError("case roles must be unique and sorted")
         if (self.permission.expectation == "DENY") != (self.roles == (CaseRole.DENY_CHALLENGE,)):
@@ -188,6 +211,7 @@ class ExecutionTwin(WireModel):
     protected_effect_ids: tuple[EffectId, ...] = Field(min_length=1, max_length=16)
     invariants: TwinInvariants
     fingerprint: Hash
+    condition_difference: Literal['RESOURCE_STATE'] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def case_invariants(case):
@@ -198,6 +222,21 @@ def case_invariants(case):
         recovery_fingerprint=None if case.recovery is None else case.recovery.binding_fingerprint,
         source_fingerprint=case.source_fingerprint, config_fingerprint=case.config_fingerprint,
     )
+
+
+def conditional_resource_twin(deny, allow):
+    """仅资源前置状态允许使用不同测试数据；归属、执行及证明方法仍精确对应。"""
+    left, right = deny.permission.conditions, allow.permission.conditions
+    if (left is None or right is None or not left.resource_states or not right.resource_states
+            or set(left.resource_states).intersection(right.resource_states) or deny.resource_id == allow.resource_id):
+        return False
+    a, b = case_invariants(deny), case_invariants(allow)
+    if a.model_dump(exclude={'resource_id','proof_fingerprints'}) != b.model_dump(exclude={'resource_id','proof_fingerprints'}):
+        return False
+    def methods(case):
+        return sorted((proof.model_dump(mode='json', exclude={'resource_id','proof_fingerprint'})
+                       for proof in case.proof_requirements), key=lambda proof:(proof['effect_id'],proof['level']))
+    return methods(deny) == methods(allow)
 
 
 class ExecutionAction(WireModel):
@@ -227,7 +266,9 @@ class ExecutionAction(WireModel):
                 raise ValueError("twin selected permission")
             if deny.protected_effect_ids != allow.protected_effect_ids or deny.protected_effect_ids != twin.protected_effect_ids:
                 raise ValueError("twin effect mismatch")
-            if case_invariants(deny) != case_invariants(allow) or case_invariants(deny) != twin.invariants:
+            if (case_invariants(deny) != twin.invariants or
+                    (not conditional_resource_twin(deny, allow) if twin.condition_difference == 'RESOURCE_STATE'
+                     else case_invariants(deny) != case_invariants(allow))):
                 raise ValueError("twin invariant mismatch")
             if twin.fingerprint != content_hash("CheckTwin", twin.model_dump(mode="json", exclude={"fingerprint"})):
                 raise ValueError("twin fingerprint")
@@ -291,10 +332,34 @@ class FrozenRequirementScope(WireModel):
     revision: int = Field(ge=1)
     requirements: tuple[FrozenRequirement, ...] = Field(min_length=1, max_length=100)
 
+
+class FrozenCheckSelection(WireModel):
+    selected: tuple[PermissionReference, ...] = Field(min_length=1, max_length=4096)
+    added_controls: tuple[PermissionReference, ...] = Field(max_length=4096)
+    omitted: tuple[PermissionReference, ...] = Field(max_length=4096)
+    uncovered_requirements: tuple[str, ...] = Field(max_length=20000)
+    pending_review_ids: tuple[str, ...] = Field(max_length=20000)
+
+    @model_validator(mode="after")
+    def distinct_sets(self):
+        seen = set()
+        for name in ("selected", "added_controls", "omitted"):
+            keys = tuple((item.intent_id, item.revision, item.intent_hash) for item in getattr(self, name))
+            if tuple(sorted(set(keys))) != keys or seen.intersection(keys):
+                raise ValueError("selection references must be sorted, distinct and disjoint")
+            seen.update(keys)
+        for name in ("uncovered_requirements", "pending_review_ids"):
+            values = getattr(self, name)
+            if tuple(sorted(set(values))) != values:
+                raise ValueError("selection omissions must be sorted and unique")
+        return self
+
+
 class ExecutionRequest(WireModel):
     document_type: Literal["jiejian.execution-request"] = "jiejian.execution-request"
     schema_version: Literal["1"] = "1"
     requirement_scope: tuple[FrozenRequirementScope, ...] = Field(default=(), max_length=200)
+    selection: FrozenCheckSelection | None = None
     project_id: LogicalId
     source_fingerprint: Hash
     policy_epoch: int = Field(ge=0)
@@ -305,6 +370,14 @@ class ExecutionRequest(WireModel):
     budget_fingerprint: Hash
     change_context: ChangeContext | None = None
     repair_context: RepairContext | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_full_request_encoding(self, handler):
+        values = handler(self)
+        # 完整检查没有新增选择事实；保留已有请求字节和历史内容摘要。
+        if self.selection is None:
+            values.pop("selection", None)
+        return values
 
     @model_validator(mode="after")
     def validate_project(self):
@@ -322,6 +395,8 @@ class ExecutionRequest(WireModel):
                     (case.subject_test_identity_id, (case.subject_actor_id, case.subject_actor_revision, case.subject_identity_fingerprint)),
                     (case.resource_owner_test_identity_id, (case.resource_owner_actor_id, case.resource_owner_actor_revision, case.owner_identity_fingerprint)),
                 ):
+                    if identity_id is None:
+                        continue
                     if identities.setdefault(identity_id, facts) != facts:
                         raise ValueError("cross case identity facts")
         # 完整执行快照只来自无 gap 的纯计划；独立重算内容身份，不依赖 backend 编译器。
@@ -341,13 +416,30 @@ class ExecutionRequest(WireModel):
     @model_validator(mode='after')
     def requirements_match_cases(self):
         facts = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash) for action in self.actions for case in action.cases}
+        uncovered = []
         for scope in self.requirement_scope:
             for item in scope.requirements:
                 linked = {(ref.intent_id, ref.revision, ref.intent_hash) for ref in item.permissions}
                 if item.disposition == 'IN_SCOPE' and (not linked or not linked <= facts or item.time_scope == 'HISTORY'):
-                    raise ValueError('frozen requirement is not covered by current cases')
+                    uncovered.append(f"{scope.candidate_id}@{scope.revision}/{item.requirement_id}")
                 if item.disposition != 'IN_SCOPE' and linked:
                     raise ValueError('outside requirement must not claim checked rules')
+        if self.selection is None:
+            if uncovered:
+                raise ValueError('frozen requirement is not covered by current cases')
+        else:
+            selection = self.selection
+            keys = lambda values: {(item.intent_id, item.revision, item.intent_hash) for item in values}
+            if self.change_context is not None or self.repair_context is not None:
+                raise ValueError("original-case revalidation cannot narrow its scope")
+            if keys(selection.selected) | keys(selection.added_controls) != facts:
+                raise ValueError("selected scope does not match executed cases")
+            controls = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash)
+                        for action in self.actions for case in action.cases if CaseRole.ALLOW_CONTROL in case.roles}
+            if not keys(selection.added_controls) <= controls:
+                raise ValueError("automatically added rules must be normal controls")
+            if tuple(sorted(uncovered)) != selection.uncovered_requirements:
+                raise ValueError("uncovered business requirements must remain explicit")
         return self
 
 

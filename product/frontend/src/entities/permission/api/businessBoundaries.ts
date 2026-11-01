@@ -50,6 +50,7 @@ export type ProposedActionDto = {
   effect_catalog: ProposedEffectDto[]
   effective_state: 'ACTIVE' | 'RETIRED'
 }
+export type PermissionConditions = {principal: 'AUTHENTICATED' | 'ANONYMOUS'; tenant: 'SAME' | 'DIFFERENT' | null; resource_states: string[]}
 export type ProposedPermissionDto = {
   item_id: string
   write_mode: 'CREATE' | 'REFERENCE' | 'APPEND_REVISION'
@@ -62,6 +63,7 @@ export type ProposedPermissionDto = {
   relation: 'OWNS' | 'SAME_ROLE_OTHER_ACCOUNT' | 'OTHER_ROLE'
   expectation: 'ALLOW' | 'DENY'
   protected_effect_item_ids: string[]
+  conditions?: PermissionConditions | null
 }
 export type BoundaryProposalCommandDto = {
   proposed_actors: ProposedActorDto[]
@@ -90,6 +92,7 @@ export type BoundaryProposalViewDto = {
   review?: BoundaryProposalReviewDto | null
 }
 export type BoundaryReviewValueDto = {
+  conditions?: PermissionConditions | null
   display_name: string; description: string; effective_state: string
   resource_concept: string | null; operation_kind: string | null; state_changing: boolean | null
   effects: Array<Omit<ProposedEffectDto, 'item_id' | 'effect_id'>>
@@ -133,6 +136,8 @@ export type BusinessActionRevisionDto = {
   effective_state: 'ACTIVE' | 'RETIRED'
 }
 export type PermissionIntentRevisionDto = {
+  conditions?: PermissionConditions | null
+  intent_hash?: string
   intent_id?: string
   revision?: number
   subject_actor_id: string
@@ -192,7 +197,7 @@ export type BoundaryMaintenanceCommandDto = {
   actors: BoundaryMaintenanceActorDto[]
   actions: BoundaryMaintenanceActionDto[]
   permissions: BoundaryMaintenancePermissionDto[]
-  provenance: string
+  provenance?: string
 }
 export type BoundaryMaintenanceDraftDto = Omit<BoundaryMaintenanceCommandDto, 'expected_boundary_state_fingerprint' | 'provenance'> & {
   project_id: string

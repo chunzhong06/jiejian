@@ -19,7 +19,8 @@ from playwright.sync_api import (
 )
 
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.domain.identities.models import TestIdentityAuthMethod
+from product.backend.domain.identities.models import TestIdentityAuthMethod, IdentityVerificationSnapshot
+from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.infrastructure.execution.web.adapter import WebTargetGuard
 from product.backend.infrastructure.recording.transport import BoundedRouteTransport
 from product.backend.infrastructure.secrets import SecretStore, credential_ref
@@ -57,7 +58,7 @@ class IdentityPreparationBrowserAdapter:
         requests_used = 0
         try:
             playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(headless=headless)
+            browser = playwright.chromium.launch(headless=headless or request.verify_only)
             context = browser.new_context(
                 accept_downloads=False,
                 service_workers="block",
@@ -98,8 +99,31 @@ class IdentityPreparationBrowserAdapter:
 
             context.route("**/*", route_request)
             context.route_web_socket("**/*", lambda route: route.close())
+            if request.verify_only:
+                self._restore_session(request,context,secret_store,bearer_tokens)
             page = context.new_page()
-            page.goto(request.target_scope.base_url)
+            origin = request.target_scope.allowed_origins[0]
+            profile = request.authentication
+            if request.verify_only:
+                if bearer_tokens:context.set_extra_http_headers({'Authorization':'Bearer '+next(iter(bearer_tokens))})
+                status,body=0,None
+                try:
+                    response=page.goto(origin+profile.verification.path)
+                    status=response.status
+                    try:body=response.json()
+                    except (ValueError,PlaywrightError):pass
+                except PlaywrightError:pass
+                snapshot = self._verify(request,page,bearer_tokens,clock(),request.session_prepared_at_us,response={'status':status,'body':body})
+                if safety_error is not None:raise safety_error
+                return IdentityPreparationResult(schema_version='1',preparation_id=request.preparation_id,
+                    project_id=request.project_id,identity_id=request.identity_id,
+                    result_type=IdentityPreparationResultType.CHECKED,verification=snapshot)
+            if profile and profile.method != 'BROWSER_SESSION':
+                page.route(origin+'/__jiejian_auth_input__',lambda route:route.fulfill(status=200,content_type='text/html',body='<html lang="zh-CN"></html>'))
+                page.goto(origin+'/__jiejian_auth_input__')
+                self._credential_form(page,profile.method)
+            else:
+                page.goto(origin+(profile.login_path if profile else '/'))
             ready_callback()
             if interaction is not None:
                 interaction(page)
@@ -119,15 +143,22 @@ class IdentityPreparationBrowserAdapter:
                 page.wait_for_timeout(100)
             if safety_error is not None:
                 raise safety_error
-            return self._capture_login_state(
+            if profile and profile.method != 'BROWSER_SESSION':
+                self._submit_credentials(request,page,context,bearer_tokens)
+            prepared_at = clock()
+            snapshot = self._verify(request,page,bearer_tokens,clock(),prepared_at) if profile else None
+            if safety_error is not None:
+                raise safety_error
+            result = self._capture_login_state(
                 request,
                 context,
                 bearer_tokens,
                 secret_store,
-                prepared_at_us=clock(),
+                prepared_at_us=prepared_at,
                 before_secret_write=before_secret_write,
                 error_observer=error_observer,
             )
+            return result.model_copy(update={'verification':snapshot}) if result.result_type is IdentityPreparationResultType.PREPARED else result
         except PlaywrightError as exc:
             observed: BaseException = safety_error or exc
             if error_observer is not None:
@@ -148,6 +179,90 @@ class IdentityPreparationBrowserAdapter:
             return self._failed(request, ErrorCode.IDENTITY_PREPARATION_FAILED.value)
         finally:
             self._close(playwright, browser, context)
+
+    @staticmethod
+    def _restore_session(request,context,store,tokens):
+        cookies=[]
+        for cookie in request.existing_cookies:
+            value=store.read(cookie.value_secret_ref)
+            if value is None:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'会话凭据不可用')
+            item=dict(name=cookie.name,value=value,domain=cookie.domain,path=cookie.path,
+                secure=cookie.secure,httpOnly=cookie.http_only,sameSite=cookie.same_site.capitalize())
+            if cookie.expires_at_us is not None:
+                item['expires']=cookie.expires_at_us/1_000_000
+            cookies.append(item)
+        if cookies:
+            context.add_cookies(cookies)
+        if request.existing_bearer_ref:
+            token=store.read(request.existing_bearer_ref)
+            if token is None:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'会话凭据不可用')
+            tokens.add(token)
+
+    @staticmethod
+    def _credential_form(page,method):
+        # 输入只存在于独立浏览器内存；控制面、进程协议及日志不接收秘密值。
+        title='输入访问令牌' if method=='BEARER' else '登录应用'
+        inputs='<label>访问令牌<input id="token" type="password" autocomplete="off"></label>' if method=='BEARER' else '<label>账号<input id="username" autocomplete="off"></label><label>密码<input id="password" type="password" autocomplete="off"></label>'
+        page.set_content('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+title+'</title><style>body{font:16px system-ui;background:#eef2f7;color:#202a3b;margin:0;display:grid;place-items:center;min-height:100vh}main{background:white;border:1px solid #d7dfea;border-radius:20px;padding:40px;width:min(420px,75vw)}h1{font-size:24px}label{display:grid;gap:8px;margin:24px 0}input{font:inherit;border:1px solid #8798b1;border-radius:8px;padding:12px}p{color:#56677f;line-height:1.6}</style><main><h1>'+title+'</h1>'+inputs+'<p>填写后返回界鉴，选择“我已完成登录”。秘密只用于本次登录。</p></main></html>')
+
+    @staticmethod
+    def _submit_credentials(request,page,context,tokens):
+        profile=request.authentication
+        if profile.method=='BEARER':
+            token=page.locator('#token').input_value()
+            page.locator('#token').fill('')
+            if not token or len(token.encode())>_CREDENTIAL_SECRET_MAX_BYTES or any(ord(char)<33 or ord(char)==127 for char in token):
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'令牌为空或格式不支持')
+            context.clear_cookies()
+            tokens.add(token)
+            return
+        credentials={profile.username_field:page.locator('#username').input_value(),profile.password_field:page.locator('#password').input_value()}
+        page.locator('#username').fill('')
+        page.locator('#password').fill('')
+        response=page.evaluate('''async ({url,credentials})=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentials),redirect:'error'});return {status:r.status,body:await r.json().catch(()=>null)}}''',dict(url=request.target_scope.allowed_origins[0]+profile.login_path,credentials=credentials))
+        credentials.clear()
+        if not 200<=response['status']<300:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'应用未接受本次登录')
+        token=response['body']
+        for key in profile.token_path:
+            token=token.get(key) if isinstance(token,dict) else None
+        if isinstance(token,str) and token:
+            if len(token.encode())>_CREDENTIAL_SECRET_MAX_BYTES or any(ord(char)<33 or ord(char)==127 for char in token):
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'登录接口返回的令牌格式不支持')
+            context.clear_cookies()
+            tokens.add(token)
+
+    @staticmethod
+    def _verify(request,page,tokens,checked_at,prepared_at,*,response=None):
+        config=request.authentication.verification
+        headers={'Authorization':'Bearer '+next(iter(tokens))} if len(tokens)==1 else {}
+        if response is None:
+            response=page.evaluate('''async ({url,headers})=>{try{const r=await fetch(url,{headers,redirect:'error'});return {status:r.status,body:await r.json().catch(()=>null)}}catch{return {status:0,body:null}}}''',dict(url=request.target_scope.allowed_origins[0]+config.path,headers=headers))
+        status='UNAVAILABLE'
+        subject=role=None
+        if response['status'] in (401,403):
+            status='AUTH_EXPIRED'
+        elif 200<=response['status']<300:
+            def field(path):
+                value=response['body']
+                for key in path:
+                    value=value.get(key) if isinstance(value,dict) else None
+                return value
+            actual_subject,actual_role=field(config.subject_path),field(config.role_path)
+            if actual_subject is None or actual_role is None:
+                status='FIELD_MISSING'
+            elif actual_subject!=config.expected_subject:
+                status='SUBJECT_MISMATCH'
+            elif actual_role!=config.expected_role:
+                status='ROLE_MISMATCH'
+            else:
+                status='VERIFIED'
+                subject,role=config.expected_subject,config.expected_role
+        return IdentityVerificationSnapshot(status=status,checked_at_us=checked_at,
+            origin=request.target_scope.allowed_origins[0],profile_fingerprint=boundary_sha256(request.authentication.model_dump(mode='json')),
+            session_prepared_at_us=prepared_at,subject=subject,role=role)
 
     def _capture_login_state(
         self,

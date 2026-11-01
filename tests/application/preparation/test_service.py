@@ -53,27 +53,43 @@ def test_missing_materials_never_become_complete_and_read_only_needs_no_recovery
         assert all(impact.member_label for impact in result.impacts if impact.kind == 'identity')
 
 
-def test_prepared_priority_stable_older_identity_and_live_reinspection():
+def test_identity_assignment_keeps_creation_order_and_reinspects_availability():
     old = _identity(100, created=10)
     new = _identity(1, created=20)
     unprepared = _identity(2, status=IdentityStatus.NOT_PREPARED, created=1)
     stale = _identity(3, status=IdentityStatus.NEEDS_REVIEW, created=1)
     wrong_revision = _identity(4, actor_revision=2, created=1)
-    service, state = _service(identities=(unprepared, old, stale, wrong_revision))
+    service, state = _service(identities=(old, wrong_revision))
     first = service.get(PROJECT).actions[0]
     assert first.identity_requirements.slots[0].test_identity_id == old.identity_id
     state.identities += (new,)
     second = service.get(PROJECT).actions[0]
     assert second.identity_requirements == first.identity_requirements
-    state.identities = (unprepared, stale, wrong_revision)
+    state.identities = (unprepared, old, wrong_revision)
     third = service.get(PROJECT).actions[0]
     assert third.identity_requirements.slots[0].test_identity_id == unprepared.identity_id
     assert third.identity_requirements.status is PreparationStatus.NEEDS_USER
     assert third.assurance_contract_fingerprint == first.assurance_contract_fingerprint
     state.identities = (stale, wrong_revision)
     last = service.get(PROJECT).actions[0]
-    assert last.identity_requirements.slots[0].test_identity_id is None
+    assert last.identity_requirements.slots[0].test_identity_id == stale.identity_id
     assert last.identity_requirements.slots[0].status is PreparationStatus.STALE
+
+
+def test_expired_identity_stays_in_its_slot_and_cannot_be_replaced_by_ready_peer():
+    owner, peer = _identity(1, created=10), _identity(2, created=20)
+    service, state = _service(identities=(owner, peer), relation=PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT)
+    before = service.get(PROJECT).actions[0]
+    state.identities = (owner.model_copy(update={'status': IdentityStatus.NEEDS_REVIEW}), peer)
+    after = service.get(PROJECT).actions[0]
+    assert [item.test_identity_id for item in after.identity_requirements.slots] == [
+        item.test_identity_id for item in before.identity_requirements.slots]
+    expired = next(item for item in after.identity_requirements.slots if item.test_identity_id == owner.identity_id)
+    assert expired.status is PreparationStatus.STALE
+    assert expired.reason_codes == ('TEST_IDENTITY_REVIEW_REQUIRED',)
+    assert not after.preparation_complete
+    assert [(item.owner_slot_id, item.owner_test_identity_id) for item in after.resources] == [
+        (item.owner_slot_id, item.owner_test_identity_id) for item in before.resources]
 
 
 def test_distinct_slots_cannot_reuse_one_test_identity_and_resources_follow_owner():

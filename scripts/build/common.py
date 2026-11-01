@@ -17,6 +17,14 @@ FORBIDDEN_PARTS = frozenset({".git", ".pytest_cache", "__pycache__", "node_modul
 TEXT_SUFFIXES = frozenset({".cfg", ".cmd", ".ini", ".json", ".pth", ".ps1", ".py", ".toml", ".txt"})
 
 
+def excluded_from_release(relative: Path, *, allow_node_npm: bool = False) -> bool:
+    parts = relative.parts
+    # 唯一例外是固定 Node 自带 npm；样例和其他目录不能借此带入项目依赖。
+    npm = allow_node_npm and (parts == ('runtime', 'node', 'node_modules') or parts[:4] == ('runtime', 'node', 'node_modules', 'npm'))
+    forbidden = FORBIDDEN_PARTS - {'node_modules'} if npm else FORBIDDEN_PARTS
+    return any(part.casefold() in forbidden for part in parts) or relative.suffix.lower() in {'.pyc', '.pyo'}
+
+
 def inside(path: Path, parent: Path) -> bool:
     try:
         path.resolve().relative_to(parent.resolve())

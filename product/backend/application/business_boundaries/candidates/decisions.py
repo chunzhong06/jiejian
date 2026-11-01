@@ -89,6 +89,7 @@ def pending_scenario_issues(states, conflicts):
 
 
 def selected_permission_issues(permissions):
+    from product.protocols.checks.conditions import permission_conditions_overlap
     active = [item for item in permissions if item.effective_state.value == "ACTIVE"]
     if any(not permission_relation_consistent(item.relation, (item.subject_actor_item_id, 1),
         (item.resource_owner_actor_item_id, 1)) for item in active):
@@ -103,9 +104,10 @@ def selected_permission_issues(permissions):
     for item in active:
         for effect in item.protected_effect_item_ids:
             key = (item.subject_actor_item_id, item.resource_owner_actor_item_id, item.relation, item.business_action_item_id, effect)
-            if key in cells and cells[key] != item.expectation:
+            if any(previous.expectation != item.expectation and permission_conditions_overlap(previous.conditions, item.conditions)
+                   for previous in cells.get(key, ())):
                 return [{"code": "CHOICES_CONFLICT", "message": "同一情境同时出现允许和禁止要求，请重新整理。"}]
-            cells[key] = item.expectation
+            cells.setdefault(key, []).append(item)
     return []
 
 

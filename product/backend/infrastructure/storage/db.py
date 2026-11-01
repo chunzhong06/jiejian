@@ -17,7 +17,7 @@ from product.backend.infrastructure.storage.base import Base
 from product.backend.infrastructure.storage.schema import sqlite_schema_signature
 from product.backend.infrastructure.storage.workspace import (
     WORKSPACE_FORMAT, WORKSPACE_GENERATION, WorkspaceSchemaRow,
-    current_schema_digest, require_workspace,
+    current_schema_digest, require_workspace,workspace_matches,
 )
 from product.backend.migrations.runtime import MigrationHistory, migration_config, migration_resources
 
@@ -156,8 +156,8 @@ def _upgrade_supported_workspace(path: Path, root: Path, history: MigrationHisto
                 config = migration_config(root, path)
                 config.attributes["connection"] = connection
                 command.upgrade(config, history.head)
-                if raw.execute("PRAGMA foreign_key_check").fetchone() is not None:
-                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "工作区关联核验失败；升级已回滚")
+                if not workspace_matches(raw,history.head):
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "升级结果与当前结构不一致；升级已回滚")
                 connection.commit()
             except BaseException:
                 connection.rollback()

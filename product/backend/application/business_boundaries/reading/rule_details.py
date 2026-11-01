@@ -64,7 +64,7 @@ class BusinessRuleDetails:
             break
         resource_owner = '自己' if rule.relation.value=='OWNS' else f'另一个{owner.display_name}账号' if rule.relation.value=='SAME_ROLE_OTHER_ACCOUNT' else owner.display_name
         return dict(project_id=project_id,intent_id=intent_id,revision=rule.revision,current=current is not None,
-            expectation=rule.expectation.value,action_id=action.action_id,action_revision=action.revision,action_label=action.display_name,
+            expectation=rule.expectation.value,conditions=None if rule.conditions is None else rule.conditions.model_dump(mode='json'),action_id=action.action_id,action_revision=action.revision,action_label=action.display_name,
             sentence=f'{subject.display_name}对{resource_owner}拥有的资源，'+('可以' if rule.expectation.value=='ALLOW' else '不得')+action.display_name+'。',
             effects=[dict(effect_id=item.effect_id,label=item.business_label,description=item.description) for item in action.effect_catalog if item.effect_id in rule.protected_effect_ids],
             approval=rule.approval.model_dump(mode='json'),candidate_mappings=candidate_mappings,materials=materials,

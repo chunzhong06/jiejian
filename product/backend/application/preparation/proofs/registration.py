@@ -24,7 +24,7 @@ def runtime_registration(project_id, sources):
             observation_identity_id=source.config.observation_identity_id,source_label='应用业务记录',
             source_location=source.config.relative_path_template.lstrip('/').replace('{resource_id}','resource'),
             closure_supported=True,resource_correlation_supported=True,exclusive_resource_window=False,
-            created_resource_supported=source.config.source_kind=='CREATED_OBJECT_RECORDS'))
+            created_resource_supported=source.config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}))
         windows[resource.binding_fingerprint] = RegisteredResourceWindow(binding_fingerprint=resource.binding_fingerprint,
             exclusive_resource_window=False)
     # 正式执行沿用用户已接受录制的目标范围与预算；预检查的较小请求预算不能扩大它。

@@ -52,6 +52,8 @@ export function actual(effect:ActionResultStory['fact_comparison']['effects'][nu
   return known?known[state==='CONFIRMED'?0:state==='ABSENT'?1:2]:state==='CONFIRMED'?`已确认：${text(effect.business_label)}`:state==='ABSENT'?`本次未观察到“${text(effect.business_label)}”`:`尚不能确认“${text(effect.business_label)}”`
 }
 export function gaps(action:ActionResultStory){const comparison=action.fact_comparison
+  if(action.reason_codes?.includes('PERMISSION_CONDITION_MISMATCH'))return ['执行前读取的身份、租户或数据状态不符合这条规则，请重新选择对应样本。本项未执行目标操作。']
+  if(action.reason_codes?.includes('PERMISSION_CONDITION_UNKNOWN'))return ['未能确认规则所需的身份、租户或数据状态，请补齐条件的判断依据。本项未执行目标操作。']
   const values=(action.proof_coverage??[]).filter(item=>item.required_level==='VERDICT_REQUIRED'&&item.observed_state==='UNKNOWN').flatMap(item=>item.limitations.length?item.limitations:[`缺少“${text(item.business_label)}”的有效记录。`])
   if(comparison.verified_actual_identity.verification_status!=='MATCH')values.push(comparison.verified_actual_identity.verification_status==='MISMATCH'?'实际操作账号与计划不一致。':'未确认实际操作账号。')
   if(!comparison.http_surface.run_correlated)values.push('记录尚未与本次请求对应。')

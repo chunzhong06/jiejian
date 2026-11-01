@@ -143,7 +143,21 @@ class CheckExecutor:
                 if not baseline:
                     self._stop("BASELINE_INTEGRITY_INVALID", "BASELINE")
                 else:
-                    execution_fact, response, identity = self.web.execute_flow(configured, case, verify_identity=True)
+                    def before_target(actual_identity):
+                        if case.permission.conditions is None:
+                            return
+                        from product.protocols.checks.conditions import collected_conditions_status
+                        if actual_identity != 'MATCH':
+                            raise JiejianError('PERMISSION_CONDITION_UNKNOWN', '执行前未能确认实际主体')
+                        # 在 SETUP 后读取条件，不能把较早的资源状态当成 TARGET 当时的状态。
+                        values = self._observe(configured, case, 'BEFORE', baseline=True)
+                        observations.extend(item.observation for item in values)
+                        if tuple(item.baseline_projection for item in values) != original:
+                            raise JiejianError('BASELINE_INTEGRITY_INVALID', '准备步骤改变了待检查的数据，尚未执行检查操作')
+                        status = collected_conditions_status(case.permission.conditions, self._condition_facts(case))
+                        if status != 'MATCH':
+                            raise JiejianError('PERMISSION_CONDITION_' + status, '当前数据不满足这条规则的检查条件')
+                    execution_fact, response, identity = self.web.execute_flow(configured, case, verify_identity=True, before_target=before_target)
                     execution, status = execution_fact.outcome.value, response.status_code
                     after = (*self._observe(configured, case, "AFTER", baseline=True),
                         *self._observe_auxiliary(configured, case, "AFTER"))
@@ -158,7 +172,8 @@ class CheckExecutor:
             except JiejianError as exc:
                 identity = self.web.actual_identity_status(case.case_id)
                 execution = "UNKNOWN"
-                self._stop(exc.code, "EXECUTION")
+                if not exc.code.startswith('PERMISSION_CONDITION_'):
+                    self._stop(exc.code, "EXECUTION")
                 # 传输失败也可能已经产生业务效果；仍用本 Case 的合法观察来源采证。
                 if self.web.target_attempted(case.case_id):
                     after = (*self._observe(configured, case, "AFTER", baseline=baseline, cleanup=True),
@@ -189,11 +204,11 @@ class CheckExecutor:
         evidence_fields = dict(business_facts=facts, fact_references=references)
         outcome = CheckCaseOutcome(execution_outcome=execution, http_status=status,
             actual_identity_status=identity, baseline_trusted=baseline, recovery_verified=recovered,
-            run_correlated=correlated, resource_correlated=correlated)
+            run_correlated=correlated, resource_correlated=correlated, condition_observations=self._condition_facts(case))
         decision = evaluate_check_case(CheckDecisionInput(case=case, execution=execution, actual_identity=identity,
             run_correlated=correlated, resource_correlated=correlated, baseline_trusted=baseline,
             recovery_verified=recovered, allow_control_verdict=allow_verdict,
-            effects=project_check_effect_facts(case, observations)))
+            effects=project_check_effect_facts(case, observations), condition_observations=outcome.condition_observations))
         document = seal_check_evidence(run_id=self.input.run_id, job_id=self.input.job_id,
             attempt=self.input.attempt, action_id=action.action_id, action_revision=action.action_revision,
             request_hash=self.input.request_hash, config_hash=self.input.config_hash, case=case,
@@ -202,6 +217,10 @@ class CheckExecutor:
         result = CheckCaseResult(case_id=case.case_id, action_id=action.action_id, verdict=decision.verdict,
             reason_codes=decision.reason_codes, evidence_ids=(document.evidence_id,), outcome=outcome)
         return result, document
+
+    def _condition_facts(self, case):
+        return tuple(value for (case_id, _), value in sorted(self.observers.condition_observations.items())
+                     if case_id == case.case_id)
 
     def _trusted_terminal_completion(self, action, case, identity, eventual):
         """只接受冻结绑定对应的本 Case 终态；失配或冲突不能被任意一个 True 覆盖。"""
@@ -228,6 +247,11 @@ class CheckExecutor:
         return True
 
     def _observe(self, action, case, phase, *, baseline, cleanup=False):
+        if phase in {'BASELINE', 'BEFORE'}:
+            # 每轮读取独立成立；失败的 BEFORE 不得复用较早 BASELINE 的条件事实。
+            self.observers.condition_observations = {
+                key: value for key, value in self.observers.condition_observations.items()
+                if key[0] != case.case_id}
         sources = {item.binding_fingerprint: item for item in action.proofs}
         observed = []
         for requirement in case.proof_requirements:

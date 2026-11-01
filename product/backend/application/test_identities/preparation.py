@@ -19,7 +19,7 @@ from product.backend.infrastructure.runtime.jobs.events import append_job_event
 from product.backend.infrastructure.runtime.jobs.models import JobEventType, RequestCancellation
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.backend.infrastructure.storage import JobRecord
-from product.protocols.preparation.test_identity_preparation import IdentityPreparationRequest, canonical_identity_preparation_json_bytes
+from product.protocols.preparation.test_identity_preparation import IdentityPreparationRequest, PreparedCookieRef, canonical_identity_preparation_json_bytes, parse_identity_preparation_request
 from product.protocols.web.target import WebTargetScope
 
 
@@ -45,12 +45,12 @@ class IdentityPreparationManager:
     def source(self, identity):
         return preparation_source(identity, self._understanding.get(identity.project_id), self._boundaries.view(identity.project_id))
 
-    def start(self, identity_id, *, operation_id=None):
+    def start(self, identity_id, *, operation_id=None, verify_only=False):
         # 重试须复用 operation_id，回读原任务的当前状态，包括已完成或已取消的状态。
         # 开始新一轮登录应使用新标识；同一账号仍有活动任务时继续返回原任务。
-        return self._start(identity_id, operation_id=operation_id)
+        return self._start(identity_id, operation_id=operation_id,verify_only=verify_only)
 
-    def _start(self, identity_id, *, operation_id=None, official_account=None):
+    def _start(self, identity_id, *, operation_id=None, official_account=None,verify_only=False):
         operation = operation_id or uuid4().hex
         if not re.fullmatch(r'[0-9a-f]{32}', operation):
             raise JiejianError(ErrorCode.INPUT_INVALID, '登录操作标识格式无效')
@@ -59,18 +59,25 @@ class IdentityPreparationManager:
         with self._uow() as work:
             existing = work.identity_preparations.get(preparation_id)
         if existing is not None:
-            if existing['official_account'] != official_account:
+            if existing['official_account'] != official_account or parse_identity_preparation_request(existing['request_json'].encode()).verify_only != verify_only:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '登录操作内容与原请求不一致')
             return self.status(preparation_id)
         identity = self._identities.get(identity_id)
-        if identity.status is not TestIdentityStatus.NOT_PREPARED:
+        if not verify_only and identity.status is not TestIdentityStatus.NOT_PREPARED:
             raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, '请先核对或重置当前登录状态')
+        record=self._identities.get_record(identity_id)
+        if verify_only and (record.auth_method is None or record.authentication is None):
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'请先保存会话并配置身份核验')
         endpoint, source = self.source(identity)
         parsed = urlsplit(endpoint)
         port = parsed.port or (443 if parsed.scheme == 'https' else 80)
         origin = f'{parsed.scheme}://{parsed.hostname}:{port}'
         request = IdentityPreparationRequest(schema_version='1', preparation_id=preparation_id,
             project_id=identity.project_id, identity_id=identity_id,
+            authentication=record.authentication,verify_only=verify_only,
+            existing_cookies=tuple(PreparedCookieRef(**item.model_dump()) for item in record.cookies) if verify_only else (),
+            existing_bearer_ref=record.bearer_secret_ref if verify_only else None,
+            session_prepared_at_us=record.prepared_at_us if verify_only else None,
             target_scope=WebTargetScope(base_url=origin, allowed_origins=(origin,),
                 allowed_hosts=(parsed.hostname,), allowed_ports=(port,), allow_private_network=True,
                 follow_redirects=False, timeout_seconds=10.0, max_requests=256, max_response_bytes=1_048_576))
@@ -90,7 +97,7 @@ class IdentityPreparationManager:
             if existing is not None:
                 return self._view(existing, work.jobs.get(existing['job_id']))
             current = work.test_identities.get(identity_id)
-            if current is None or current.auth_method is not None or current.updated_at_us != identity.updated_at_us:
+            if current is None or not verify_only and current.auth_method is not None or current.updated_at_us != identity.updated_at_us:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '账号条件已变化，请重新核对')
             raw = canonical_identity_preparation_json_bytes(request).decode('utf-8')
             digest = boundary_sha256({'request': json.loads(raw), 'source': source, 'generation': generation, 'official_account': official_account})
@@ -160,9 +167,12 @@ class IdentityPreparationManager:
         messages = {'STARTING': '正在打开登录窗口', 'WAITING_FOR_LOGIN': '在登录窗口完成登录后，回到这里保存',
             'SAVING': '正在保存登录状态', 'CANCELLING': '正在停止并清理', 'PREPARED': '登录已保存',
             'FAILED': '登录已中断，请核对原任务后重新登录', 'CANCELLED': '本次登录已取消', 'UNSUPPORTED': '当前登录方式暂不支持安全保存'}
+        verify = parse_identity_preparation_request(row['request_json'].encode()).verify_only
+        if verify:
+            messages = {**messages,'STARTING':'正在核验已保存会话的实际身份','PREPARED':'身份核验已完成','FAILED':'身份核验未完成，请查看账号状态','CANCELLED':'本次核验已取消'}
         return IdentityPreparationView(preparation_id=row['preparation_id'], identity_id=row['identity_id'],
             project_id=row['project_id'], job_id=job.job_id, status=IdentityPreparationStatus(phase),
-            message=messages[phase], error_code=row['error_code'], cleanup_required=cleanup_required)
+            message=messages[phase], error_code=row['error_code'], cleanup_required=cleanup_required,purpose='VERIFY' if verify else 'LOGIN')
 
     def confirm(self, preparation_id):
         # 此处只持久化保存意图；Worker 观察该意图后才通知浏览器采集受控登录状态。

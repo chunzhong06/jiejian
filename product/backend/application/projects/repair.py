@@ -82,6 +82,8 @@ class CurrentProjectRepairService:
             return references_by_change[change_id]
         by_reference = {contract.reference().model_dump_json(): family
             for (family, _), contract in discoveries.items()}
+        contracts_by_reference = {contract.reference().model_dump_json(): contract
+            for contract in discoveries.values()}
         family_history = {family: [] for family in families}
         discovery_runs = {run_id for _, run_id in discoveries}
         case_families = {}
@@ -131,6 +133,16 @@ class CurrentProjectRepairService:
                 request = package.request if package is not None else self._pending_request_reader(entry.run.run_id)
                 change_context = None if request is None else request.change_context
                 references, targets = ((), ()) if change_context is None else references_for(change_context.change_id)
+                if change_context is not None and contract.reference() not in references:
+                    # 同一未解决问题可能重复发现；接受明确关联的新原题，保留首次发现，
+                    # 且必须证明判断标准与正常对照相同，不能按“最近一次通过”关闭旧问题。
+                    for reference in references:
+                        candidate = contracts_by_reference.get(reference.model_dump_json())
+                        if (candidate is not None and by_reference[reference.model_dump_json()] == family
+                            and _same_conditions(contract, candidate)
+                            and (request.repair_context == repair_context(candidate) or reference in targets)):
+                            contract = candidate
+                            break
                 linked = (change_context is not None and contract.reference() in references
                     and (request.repair_context == repair_context(contract) or contract.reference() in targets))
                 if linked:

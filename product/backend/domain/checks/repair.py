@@ -22,10 +22,10 @@ class RepairCaseIdentity(WireModel):
     action_revision: int = Field(ge=1)
     action_semantic_fingerprint: Hash
     permission: FrozenPermission
-    subject_test_identity_id: IdentityId
+    subject_test_identity_id: IdentityId | None
     subject_actor_id: ActorId
     subject_actor_revision: int = Field(ge=1)
-    subject_identity_fingerprint: Hash
+    subject_identity_fingerprint: Hash | None
     resource_owner_test_identity_id: IdentityId
     resource_owner_actor_id: ActorId
     resource_owner_actor_revision: int = Field(ge=1)
@@ -80,7 +80,9 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
             config['protected_projection']=sorted(config.get('protected_projection',()))
             identities_used=[]
             for claim in claims:
-                actual=identities[claim['identity_id']]
+                actual=identities.get(claim['identity_id'])
+                if actual is None:
+                    continue
                 if actual.verification is None:raise ValueError('repair identity standard missing')
                 identities_used.append(dict(claim=claim,verification=actual.verification.model_dump(mode='json'),role=source.identity_roles[claim['identity_id']]))
             if source.config.source_kind=='REFERENCE_FILE' and source.config.reference_artifact is None:

@@ -61,7 +61,7 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
             action, case = source_cases[requirement.source_case_id]
             before = source_results[requirement.source_case_id]
             config = configs[action.action_id]
-            subject = identities[case.subject_test_identity_id]
+            subject = identities.get(case.subject_test_identity_id)
             owner = identities[case.resource_owner_test_identity_id]
         except KeyError:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "原题修复要求无法从已发布事实重建") from None
@@ -74,7 +74,7 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
         match_status = ("NOT_AVAILABLE" if not available else "AMBIGUOUS" if len(matches) > 1
                         else "MATCHED" if after is not None else "NOT_FOUND")
         rows.append(RepairComparisonRow(role=role, source_case_id=case.case_id,
-            action_label=config.display_name, subject_label=subject.label, resource_owner_label=owner.label,
+            action_label=config.display_name, subject_label='未登录访客' if subject is None else subject.label, resource_owner_label=owner.label,
             resource_id=case.resource_id, effect_labels=tuple(labels), before_verdict=before.verdict,
             before_evidence_refs=before.evidence_ids, after_run_id=current.result.run_id if available else None,
             after_case_id=None if after is None else after.case_id,

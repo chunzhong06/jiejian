@@ -6,9 +6,10 @@ export type ProofConfig = {
   action_id: string; action_revision: number; effect_id: string; observation_identity_id: string
   resource_binding_id: string; read_scope_id: string | null; relative_path_template: string
   mappings: Record<string, string[]>; target_operation_path: string[]; source_contract_id: string
-  identity_claims: Array<{identity_id: string; application_subject_id: string; request_path?: string; subject_path?: string[]; role_path?: string[]; application_role?: string}>; source_files: string[]
+  identity_claims: Array<{identity_id: string; application_subject_id: string; request_path?: string; subject_path?: string[]; role_path?: string[]; tenant_path?: string[] | null; application_role?: string}>; source_files: string[]
   collection?: string; protected_projection?: string[]
-  max_response_bytes: number; timeout_us: number; source_kind: 'JSON_HTTP_RESOURCE' | 'MANAGED_TRANSACTION_RECORDS' | 'REFERENCE_FILE' | 'CREATED_OBJECT_RECORDS'
+  max_response_bytes: number; timeout_us: number; source_kind: 'JSON_HTTP_RESOURCE' | 'MANAGED_TRANSACTION_RECORDS' | 'REFERENCE_FILE' | 'CREATED_OBJECT_RECORDS'|'SQLITE_AUDIT'|'SQLITE_OBJECTS'
+  database_path?:string;table?:string;resource_column?:string;owner_column?:string;protected_column?:string;observed_columns?:string[]
   reference_artifact?: ArtifactManifest | null; reference_origin?: 'UPLOAD' | 'REFERENCE_CAPTURE' | null
   reference_resource_id?: string; reference_owner_identity_id?: string
 }
@@ -23,15 +24,16 @@ export type CapturePlan = {schema_version: '1'; project_id: string; basis_id: st
 export type CaptureStatus = {capture_id: string; action_id:string;resource_binding_id:string;asset_id: string | null; state: string; target_may_have_run: boolean; operation_may_have_run:boolean; plan_hash: string
   report: null | {state: 'CANDIDATE' | 'INCOMPLETE' | 'RECOVERED'; recovery_verified: boolean; reason_codes: string[]; manifest: ArtifactManifest | null}}
 export type ProofReport = { assessment: 'USABLE' | 'NEEDS_CHANGES' | 'UNSUPPORTED'; checks: Array<{code: string; status: 'CONFIRMED' | 'MISSING' | 'UNAVAILABLE' | 'UNSUPPORTED'; mapping_key: string | null}> }
-export type ProofSource = { source_id: string; revision: number; config: ProofConfig; submitted_via: string; client_name: string; adopted: boolean
+export type ProofSource = { source_id: string; revision: number; config: ProofConfig; submitted_via: string; client_name: string; adopted: boolean; usable?: boolean
   read_scope_confirmed?: boolean; matching_read_scope_id?: string | null
   preflight: null | {preflight_id: string; state: string; current_basis: boolean; report: ProofReport | null} }
 export type ProofContext = { project_id: string; basis_id: string; runtime_available: boolean; runtime_origin: string | null
+  sqlite?:Array<{database_path:string;table:string;resource_column:string;owner_column:string;fields:string[]}>
   guidance?: PreparationGuidance
   suggestion_context?: PreparationSuggestionContext
-  actions: Array<{action_id: string; revision: number; label: string; execution_identity_id?: string | null; recovery_identity_id?: string | null; effects: Array<{effect_id: string; label: string; kind: string}>}>
+  actions: Array<{action_id: string; revision: number; label: string; execution_identity_id?: string | null; recovery_identity_id?: string | null; condition_requirements?: {tenant:boolean;resource_state:boolean}; effects: Array<{effect_id: string; label: string; kind: string}>}>
   identities: Array<{identity_id: string; label: string; actor_id: string; prepared: boolean}>
-  resources: Array<{resource_binding_id: string; action_id: string; action_revision: number; resource_id: string; owner_identity_id: string}>
+  resources: Array<{resource_binding_id: string; binding_fingerprint?:string; case_specific?:boolean; action_id: string; action_revision: number; resource_id: string; owner_identity_id: string}>
   sources: ProofSource[]; read_scopes: Array<{scope_id: string; origin: string; identity_ids: string[]; resource_binding_ids: string[]; path_templates: string[]; max_response_bytes: number; timeout_us: number}>
   reference_inputs?: ReferenceInput[]
   reference_recovery_gaps?: Array<{capture_id:string;action_id:string;resource_id:string;owner_identity_id:string;reason:string}>
@@ -43,6 +45,7 @@ export type ProofOperationKind = 'SAVE_SOURCE' | 'GRANT_SCOPE' | 'START_PREFLIGH
 const paths: Record<ProofOperationKind, string> = {SAVE_SOURCE: '/sources', GRANT_SCOPE: '/read-scopes', START_PREFLIGHT: '/preflights', CANCEL_PREFLIGHT: '/preflights/cancel', ADOPT_SOURCE: '/adoptions', REVOKE_SCOPE: '/read-scopes/revoke',UPLOAD_REFERENCE:'/reference-inputs',CANCEL_REFERENCE:'/reference-inputs/cancel',START_REFERENCE_CAPTURE:'/reference-captures',CANCEL_REFERENCE_CAPTURE:'/reference-captures/cancel'}
 const prefix = (project: string) => `/api/projects/${encodeURIComponent(project)}/proof-preparation`
 export const proofSourcesApi = {
+  sqliteCandidate:(project:string,body:object)=>request<ProofConfig>(prefix(project)+'/sqlite-candidate',{method:'POST',body:JSON.stringify({schema_version:'1',...body})}),
   context: (project: string, view: 'full' | 'sources' = 'full', signal?:AbortSignal) => request<ProofContext>(prefix(project) + (view === 'sources' ? '?view=sources' : ''),{signal}),
   write: (project: string, kind: ProofOperationKind, body: object, content?: ArrayBuffer) => request<ProofReceipt>(prefix(project) + paths[kind], content
     ? {method:'POST',headers:{'Content-Type':'application/octet-stream','X-Jiejian-Reference':JSON.stringify(body)},body:content}

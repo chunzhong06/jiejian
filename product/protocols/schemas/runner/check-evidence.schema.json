@@ -130,6 +130,26 @@
       "title": "ActivityEvent",
       "type": "object"
     },
+    "AnonymousCheckFact": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ANONYMOUS_CHECK",
+          "default": "ANONYMOUS_CHECK",
+          "title": "Kind",
+          "type": "string"
+        },
+        "unauthenticated": {
+          "title": "Unauthenticated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "unauthenticated"
+      ],
+      "title": "AnonymousCheckFact",
+      "type": "object"
+    },
     "ArtifactManifestReference": {
       "additionalProperties": false,
       "properties": {
@@ -189,6 +209,7 @@
         "data": {
           "discriminator": {
             "mapping": {
+              "ANONYMOUS_CHECK": "#/$defs/AnonymousCheckFact",
               "COMMITTED_STATE": "#/$defs/CommittedStateFact",
               "FIELD_DISCLOSURE": "#/$defs/FieldDisclosureFact",
               "FILE_RECEIPT": "#/$defs/FileReceiptFact",
@@ -204,6 +225,9 @@
             },
             {
               "$ref": "#/$defs/IdentityCheckFact"
+            },
+            {
+              "$ref": "#/$defs/AnonymousCheckFact"
             },
             {
               "$ref": "#/$defs/FieldDisclosureFact"
@@ -292,6 +316,15 @@
         "baseline_trusted": {
           "title": "Baseline Trusted",
           "type": "boolean"
+        },
+        "condition_observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservedPermissionConditions"
+          },
+          "maxItems": 48,
+          "title": "Condition Observations",
+          "type": "array"
         },
         "execution_outcome": {
           "enum": [
@@ -598,9 +631,16 @@
           "type": "integer"
         },
         "subject_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Id"
         }
       },
       "required": [
@@ -1059,14 +1099,28 @@
           "type": "integer"
         },
         "subject_identity_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Subject Identity Fingerprint",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Fingerprint"
         },
         "subject_test_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Test Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Test Identity Id"
         }
       },
       "required": [
@@ -1120,9 +1174,16 @@
           "type": "array"
         },
         "planned_subject_id": {
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
-          "title": "Planned Subject Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Planned Subject Id"
         },
         "reason_codes": {
           "default": [],
@@ -1265,9 +1326,16 @@
           "type": "string"
         },
         "subject_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Id"
         }
       },
       "required": [
@@ -1374,9 +1442,16 @@
           "type": "string"
         },
         "subject_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Id"
         }
       },
       "required": [
@@ -1394,6 +1469,17 @@
     "FrozenPermission": {
       "additionalProperties": false,
       "properties": {
+        "conditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionConditions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "expectation": {
           "enum": [
             "ALLOW",
@@ -1549,9 +1635,16 @@
           "type": "integer"
         },
         "subject_identity_id": {
-          "pattern": "^tid_[0-9a-f]{32}$",
-          "title": "Subject Identity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Id"
         }
       },
       "required": [
@@ -1673,6 +1766,98 @@
       "title": "ObservationFactReference",
       "type": "object"
     },
+    "ObservedPermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Tenant"
+        },
+        "principal": {
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "resource_state": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource State"
+        },
+        "resource_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource Tenant"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^psr_[0-9a-f]{32}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "subject_tenant": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Tenant"
+        }
+      },
+      "required": [
+        "proof_fingerprint",
+        "source_id",
+        "source_fingerprint",
+        "principal"
+      ],
+      "title": "ObservedPermissionConditions",
+      "type": "object"
+    },
     "ObserverProofReference": {
       "additionalProperties": false,
       "properties": {
@@ -1704,6 +1889,49 @@
         "observer_id"
       ],
       "title": "ObserverProofReference",
+      "type": "object"
+    },
+    "PermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "principal": {
+          "default": "AUTHENTICATED",
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "resource_states": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Resource States",
+          "type": "array"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "enum": [
+                "SAME",
+                "DIFFERENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        }
+      },
+      "title": "PermissionConditions",
       "type": "object"
     },
     "RecordObservationWindow": {
@@ -1900,19 +2128,69 @@
           "type": "string"
         },
         "draft_revision": {
-          "minimum": 1,
-          "title": "Draft Revision",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Draft Revision"
         },
         "draft_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Draft Sha256",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Draft Sha256"
+        },
+        "operation_flow_id": {
+          "anyOf": [
+            {
+              "pattern": "^ofl_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Id"
+        },
+        "operation_flow_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Revision"
         },
         "recording_id": {
-          "pattern": "^rec_[0-9a-f]{32}$",
-          "title": "Recording Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recording Id"
         },
         "request_template_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
@@ -1926,9 +2204,6 @@
         }
       },
       "required": [
-        "recording_id",
-        "draft_revision",
-        "draft_sha256",
         "step_id",
         "binding_fingerprint",
         "request_template_fingerprint"
@@ -1981,11 +2256,12 @@
               "node:https",
               "node:sqlite",
               "node:fs",
-              "node:fs/promises"
+              "node:fs/promises",
+              "better-sqlite3"
             ],
             "type": "string"
           },
-          "maxItems": 5,
+          "maxItems": 6,
           "title": "Adapters",
           "type": "array"
         },

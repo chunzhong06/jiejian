@@ -38,6 +38,11 @@ def _binding_constraints(*, recorded: bool = True):
     return constraints
 
 
+def _defined_constraints():
+    return (ForeignKeyConstraint(['operation_flow_id','operation_flow_revision'],['operation_flow_revisions.flow_id','operation_flow_revisions.revision'],ondelete='RESTRICT'),
+        CheckConstraint('(source_recording_id IS NOT NULL AND source_draft_revision IS NOT NULL AND source_draft_sha256 IS NOT NULL AND operation_flow_id IS NULL AND operation_flow_revision IS NULL) OR (source_recording_id IS NULL AND source_draft_revision IS NULL AND source_draft_sha256 IS NULL AND operation_flow_id IS NOT NULL AND operation_flow_revision IS NOT NULL)',name='material_origin_matrix'))
+
+
 class _BindingColumns:
     business_action_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     action_revision: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -56,14 +61,16 @@ class _BindingColumns:
 
 
 class _RecordedColumns:
-    source_recording_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    source_draft_revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    source_draft_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_recording_id: Mapped[str | None] = mapped_column(String(36))
+    source_draft_revision: Mapped[int | None] = mapped_column(Integer)
+    source_draft_sha256: Mapped[str | None] = mapped_column(String(64))
+    operation_flow_id: Mapped[str | None] = mapped_column(String(36))
+    operation_flow_revision: Mapped[int | None] = mapped_column(Integer)
 
 
 class ActionExecutionBindingRow(_BindingColumns, _RecordedColumns, Base):
     __tablename__ = "action_execution_bindings"
-    __table_args__ = _binding_constraints()
+    __table_args__ = _binding_constraints()+_defined_constraints()
     flow_id: Mapped[str] = mapped_column(String(64), nullable=False)
     flow_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_injection_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -71,7 +78,7 @@ class ActionExecutionBindingRow(_BindingColumns, _RecordedColumns, Base):
 
 class ActionResourceBindingRow(_BindingColumns, _RecordedColumns, Base):
     __tablename__ = "action_resource_bindings"
-    __table_args__ = _binding_constraints() + (
+    __table_args__ = _binding_constraints() + _defined_constraints() + (
         PrimaryKeyConstraint("business_action_id", "action_revision", "resource_owner_test_identity_id"),
         CheckConstraint("length(actual_resource_id) BETWEEN 1 AND 256", name="resource_value_bound"),
     )
@@ -108,7 +115,7 @@ class ActionEvidenceBindingRow(_BindingColumns, Base):
 
 class ActionRecoveryBindingRow(_BindingColumns, _RecordedColumns, Base):
     __tablename__ = "action_recovery_bindings"
-    __table_args__ = _binding_constraints()
+    __table_args__ = _binding_constraints()+_defined_constraints()
     step_id: Mapped[str] = mapped_column(String(64), nullable=False)
     request_template_json: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -166,6 +173,9 @@ class ActionPreparationRepository:
             _canonical_json(value) if key in _JSON_FIELDS and value is not None else value
             for key, value in payload.items()
         }
+        for key in ('source_recording_id','source_draft_revision','source_draft_sha256','operation_flow_id','operation_flow_revision'):
+            if hasattr(row_type,key):
+                values.setdefault(key,None)
         conditions = [getattr(row_type, key.name) == values[key.name] for key in row_type.__table__.primary_key]
         row = _scalar(self._session, select(row_type).where(*conditions))
         if row is None:
@@ -184,6 +194,23 @@ class ActionPreparationRepository:
         return tuple(ActionAllowControlBinding(**{
             name: getattr(row, name) for name in ActionAllowControlBinding.model_fields
         }) for row in rows)
+
+    def case_data(self, project_id):
+        from product.backend.domain.preparation.bindings import RuleCaseDataBinding
+        rows = _scalars(self._session, select(RuleCaseDataRow).where(
+            RuleCaseDataRow.project_id == project_id).order_by(RuleCaseDataRow.intent_id))
+        return tuple(RuleCaseDataBinding.model_validate_json(row.payload) for row in rows)
+
+    def replace_case_data(self, binding):
+        ensure_storage_payload_safe(binding.model_dump(mode='json'), self._known_secrets)
+        row = _scalar(self._session, select(RuleCaseDataRow).where(
+            RuleCaseDataRow.intent_id == binding.permission.intent_id))
+        if row is None:
+            self._session.add(RuleCaseDataRow(intent_id=binding.permission.intent_id,
+                project_id=binding.project_id, payload=binding.model_dump_json()))
+        else:
+            row.payload = binding.model_dump_json()
+        _flush(self._session)
 
     def replace_allow_control(self, binding: ActionAllowControlBinding) -> None:
         payload = binding.model_dump(mode="json")
@@ -242,3 +269,10 @@ class ActionPreparationRepository:
 
 
 __all__ = ["ActionPreparationRepository"]
+
+
+class RuleCaseDataRow(Base):
+    __tablename__ = 'rule_case_data'
+    intent_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey('projects.project_id', ondelete='CASCADE'), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)

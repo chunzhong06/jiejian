@@ -74,6 +74,7 @@ class CheckObserverRuntime:
         self._trusted_histories = {}
         self._json_histories = {}
         self._evidence_sources = {}
+        self.condition_observations = {}
         self._creation_histories = {}
         self._json_sources = {'json_' + item.source_id[4:]:item for item in bundle.proof_sources}
         self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if environ.get('JIEJIAN_VAR_DIR') else None
@@ -240,9 +241,9 @@ class CheckObserverRuntime:
         if not sources:
             from product.backend.infrastructure.observers.checks.managed_trace import managed_execution_trace
             return managed_execution_trace(self,action,case)
-        identity = next(item for item in self.bundle.identities if item.identity_id == case.subject_test_identity_id)
+        identity = next((item for item in self.bundle.identities if item.identity_id == case.subject_test_identity_id), None)
         namespaces = {source.trace_namespace for _, source in sources}
-        mapped = identity.verification if identity.verification is not None and identity.verification.namespace in namespaces and len(namespaces) == 1 else None
+        mapped = identity.verification if identity is not None and identity.verification is not None and identity.verification.namespace in namespaces and len(namespaces) == 1 else None
         groups = []
         for proof, source in sources:
             key = (case.case_id, proof.binding_fingerprint, source.observer_id)

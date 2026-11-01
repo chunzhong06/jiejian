@@ -8,6 +8,14 @@ from pydantic import Field
 from product.backend.domain.preparation.requirements import ActionAssuranceContract, AllocationMode, IdentityRequirementSlot
 from product.backend.domain.boundaries.entities import BoundaryModel
 from product.backend.domain.boundaries.permissions import PermissionIntentRevision
+from product.protocols.checks.execution_request import PermissionReference
+
+
+class RuleCaseDataSelection(BoundaryModel):
+    permission: PermissionReference
+    resource_id: str = Field(min_length=1, max_length=256)
+    owner_identity_id: str = Field(pattern=r'^tid_[0-9a-f]{32}$')
+    expected_binding_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
 
 
 class PreparationStatus(StrEnum):

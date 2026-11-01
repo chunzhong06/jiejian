@@ -46,14 +46,14 @@ export function History({ projectId, route, archive = false }: ReportsProps) {
       <div className="jj-history-toolbar"><form onSubmit={event => { event.preventDefault(); setCursor(undefined); setStack([]); setSearch(query); }}><label className="jj-sr-only" htmlFor="jj-history-search">查找检查记录</label><input id="jj-history-search" placeholder="查找业务操作或检查编号" value={query} onChange={event => setQuery(event.target.value)}/><Button type="submit">查找</Button></form><Choice aria-label="筛选检查结果" value={filter} onValueChange={value => { setFilter(value as CheckVerdict | 'ALL'); setCursor(undefined); setStack([]); }}><option value="ALL">全部结果</option><option value="PASS">符合规则</option><option value="BLOCK">存在问题</option><option value="INCONCLUSIVE">证据不足</option></Choice></div>
       {state.error && <ErrorNote error={state.error} onRetry={state.reload}/>}
       {state.loading ? <Loading page>正在读取检查记录</Loading> : state.data?.items.length ? <>
-        <div className="jj-history-table-wrap"><table className="jj-history-table"><thead><tr><th>检查时间</th><th>业务操作</th><th>结果</th><th>关联</th><th><span className="jj-sr-only">打开报告</span></th></tr></thead><tbody>{state.data.items.map(item => {
+        <div className="jj-history-table-wrap"><table className="jj-history-table"><thead><tr><th scope="col">检查时间</th><th scope="col">业务操作</th><th scope="col" className="jj-table-state">结果</th><th scope="col" className="jj-table-state">检查用途</th><th scope="col" className="jj-table-actions"><span className="jj-sr-only">打开报告</span></th></tr></thead><tbody>{state.data.items.map(item => {
                 const run = item.status.run;
                 return <tr key={run.run_id}>
           <td><time>{date(run.created_at_us)}</time><small>权限版本 {run.policy_epoch}</small></td>
           <td><strong>{item.action_labels.map(text).join('、') || '权限检查'}</strong></td>
-          <td><Badge tone={run.verdict === 'PASS' ? 'positive' : run.verdict === 'BLOCK' ? 'negative' : run.verdict === 'INCONCLUSIVE' ? 'caution' : 'neutral'}>{run.verdict === 'PASS' ? '符合规则' : run.verdict === 'BLOCK' ? '存在问题' : run.verdict === 'INCONCLUSIVE' ? '证据不足' : ['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '正在检查' : '未形成结论'}</Badge></td>
-          <td className="jj-history-context">{item.change_id ? '源码修改' : '常规检查'}</td>
-          <td><Button kind="quiet" onClick={() => openRun(run.run_id)}>{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '查看进度' : '阅读报告'}<ArrowRightOutlined aria-hidden="true"/></Button></td>
+          <td className="jj-table-state"><Badge tone={run.verdict === 'PASS' ? 'positive' : run.verdict === 'BLOCK' ? 'negative' : run.verdict === 'INCONCLUSIVE' ? 'caution' : 'neutral'}>{run.verdict === 'PASS' ? '符合规则' : run.verdict === 'BLOCK' ? '存在问题' : run.verdict === 'INCONCLUSIVE' ? '证据不足' : ['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '正在检查' : '未形成结论'}</Badge></td>
+          <td className="jj-history-context jj-table-state">{item.change_id ? '修改后检查' : '常规检查'}</td>
+          <td className="jj-table-actions"><Button kind="quiet" onClick={() => openRun(run.run_id)}>{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '查看进度' : '阅读报告'}<ArrowRightOutlined aria-hidden="true"/></Button></td>
         </tr>;
             })}</tbody></table></div>
         <div className="jj-pagination jj-history-pagination"><Button disabled={!stack.length} onClick={() => { setCursor(stack.at(-1)); setStack(value => value.slice(0, -1)); }}>上一页</Button><span>第 {stack.length + 1} 页</span><Button disabled={!state.data.next_cursor} onClick={() => { setStack(value => [...value, cursor]); setCursor(state.data!.next_cursor ?? undefined); }}>下一页</Button></div>

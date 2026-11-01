@@ -836,6 +836,17 @@
     "FrozenPermission": {
       "additionalProperties": false,
       "properties": {
+        "conditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionConditions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "expectation": {
           "enum": [
             "ALLOW",
@@ -1278,6 +1289,24 @@
           "minItems": 1,
           "title": "Subject Path",
           "type": "array"
+        },
+        "tenant_path": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Path"
         }
       },
       "required": [
@@ -1404,6 +1433,19 @@
     "NodeRuntimeReference": {
       "additionalProperties": false,
       "properties": {
+        "execution_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Fingerprint"
+        },
         "instance_id": {
           "pattern": "^rti_[0-9a-f]{32}$",
           "title": "Instance Id",
@@ -1457,6 +1499,49 @@
         "port"
       ],
       "title": "NodeRuntimeReference",
+      "type": "object"
+    },
+    "PermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "principal": {
+          "default": "AUTHENTICATED",
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "resource_states": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Resource States",
+          "type": "array"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "enum": [
+                "SAME",
+                "DIFFERENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        }
+      },
+      "title": "PermissionConditions",
       "type": "object"
     },
     "PreparedCookieCredential": {

@@ -6,6 +6,7 @@ import {Choice} from './Choice'
 import {Dialog} from './Dialog'
 import {InfoPopover} from './InfoPopover'
 import {Tabs} from './Tabs'
+import {Field} from './layout'
 
 it('提交期间按钮不可再次激活，并保留可访问状态',()=>{
   const action=vi.fn()
@@ -22,6 +23,23 @@ it('选择菜单展开后将所选值交给业务调用方',async()=>{
   fireEvent.mouseDown(input)
   fireEvent.click(await screen.findByRole('option',{name:'应用 B'}))
   expect(change).toHaveBeenCalledWith('b',expect.anything())
+})
+
+it('对话框中的选择器关联字段名称，键盘跳过禁用项，Escape 只关闭选项',async()=>{
+  const close=vi.fn(),change=vi.fn()
+  function Scene(){const [value,setValue]=useState('0');return <Dialog title="准备数据" onClose={close}><Field label="数据所有者"><Choice value={value} onValueChange={next=>{setValue(next);change(next)}}><option value="0">负责人</option><option value="1" disabled>已停用账号</option><option value="2">评审</option></Choice></Field></Dialog>}
+  render(<Scene/>)
+  const input=screen.getByRole('combobox',{name:'数据所有者'})
+  fireEvent.keyDown(input,{key:'ArrowDown',keyCode:40})
+  await screen.findByRole('option',{name:'负责人'})
+  fireEvent.keyDown(input,{key:'ArrowDown',keyCode:40})
+  fireEvent.keyDown(input,{key:'Enter',keyCode:13})
+  expect(change).toHaveBeenCalledWith('2')
+  fireEvent.keyDown(input,{key:'ArrowDown',keyCode:40})
+  fireEvent.keyDown(input,{key:'Escape',keyCode:27})
+  await waitFor(()=>expect(input).toHaveAttribute('aria-expanded','false'))
+  expect(screen.getByRole('dialog',{name:'准备数据'})).toBeInTheDocument()
+  expect(close).not.toHaveBeenCalled()
 })
 
 it('页签键盘切换同步选中值和焦点',()=>{

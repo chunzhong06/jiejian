@@ -9,6 +9,22 @@ from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.application_understanding.analysis import analyzer as analyzer_module
 from product.backend.application.application_understanding.analysis.analyzer import ApplicationUnderstandingAnalyzer
 from product.backend.application.application_understanding.analysis.models import SourceAnalysisLimits
+from product.backend.application.application_understanding.analysis.sqlite_setup import sqlite_setup_suggestions
+
+
+def test_sqlite_setup_suggests_only_unambiguous_source_structure():
+    value = sqlite_setup_suggestions((('app.mjs', b'''const db = "data/app.sqlite";
+        CREATE TABLE tickets (id TEXT PRIMARY KEY, owner_id TEXT, title TEXT DEFAULT 'a,b');
+        CREATE TABLE shared (id TEXT PRIMARY KEY, title TEXT);
+        const outside = "../private.db";'''), ('other.py', b'''
+        CREATE TABLE shared (id INTEGER PRIMARY KEY, other TEXT);
+        CREATE TABLE compound (a TEXT, b TEXT, PRIMARY KEY(a,b));''')))
+    assert value.paths == ('data/app.sqlite',)
+    tables = {table.name:table for table in value.tables}
+    assert set(tables) == {'tickets','compound'}
+    assert tables['tickets'].columns == ('id','owner_id','title')
+    assert tables['tickets'].primary_key == 'id'
+    assert tables['compound'].primary_key is None
 
 
 def _write_understood_application(root: Path) -> None:

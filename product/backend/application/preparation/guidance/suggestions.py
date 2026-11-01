@@ -56,7 +56,7 @@ class PreparationSuggestionService:
                 'actors':[{'actor_id':item.actor_id,'revision':item.revision,'label':item.display_name} for item in facts.boundary.actors],
                 'candidate_references':snapshot['candidate_references'],
                 'available_recordings':snapshot['recordings'][-50:],
-                'supported_evidence_capabilities':['MANAGED_TRANSACTION_RECORDS'],
+                'supported_evidence_capabilities':['MANAGED_TRANSACTION_RECORDS','SQLITE_AUDIT','SQLITE_OBJECTS'],
                 'evidence_capability_note':'material.capability 是能力标识，请使用 supported_evidence_capabilities。RESOURCE_FIELDS_V1 与 TRANSACTION_HISTORY_V2 是来源合同 source_contract_id，不是能力标识；合同不应填入 capability，也不表示对应读取能力缺失。',
                 'latest':None if latest is None else self._view(work,latest,snapshot),
                 'suggestion_references':heads,
@@ -78,7 +78,7 @@ class PreparationSuggestionService:
             refs.add(entry)
         if not refs <= set(known_code):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, '源码定位未核实或已经变化；请重新分析，或明确保留为假设')
-        if item.material.kind == 'evidence' and item.material.capability not in {None,'MANAGED_TRANSACTION_RECORDS'}:
+        if item.material.kind == 'evidence' and item.material.capability not in {None,'MANAGED_TRANSACTION_RECORDS','SQLITE_AUDIT','SQLITE_OBJECTS'}:
             raise JiejianError(ErrorCode.INPUT_INVALID, 'material.capability 不是已注册能力。当前支持 MANAGED_TRANSACTION_RECORDS，请核对 supported_evidence_capabilities；RESOURCE_FIELDS_V1 等是来源合同 source_contract_id，不能填入 capability。保留原业务结果要求，不要据此判定读取能力缺失。')
         facts = snapshot['facts']
         if target['state'] == 'APPROVED' and item.material.kind in {'identity','resource'}:

@@ -323,12 +323,15 @@ class CheckRuntimeBundle(WireModel):
                 or proof.observation_identity_id!=config.observation_identity_id
                 or proof.effect_kind!=source.contract.approved_effect_kind
                 or source.contract.contract_id!=config.source_contract_id
-                or set(source.identity_roles)!={claim.identity_id for claim in config.identity_claims}
-                or not set(source.identity_roles)<=set(identities)):
+                or set(source.identity_roles)!={claim.identity_id for claim in config.identity_claims}):
                 raise ValueError('proof association mismatch')
             for claim in config.identity_claims:
                 identity=identities.get(claim.identity_id)
-                if (identity is None or identity.verification is None
+                # 来源可保留未执行场景的主体声明；仅冻结实际 Case 和观察所需凭据。
+                # request/bundle 交叉核对仍要求每个执行主体存在。
+                if identity is None:
+                    continue
+                if (identity.verification is None
                     or identity.verification.expected_application_subject_id!=claim.application_subject_id):
                     raise ValueError('proof identity association mismatch')
         return self
@@ -339,7 +342,7 @@ class CheckRuntimeBundle(WireModel):
         for action in self.actions:
             for proof in action.proofs:
                 source=sources.get(proof.observer_id)
-                created=source is not None and source.config.source_kind=='CREATED_OBJECT_RECORDS'
+                created=source is not None and source.config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}
                 if (action.created_resource is not None)!=created:
                     raise ValueError('creation action requires adopted collection proof')
         return self

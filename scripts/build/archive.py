@@ -6,14 +6,14 @@ import os
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
-from scripts.build.common import RELEASE_NAME, FORBIDDEN_PARTS
+from scripts.build.common import RELEASE_NAME, excluded_from_release
 
 
-def iter_files(root: Path) -> Iterable[Path]:
+def iter_files(root: Path, *, allow_node_npm: bool = False) -> Iterable[Path]:
     for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
         if not path.is_file():
             continue
-        if any(part.casefold() in FORBIDDEN_PARTS for part in path.parts) or path.suffix.lower() in {".pyc", ".pyo"}:
+        if excluded_from_release(path.relative_to(root), allow_node_npm=allow_node_npm):
             continue
         yield path
 
@@ -24,7 +24,7 @@ def write_zip(destination: Path, base: Path, samples: Path | None) -> None:
     try:
         with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
             entries: list[tuple[Path, Path]] = [
-                (path, Path(RELEASE_NAME) / path.relative_to(base)) for path in iter_files(base)
+                (path, Path(RELEASE_NAME) / path.relative_to(base)) for path in iter_files(base, allow_node_npm=True)
             ]
             if samples is not None:
                 entries.extend(

@@ -61,7 +61,7 @@ def coverage_ready(work, value, issue_id, plan, bundle):
             if target.proof == 'PROCESS_RECORD':
                 # 普通最终状态快照不能证明曾经发生；要求受控事务记录且至少保护一个状态变化效果。
                 states = [proof for proof in config.proofs if proof.effect_kind == 'STATE_MUTATION' and any(proof.effect_id in case.protected_effect_ids for case in cases)]
-                if not states or any(not any(source.config.source_kind == 'MANAGED_TRANSACTION_RECORDS'
+                if not states or any(not any(source.config.source_kind in {'MANAGED_TRANSACTION_RECORDS','SQLITE_AUDIT'}
                     and source.config.action_id == action.action_id and source.config.effect_id == proof.effect_id
                     and source.source_fingerprint == proof.descriptor_fingerprint for source in bundle.proof_sources) for proof in states):
                     continue

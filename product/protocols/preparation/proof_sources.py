@@ -19,7 +19,7 @@ ScopeId=Annotated[str,Field(pattern=r'^prs_[0-9a-f]{32}$')]
 OperationId=Annotated[str,Field(pattern=r'^[0-9a-f]{32}$')]
 IdentityId=Annotated[str,Field(pattern=r'^tid_[0-9a-f]{32}$')]
 ObjectPath=Annotated[tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...],Field(min_length=1,max_length=8)]
-MappingKey=Literal['resource_id','owner_id','state','version','effect_count','history_generation',
+MappingKey=Literal['resource_id','owner_id','state','tenant','condition_state','version','effect_count','history_generation',
     'operation_id','operation_resource_id','operation_subject_id','operation_before_version','operation_after_version',
     'operation_state','unfinished_effects','title','summary','body']
 ContractId=Literal['SYNC_RESOURCE_HISTORY_V1','OWNER_RESOURCE_VIEW_V1','TRANSACTION_HISTORY_V1','RESOURCE_FIELDS_V1']
@@ -94,14 +94,16 @@ class ManagedIdentityClaim(SourceIdentityClaim):
     subject_path:ObjectPath
     role_path:ObjectPath
     application_role:str=Field(pattern=SAFE_SUBJECT)
+    tenant_path:ObjectPath|None=Field(default=None,exclude_if=lambda value:value is None)
 
     @field_validator('request_path')
     @classmethod
     def request(cls,value):return safe_identity_path(value)
 
-    @field_validator('subject_path','role_path')
+    @field_validator('subject_path','role_path','tenant_path')
     @classmethod
     def nonsensitive(cls,value):
+        if value is None:return value
         if any(part.casefold() in {'password','token','cookie','authorization','secret','api_key','constructor','__proto__'} for part in value):
             raise ValueError('secret identity field prohibited')
         return value
@@ -124,8 +126,10 @@ class ManagedProofSourceConfig(ProofSourceConfig):
             raise ValueError('source path must identify its controlled collection')
         if self.mappings.get('resource_id')!=('resource_id',) or self.mappings.get('owner_id')!=('owner_id',):
             raise ValueError('controlled source identity fields cannot be remapped')
-        if set(self.mappings)-{'resource_id','owner_id','state'}:
+        if set(self.mappings)-{'resource_id','owner_id','state','tenant','condition_state'}:
             raise ValueError('controlled source only maps resource, owner and state')
+        if any(path[0] != 'data' or len(path) < 2 for key,path in self.mappings.items() if key in {'tenant','condition_state'}):
+            raise ValueError('conditions must reference declared public resource data fields')
         if self.source_contract_id=='TRANSACTION_HISTORY_V1' and (len(self.mappings.get('state',()))<2 or self.mappings['state'][0]!='data'):
             raise ValueError('state must reference a protected resource data field')
         for path in (self.target_resource_path,self.target_owner_path,self.target_data_path):
@@ -147,7 +151,7 @@ def source_identity_paths(config, identities=()):
 
 def source_read_paths(config, identities=()):
     paths = {*source_identity_paths(config, identities), config.relative_path_template}
-    if config.source_kind == 'CREATED_OBJECT_RECORDS':
+    if config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}:
         paths.add(f'/collections/{config.collection}')
     return tuple(sorted(paths))
 
@@ -179,6 +183,27 @@ class AtomicProofSourceConfig(ManagedProofSourceConfig):
         return self
 
 
+class SqliteProofSourceConfig(AtomicProofSourceConfig):
+    source_kind: Literal['SQLITE_AUDIT'] = 'SQLITE_AUDIT'
+    source_contract_id: Literal['TRANSACTION_HISTORY_V2'] = 'TRANSACTION_HISTORY_V2'
+    database_path: str = Field(min_length=1, max_length=512)
+    table: str = Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    resource_column: str = Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    owner_column: str = Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    protected_column: str = Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    observed_columns:tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...]=Field(default=(),max_length=8)
+
+    @model_validator(mode='after')
+    def sqlite_projection(self):
+        RuntimeFile.safe_path(self.database_path)
+        if self.collection != self.table or self.mappings.get('state') != ('data', self.protected_column):
+            raise ValueError('SQLite source must use the declared table and protected column')
+        allowed = set(self.observed_columns or (self.protected_column,))
+        if any(len(path) != 2 or path[1] not in allowed for key,path in self.mappings.items() if key in {'tenant','condition_state'}):
+            raise ValueError('condition column is outside the declared SQLite capture')
+        return self
+
+
 class FileProofSourceConfig(AtomicProofSourceConfig):
     source_kind:Literal['REFERENCE_FILE']='REFERENCE_FILE'
     source_contract_id:Literal['FILE_RESPONSE_CONTENT_V1']='FILE_RESPONSE_CONTENT_V1'
@@ -204,12 +229,28 @@ class CreationProofSourceConfig(AtomicProofSourceConfig):
         return self
 
 
-CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig,Field(discriminator='source_kind')]
+class SqliteCreationProofSourceConfig(CreationProofSourceConfig):
+    source_kind:Literal['SQLITE_OBJECTS']='SQLITE_OBJECTS'
+    database_path:str=Field(min_length=1,max_length=512)
+    table:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    resource_column:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    owner_column:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    protected_column:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    observed_columns:tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...]=Field(default=(),max_length=8)
+
+    @model_validator(mode='after')
+    def sqlite_mapping(self):
+        RuntimeFile.safe_path(self.database_path)
+        if self.collection!=self.table:raise ValueError('SQLite collection must name its table')
+        return self
+
+
+CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig|SqliteProofSourceConfig|SqliteCreationProofSourceConfig,Field(discriminator='source_kind')]
 
 
 class ProofContractAttestation(RuntimeModel):
     contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1']
-    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
+    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1','SQLITE_ROW_HISTORY_V1','SQLITE_CREATION_HISTORY_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
     fingerprint:Digest
     approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY','OBJECT_CREATION']
 
@@ -217,7 +258,7 @@ class ProofContractAttestation(RuntimeModel):
     def matching_profile(self):
         if (self.contract_id=='FILE_RESPONSE_CONTENT_V1')!=(self.implementation_profile=='CONTROLLED_FILE_RECEIPT_V1'):
             raise ValueError('file contract profile mismatch')
-        if (self.contract_id=='OBJECT_CREATION_V1')!=(self.implementation_profile=='CONTROLLED_CREATION_V1'):
+        if (self.contract_id=='OBJECT_CREATION_V1')!=(self.implementation_profile in {'CONTROLLED_CREATION_V1','SQLITE_CREATION_HISTORY_V1'}):
             raise ValueError('creation contract profile mismatch')
         expected={'OBJECT_CREATION_V1':'OBJECT_CREATION','FILE_RESPONSE_CONTENT_V1':'FILE_CONTENT_DELIVERY','TRANSACTION_HISTORY_V2':'STATE_MUTATION','RESOURCE_FIELDS_V1':'DATA_DISCLOSURE'}
         if self.approved_effect_kind!=expected[self.contract_id]:raise ValueError('source contract effect mismatch')
@@ -244,6 +285,23 @@ class ProofSourceRevision(RuntimeModel):
     document_type: Literal["jiejian.proof-source-revision"] = "jiejian.proof-source-revision"
 
 
+class SqliteReadSelection(RuntimeModel):
+    database_path:str=Field(min_length=1,max_length=512)
+    table:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    columns:tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...]=Field(min_length=1,max_length=10)
+
+    @field_validator('database_path')
+    @classmethod
+    def database(cls,value):
+        RuntimeFile.safe_path(value)
+        return value
+
+
+def sqlite_read_selections(config):
+    return (SqliteReadSelection(database_path=config.database_path,table=config.table,
+        columns=tuple(sorted({config.resource_column,config.owner_column,*(config.observed_columns or (config.protected_column,))}))),) if config.source_kind in {'SQLITE_AUDIT','SQLITE_OBJECTS'} else ()
+
+
 class SourceReadScope(RuntimeModel):
     schema_version: Literal["1"] = "1"
     scope_id:ScopeId
@@ -255,6 +313,7 @@ class SourceReadScope(RuntimeModel):
     max_response_bytes:int=Field(ge=1024,le=262144)
     timeout_us:int=Field(ge=1000,le=5_000_000)
     created_at_us:int=Field(ge=0)
+    sqlite:tuple[SqliteReadSelection,...]=Field(default=(),max_length=4,exclude_if=lambda value:not value)
 
     @field_validator('origin')
     @classmethod

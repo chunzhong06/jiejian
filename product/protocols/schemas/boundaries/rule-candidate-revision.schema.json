@@ -356,6 +356,49 @@
       "title": "CoverageTarget",
       "type": "object"
     },
+    "PermissionConditions": {
+      "additionalProperties": false,
+      "properties": {
+        "principal": {
+          "default": "AUTHENTICATED",
+          "enum": [
+            "AUTHENTICATED",
+            "ANONYMOUS"
+          ],
+          "title": "Principal",
+          "type": "string"
+        },
+        "resource_states": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Resource States",
+          "type": "array"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "enum": [
+                "SAME",
+                "DIFFERENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        }
+      },
+      "title": "PermissionConditions",
+      "type": "object"
+    },
     "PermissionExpectation": {
       "enum": [
         "ALLOW",
@@ -407,8 +450,8 @@
           "title": "Action Id"
         },
         "description": {
+          "default": "",
           "maxLength": 1024,
-          "minLength": 1,
           "title": "Description",
           "type": "string"
         },
@@ -478,7 +521,6 @@
         "write_mode",
         "item_id",
         "display_name",
-        "description",
         "primary_resource_concept",
         "operation_kind",
         "state_changing",
@@ -505,8 +547,8 @@
           "title": "Actor Id"
         },
         "description": {
+          "default": "",
           "maxLength": 1024,
-          "minLength": 1,
           "title": "Description",
           "type": "string"
         },
@@ -554,7 +596,6 @@
         "write_mode",
         "item_id",
         "display_name",
-        "description",
         "effective_state"
       ],
       "title": "ProposedActorItem",
@@ -601,8 +642,8 @@
           "type": "string"
         },
         "description": {
+          "default": "",
           "maxLength": 1024,
-          "minLength": 1,
           "title": "Description",
           "type": "string"
         },
@@ -664,8 +705,7 @@
         "item_id",
         "business_label",
         "effect_kind",
-        "resource_concept",
-        "description"
+        "resource_concept"
       ],
       "title": "ProposedEffectItem",
       "type": "object"
@@ -677,6 +717,17 @@
           "pattern": "^pactn_[0-9a-f]{16}$",
           "title": "Business Action Item Id",
           "type": "string"
+        },
+        "conditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionConditions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "effective_state": {
           "$ref": "#/$defs/PermissionIntentEffectiveState"

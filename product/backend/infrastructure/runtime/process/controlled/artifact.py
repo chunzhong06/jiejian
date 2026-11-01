@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from product.protocols.runtime.runtime_identity import MAX_ARTIFACT_BYTES, MAX_MANIFEST_BYTES, RuntimeFile, RuntimeLaunchManifest, runtime_source_fingerprint
 from product.protocols.runtime.node_runtime import NodeRuntimeManifest
+from product.protocols.runtime.node_runtime import NodeBuildArtifact
 
 
 def _regular_file(root: Path, relative: str) -> Path:
@@ -79,11 +80,21 @@ def _write_runtime_artifact(source_root: Path, artifact_store: Path, manifest: R
     return root
 
 
+def execution_files(source_root,manifest):
+    if isinstance(manifest,NodeRuntimeManifest) and manifest.package is not None and manifest.package.build_script is not None and (source_root.parent/'execution.json').is_file():
+        artifact=NodeBuildArtifact.model_validate_json(_read_bounded(_regular_file(source_root.parent,'execution.json'),MAX_MANIFEST_BYTES))
+        if artifact.instance_id!=manifest.instance_id or artifact.source_fingerprint!=manifest.source_fingerprint or manifest.entry not in {item.relative_path for item in artifact.files}:
+            raise ValueError('build artifact identity changed')
+        return artifact.files
+    return manifest.files
+
+
 def verify_runtime_artifact(source_root: Path, manifest: RuntimeLaunchManifest | NodeRuntimeManifest) -> None:
     """启动前及检查边界复核全部文件；多出文件同样意味着副本已漂移。"""
     if source_root.is_symlink() or source_root.is_junction() or not source_root.is_dir():
         raise ValueError("runtime artifact root unavailable")
-    expected = {item.relative_path for item in manifest.files}
+    files=execution_files(source_root,manifest)
+    expected = {item.relative_path for item in files}
     actual: set[str] = set()
     # 不跟随链接，且遇到第一个额外文件即停止，避免遍历无界目录。
     pending = [source_root]
@@ -95,6 +106,8 @@ def verify_runtime_artifact(source_root: Path, manifest: RuntimeLaunchManifest |
             if seen > 4096 or path.is_symlink() or path.is_junction():
                 raise ValueError("runtime artifact tree is unsupported")
             if path.is_dir():
+                if path == source_root / 'node_modules' and isinstance(manifest, NodeRuntimeManifest) and manifest.package is not None:
+                    continue
                 pending.append(path)
             else:
                 relative = path.relative_to(source_root).as_posix()
@@ -104,7 +117,7 @@ def verify_runtime_artifact(source_root: Path, manifest: RuntimeLaunchManifest |
     if actual != expected:
         raise ValueError("runtime artifact files missing")
     total = 0
-    for item in manifest.files:
+    for item in files:
         data = _read_bounded(_regular_file(source_root, item.relative_path), item.size)
         total += len(data)
         if total > MAX_ARTIFACT_BYTES or len(data) != item.size or hashlib.sha256(data).hexdigest() != item.sha256:

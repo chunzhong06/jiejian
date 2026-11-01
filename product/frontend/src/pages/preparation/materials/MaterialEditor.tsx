@@ -12,6 +12,7 @@ import { operationId, readPending, savePending } from '../../../shared/lib/opera
 import { Badge, ErrorNote, Loading, Notice } from "../../../shared/ui/feedback";
 import { Button } from "../../../shared/ui/actions";
 import { Heading } from "../../../shared/ui/layout";
+import {OperationFlowEditor} from './OperationFlowEditor';
 import { requiredVariables, sourceChoice } from './draft';
 const recordingLabels: Record<string, string> = { STARTING: '正在打开浏览器', RECORDING: '浏览器已打开', PROCESSING: '正在整理操作', PENDING_REVIEW: '等待核对', COMPLETED: '已保存', FAILED: '录制未完成', CANCELLED: '已放弃' };
 type MaterialEditorProps = {
@@ -30,6 +31,7 @@ export function MaterialEditor(props: MaterialEditorProps) {
     return <MaterialEditorSession key={identity} {...props} pendingKey={'jiejian.studio.material:' + identity}/>;
 }
 function MaterialEditorSession({ projectId, reference, label, actionName, resumeRecordingId, onBack, onError, pendingKey }: MaterialEditorProps & {pendingKey: string}) {
+    const [flowEditor,setFlowEditor]=useState(false);
     const key = `material:${projectId}:${JSON.stringify(reference)}`;
     const state = useRead(key, () => api.material(projectId, reference));
     const [selected, setSelected] = useState(''), [preview, setPreview] = useState<{
@@ -115,7 +117,8 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
         throw error;
     } });
     const creating = mode === 'new' || !details?.candidates.length;
-    return <><div><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} disabled={busy} onClick={onBack}>检查准备</Button></div><Heading eyebrow={actionName ? text(actionName) : undefined} title={label}/>
+    if(flowEditor)return <OperationFlowEditor projectId={projectId} actionId={reference.action_id} onBack={()=>{setFlowEditor(false);state.reload()}}/>;
+    return <><div><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} disabled={busy} onClick={onBack}>检查准备</Button></div><Heading eyebrow={actionName ? text(actionName) : undefined} title={label} actions={reference.kind!=='evidence'&&<Button onClick={()=>setFlowEditor(true)}>接口方式设置</Button>}/>
     {state.loading ? <Loading page/> : state.error ? <ErrorNote error={state.error} onRetry={state.reload}/> : details && !current?.recording && <section className="jj-recording-workspace" aria-label="操作录制">
       <header className="jj-recording-toolbar"><h2>{creating ? '录制新操作' : '选择已有录制'}</h2>{details.candidates.length > 0 && <Button kind="quiet" disabled={busy || Boolean(uncertain) || captureUnknown} icon={creating ? <ArrowLeftOutlined aria-hidden="true"/> : <PlusOutlined aria-hidden="true"/>} onClick={() => { setMode(creating ? 'existing' : 'new'); setPreview(undefined); }}>{creating ? '已有录制' : '新建录制'}</Button>}</header>
       {creating ? <div className="jj-recording-setup"><div className="jj-recording-instruction"><VideoCameraOutlined aria-hidden="true"/><p>在独立浏览器中完成一次业务操作，结束后核对步骤与资源。</p></div>{details.recording_context?.can_execute ? <><dl className="jj-recording-participants"><div><dt>操作账号</dt><dd>{text(setup.data?.test_identity_options.find(item => item.test_identity_id === details.recording_context!.subject_test_identity_id)?.label ?? '正在核对账号')}</dd></div><div><dt>资源所有者</dt><dd>{text(setup.data?.test_identity_options.find(item => item.test_identity_id === details.recording_context!.resource_owner_test_identity_id)?.label ?? '正在核对账号')}</dd></div></dl>{setup.error && <ErrorNote error={setup.error} onRetry={setup.reload}/>}<label className="jj-checkbox"><input type="checkbox" checked={confirmOwner} onChange={event => setConfirmOwner(event.target.checked)}/><span>我已核对本次操作账号与资源所有者</span></label><div className="jj-recording-actions"><Button kind="primary" disabled={!confirmOwner || busy || captureUnknown || Boolean(capturePending) || !setup.data || Boolean(setup.error)} busy={busy} onClick={() => void act(async () => { const c = details.recording_context!; try {
@@ -134,7 +137,7 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
                 throw error;
             } })}>建立本次录制</Button></div></> : <Notice>当前还不能录制，请先核对账号、权限与资源条件。</Notice>}</div> : <>
         <fieldset className="jj-recording-list" aria-label="已有操作录制">{details.candidates.map((item, index) => <label key={item.recording_id}><input type="radio" name="material-recording" value={item.recording_id} checked={selected === item.recording_id} disabled={busy || Boolean(uncertain)} onChange={() => { setSelected(item.recording_id); setPreview(undefined); }}/><strong>{item.recording_id === details.source_recording_id ? '已采用的录制' : `操作记录 ${index + 1}`}</strong>{item.captured_at_us && <time dateTime={new Date(item.captured_at_us / 1000).toISOString()}>{date(item.captured_at_us)}</time>}<Badge tone={item.current ? 'positive' : 'neutral'}>{item.current ? '当前版本' : '需重新核对'}</Badge></label>)}</fieldset>
-        {preview && <div className="jj-material-impact"><h3>采用后需要更新的材料</h3><ul>{preview.impact.updates.map((item, index) => <li key={index}>{({ execution: '操作录制', resource: '测试资源', evidence: '业务结果证明', recovery: '操作恢复' })[item.kind]}</li>)}</ul>{preview.impact.recheck.length > 0 && <p>{preview.impact.recheck.length} 项相关材料将重新核对。</p>}</div>}
+        {preview && <div className="jj-material-impact"><h3>使用后将更新的材料</h3><ul>{preview.impact.updates.map((item, index) => <li key={index}>{({ execution: '操作录制', resource: '测试资源', evidence: '业务结果证明', recovery: '操作恢复' })[item.kind]}</li>)}</ul>{preview.impact.recheck.length > 0 && <p>{preview.impact.recheck.length} 项相关材料将重新核对。</p>}</div>}
         <footer className="jj-recording-actions">{uncertain ? <Notice>采用结果尚未确认。<Button busy={busy} onClick={() => void act(async () => { complete(await api.materialReceipt(projectId, uncertain), uncertain); })}>查询本次采用</Button></Notice> : <>{preview && <Button disabled={busy} onClick={() => setPreview(undefined)}>返回选择</Button>}<Button kind="primary" busy={busy} disabled={!selected} onClick={preview ? () => void act(async () => {
                 const operation = preview.change.operation_id;
                 sessionStorage.setItem(pendingKey, operation);
@@ -148,7 +151,7 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
                     if (mounted.current) setUncertain(undefined);
                 }
                 throw error;
-            } }) : choose}>{preview ? '采用这份记录' : '核对采用影响'}</Button></>}</footer>
+            } }) : choose}>{preview ? '确认使用这份录制' : '核对后用于检查'}</Button></>}</footer>
       </>}
     </section>}
     {(captureUnknown || capturePending && !current) && <Notice>录制操作尚未确认。<Button busy={busy} onClick={() => void act(() => recoverCapture(true))}>查询并恢复本次录制</Button></Notice>}

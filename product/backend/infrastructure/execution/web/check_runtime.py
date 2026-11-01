@@ -55,7 +55,17 @@ class CheckWebRuntime:
         return self._actual_identities.get(case_id, "UNKNOWN")
 
     @contextmanager
-    def identity_session(self, identity_id: str):
+    def identity_session(self, identity_id: str | None):
+        if identity_id is None:
+            from product.protocols.web.identity import AnonymousIdentityBinding
+            runtime = HttpIdentityRuntime(AnonymousIdentityBinding(), resolve_secret=lambda _: None,
+                business_origin=self.bundle.target.base_url)
+            try:
+                runtime.bootstrap(lambda *_args, **_kwargs: None)
+                yield runtime
+            finally:
+                runtime.close()
+            return
         definition = self._identities.get(identity_id)
         if definition is None:
             raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "执行身份与所需凭据类型不一致，请重新生成检查配置")
@@ -75,13 +85,16 @@ class CheckWebRuntime:
             return self._verify_identity(runtime, identity_id, case, cleanup=cleanup)
 
     def _verify_identity(self, runtime: HttpIdentityRuntime, identity_id: str, case: ExecutionCase, *, cleanup=False) -> str:
-        definition = self._identities[identity_id]
+        # 匿名也读取真实身份端点；SETUP 后若会话已登录，不能继续冒充匿名场景。
+        definition = self._identities[case.resource_owner_test_identity_id if identity_id is None else identity_id]
         verification = definition.verification
         if verification is None:
             return "UNKNOWN"
         try:
             _, response = self.adapter.execute_detailed(verification.request, case_id=case.case_id,
                 action_id="identity-verification", identity_runtime=runtime, cleanup_request=cleanup)
+            if identity_id is None:
+                return 'MATCH' if response.status_code in (401, 403) else 'MISMATCH' if 200 <= response.status_code < 300 else 'UNKNOWN'
             if not 200 <= response.status_code < 300:
                 return "UNKNOWN"
             found, subject = _read_json_path(response.data, verification.subject_json_path)

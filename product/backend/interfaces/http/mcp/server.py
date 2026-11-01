@@ -112,6 +112,8 @@ def build_mcp_control(
     from product.backend.interfaces.http.mcp.preparation import register_preparation_tools
     register_preparation_tools(server,context,access,require_level=require_mcp_level,
         invoke=_invoke,client_name=_REQUEST_CLIENT.get)
+    from product.backend.interfaces.http.mcp.collaboration import register_collaboration_tools
+    register_collaboration_tools(server, context, access, require_level=require_mcp_level, invoke=_invoke)
 
     @server.tool(name="jiejian_project_list", structured_output=True)
     def project_list(ctx: Context, include_archived: bool = False) -> list[dict[str, Any]]:
@@ -216,8 +218,7 @@ def build_mcp_control(
     @server.tool(name="jiejian_result_show",structured_output=True)
     def result_show(ctx: Context, project_id: str, run_id: str) -> dict[str,Any]:
         require_mcp_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
-        _invoke(lambda:context.check_results.status(run_id,project_id=project_id))
-        return _current_story_view(_invoke(lambda:context.check_story.build(run_id)))
+        return _current_story_view(_invoke(lambda:context.check_story.build(run_id,project_id=project_id)))
 
     @server.tool(name='jiejian_evidence_show',structured_output=True)
     def evidence_show(ctx:Context,project_id:str,run_id:str,case_id:str,evidence_id:str,record_ref:str|None=None)->dict[str,Any]:
@@ -266,7 +267,7 @@ def build_mcp_control(
         repair_reference: CurrentRepairReference | None = None) -> dict[str,Any]:
         require_mcp_level(access,ctx,MCPAccessLevel.PREPARE,project_id=project_id)
         name = _REQUEST_CLIENT.get()
-        submitted_by = "MCP Agent" if name is None else "MCP · "+name[:122]
+        submitted_by = "MCP Agent" if name is None else "MCP "+name[:122]
         return _json(_invoke(lambda:context.development.deliver(project_id, task_id,
             operation_id=operation_id, expected_version=expected_version, context_id=context_id, reason=reason,
             claimed_paths=claimed_paths or (), repair_reference=repair_reference, submitted_by=submitted_by)))

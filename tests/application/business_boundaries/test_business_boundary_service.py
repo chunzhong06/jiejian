@@ -648,6 +648,34 @@ def test_rejected_candidates_do_not_return_to_boundary_preview(tmp_path: Path) -
         core.close()
 
 
+def test_optional_explanations_do_not_replace_required_rule_decisions(tmp_path):
+    from product.backend.application.business_boundaries.models import BoundaryMaintenanceCommand
+    core, project = _core(tmp_path)
+    try:
+        initial = _create_proposal(core,project)
+        core.business_boundaries.approve(project,initial.proposal_id,expected_fingerprint=initial.proposal_fingerprint,reason='明确批准测试规则')
+        draft = core.business_boundaries.maintenance_draft(project)
+        command = _maintenance_command(draft).model_dump(mode='json')
+        command.pop('provenance')
+        for actor in command['actors']:
+            actor.pop('description')
+        for action in command['actions']:
+            action.pop('description')
+            for effect in action['effects']:
+                effect.pop('description')
+        parsed = BoundaryMaintenanceCommand.model_validate_json(__import__('json').dumps(command))
+        created = core.business_boundaries.create_maintenance_proposal(project,parsed)
+        before = core.business_boundaries.view(project)
+        assert all(item.description for item in before.actors)
+        after = core.business_boundaries.approve(project,created.proposal.proposal_id,
+            expected_fingerprint=created.proposal.proposal_fingerprint,reason='明确批准选填说明的变更')
+        assert all(item.description == '' for item in after.actors)
+        assert after.permission_intents
+        assert all(item.protected_effect_ids for item in after.permission_intents)
+    finally:
+        core.close()
+
+
 def test_maintenance_draft_is_stable_and_guards_complete_current_state(
     tmp_path: Path,
 ) -> None:

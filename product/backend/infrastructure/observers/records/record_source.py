@@ -80,8 +80,20 @@ def _read_owned_payload(var_dir, runtime_reference, path, *, timeout_us, max_res
         adapter.close()
 
 
-def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False):
+def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False, verified_subject=None):
     if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
+    if config.source_kind in {'SQLITE_AUDIT','SQLITE_OBJECTS'} and not trace:
+        from product.backend.infrastructure.observers.records.sqlite_source import read_sqlite_source
+        from product.protocols.runtime.transaction_records import RecordRequestScope
+        scope = None
+        if request_nonce is not None:
+            body = _read_owned_payload(var_dir, runtime_reference, '/activity/read/' + quote(request_nonce, safe=''),
+                timeout_us=config.timeout_us, max_response_bytes=config.max_response_bytes, cancelled=cancelled)
+            scope = RecordRequestScope.model_validate_json(json.dumps(body.get('data'), allow_nan=False))
+            if scope.request_nonce != request_nonce:
+                raise SourceReadError('OPERATION_CORRELATION_INVALID')
+        return read_sqlite_source(var_dir, runtime_reference, config, resource_id, scope=scope,
+            verified_subject=verified_subject, cancelled=cancelled)
     creation = config.source_kind == 'CREATED_OBJECT_RECORDS' and not trace
     path = ('/creation/read/'+quote(config.collection,safe='')) if creation else (
         ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe=''))

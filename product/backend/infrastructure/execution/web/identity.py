@@ -15,6 +15,7 @@ import httpx
 
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.protocols.web.identity import (
+    AnonymousIdentityBinding,
     BearerIdentityBinding,
     CookieSessionIdentityBinding,
     HttpIdentityBinding,
@@ -113,7 +114,7 @@ class HttpIdentityRuntime:
     def bootstrap(self, send: BootstrapSender, *, requests: tuple[Any, ...] = ()) -> None:
         """运行已由上层冻结的 Bootstrap；任一步失败都终止本身份。"""
 
-        if isinstance(self.binding, (BearerIdentityBinding, StaticHeadersIdentityBinding)):
+        if isinstance(self.binding, (AnonymousIdentityBinding, BearerIdentityBinding, StaticHeadersIdentityBinding)):
             self._bootstrapped = True
             return
         if isinstance(self.binding, PreparedCookieSessionIdentityBinding):

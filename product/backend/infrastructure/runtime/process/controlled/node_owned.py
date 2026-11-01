@@ -18,13 +18,14 @@ from product.protocols.runtime.node_runtime import NodeRuntimeManifest, NodeRunt
 from product.protocols.runtime.runtime_identity import MAX_MANIFEST_BYTES
 
 EXECUTOR = Path(__file__).with_name("node_target.mjs")
+SQLITE_ADAPTER = Path(__file__).with_name('sqlite_capture.mjs')
 
 
 def node_artifact_store(var_dir: Path) -> Path:
     return var_dir.resolve() / "runtime" / "node-artifacts"
 
 
-def read_node_manifest(var_dir: Path, request: NodeRuntimeLoadRequest) -> tuple[Path, NodeRuntimeManifest]:
+def read_node_manifest(var_dir: Path, request: NodeRuntimeLoadRequest, *, verify_files=True) -> tuple[Path, NodeRuntimeManifest]:
     root = node_artifact_store(var_dir) / request.instance_id
     if root.resolve() != root or not root.is_dir():
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "冻结的运行副本不可用")
@@ -33,7 +34,7 @@ def read_node_manifest(var_dir: Path, request: NodeRuntimeLoadRequest) -> tuple[
             or node_document_fingerprint(manifest) != request.manifest_fingerprint
             or manifest.source_fingerprint != request.source_fingerprint):
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "运行副本与本次加载输入不一致")
-    verify_runtime_artifact(root / "source", manifest)
+    if verify_files:verify_runtime_artifact(root / "source", manifest)
     return root, manifest
 
 
@@ -44,9 +45,10 @@ def _digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def node_execution_identity(node_executable: Path) -> dict[str, str]:
+def node_execution_identity(node_executable: Path, *, module_loader='NODE_STANDARD') -> dict[str, str]:
     """按解释器、固定执行器顺序核验身份；路径与摘要算法由运行基础设施拥有。"""
-    return {"interpreter_fingerprint": _digest(node_executable), "executor_fingerprint": _digest(EXECUTOR)}
+    return {"interpreter_fingerprint": _digest(node_executable),
+        "executor_fingerprint": hashlib.sha256(EXECUTOR.read_bytes() + (SQLITE_ADAPTER.read_bytes() if module_loader == 'NODE_STANDARD' else b'')).hexdigest()}
 
 
 def node_reference_matches(var_dir: Path, request: NodeRuntimeLoadRequest, reference: NodeRuntimeReference,
@@ -56,6 +58,13 @@ def node_reference_matches(var_dir: Path, request: NodeRuntimeLoadRequest, refer
             or reference.manifest_fingerprint!=request.manifest_fingerprint or reference.source_fingerprint!=request.source_fingerprint):
         return False
     return node_corresponds(var_dir,reference,node_executable)
+
+
+def node_process_alive(reference):
+    """界面运行状态只核对内核归属；正式采集仍调用 node_corresponds 核验执行产物。"""
+    identity={'kind':'windows-job','name':'jiejian-node-'+reference.instance_id}
+    return (kernel_process_created_at(identity,reference.process_id)==reference.process_created_at
+        and ipv4_listeners(reference.port)==(('127.0.0.1',reference.process_id),))
 
 
 def node_corresponds(var_dir: Path, reference: NodeRuntimeReference, node_executable: Path) -> bool:
@@ -75,7 +84,12 @@ def node_corresponds(var_dir: Path, reference: NodeRuntimeReference, node_execut
                 or reference.manifest_fingerprint != node_document_fingerprint(manifest)
                 or reference.source_fingerprint != manifest.source_fingerprint or reference.port != manifest.port
                 or _digest(node_executable) != manifest.interpreter_fingerprint
-                or _digest(EXECUTOR) != manifest.executor_fingerprint):
+                or node_execution_identity(node_executable,module_loader=manifest.module_loader)['executor_fingerprint'] != manifest.executor_fingerprint):
+            return False
+        from product.backend.infrastructure.runtime.process.controlled.npm import verify_dependencies
+        verify_dependencies(root, manifest)
+        from product.backend.infrastructure.runtime.process.controlled.npm import execution_fingerprint
+        if reference.execution_fingerprint!=execution_fingerprint(root,manifest):
             return False
         return kernel_process_created_at(identity, reference.process_id) == before
     except (OSError, ValueError, JiejianError):
@@ -102,8 +116,7 @@ def start_owned_node(var_dir: Path, request: NodeRuntimeLoadRequest, node_execut
     if os.name != "nt" or not 0 < timeout <= 30 or not node_executable.is_absolute():
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前系统不支持这种受控运行方式")
     root, manifest = read_node_manifest(var_dir, request)
-    if (_digest(node_executable) != manifest.interpreter_fingerprint
-            or _digest(EXECUTOR) != manifest.executor_fingerprint):
+    if node_execution_identity(node_executable,module_loader=manifest.module_loader) != dict(interpreter_fingerprint=manifest.interpreter_fingerprint, executor_fingerprint=manifest.executor_fingerprint):
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "解释器或受控加载器发生变化")
     gate = root / "start.gate"
     if gate.exists():
@@ -114,11 +127,22 @@ def start_owned_node(var_dir: Path, request: NodeRuntimeLoadRequest, node_execut
     if data.resolve() != data:
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "运行数据目录含有链接")
     data.mkdir(parents=True, exist_ok=True)
+    from product.backend.infrastructure.runtime.process.controlled.npm import prepare_dependencies
+    from product.backend.infrastructure.runtime.process.controlled.sqlite_capture import prepare_sqlite_copies
+    prepare_dependencies(root, manifest, node_executable, var_dir, cancelled=cancelled)
+    if manifest.sqlite:
+        prepare_sqlite_copies(Path(manifest.sqlite_source_root).resolve(), data, manifest)
     environment = {key.upper(): value for key, value in environ.items() if key.upper() in {"SYSTEMROOT", "WINDIR"}}
     raw_hash = hashlib.sha256(_read_bounded(root / "launch.json", MAX_MANIFEST_BYTES)).hexdigest()
+    from product.backend.infrastructure.runtime.process.controlled.npm import execution_fingerprint
+    actual_execution=execution_fingerprint(root,manifest)
     argv = [str(node_executable), "--experimental-vm-modules", "--permission",
-        f"--allow-fs-read={root}", f"--allow-fs-read={EXECUTOR}", f"--allow-fs-read={data}",
+        f"--allow-fs-read={root}", f"--allow-fs-read={EXECUTOR}", f"--allow-fs-read={SQLITE_ADAPTER}", f"--allow-fs-read={data}",
         f"--allow-fs-write={data}", str(EXECUTOR), str(root / "launch.json"), raw_hash, str(data)]
+    if actual_execution is not None:
+        argv.append(actual_execution)
+    if manifest.module_loader == 'NODE_STANDARD':
+        argv.insert(3, '--allow-addons')
     from product.backend.infrastructure.runtime.process.records.record_server import OwnedRecordServer
     records = OwnedRecordServer(var_dir, request.project_id, request.instance_id)
     # 记录库位于目标 fs 权限之外；只给受控宿主业务端口能力，令牌不进入清单、回执或应用 env。
@@ -145,7 +169,7 @@ def start_owned_node(var_dir: Path, request: NodeRuntimeLoadRequest, node_execut
             stream.write(raw_hash)
         reference = NodeRuntimeReference(project_id=request.project_id, instance_id=request.instance_id,
             manifest_fingerprint=request.manifest_fingerprint, source_fingerprint=request.source_fingerprint,
-            process_id=process.pid, process_created_at=created, port=manifest.port)
+            process_id=process.pid, process_created_at=created, port=manifest.port,execution_fingerprint=actual_execution)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if process.poll() is not None or cancelled():

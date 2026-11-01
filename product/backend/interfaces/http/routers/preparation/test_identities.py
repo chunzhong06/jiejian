@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
-from pydantic import Field
+from fastapi import APIRouter, Request
+from pydantic import Field, ValidationError
+from product.backend.domain.identities.models import AuthenticationProfile
+from product.backend.domain.errors import ErrorCode, JiejianError
 
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
 from product.backend.bootstrap import ApplicationCore
@@ -26,10 +28,33 @@ class TestIdentityResetRequest(ApiModel):
 
 class TestIdentityLoginRequest(TestIdentityResetRequest):
     operation_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+    verify_only: bool = False
+
+
+class AuthenticationRequest(ApiModel):
+    schema_version:Literal['1']
+    profile: AuthenticationProfile
+    expected_updated_at_us: int = Field(ge=0)
 
 
 def build_test_identities_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
+
+    @router.get('/api/test-identities/{identity_id}/authentication-options', response_model=ApiResponse)
+    def authentication_options(identity_id: str):
+        return data_response(context.test_identities.authentication_options(identity_id))
+
+    @router.put('/api/test-identities/{identity_id}/authentication',response_model=ApiResponse)
+    async def configure_authentication(identity_id:str,request:Request):
+        raw=await request.body()
+        if len(raw)>16384:
+            raise JiejianError(ErrorCode.INPUT_INVALID,'认证配置过大')
+        try:
+            command=AuthenticationRequest.model_validate_json(raw)
+        except ValidationError:
+            raise JiejianError(ErrorCode.INPUT_INVALID,'认证配置格式不正确') from None
+        return data_response(context.test_identities.configure_authentication(identity_id,command.profile,
+            expected_updated_at_us=command.expected_updated_at_us).model_dump(mode='json'))
 
     @router.get('/api/projects/{project_id}/identity-preparations', response_model=ApiResponse)
     def preparations(project_id: str):
@@ -113,7 +138,7 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
 
     @router.post("/api/test-identities/{identity_id}/preparations", response_model=ApiResponse)
     def start_preparation(identity_id: str, body: TestIdentityLoginRequest):
-        return data_response(context.identity_preparations.start(identity_id, operation_id=body.operation_id).model_dump(mode="json"))
+        return data_response(context.identity_preparations.start(identity_id, operation_id=body.operation_id,verify_only=body.verify_only).model_dump(mode="json"))
 
     @router.get("/api/identity-preparations/{preparation_id}", response_model=ApiResponse)
     def get_preparation(preparation_id: str):

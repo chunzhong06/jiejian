@@ -24,6 +24,7 @@ def legal_demonstrations(contract, permissions, identities):
         for position in contract.identity_requirements.permissions:
             permission = by_id[position.permission.intent_id]
             if (permission.expectation is not PermissionExpectation.ALLOW
+                    or position.subject_slot_id is None
                     or position.resource_owner_slot_id != resource.owner_slot_id
                     or not set(permission.protected_effect_ids) >= needed):
                 continue

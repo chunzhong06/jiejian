@@ -44,8 +44,9 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path):
                 if stage==2:
                     # 同一含义重新保存与采用不换题；revision和preflight_id不是证明标准。
                     updated=service.context(project)
-                    service.save(project,SaveProofSource(operation_id=uuid4().hex,basis_id=updated['basis_id'],source_id=source,expected_revision=1,config=source_configuration(harness)))
-                    source_revision=2
+                    retained=service.save(project,SaveProofSource(operation_id=uuid4().hex,basis_id=updated['basis_id'],source_id=source,expected_revision=1,config=source_configuration(harness)))
+                    assert retained['result']['state']=='UNCHANGED'
+                    source_revision=retained['result']['revision']
             basis = service.context(project)['basis_id']
             started = service.start(project,StartProofPreflight(operation_id=uuid4().hex,basis_id=basis,source_id=source,revision=source_revision))
             preflight = started['result']['preflight_id']

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     delete,
     select,
@@ -22,7 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.domain.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.domain.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie, AuthenticationProfile, IdentityVerificationSnapshot
 from product.backend.infrastructure.storage.base import (
     Base,
     _flush,
@@ -70,6 +71,8 @@ class TestIdentityRow(Base):
     refreshed_at_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    authentication_json: Mapped[str | None] = mapped_column(Text,nullable=True)
+    verification_json: Mapped[str | None] = mapped_column(Text,nullable=True)
 
 
 class TestIdentityCookieRow(Base):
@@ -155,6 +158,12 @@ class TestIdentityRepository:
             raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
         return row.authentication_generation, row.active_preparation_id
 
+    def update_verification(self, identity_id, verification):
+        if verification is not None:ensure_storage_payload_safe(verification.model_dump(mode='json'),self._known_secrets)
+        row = self._session.get(TestIdentityRow,identity_id)
+        row.verification_json = verification.model_dump_json() if verification is not None else None
+        _flush(self._session)
+
     def claim_preparation(self, identity_id, preparation_id):
         row = self._session.get(TestIdentityRow, identity_id)
         row.active_preparation_id = preparation_id
@@ -184,6 +193,8 @@ class TestIdentityRepository:
             "refreshed_at_us": record.refreshed_at_us,
             "created_at_us": record.created_at_us,
             "updated_at_us": record.updated_at_us,
+            'authentication_json':record.authentication.model_dump_json() if record.authentication else None,
+            'verification_json':record.verification.model_dump_json() if record.verification else None,
         }
 
     def _replace_cookies(self, record: TestIdentity) -> None:
@@ -235,5 +246,7 @@ class TestIdentityRepository:
                 "refreshed_at_us": row.refreshed_at_us,
                 "created_at_us": row.created_at_us,
                 "updated_at_us": row.updated_at_us,
+                'authentication':AuthenticationProfile.model_validate_json(row.authentication_json) if row.authentication_json else None,
+                'verification':IdentityVerificationSnapshot.model_validate_json(row.verification_json) if row.verification_json else None,
             }
         )

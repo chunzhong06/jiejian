@@ -3,6 +3,7 @@ import { request } from '../../../shared/api/http'
 import type { PermissionIntentRevisionDto } from '../../permission/api/businessBoundaries'
 
 export type PermissionReference = { intent_id: string; revision: number; intent_hash: string }
+export type RuleCaseData = {project_id:string;permission:PermissionReference;resource_id:string;owner_identity_id:string;base_binding_fingerprint:string;confirmed_at_us:number}
 export type AllowControlRequirement = {
   deny_permission: PermissionReference
   protected_effect_ids: string[]
@@ -25,7 +26,7 @@ export type ActionPreparation = {
   preparation_complete: boolean
   next_material: 'identity'|'execution'|'resource'|'evidence'|'recovery'|null
   permissions: PermissionIntentRevisionDto[]
-  assurance_contract: { allow_controls: AllowControlRequirement[] }
+  assurance_contract: { allow_controls: AllowControlRequirement[]; identity_requirements?: {permissions:Array<{permission:PermissionReference;subject_slot_id:string|null;resource_owner_slot_id:string}>} }
   identity_requirements: PreparationItem & { allocation_mode: string; slots: IdentitySlot[] }
   execution: PreparationItem
   resources: Array<PreparationItem & { owner_slot_id: string; owner_test_identity_id: string | null }>
@@ -67,6 +68,8 @@ export type PreparationDraft = {
   material: MaterialReference | null; candidate_recording_id: string | null; base_fingerprint: string | null; pending_operation_id: string | null
 }
 export const preparationApi = {
+  ruleData:(project:string)=>request<RuleCaseData[]>(`/api/projects/${project}/preparation/rule-data`),
+  selectRuleData:(project:string,value:{permission:PermissionReference;resource_id:string;owner_identity_id:string;expected_binding_fingerprint:string})=>request<RuleCaseData>(`/api/projects/${project}/preparation/rule-data`,{method:'PUT',body:JSON.stringify(value)}),
   material: (projectId: string, ref: MaterialReference) => request<MaterialDetails>(`/api/projects/${projectId}/preparation/materials/${ref.action_id}/${ref.kind}?action_revision=${ref.action_revision}${ref.member_id ? `&member_id=${encodeURIComponent(ref.member_id)}` : ''}`),
   previewMaterial: (projectId: string, value: MaterialChange) => request<MaterialPreview>(`/api/projects/${projectId}/preparation/changes/preview`, { method: 'POST', body: JSON.stringify(value) }),
   saveMaterial: (projectId: string, value: MaterialChange) => request<MaterialReceipt>(`/api/projects/${projectId}/preparation/changes`, { method: 'POST', body: JSON.stringify(value) }),

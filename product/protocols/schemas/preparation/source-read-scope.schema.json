@@ -1,4 +1,39 @@
 {
+  "$defs": {
+    "SqliteReadSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "database_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Database Path",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "database_path",
+        "table",
+        "columns"
+      ],
+      "title": "SqliteReadSelection",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "created_at_us": {
@@ -66,6 +101,15 @@
       "pattern": "^prs_[0-9a-f]{32}$",
       "title": "Scope Id",
       "type": "string"
+    },
+    "sqlite": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SqliteReadSelection"
+      },
+      "maxItems": 4,
+      "title": "Sqlite",
+      "type": "array"
     },
     "timeout_us": {
       "maximum": 5000000,

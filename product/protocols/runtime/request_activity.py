@@ -46,7 +46,7 @@ class RequestActivity(RuntimeModel):
     request_nonce: Digest
     request_digest: Digest
     collector: Literal['CONTROLLED_NODE'] = 'CONTROLLED_NODE'
-    adapters: tuple[Literal['node:http', 'node:https', 'node:sqlite', 'node:fs', 'node:fs/promises'], ...] = Field(max_length=5)
+    adapters: tuple[Literal['node:http', 'node:https', 'node:sqlite', 'node:fs', 'node:fs/promises', 'better-sqlite3'], ...] = Field(max_length=6)
     complete: bool
     dropped_count: int = Field(default=0, ge=0)
     events: tuple[ActivityEvent, ...] = Field(min_length=1, max_length=128)

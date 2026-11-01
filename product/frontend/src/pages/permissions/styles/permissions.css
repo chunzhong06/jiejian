@@ -74,7 +74,7 @@
 .jj-rule-authoring { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:start; border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--inset); overflow:clip; }
 .jj-rule-authoring-editor { container: rule-editor / inline-size; min-width:0; align-self:stretch; background:var(--surface); border-right:1px solid var(--line); }
 .jj-rule-authoring-editor > .jj-tabs { display:flex; flex-wrap:wrap; gap:8px 24px; margin:0; padding-inline:24px; background:var(--inset); border-bottom:1px solid var(--line); }
-.jj-rule-authoring-editor > .jj-tabs > button { border:0; background:transparent; color:var(--muted); font-size:var(--text-body); font-weight:500; padding:18px 0; }
+.jj-rule-authoring-editor > .jj-tabs > button { border:0; background:transparent; color:var(--muted); font-size:var(--text-body); font-weight:500; padding:18px 12px; }
 .jj-rule-authoring-editor > .jj-tabs > button[aria-selected=true] { color:var(--accent-ink); font-weight:600; }
 .jj-rule-authoring-editor > .jj-tabs > button:hover { color:var(--ink); }
 .jj-rule-authoring-panel { animation:jj-initial-panel-in var(--motion-content) var(--ease-enter) both; }
@@ -103,7 +103,7 @@
 .jj-initial-next { display:flex; justify-content:flex-end; padding:18px 24px; border-top:1px solid var(--line); }
 .jj-initial-preview { position:sticky; top:92px; min-width:0; background:var(--inset); }
 .jj-initial-preview > header { display:flex; align-items:center; gap:12px; padding:22px 20px; border-bottom:1px solid var(--line); }
-.jj-initial-preview > header > div { display:grid; gap:7px; justify-items:start; }
+.jj-initial-preview > header > .jj-badge { margin-left:auto; }
 .jj-initial-preview h2 { font-size:var(--text-body); }
 .jj-initial-preview-symbol { display:grid; place-items:center; width:40px; height:40px; border-radius:var(--radius-control); background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); flex:none; }
 .jj-initial-preview-rules { padding:8px; }
@@ -121,9 +121,14 @@
 .jj-initial-submit { display:grid; gap:16px; padding:22px 20px; border-top:1px solid var(--line); }
 .jj-initial-submit > p { font-size:var(--text-meta); color:var(--muted); }
 .jj-initial-submit > .jj-button { width:100%; justify-content:space-between; }
-.jj-initial-missing { display:grid; gap:6px; padding-bottom:16px; border-bottom:1px solid var(--line); }
-.jj-initial-missing h3 { font-size:var(--text-meta); color:var(--muted); margin-bottom:2px; }
-.jj-initial-missing > .jj-button { white-space:normal; text-align:left; justify-content:space-between; padding:8px 0; font-size:var(--text-meta); }
+.jj-initial-missing { padding:0; border:0; }
+.jj-initial-missing > div { display:grid; gap:8px; margin-top:12px; }
+.jj-initial-missing .jj-button { white-space:normal; text-align:left; justify-content:space-between; padding:8px 12px; font-size:var(--text-meta); }
+.jj-initial-candidates { padding:18px 24px; border-top:1px solid var(--line); background:var(--inset); }
+.jj-initial-extra { grid-column:1/-1; min-width:0; padding:0; border:0; }
+.jj-initial-extra > div { display:grid; gap:18px; margin-top:18px; }
+.jj-initial-role-fields > .jj-initial-extra { grid-column:auto; align-self:center; }
+.jj-initial-provenance > .jj-field { margin-top:16px; }
 @keyframes jj-initial-panel-in { from { opacity:.8; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
 @container rule-editor (min-width:760px) { .jj-initial-permission-fields { grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; } .jj-initial-action { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; } .jj-initial-effects { margin-top:0; } .jj-initial-entity-actions { grid-column:1/-1; margin-top:0; } }
 @media(max-width:1120px) { .jj-rule-authoring { grid-template-columns:minmax(0,1fr); } .jj-rule-authoring-editor { border-right:0; border-bottom:1px solid var(--line); } .jj-initial-preview { position:static; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .jj-initial-preview > header { grid-column:1/-1; } .jj-initial-provenance { grid-column:2; grid-row:2; border-top:0; border-left:1px solid var(--line); } .jj-initial-submit { grid-column:1/-1; } .jj-initial-preview:not([data-section=permissions]) > .jj-initial-submit { grid-column:2; grid-row:2; border-top:0; border-left:1px solid var(--line); } }

@@ -94,7 +94,7 @@ class PreparationService:
                        if item.action_id == action_id and item.project_id == project_id), None)
         return evidence_details(project_id, prepared, action, self._bindings)
 
-    def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str):
+    def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str, selected_permissions=None):
         """在装配事务内重读来源和绑定，再编译本次检查计划。"""
         if self._uow_factory is None:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配")
@@ -103,11 +103,16 @@ class PreparationService:
         inputs = []
         with self._uow_factory() as work:
             boundary = self._business_boundaries.view(project_id, work=work)
+            from product.backend.domain.checks.selection import resolve_selected_permissions, select_action_input
+            selected = None if selected_permissions is None else resolve_selected_permissions(boundary.permission_intents, selected_permissions)
             understanding = work.application_understanding.get(project_id)
             if understanding is None or understanding.source_fingerprint is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             repository = work.action_preparation
             for action in boundary.actions:
+                if selected is not None and not any((p.intent_id, p.revision, p.intent_hash) in selected
+                    for p in boundary.permission_intents if p.business_action_id == action.action_id):
+                    continue
                 item = prepared.get(action.action_id)
                 if item is None or item.action_revision != action.revision:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
@@ -143,21 +148,24 @@ class PreparationService:
                 capabilities = () if self._bindings is None else self._bindings.proof_capabilities(project_id, evidence)
                 inputs.append(PreparedActionInput(action=action, permissions=permissions, assurance=contract,
                     identities=tuple(identities), execution=execution, resources=resources, evidence=evidence,
+                    case_data=repository.case_data(project_id),
                     recovery=recovery, observer_capabilities=capabilities, reason_codes=tuple(dict.fromkeys((
                         *item.reason_codes, *(reason for status in (technical.execution, *technical.resources,
                             *technical.effect_evidence, technical.recovery) for reason in status.reason_codes))))))
+            if selected is not None:
+                inputs = [select_action_input(item, selected) for item in inputs]
             return compile_project_check_plan(project_id, source_fingerprint=understanding.source_fingerprint,
                 policy_epoch=boundary.policy_epoch, engine_version=engine_version,
                 config_fingerprint=config_fingerprint, actions=tuple(inputs))
 
     def build_execution_request(self, project_id: str, *, engine_version: str,
                                    config_fingerprint: str, budget_fingerprint: str,
-                                   change_context=None, repair_context=None):
+                                   change_context=None, repair_context=None, selected_permissions=None):
         """只构造完整快照；有缺口时拒绝，不生成会话、Job 或 Run。"""
         import json
         from product.protocols.checks.execution_request import ExecutionRequest
         plan = self.current_plan(project_id, engine_version=engine_version,
-                                 config_fingerprint=config_fingerprint)
+                                 config_fingerprint=config_fingerprint, selected_permissions=selected_permissions)
         if plan.gaps or not plan.actions or any(not item.cases for item in plan.actions):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备尚未完成",
                                details={"reason": "CHECK_PLAN_INCOMPLETE"})
@@ -168,6 +176,39 @@ class PreparationService:
                        change_context=None if change_context is None else change_context.model_dump(mode="json"),
                        repair_context=None if repair_context is None else repair_context.model_dump(mode="json"))
         return ExecutionRequest.model_validate_json(json.dumps(payload), strict=True)
+
+    def case_data(self, project_id):
+        with self._uow_factory() as work:
+            return tuple(item.model_dump(mode='json') for item in work.action_preparation.case_data(project_id))
+
+    def bind_case_data(self, project_id, *, permission, resource_id, owner_identity_id, expected_binding_fingerprint):
+        """给准确规则修订选择测试数据；复用已核对模板，执行前仍独立核对归属和条件。"""
+        from product.backend.domain.preparation.bindings import RuleCaseDataBinding
+        with self._uow_factory() as work:
+            view = self._project_current(project_id, work)
+            action = next((item for item in view.actions if any(
+                (rule.intent_id,rule.revision,rule.intent_hash) == (permission.intent_id,permission.revision,permission.intent_hash)
+                for rule in item.permissions)), None)
+            if action is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '权限规则已变化，请重新选择测试数据')
+            position = next(item for item in action.assurance_contract.identity_requirements.permissions
+                            if item.permission.intent_id == permission.intent_id)
+            owner = next(item for item in action.identity_requirements.slots
+                         if item.requirement.slot_id == position.resource_owner_slot_id)
+            base = work.action_preparation.resource(action.action_id, action.action_revision, owner_identity_id)
+            if (owner.test_identity_id != owner_identity_id or base is None
+                    or base.binding_fingerprint != expected_binding_fingerprint):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '测试数据的账号或操作模板已变化，请重新核对')
+            binding = RuleCaseDataBinding(project_id=project_id, permission=permission,
+                resource_id=resource_id, owner_identity_id=owner_identity_id,
+                base_binding_fingerprint=base.binding_fingerprint, confirmed_at_us=self._clock_us())
+            previous = next((item for item in work.action_preparation.case_data(project_id)
+                             if item.permission.intent_id == permission.intent_id), None)
+            if previous is not None and previous.model_dump(exclude={'confirmed_at_us'}) == binding.model_dump(exclude={'confirmed_at_us'}):
+                return previous.model_dump(mode='json')
+            work.action_preparation.replace_case_data(binding)
+            work.commit()
+            return binding.model_dump(mode='json')
 
     def select_allow_control(self, project_id: str, *, deny_permission: PermissionIdentity,
                              selected_allow_permission: PermissionIdentity, expected_selection_fingerprint: str):
@@ -315,17 +356,14 @@ class PreparationService:
         for slot in contract.identity_requirements.slots:
             matching = tuple(item for item in identities
                              if (item.actor_id, item.actor_revision) == (slot.actor_id, slot.actor_revision))
-            usable = sorted((item for item in matching
-                             if item.status in (TestIdentityStatus.PREPARED, TestIdentityStatus.NOT_PREPARED)
-                             and item.identity_id not in used), key=lambda item: (
-                                 item.status is not TestIdentityStatus.PREPARED,
-                                 item.created_at_us, item.identity_id,
-                             ))
+            # 会话失效不能改变资源所属账号；槽位按账号建立顺序分配，可用性另行判断。
+            usable = sorted((item for item in matching if item.identity_id not in used),
+                            key=lambda item: (item.created_at_us, item.identity_id))
             selected = usable[0] if usable else None
             if selected is not None:
                 used.add(selected.identity_id)
             satisfied = selected is not None and selected.status is TestIdentityStatus.PREPARED
-            stale = selected is None and any(item.status is TestIdentityStatus.NEEDS_REVIEW for item in matching)
+            stale = selected is not None and selected.status is TestIdentityStatus.NEEDS_REVIEW
             reasons = () if satisfied else (
                 "TEST_IDENTITY_REVIEW_REQUIRED" if stale else
                 "TEST_IDENTITY_LOGIN_REQUIRED" if selected else "TEST_IDENTITY_REQUIRED",

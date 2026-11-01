@@ -18,7 +18,7 @@ from product.backend.application.runtime.load_jobs import RuntimeLoadJobs
 from product.backend.infrastructure.runtime.jobs.queue import JobQueue
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
-from product.protocols.runtime.node_runtime import NodeRuntimeManifest, NodeRuntimeLoadRequest, ProjectId, node_document_fingerprint
+from product.protocols.runtime.node_runtime import NodeRuntimeManifest, NodeRuntimeLoadRequest, NodePackagePlan, SqliteDatabaseCapture, ProjectId, node_document_fingerprint
 from product.protocols.runtime.runtime_identity import RuntimeFile, RuntimeModel, runtime_source_fingerprint, Digest
 
 
@@ -32,6 +32,8 @@ class NodeStartPreview(RuntimeModel):
     executor_fingerprint: Digest
     files: tuple[RuntimeFile, ...]
     preview_fingerprint: Digest
+    package: NodePackagePlan | None = None
+    sqlite: tuple[SqliteDatabaseCapture, ...] = ()
 
 
 class NodeRuntimeSetup:
@@ -46,7 +48,35 @@ class NodeRuntimeSetup:
         self._control_port=urlsplit(control_origin).port if control_origin else None
         self._clock=clock_us or (lambda:time.time_ns()//1000)
 
-    def preview(self, project_id, *, entry, port, revision, consent_source_read=False):
+    def capabilities(self, project_id):
+        current = self._eligible(project_id)
+        if not current.source_analysis_authorized:
+            return dict(project_id=project_id,source_read_authorized=False,entries=[],package=None,
+                dependencies='NEEDS_AUTHORIZATION',build_scripts=[],database='NEEDS_CONFIGURATION')
+        root = Path(current.source_root)
+        analysis = self.understanding.analyzer.analyze(project_id,root)
+        entries = [item.relative_path for item in analysis.files if item.relative_path.endswith(('.js','.mjs','.cjs'))]
+        package, scripts, dependency_state = None, [], 'NOT_REQUIRED'
+        if (root/'package.json').is_file():
+            try:
+                package = json.loads((root/'package.json').read_text(encoding='utf-8-sig'))
+                from product.backend.infrastructure.runtime.process.controlled.npm import npm_plan
+                npm_plan(root)
+                dependency_state = 'LOCKED'
+                scripts = list(package.get('scripts', {}))
+            except (OSError,ValueError):
+                dependency_state = 'NEEDS_CONFIGURATION'
+        preferred = package.get('main') if isinstance(package,dict) else None
+        if preferred in entries:
+            entries.remove(preferred)
+            entries.insert(0,preferred)
+        return dict(project_id=project_id,source_read_authorized=True,entries=entries,
+            package=package.get('name') if isinstance(package,dict) else None,dependencies=dependency_state,
+            build_scripts=scripts,database='NEEDS_CONFIGURATION',sqlite_setup=analysis.sqlite_setup.model_dump(mode='json'),module_loader='NODE_STANDARD',
+            supported_database_driver='better-sqlite3 13.0.3',node='24.19.0')
+
+    def preview(self, project_id, *, entry, port, revision, consent_source_read=False,
+            build_script=None, allow_install_scripts=False, sqlite=()):
         """预览只读代码，授权后可先于地址确认；不安装依赖或执行目标。"""
         before=self._eligible(project_id)
         if before.revision != revision:
@@ -59,27 +89,41 @@ class NodeRuntimeSetup:
             raise JiejianError(ErrorCode.SELF_TARGET_FORBIDDEN,'不能使用界鉴自身的服务端口')
         analysis=self.understanding.analyzer.analyze(project_id,before.source_root)
         try:
+            from product.backend.infrastructure.runtime.process.controlled.npm import npm_plan
+            package=npm_plan(Path(before.source_root),build_script=build_script,allow_install_scripts=allow_install_scripts)
             files=inspect_runtime_files(Path(before.source_root),
                 ((item.relative_path, item.content_sha256) for item in analysis.files))
-            if entry not in {item.relative_path for item in files}:
+            if entry not in {item.relative_path for item in files} and (package is None or package.build_script is None):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,
                     '入口文件不在当前目录的已授权文件清单中。入口应相对接入目录填写；例如文件位于 source 子目录时，填写 source/app.mjs。')
             # 与正式源码身份使用同一份受控扫描范围，不能运行扫描范围外的模块。
             manifest=NodeRuntimeManifest(instance_id='rti_'+'0'*32,project_id=project_id,entry=entry,port=port,
                 files=files,source_fingerprint=runtime_source_fingerprint(files),
-                **node_execution_identity(self._node()))
+                **node_execution_identity(self._node()),module_loader='NODE_STANDARD',package=package,sqlite=tuple(sqlite),
+                sqlite_source_root=before.source_root if sqlite else None)
             if manifest.source_fingerprint != analysis.source_fingerprint:
                 raise ValueError('source identity mismatch')
         except (OSError,ValueError):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,
-                '当前目录不符合受控ESM范围：需要.mjs入口及静态相对模块，不支持外部包、CJS或其他源码类型') from None
+                '请核对 JavaScript 入口、npm 锁文件、受支持的公开依赖及所选构建步骤') from None
+        # 在安装依赖前指出缺失的业务数据；Worker 复制时仍须核对当时的文件和结构。
+        from product.backend.infrastructure.runtime.process.controlled.artifact import _regular_file
+        for database in sqlite:
+            try:
+                _regular_file(Path(before.source_root), database.relative_path)
+            except (OSError, ValueError):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,
+                    '没有找到所选 SQLite 业务数据库。请先初始化应用数据，或选择已有数据库后继续。',
+                    details={'reason': 'SQLITE_SOURCE_REQUIRED'}) from None
         payload=dict(project_id=project_id,revision=before.revision,entry=entry,port=port,
             source_fingerprint=manifest.source_fingerprint,interpreter_fingerprint=manifest.interpreter_fingerprint,
-            executor_fingerprint=manifest.executor_fingerprint,files=[item.model_dump(mode='json') for item in files])
+            executor_fingerprint=manifest.executor_fingerprint,files=[item.model_dump(mode='json') for item in files],
+            package=None if package is None else package.model_dump(mode='json'),sqlite=[item.model_dump(mode='json') for item in sqlite])
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-        return NodeStartPreview(**(payload|{'files':files,'preview_fingerprint':digest}))
+        return NodeStartPreview(**(payload|{'files':files,'package':package,'sqlite':tuple(sqlite),'preview_fingerprint':digest}))
 
-    def start(self, project_id, *, entry, port, revision, preview_fingerprint, operation_id, consent_execute, work=None):
+    def start(self, project_id, *, entry, port, revision, preview_fingerprint, operation_id, consent_execute, work=None,
+            build_script=None, allow_install_scripts=False, sqlite=()):
         """同操作键先查原记录；只有新操作才冻结已预览代码并排队。"""
         if not consent_execute:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'启动当前应用需要明确确认')
@@ -89,13 +133,16 @@ class NodeRuntimeSetup:
             if previous['request'].preview_fingerprint != preview_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'该操作已用于另一份启动预览')
             return self._public(previous)
-        preview=self.preview(project_id,entry=entry,port=port,revision=revision)
+        preview=self.preview(project_id,entry=entry,port=port,revision=revision,build_script=build_script,
+            allow_install_scripts=allow_install_scripts,sqlite=sqlite)
         if preview.preview_fingerprint != preview_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'源码或运行设置已变化，请重新预览')
         before=self.understanding.get(project_id)
         manifest=NodeRuntimeManifest(instance_id='rti_'+uuid4().hex,project_id=project_id,entry=entry,port=port,
             files=preview.files,source_fingerprint=preview.source_fingerprint,
-            interpreter_fingerprint=preview.interpreter_fingerprint,executor_fingerprint=preview.executor_fingerprint)
+            interpreter_fingerprint=preview.interpreter_fingerprint,executor_fingerprint=preview.executor_fingerprint,
+            module_loader='NODE_STANDARD',package=preview.package,sqlite=preview.sqlite,
+            sqlite_source_root=before.source_root if preview.sqlite else None)
         request=NodeRuntimeLoadRequest(load_id='rld_'+uuid4().hex,project_id=project_id,operation_id=operation_id,
             control_session_id=self.supervisor.control_session_id,preview_fingerprint=preview_fingerprint,
             instance_id=manifest.instance_id,manifest_fingerprint=node_document_fingerprint(manifest),
@@ -113,7 +160,7 @@ class NodeRuntimeSetup:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'官方示例应使用其独立启动入口')
         return self._public(self.jobs.submit(request,validate_current=validate_current,work=work))
 
-    def state(self, project_id, *, verify_source=True):
+    def state(self, project_id, *, verify_source=True, verify_artifacts=True):
         self._eligible(project_id)
         with self._uow() as work:
             request=work.runtime_loads.latest(project_id)
@@ -122,22 +169,34 @@ class NodeRuntimeSetup:
         operation=self.jobs.operation(project_id,request.operation_id)
         configuration=None
         try:
-            _,manifest=read_node_manifest(self.var_dir,request)
-            configuration={'entry':manifest.entry,'port':manifest.port,'file_count':len(manifest.files)}
+            _,manifest=read_node_manifest(self.var_dir,request,verify_files=verify_artifacts)
+            configuration={'entry':manifest.entry,'port':manifest.port,'file_count':len(manifest.files),
+                'package':None if manifest.package is None else manifest.package.model_dump(mode='json'),
+                'sqlite':[item.model_dump(mode='json') for item in manifest.sqlite]}
         except (OSError,ValueError,JiejianError):
             pass
         running=False
         source_matches=False
         if operation['receipt'] is not None:
             try:
-                running=node_reference_matches(self.var_dir,request,operation['receipt'].reference,self._node())
+                if verify_artifacts:
+                    running=node_reference_matches(self.var_dir,request,operation['receipt'].reference,self._node())
+                else:
+                    from product.backend.infrastructure.runtime.process.controlled.node_owned import node_process_alive
+                    running=node_process_alive(operation['receipt'].reference)
                 if verify_source:
                     current=self.understanding.get(project_id)
                     source_matches=current.source_analysis_authorized and self.understanding.analyzer.analyze(
                         project_id,current.source_root).source_fingerprint==request.source_fingerprint
             except (OSError,ValueError,JiejianError):
                 pass
-        return {'project_id':project_id,'operation':self._public(operation),'running':running,'source_matches':source_matches,'configuration':configuration}
+        preparation = None
+        stage_file = node_artifact_store(self.var_dir) / request.instance_id / 'dependency-state.json'
+        if stage_file.is_file():
+            value = json.loads(stage_file.read_text(encoding='utf-8'))
+            if value.get('stage') in {'INSTALLING','BUILDING','READY'}:
+                preparation = dict(stage=value['stage'],cache_reused=value.get('cache_reused') is True)
+        return {'project_id':project_id,'operation':self._public(operation),'running':running,'source_matches':source_matches,'configuration':configuration,'preparation':preparation}
 
     def operation(self, project_id, operation_id):
         self._eligible(project_id)

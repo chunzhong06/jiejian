@@ -16,6 +16,7 @@ from product.backend.domain.identifiers import (
     TEST_IDENTITY_ID_PATTERN,
 )
 from product.backend.domain.identities.models import TestIdentityAuthMethod
+from product.backend.domain.identities.models import AuthenticationProfile, IdentityVerificationSnapshot
 from product.protocols.runner.execution import ProtocolModel
 from product.protocols.web.target import WebTargetScope
 
@@ -35,6 +36,7 @@ class IdentityPreparationResultType(StrEnum):
     UNSUPPORTED = "UNSUPPORTED"
     CANCELLED = "CANCELLED"
     FAILED = "FAILED"
+    CHECKED = 'CHECKED'
 
 
 class IdentityPreparationRequest(ProtocolModel):
@@ -44,6 +46,22 @@ class IdentityPreparationRequest(ProtocolModel):
     identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     target_scope: WebTargetScope
     timeout_us: int = Field(default=900_000_000, ge=1_000_000, le=3_600_000_000)
+    authentication: AuthenticationProfile | None = Field(default=None,exclude_if=lambda value:value is None)
+    verify_only: bool = Field(default=False,exclude_if=lambda value:not value)
+    existing_cookies: tuple[PreparedCookieRef, ...] = Field(default=(),max_length=32,exclude_if=lambda value:not value)
+    existing_bearer_ref: str | None = Field(default=None,pattern=_SECRET_REF_PATTERN,exclude_if=lambda value:value is None)
+    session_prepared_at_us: int | None = Field(default=None,ge=0,exclude_if=lambda value:value is None)
+
+    @model_validator(mode='after')
+    def verification_session(self):
+        refs=tuple(cookie.value_secret_ref for cookie in self.existing_cookies)+((self.existing_bearer_ref,) if self.existing_bearer_ref else ())
+        if self.verify_only:
+            prefix=f'cred:jiejian/test-identity/{self.project_id}/{self.identity_id}/'
+            if self.authentication is None or not refs or self.session_prepared_at_us is None or any(not ref.startswith(prefix) for ref in refs) or bool(self.existing_cookies and self.existing_bearer_ref):
+                raise ValueError('verification requires the exact prepared account session')
+        elif refs or self.session_prepared_at_us is not None:
+            raise ValueError('login cannot carry a saved verification session')
+        return self
 
 
 class PreparedCookieRef(ProtocolModel):
@@ -73,6 +91,7 @@ class IdentityPreparationResult(ProtocolModel):
     )
     prepared_at_us: int | None = Field(default=None, ge=0)
     error_code: str | None = Field(default=None, min_length=1, max_length=64)
+    verification: IdentityVerificationSnapshot | None = Field(default=None,exclude_if=lambda value:value is None)
 
     @model_validator(mode="after")
     def validate_result_matrix(self) -> IdentityPreparationResult:
@@ -108,6 +127,8 @@ class IdentityPreparationResult(ProtocolModel):
                 raise ValueError("failed result requires an error code")
         elif self.error_code is not None:
             raise ValueError("only failed result may contain an error code")
+        if self.result_type is IdentityPreparationResultType.CHECKED and self.verification is None:
+            raise ValueError('checked result requires its actual verification')
         return self
 
 
@@ -139,3 +160,6 @@ def parse_identity_preparation_request(raw: bytes) -> IdentityPreparationRequest
 def parse_identity_preparation_result(raw: bytes) -> IdentityPreparationResult:
     decode_json(raw, limit=IDENTITY_PREPARATION_RESULT_MAX_BYTES)
     return IdentityPreparationResult.model_validate_json(raw, strict=True)
+
+
+IdentityPreparationRequest.model_rebuild()

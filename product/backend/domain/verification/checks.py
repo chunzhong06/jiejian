@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from product.backend.domain.lifecycle import CaseVerdict, RunVerdict
 from product.protocols.checks.execution_request import EffectId, ExecutionCase, Hash, WireModel
+from product.protocols.checks.conditions import ObservedPermissionConditions, collected_conditions_status
 
 
 class CheckEffectFact(WireModel):
@@ -69,6 +70,7 @@ class CheckDecisionInput(WireModel):
     recovery_verified: bool
     allow_control_verdict: CaseVerdict | None = None
     effects: tuple[CheckEffectFact, ...] = Field(max_length=48)
+    condition_observations: tuple[ObservedPermissionConditions, ...] = Field(default=(), max_length=48)
 
     @model_validator(mode="after")
     def validate_proof_associations(self):
@@ -76,6 +78,15 @@ class CheckDecisionInput(WireModel):
         actual = [(fact.effect_id, fact.proof_fingerprint) for fact in self.effects]
         if len(set(actual)) != len(actual) or not set(actual) <= expected:
             raise ValueError("check facts must reference unique frozen case proofs")
+        proof_by_id = {item.proof_fingerprint:item for item in self.case.proof_requirements}
+        seen = set()
+        for observation in self.condition_observations:
+            proof = proof_by_id.get(observation.proof_fingerprint)
+            if (proof is None or proof.rule != 'REGISTERED_EFFECT' or observation.proof_fingerprint in seen
+                    or observation.source_id != proof.reference.descriptor_id
+                    or observation.source_fingerprint != proof.reference.descriptor_fingerprint):
+                raise ValueError('condition facts must reference their frozen independent source')
+            seen.add(observation.proof_fingerprint)
         return self
 
 
@@ -88,6 +99,10 @@ class CheckDecision(WireModel):
 def evaluate_check_case(facts: CheckDecisionInput) -> CheckDecision:
     """消费冻结 Case 与独立观察事实；缺失证明不补猜，也不发起任何 I/O。"""
 
+    condition_status = collected_conditions_status(facts.case.permission.conditions, facts.condition_observations)
+    if condition_status != 'MATCH':
+        return CheckDecision(verdict=CaseVerdict.INCONCLUSIVE,
+            reason_codes=('PERMISSION_CONDITION_' + condition_status,), confirmed_forbidden_effect_ids=())
     # 同一效果的辅助材料不能覆盖决定性来源；所有关联先按冻结 proof 身份核对。
     by_proof = {item.proof_fingerprint: item for item in facts.effects}
     required = tuple(

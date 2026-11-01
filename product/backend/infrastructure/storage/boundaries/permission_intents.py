@@ -75,6 +75,7 @@ class PermissionIntentRevisionRow(Base):
     policy_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     approval_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    conditions_json: Mapped[str | None] = mapped_column(Text)
 
 
 class ProjectPolicyStateRow(Base):
@@ -118,8 +119,9 @@ class PermissionIntentRepository:
         _flush(self._session)
 
     def add_revision(self, revision: PermissionIntentRevision) -> None:
-        values = revision.model_dump(mode="json", exclude={"protected_effect_ids", "approval"})
+        values = revision.model_dump(mode="json", exclude={"protected_effect_ids", "approval", "conditions"})
         values["protected_effect_ids_json"] = _canonical_json(list(revision.protected_effect_ids))
+        values['conditions_json'] = None if revision.conditions is None else _canonical_json(revision.conditions.model_dump(mode='json'))
         values["approval_json"] = _canonical_json(revision.approval.model_dump(mode="json"))
         ensure_storage_payload_safe(values, self._known_secrets)
         self._session.add(PermissionIntentRevisionRow(**values))
@@ -162,6 +164,7 @@ class PermissionIntentRepository:
                 "relation": row.relation,
                 "expectation": row.expectation,
                 "protected_effect_ids": json.loads(row.protected_effect_ids_json),
+                "conditions": None if row.conditions_json is None else json.loads(row.conditions_json),
                 "intent_hash": row.intent_hash,
                 "policy_epoch": row.policy_epoch,
                 "approval": json.loads(row.approval_json),

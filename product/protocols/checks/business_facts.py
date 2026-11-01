@@ -36,7 +36,7 @@ class CommittedStateFact(WireModel):
     before_version:int=Field(ge=0)
     after_version:int=Field(ge=1)
     commit_semantics:Literal['ATOMIC_COMMIT']='ATOMIC_COMMIT'
-    subject_identity_id:IdentityId
+    subject_identity_id:IdentityId|None
     owner_identity_id:IdentityId
     resource_id:str=Field(min_length=1,max_length=256)
     changes:tuple[CommittedFieldChange,...]=Field(min_length=1,max_length=8)
@@ -56,6 +56,11 @@ class IdentityCheckFact(WireModel):
     role_match:Literal['MATCH','MISMATCH','UNKNOWN']
 
 
+class AnonymousCheckFact(WireModel):
+    kind:Literal['ANONYMOUS_CHECK']='ANONYMOUS_CHECK'
+    unauthenticated:bool
+
+
 class FieldContentComparison(WireModel):
     path:str=Field(min_length=1,max_length=128)
     expected_digest:Hash|None=None
@@ -71,7 +76,7 @@ class FieldContentComparison(WireModel):
 
 class FieldDisclosureFact(WireModel):
     kind:Literal['FIELD_DISCLOSURE']='FIELD_DISCLOSURE'
-    subject_identity_id:IdentityId
+    subject_identity_id:IdentityId|None
     owner_identity_id:IdentityId
     resource_id:str=Field(min_length=1,max_length=256)
     fields:tuple[FieldContentComparison,...]=Field(min_length=1,max_length=16)
@@ -97,7 +102,7 @@ class FileReceiptFact(WireModel):
     complete:bool
     expected:ArtifactManifestReference
     comparison:Literal['MATCH','DIFFERENT','INCOMPLETE']
-    subject_identity_id:IdentityId
+    subject_identity_id:IdentityId|None
     owner_identity_id:IdentityId
     resource_id:str=Field(min_length=1,max_length=256)
 
@@ -115,11 +120,11 @@ class ObjectCreationFact(WireModel):
     sequence:int=Field(ge=1)
     resource_id:str=Field(min_length=1,max_length=256)
     incarnation:RecordId
-    subject_identity_id:IdentityId
+    subject_identity_id:IdentityId|None
     owner_identity_id:IdentityId
 
 
-FactData=Annotated[CommittedStateFact|IdentityCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact|ObjectCreationFact,Field(discriminator='kind')]
+FactData=Annotated[CommittedStateFact|IdentityCheckFact|AnonymousCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact|ObjectCreationFact,Field(discriminator='kind')]
 
 
 def fact_content_id(payload):
@@ -148,7 +153,7 @@ class BusinessFact(WireModel):
         if len(self.model_dump_json().encode('utf-8'))>2048:raise ValueError('business fact exceeds 2KiB')
         if isinstance(self.data,CommittedStateFact) and {item.proof_fingerprint for item in self.data.changes}!=set(keys):
             raise ValueError('committed projection must cover exact proof references')
-        collector={'OBJECT_CREATION':'CONTROLLED_RECORDS','COMMITTED_STATE':'CONTROLLED_RECORDS','IDENTITY_CHECK':'IDENTITY_READER',
+        collector={'OBJECT_CREATION':'CONTROLLED_RECORDS','COMMITTED_STATE':'CONTROLLED_RECORDS','IDENTITY_CHECK':'IDENTITY_READER','ANONYMOUS_CHECK':'IDENTITY_READER',
             'FIELD_DISCLOSURE':'HTTP_ENTITY','FILE_RECEIPT':'HTTP_ENTITY','REFERENCE_ARTIFACT':'REFERENCE_STORE'}
         if self.collector_kind!=collector[self.data.kind]:raise ValueError('business fact collector mismatch')
         return self

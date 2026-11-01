@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from product.backend import __version__
 from scripts.build.archive import write_zip, archive_content
-from scripts.build.runtime import prune_installed_runtime, runtime_environment
+from scripts.build.runtime import copy_node_runtime, prune_installed_runtime, runtime_environment
 from scripts.build.validation import validate_tree_content
 from scripts.build.resources import write_runtime_files
 
@@ -76,6 +76,30 @@ def test_portable_runtime_prunes_dependency_tests_and_generated_python_artifacts
     assert not (metadata / "direct_url.json").exists()
     assert not cache.exists()
     assert runtime_module.is_file()
+
+
+def test_node_runtime_includes_npm_dependencies_but_rejects_unrelated_modules(tmp_path):
+    source, base = tmp_path / 'node-source', tmp_path / 'base'
+    for name in ('node.exe', 'LICENSE', 'node_modules/npm/package.json', 'node_modules/npm/bin/npm-cli.js',
+        'node_modules/npm/node_modules/dependency/index.js', 'node_modules/unrelated/index.js'):
+        file = source / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(name.encode())
+    target = copy_node_runtime(base, source / 'node.exe')
+    assert (target / 'node_modules/npm/node_modules/dependency/index.js').read_bytes() == b'node_modules/npm/node_modules/dependency/index.js'
+    assert not (target / 'node_modules/unrelated').exists()
+    validate_tree_content(base, ROOT)
+    archive = tmp_path / 'node.zip'
+    samples = tmp_path / 'samples'
+    (samples / 'runtime/node/node_modules/npm').mkdir(parents=True)
+    (samples / 'runtime/node/node_modules/npm/project-dependency.js').write_text('unrelated', encoding='ascii')
+    write_zip(archive, base, samples)
+    with zipfile.ZipFile(archive) as bundle:
+        assert f'{RELEASE_NAME}/runtime/node/node_modules/npm/bin/npm-cli.js' in bundle.namelist()
+        assert not any(name.endswith('project-dependency.js') for name in bundle.namelist())
+    (target / 'node_modules/unrelated').mkdir()
+    with pytest.raises(RuntimeError, match='禁止生成物'):
+        validate_tree_content(base, ROOT)
 
 def test_portable_build_owns_its_temporary_directory(
     tmp_path: Path,

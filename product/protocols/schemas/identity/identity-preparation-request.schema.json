@@ -1,5 +1,174 @@
 {
   "$defs": {
+    "AuthenticationProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "login_path": {
+          "default": "/",
+          "pattern": "^/[A-Za-z0-9_/-]{0,510}$",
+          "title": "Login Path",
+          "type": "string"
+        },
+        "method": {
+          "default": "BROWSER_SESSION",
+          "enum": [
+            "BROWSER_SESSION",
+            "BEARER",
+            "API_LOGIN"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "password_field": {
+          "default": "password",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Password Field",
+          "type": "string"
+        },
+        "token_path": {
+          "default": [
+            "token"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Token Path",
+          "type": "array"
+        },
+        "username_field": {
+          "default": "username",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Username Field",
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/IdentityVerificationConfig"
+        }
+      },
+      "required": [
+        "verification"
+      ],
+      "title": "AuthenticationProfile",
+      "type": "object"
+    },
+    "IdentityVerificationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_role": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Expected Role",
+          "type": "string"
+        },
+        "expected_subject": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Expected Subject",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^/[A-Za-z0-9_/-]{0,510}$",
+          "title": "Path",
+          "type": "string"
+        },
+        "role_path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Role Path",
+          "type": "array"
+        },
+        "subject_path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Subject Path",
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "subject_path",
+        "role_path",
+        "expected_subject",
+        "expected_role"
+      ],
+      "title": "IdentityVerificationConfig",
+      "type": "object"
+    },
+    "PreparedCookieRef": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "expires_at_us": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At Us"
+        },
+        "http_only": {
+          "title": "Http Only",
+          "type": "boolean"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "same_site": {
+          "pattern": "^(STRICT|LAX|NONE)$",
+          "title": "Same Site",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_secret_ref": {
+          "maxLength": 512,
+          "pattern": "^cred:jiejian/test-identity/[a-z][a-z0-9_-]{0,63}/tid_[0-9a-f]{32}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Value Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "http_only",
+        "same_site",
+        "value_secret_ref"
+      ],
+      "title": "PreparedCookieRef",
+      "type": "object"
+    },
     "WebTargetScope": {
       "additionalProperties": false,
       "description": "Web 目标的协议级授权范围。",
@@ -74,6 +243,39 @@
   },
   "additionalProperties": false,
   "properties": {
+    "authentication": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthenticationProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "existing_bearer_ref": {
+      "anyOf": [
+        {
+          "pattern": "^cred:jiejian/test-identity/[a-z][a-z0-9_-]{0,63}/tid_[0-9a-f]{32}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Existing Bearer Ref"
+    },
+    "existing_cookies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PreparedCookieRef"
+      },
+      "maxItems": 32,
+      "title": "Existing Cookies",
+      "type": "array"
+    },
     "identity_id": {
       "pattern": "^tid_[0-9a-f]{32}$",
       "title": "Identity Id",
@@ -94,6 +296,19 @@
       "title": "Schema Version",
       "type": "string"
     },
+    "session_prepared_at_us": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Prepared At Us"
+    },
     "target_scope": {
       "$ref": "#/$defs/WebTargetScope"
     },
@@ -103,6 +318,11 @@
       "minimum": 1000000,
       "title": "Timeout Us",
       "type": "integer"
+    },
+    "verify_only": {
+      "default": false,
+      "title": "Verify Only",
+      "type": "boolean"
     }
   },
   "required": [

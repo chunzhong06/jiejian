@@ -33,11 +33,13 @@ class NodeRuntimeActivation:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在“待测应用”中确认启动方式')
             _,manifest=read_node_manifest(self.runtime.var_dir,previous_load)
             understanding=work.application_understanding.get(project_id)
-            preview=self.runtime.preview(project_id,entry=manifest.entry,port=manifest.port,revision=understanding.revision)
+            options=dict(build_script=manifest.package.build_script if manifest.package else None,
+                allow_install_scripts=bool(manifest.package and manifest.package.allow_install_scripts),sqlite=manifest.sqlite)
+            preview=self.runtime.preview(project_id,entry=manifest.entry,port=manifest.port,revision=understanding.revision,**options)
             if preview.source_fingerprint!=snapshot.source_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'本地源码与这批交付不一致，请先登记当前修改')
             self.runtime.start(project_id,entry=preview.entry,port=preview.port,revision=preview.revision,
-                preview_fingerprint=preview.preview_fingerprint,operation_id=operation_id,consent_execute=True,work=work)
+                preview_fingerprint=preview.preview_fingerprint,operation_id=operation_id,consent_execute=True,work=work,**options)
             request=work.runtime_loads.operation(project_id,operation_id)
             receipt=NodeRuntimeActivationReceipt(project_id=project_id,operation_id=operation_id,
                 request_fingerprint=fingerprint,task_id=task.task_id,delivery_id=delivery_id,

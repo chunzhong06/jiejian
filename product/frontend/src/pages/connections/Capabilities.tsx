@@ -1,3 +1,5 @@
+import CheckOutlined from '@ant-design/icons/CheckOutlined';
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { projectsApi } from '../../entities/application/api/projects';
 import { useRead } from '../../shared/lib/useRead';
 import { assertProject } from '../../shared/model/page';
@@ -5,11 +7,27 @@ import { go } from '../../shared/lib/navigation';
 import { Badge, ErrorNote } from '../../shared/ui/feedback';
 import { Button } from '../../shared/ui/actions';
 
+const tasks: Record<string,{title:string;ready:string;pending:string}> = {
+    source:{title:'读取业务内容',ready:'已识别源码中的角色和操作',pending:'先在左侧允许读取源码'},
+    endpoint:{title:'连接应用',ready:'上次连接检查可以访问',pending:'在左侧设置应用的访问地址'},
+    runtime:{title:'对应实际运行的代码',ready:'已保存对应源码的运行记录',pending:'由界鉴启动，可记录实际运行的源码'},
+    proof:{title:'准备结果判断依据',ready:'已有配置，检查前还会核对是否可用',pending:'在材料准备中选择如何确认业务结果'},
+};
 export function Capabilities({projectId, revision}: {projectId:string;revision:number}) {
     const state=useRead('readiness:'+projectId+':'+revision,async signal=>{const value=await projectsApi.readiness(projectId,signal);assertProject(value.project_id,projectId);return value;});
-    return <section className="jj-application-capabilities" aria-label="应用接入能力">
-      <header><h2>检查条件</h2></header>
+    const connected=state.data?.items.find(item=>item.key==='endpoint')?.state==='READY';
+    return <aside className="jj-application-capabilities" aria-label="接入进度">
+      <header><h2>接入进度</h2></header>
       {state.error&&<ErrorNote error={state.error} onRetry={state.reload}/>}
-      {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入条件</p>:<div>{state.data?.items.map(item=><article key={item.key}><div className="jj-item-heading"><h3>{item.label}</h3><Badge tone={item.state==='READY'?'positive':'neutral'}>{({READY:'已核对',AVAILABLE:'已有记录',CONFIGURED:'已配置',NEEDS_ACTION:'待准备',UNVERIFIED:'待核验'} as Record<string,string>)[item.state]??'待核验'}</Badge></div>{(item.key==='proof'||['NEEDS_ACTION','UNVERIFIED'].includes(item.state))&&<p className="jj-small jj-muted">{item.detail}</p>}{item.key==='proof'&&<Button kind="quiet" onClick={()=>go(item.destination,projectId)}>准备业务证明</Button>}</article>)}</div>}
-    </section>;
+      {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入状态</p>:<ol>{state.data?.items.map((item,index)=>{
+        const available=['READY','AVAILABLE','CONFIGURED'].includes(item.state),task=tasks[item.key];
+        return <li key={item.key} data-ready={item.state==='READY'}>
+          <span className="jj-capability-marker" aria-hidden="true">{item.state==='READY'?<CheckOutlined/>:index+1}</span>
+          <h3>{task?.title??item.label}</h3>
+          <Badge tone={item.state==='READY'?'positive':'neutral'}>{({READY:'已确认',AVAILABLE:'已有记录',CONFIGURED:'已有配置',NEEDS_ACTION:'待准备',UNVERIFIED:'待核对'} as Record<string,string>)[item.state]??'待核对'}</Badge>
+          <p>{task?(available?task.ready:task.pending):item.detail}</p>
+        </li>
+      })}</ol>}
+      {connected&&<footer><p>接下来，登录测试账号并准备要检查的业务操作。</p><Button kind="primary" onClick={()=>go('/preparation',projectId)}>继续准备检查<ArrowRightOutlined aria-hidden="true"/></Button></footer>}
+    </aside>;
 }

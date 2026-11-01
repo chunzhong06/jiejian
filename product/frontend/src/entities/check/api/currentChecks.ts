@@ -1,3 +1,5 @@
+import type {PermissionConditions} from '../../permission/api/businessBoundaries'
+import type { PermissionReference } from '../../preparation/api/preparation'
 // 当前权限实验与只读结果合同；浏览器只提交计划指纹，不创建考题或计算安全结论。
 import { ApiError, request } from '../../../shared/api/http'
 import type { RepairContract, RepairVerification, RepairComparisonRow } from './repairs'
@@ -14,12 +16,15 @@ export type CheckStatus = {
   progress: { phase: 'PREPARING' | 'EXECUTING' | 'FINALIZING'; completed_cases: number; planned_cases: number; current_case?: CheckProgressCase | null } | null
   result_integrity: 'VALID' | 'INVALID' | 'NOT_PUBLISHED'
 }
+export type CheckSelection = { selected: PermissionReference[]; added_controls: PermissionReference[]; omitted: PermissionReference[]; uncovered_requirements: string[]; pending_review_ids: string[] }
 export type CheckPreview = {
+  selection?: CheckSelection | null
+  omitted_review_gaps?: BoundaryReviewGap[]
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
   gaps: Array<{ action_id: string; action_revision: number; reason: string; intent_id?: string | null; effect_id?: string | null }>
   boundary_review_gaps?: BoundaryReviewGap[]
   requirement_scope?: RequirementScope[]
-  actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string; subject_test_identity_id: string; resource_owner_test_identity_id: string; resource_id: string; permission: { expectation: 'ALLOW' | 'DENY'; relation: string } }> }>
+  actions: Array<{ action_id: string; action_revision: number; cases: Array<{ case_id: string; subject_test_identity_id: string | null; resource_owner_test_identity_id: string; resource_id: string; permission: { expectation: 'ALLOW' | 'DENY'; relation: string; conditions?: PermissionConditions | null } }> }>
 }
 export type RequirementScope={candidate_id:string;revision:number;requirements:Array<{requirement_id:string;requirement:string;disposition:'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE';time_scope:'CHECK_WINDOW'|'HISTORY'|'NOT_APPLICABLE';permissions:Array<{intent_id:string;revision:number;intent_hash:string}>}>}
 export type CheckObservation = {
@@ -40,7 +45,8 @@ export type ObservationReading = {
   label: string; detail: string; attention: boolean
 }
 export type StoryIdentity = { identity_id: string | null; label: string | null; actor_id: string | null; actor_label: string | null; verification_status: 'PLANNED' | 'MATCH' | 'MISMATCH' | 'UNKNOWN'; namespace: string | null; application_subject_id: string | null }
-export type CheckOutcome = { execution_outcome: string; http_status: number | null; actual_identity_status: 'MATCH' | 'MISMATCH' | 'UNKNOWN'; baseline_trusted: boolean; recovery_verified: boolean; run_correlated: boolean; resource_correlated: boolean }
+export type ObservedConditions = {proof_fingerprint:string;source_id:string;source_fingerprint:string;principal:'AUTHENTICATED'|'ANONYMOUS';subject_tenant:string|null;owner_tenant:string|null;resource_tenant:string|null;resource_state:string|null}
+export type CheckOutcome = { condition_observations?: ObservedConditions[]; execution_outcome: string; http_status: number | null; actual_identity_status: 'MATCH' | 'MISMATCH' | 'UNKNOWN'; baseline_trusted: boolean; recovery_verified: boolean; run_correlated: boolean; resource_correlated: boolean }
 export type CheckBreakpoint = {
   breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING' | null
   precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'; first_violation_event_id: string | null
@@ -69,8 +75,9 @@ export type StoryProofCoverage = {
   evidence_refs: string[]; supporting_evidence_refs: string[]; limitations: string[]
 }
 export type ActionResultStory = {
+  reason_codes?: string[]
   action_id: string; action_revision: number; display_name: string; case_id: string
-  permission: { intent_id?: string; revision?: number; intent_hash?: string; expectation: 'ALLOW' | 'DENY'; relation: string }
+  permission: { intent_id?: string; revision?: number; intent_hash?: string; expectation: 'ALLOW' | 'DENY'; relation: string; conditions?: PermissionConditions | null }
   judgement: string
   fact_comparison: {
     planned_identity: StoryIdentity; planned_resource_owner?: StoryIdentity | null; resource_id?: string | null; verified_actual_identity: StoryIdentity; http_surface: CheckOutcome; http_explanation: string
@@ -84,7 +91,7 @@ export type ActionResultStory = {
   activity_error?: string | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
+export type ResultStory = { selection?: CheckSelection | null; run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
   schema_version: '1' | '2' | '3'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
@@ -130,11 +137,11 @@ export const currentChecksApi = {
   historyCoverage:(projectId:string)=>request<HistoryCoverage>(`${projectPath(projectId)}/check-history/index-status`),
   maintainHistory:(projectId:string,body:{operation_id:string;expected_checkpoint:number;limit:number})=>request<HistoryMaintenanceReceipt>(`${projectPath(projectId)}/check-history/index-maintenance`,{method:'POST',body:JSON.stringify(body)}),
   historyReceipt:(projectId:string,operationId:string)=>request<{status:'FOUND'|'NOT_FOUND';receipt?:HistoryMaintenanceReceipt}>(`${projectPath(projectId)}/check-history/index-maintenance/${encodeURIComponent(operationId)}`),
-  preview: (id: string, changeId?: string | null) => request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
+  preview: (id: string, changeId?: string | null, selected?: PermissionReference[] | null) => selected ? request<CheckPreview>(`${projectPath(id)}/check-preview`, { method: 'POST', body: JSON.stringify({ selected_permissions: selected }) }) : request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
   receipt: (id: string, operationId: string) => request<CheckStatus | null>(`${projectPath(id)}/check-requests/${encodeURIComponent(operationId)}`),
   list: (id: string, activeOnly = false) => request<CheckStatus[]>(`${projectPath(id)}/runs${activeOnly ? '?active_only=true' : ''}`),
-  submit: (id: string, fingerprint: string, key: string, changeId?: string | null) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
-    method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}) }),
+  submit: (id: string, fingerprint: string, key: string, changeId?: string | null, selected?: PermissionReference[] | null) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
+    method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}), ...(selected ? { selected_permissions: selected } : {}) }),
   }),
   cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   status: readStatus,

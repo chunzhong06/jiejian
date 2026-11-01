@@ -1,9 +1,9 @@
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a) {
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a) {
   position: relative;
   isolation: isolate;
   --state-fill: var(--hover);
 }
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a)::before {
+:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -18,7 +18,7 @@
 .jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 16%,var(--surface)); }
 .jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--selected)); }
 @media(hover:hover) and (pointer:fine) {
-  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-candidate-list > button, .jj-breadcrumb a):not(:disabled):hover::before {
+  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, .jj-tabs > button, .jj-action-tabs > button, .jj-material-select, .jj-tool-picker > button, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a):not(:disabled):hover::before {
     opacity: 1;
     transition-duration: var(--motion-hover-in);
   }
@@ -89,6 +89,7 @@ progress::-webkit-progress-value { transition: width var(--motion-content) var(-
 .jj-tabs > button { border-radius: var(--radius-control); }
 .jj-inspector-slot:not(:empty) { animation: jj-inspector-enter var(--motion-panel) var(--ease-enter) both; }
 .jj-record-reading { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-repair-task-main > section { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
 .jj-choice-menu.ant-select-dropdown :is(.ant-select-item-option-selected .anticon-check) { animation: jj-check-enter var(--motion-disclosure) var(--ease-spring) both; }
 body :is(.jj-example-menu.ant-dropdown, .jj-info-popover.ant-popover, .jj-choice-menu.ant-select-dropdown):is([class*='-enter-active'],[class*='-appear-active']) > :is(.ant-dropdown-menu,.ant-popover-content,.rc-virtual-list) { animation: jj-menu-enter var(--motion-popup) var(--ease-enter) both; }
 @keyframes jj-inspector-enter { from { opacity: .3; transform: translateX(16px); } to { opacity: 1; transform: none; } }

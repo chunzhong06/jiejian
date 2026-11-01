@@ -1,10 +1,12 @@
 import { request } from '../../../shared/api/http'
+import type {PermissionConditions} from './businessBoundaries'
 import type { ProjectRepair } from '../../check/api/repairs'
 import type { RuleChangeTarget } from '../../source-change/api/sourceChanges'
 
 export type RuleState = 'UNCONFIRMED' | 'UNTESTED' | 'STALE' | 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE' | 'REPAIR_PENDING'
 export type RuleHistory = { run_id: string; created_at_us: number; case_ids: string[]; verdict: 'SAFE'|'VULNERABLE'|'INCONCLUSIVE'; case_count: number; current: boolean; change_id: string|null }
 export type RuleItem = {
+  conditions?:PermissionConditions|null
   permission: {intent_id: string; revision: number; intent_hash: string}
   title: string; expectation: 'ALLOW'|'DENY'; subject: string; action: string; resource_scope: string
   state: RuleState; latest: RuleHistory|null; issues: ProjectRepair['tasks']

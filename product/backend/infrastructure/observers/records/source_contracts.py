@@ -15,6 +15,20 @@ def audit_source_contract(var_dir, reference, config, *, require_live=True):
     provider = record_provider(var_dir, reference, require_live=require_live)
     if provider is None:
         return None
+    if config.source_kind in {'SQLITE_AUDIT','SQLITE_OBJECTS'}:
+        from product.backend.infrastructure.observers.records.sqlite_source import sqlite_selection
+        from product.backend.infrastructure.observers.adapters.json_source import SourceReadError
+        from product.backend.infrastructure.runtime.process.controlled.node_owned import SQLITE_ADAPTER
+        try:
+            _, database, table = sqlite_selection(var_dir, reference, config)
+        except (SourceReadError, OSError, ValueError):
+            return None
+        material = {'provider': provider.implementation_fingerprint, 'adapter': hashlib.sha256(SQLITE_ADAPTER.read_bytes()).hexdigest(),
+            'project_id': reference.project_id, 'database': database.relative_path, 'table': table.model_dump(mode='json')}
+        fingerprint = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        creation=config.source_kind=='SQLITE_OBJECTS'
+        return ProofContractAttestation(contract_id='OBJECT_CREATION_V1' if creation else 'TRANSACTION_HISTORY_V2',implementation_profile='SQLITE_CREATION_HISTORY_V1' if creation else 'SQLITE_ROW_HISTORY_V1',
+            fingerprint=fingerprint,approved_effect_kind='OBJECT_CREATION' if creation else 'STATE_MUTATION')
     # 应用源码身份由 Runtime/采用基线另行冻结。来源能力只取决于独立组件与所选集合，
     # 因而可以跨业务应用使用，也不会把应用的角色名、入口文件或权限逻辑带进信任目录。
     material = {'provider': provider.implementation_fingerprint, 'project_id': reference.project_id,

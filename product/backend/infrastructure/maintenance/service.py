@@ -338,6 +338,11 @@ class LocalMaintenanceService:
         for path in children(self.paths.assistant_cache):
             writing = path.name.startswith('.assistant-') and path.name.endswith('.tmp') and not self._older_than(path,_ORPHAN_MIN_AGE_SECONDS)
             add(path,"assistant","AI 辅助缓存",known=generated_file_owner(self.paths.root,path)=='assistant-cache',protected=writing)
+        for name in ('application-dependencies','npm-downloads'):
+            path=self.paths.root/'cache'/name
+            if path.exists():
+                marker=read_record(path/'.application-owned.json')
+                add(path,'build_cache','应用依赖缓存',known=bool(marker and marker.get('kind')=='application-cache' and marker.get('name')==name))
         for root in self._log_roots().values():
             for path in self._log_files(root):
                 add(path,"logs","历史运行日志",known=bool(generated_file_owner(self.paths.root,path)),protected=self._is_current_session_log(path))

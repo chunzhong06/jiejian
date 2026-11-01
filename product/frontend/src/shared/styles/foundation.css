@@ -15,15 +15,18 @@ h2 { font-size: var(--text-section); line-height: 1.5; font-weight: 600; letter-
 h3, h4 { font-size: var(--text-body); line-height: 1.6; font-weight: 600; }
 small { font-size: var(--text-meta); }
 strong { font-weight: 600; }
-input, select, textarea { min-width: 0; width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); }
+input, select, textarea { min-width: 0; width: 100%; min-height: 40px; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); line-height: 20px; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 input:hover, select:hover, textarea:hover { border-color: var(--accent); }
-textarea { resize: vertical; min-height: 100px; }
+textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 input[type=checkbox], input[type=radio] { width: 16px; min-height: 16px; accent-color: var(--accent); padding: 0; flex: none; }
 input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 code, pre { font-family: 'Cascadia Code', Consolas, monospace; font-size: var(--text-meta); }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--inset); border-radius: var(--radius-control); padding: 16px; }
 table { border-collapse: collapse; width: 100%; text-align: left; }
+th.jj-table-state, td.jj-table-state { text-align: center; vertical-align: middle; }
+th.jj-table-number, td.jj-table-number { text-align: right; font-variant-numeric: tabular-nums; }
+th.jj-table-actions, td.jj-table-actions { text-align: right; vertical-align: middle; }
 th { font-weight: 550; }
 progress { width: 100%; height: 6px; accent-color: var(--accent); border-radius: 10px; overflow: hidden; }
 fieldset { min-width: 0; }
@@ -60,9 +63,11 @@ summary:hover { color: var(--accent-ink); }
 .jj-heading-note { color: var(--muted); font-size: var(--text-body); margin-top: 12px; max-width: 70ch; }
 .jj-eyebrow { font-size: var(--text-meta); color: var(--muted); font-weight: 450; }
 .jj-panel { padding: 24px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); }
-.jj-panel-heading, .jj-section-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+.jj-panel-heading, .jj-section-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+.jj-panel-heading > :is(.jj-button,.jj-inline-actions,.jj-heading-actions), .jj-section-header > :is(.jj-button,.jj-inline-actions,.jj-heading-actions) { margin-left: auto; }
 .jj-panel-heading > span, .jj-section-header > span { font-size: var(--text-meta); color: var(--muted); }
 .jj-near-heading { justify-content: flex-start; gap: 20px; }
+.jj-near-heading > .jj-button { margin-left: 0; }
 .jj-item-heading { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .jj-muted, .jj-review-summary { color: var(--muted); }
 .jj-small, .jj-review-summary { font-size: var(--text-meta); }
@@ -74,7 +79,8 @@ summary:hover { color: var(--accent-ink); }
 .jj-checkbox { display: flex; align-items: flex-start; gap: 10px; line-height: 1.65; }
 .jj-checkbox input { margin-top: 4px; }
 .jj-facts { display: grid; gap: 14px; }
-.jj-facts > div { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: 20px; }
+.jj-facts > div { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: 12px; }
+.jj-facts.is-stacked > div { display: grid; grid-template-columns: minmax(0,1fr); align-content: start; gap: 6px; }
 .jj-facts dt { color: var(--muted); font-size: var(--text-meta); }
 .jj-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .jj-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }

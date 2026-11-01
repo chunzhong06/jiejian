@@ -125,3 +125,31 @@ def test_multiple_owners_reuse_validated_parameterized_materials(state_changing)
     assert len({case.proof_requirements[0].binding_fingerprint for case in cases}) == 1
     assert all(case.proof_requirements[0].resource_id == case.resource_id for case in cases)
     assert all((case.recovery is not None) == state_changing for case in cases)
+
+
+def test_selected_allow_reuses_slots_without_unrelated_identity_gap():
+    from product.backend.domain.checks.selection import select_action_input, permission_key
+    source = prepared_action()
+    allow = next(item for item in source.permissions if item.expectation.value == 'ALLOW')
+    position = next(item for item in source.assurance.identity_requirements.permissions if item.permission.intent_id == allow.intent_id)
+    source = source.model_copy(update={'identities': tuple(item for item in source.identities
+        if item.slot_id in {position.subject_slot_id, position.resource_owner_slot_id}),
+        'reason_codes': ('TEST_IDENTITY_REQUIRED',)})
+    assert plan(source).gaps
+    selected = select_action_input(source, {permission_key(allow)})
+    result = plan(selected)
+    assert not result.gaps
+    assert {case.permission.intent_id for case in result.actions[0].cases} == {allow.intent_id}
+    assert {item.slot_id for item in selected.identities} == {item.slot_id for item in source.identities}
+
+
+def test_selected_deny_keeps_normal_control_and_requires_its_real_identity():
+    from product.backend.domain.checks.selection import select_action_input, permission_key
+    source = prepared_action()
+    deny = next(item for item in source.permissions if item.expectation.value == 'DENY')
+    projected = select_action_input(source, {permission_key(deny)})
+    result = plan(projected)
+    assert not result.gaps and result.actions[0].twins
+    assert {case.permission.expectation for case in result.actions[0].cases} == {'ALLOW', 'DENY'}
+    missing = projected.model_copy(update={'identities': ()})
+    assert 'TEST_IDENTITY_REQUIRED' in {gap.reason for gap in plan(missing).gaps}

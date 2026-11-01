@@ -16,6 +16,7 @@ from product.backend.domain.boundaries.approval import HumanApproval, HumanAppro
 from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, EFFECT_ID_PATTERN
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.boundaries.semantics import PermissionExpectation
+from product.protocols.checks.conditions import PermissionConditions
 
 
 _INTENT_ID_PATTERN = r"^pin_[0-9a-f]{32}$"
@@ -77,6 +78,16 @@ class PermissionIntentSemantic(PermissionIntentModel):
     relation: PermissionIntentRelation
     expectation: PermissionExpectation
     protected_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=16)
+    conditions: PermissionConditions | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode='after')
+    def condition_relation(self):
+        if self.conditions is not None:
+            if self.conditions.principal == 'ANONYMOUS' and self.relation is not PermissionIntentRelation.OTHER_ROLE:
+                raise ValueError('anonymous access requires a separate business principal')
+            if self.conditions.tenant == 'DIFFERENT' and self.relation is PermissionIntentRelation.OWNS:
+                raise ValueError('a cross-tenant subject cannot own this resource')
+        return self
 
     @field_validator("protected_effect_ids")
     @classmethod
@@ -113,6 +124,7 @@ class PermissionIntentRevision(PermissionIntentSemantic):
             relation=self.relation,
             expectation=self.expectation,
             protected_effect_ids=self.protected_effect_ids,
+            conditions=self.conditions,
         )
         if self.intent_hash != permission_intent_sha256(semantic.canonical_payload()):
             raise ValueError("permission intent hash is inconsistent")

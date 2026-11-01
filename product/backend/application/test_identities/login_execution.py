@@ -42,6 +42,7 @@ from product.protocols.preparation.test_identity_preparation import (
     IdentityPreparationResultType,
     canonical_identity_preparation_json_bytes,
     parse_identity_preparation_result,
+    parse_identity_preparation_request,
 )
 from product.protocols.web.target import WebTargetScope
 from product.backend.application.test_identities.models import (
@@ -240,10 +241,11 @@ class IdentityLoginSupervisor:
         *,
         official_account: str | None = None,
         preparation_id: str | None = None,
+        request_override: IdentityPreparationRequest | None = None,
     ) -> IdentityPreparationView:
         with self._lock:
             view = self._identities.get(identity_id)
-            if view.status is not TestIdentityStatus.NOT_PREPARED:
+            if view.status is not TestIdentityStatus.NOT_PREPARED and not (request_override and request_override.verify_only):
                 raise JiejianError(
                     ErrorCode.TEST_IDENTITY_NOT_READY,
                     "测试账号当前不能开始登录准备，请先处理复核或重置状态",
@@ -259,12 +261,13 @@ class IdentityLoginSupervisor:
             attempt_dir = self._paths.identity_preparations / preparation_id
             attempt_dir.mkdir(parents=False, exist_ok=False)
             controls = identity_preparation_control_paths(attempt_dir)
-            request = IdentityPreparationRequest(
+            request = request_override or IdentityPreparationRequest(
                 schema_version="1",
                 preparation_id=preparation_id,
                 project_id=view.project_id,
                 identity_id=identity_id,
                 target_scope=scope,
+                authentication=self._identities.get_record(identity_id).authentication,
             )
             log_path = self._paths.identity_preparation_logs / f"{preparation_id}.log"
             process: subprocess.Popen[bytes] | None = None
@@ -449,7 +452,7 @@ class IdentityLoginSupervisor:
                 "登录状态准备失败，请查看日志后重试",
                 error_code=ErrorCode.IDENTITY_PREPARATION_FAILED.value,
             )
-        elif result.result_type is IdentityPreparationResultType.PREPARED:
+        elif result.result_type in {IdentityPreparationResultType.PREPARED,IdentityPreparationResultType.CHECKED}:
             view = self._commit_result(active, result)
         elif result.result_type is IdentityPreparationResultType.UNSUPPORTED:
             view = self._view(
@@ -492,6 +495,8 @@ class IdentityLoginSupervisor:
             if self._commit_prepared is not None:
                 return self._commit_prepared(active, result)
             current = self._identities.get(request.identity_id)
+            if request.verify_only:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'身份核验必须通过持久任务提交')
             if (
                 current.status is not TestIdentityStatus.NOT_PREPARED
                 or self._source(current)[1] != active.source_fingerprint
@@ -511,6 +516,7 @@ class IdentityLoginSupervisor:
                     ),
                     bearer_secret_ref=result.bearer_secret_ref,
                     prepared_at_us=result.prepared_at_us,
+                    verification=result.verification,
                 ),
             )
             return self._view(
@@ -750,6 +756,7 @@ class IdentityPreparationHandler:
                 row["identity_id"],
                 preparation_id=row["preparation_id"],
                 official_account=row["official_account"],
+                request_override=parse_identity_preparation_request(row['request_json'].encode()),
             )
             active = engine._active[row["preparation_id"]]
 
@@ -834,7 +841,7 @@ class IdentityPreparationHandler:
                             work.commit()
             raise
 
-    def _finish(self, job, row, *, phase, prepared=None):
+    def _finish(self, job, row, *, phase, prepared=None,verification=None):
         # 浏览器结果只是候选。写锁内同时重验账号代次、准备所有者和来源，拒绝重置后的迟到结果。
         now = self._clock()
         with self._uow() as work:
@@ -872,6 +879,8 @@ class IdentityPreparationHandler:
                 # 与 Job 终态、准备阶段及事件一起提交；失败时不留下“账号已保存、任务未完成”。
                 # 事务只采用引用，外部秘密写入的补偿仍由监督器的 journal 清理负责。
                 self._identities.save_prepared_state(current.identity_id, prepared, work=work)
+            if verification is not None:
+                work.test_identities.update_verification(current.identity_id,verification)
             work.identity_preparations.update(row["preparation_id"], phase=phase, now_us=now)
             append_job_event(
                 work,
@@ -885,11 +894,25 @@ class IdentityPreparationHandler:
             work.commit()
 
     def _commit(self, job, row, active, result):
+        if active.request.authentication is not None:
+            from product.backend.domain.boundaries.entities import boundary_sha256
+            snapshot=result.verification
+            prepared_at=active.request.session_prepared_at_us if active.request.verify_only else result.prepared_at_us
+            if (snapshot is None or snapshot.profile_fingerprint!=boundary_sha256(active.request.authentication.model_dump(mode='json'))
+                or snapshot.session_prepared_at_us!=prepared_at or snapshot.origin!=active.request.target_scope.allowed_origins[0]):
+                raise JiejianError(ErrorCode.IDENTITY_PREPARATION_FAILED,'身份核验未对应本次配置与会话')
+        if active.request.verify_only:
+            if result.result_type is not IdentityPreparationResultType.CHECKED or result.verification is None:
+                raise JiejianError(ErrorCode.IDENTITY_PREPARATION_FAILED,'核验任务未返回身份事实')
+            self._finish(job,row,phase='PREPARED',verification=result.verification)
+            return IdentityPreparationView(preparation_id=row['preparation_id'],identity_id=row['identity_id'],
+                status=IdentityPreparationStatus.PREPARED,message='身份核验已完成')
         prepared = PreparedLoginState(
             auth_method=result.auth_method,
             cookies=tuple(TestIdentityCookie(**cookie.model_dump()) for cookie in result.cookies),
             bearer_secret_ref=result.bearer_secret_ref,
             prepared_at_us=result.prepared_at_us,
+            verification=result.verification,
         )
         self._finish(job, row, phase="PREPARED", prepared=prepared)
         return IdentityPreparationView(

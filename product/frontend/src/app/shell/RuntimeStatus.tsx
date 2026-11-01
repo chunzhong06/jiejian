@@ -14,7 +14,7 @@ export function RuntimeStatus({projectId}:{projectId?:string}){
   return <InfoPopover label="本地运行环境"
     actions={<Button kind="quiet" className="jj-system-refresh" busy={state.loading} aria-label="刷新运行状态" icon={<ReloadOutlined aria-hidden="true"/>} onClick={state.reload}/>}
     trigger={<Button kind="quiet" className="jj-system-state" aria-label={label}><i aria-hidden="true" className={ready?'is-ready':''}/><span>{label}</span></Button>}>
-    <dl className="jj-system-facts">
+    <dl className="jj-system-facts jj-facts is-stacked">
       <div><dt>界鉴版本</dt><dd>{state.data?.version??'正在读取'}</dd></div>
       <div><dt>执行服务</dt><dd>{!state.error&&state.data?.worker==='running'?'可用':'待确认'}</dd></div>
       <div><dt>检查浏览器</dt><dd>{!state.error&&state.data?.browser==='available'?'可用':'待确认'}</dd></div>

@@ -234,4 +234,24 @@ def test_revision_reports_every_unmapped_question_without_losing_original_requir
         assert any(issue['code']=='RULE_KIND_UNSUPPORTED' for issue in selected['issues'])
         assert client.get(prefix).json()['data']['policy_epoch']==0
 
+def test_confirmed_preparation_only_candidate_does_not_require_formal_rule_approval(tmp_path):
+    app = create_app(tmp_path/'var', start_worker=False, environ={})
+    with TestClient(app) as client:
+        project = _project(client, tmp_path/'source')
+        prefix = f'/api/projects/{project}/business-boundaries'
+        _, saved = _save(client, prefix, {'original_text':'登录只用于准备测试账号。', 'actors':[], 'actions':[], 'permissions':[],
+            'requirement_sources':[{'requirement_id':'req_'+'1'*16, 'title':'登录准备', 'origin':'USER',
+                'source_excerpt':'登录只用于准备测试账号。', 'interpretation':'登录只用于准备测试账号。', 'permission_item_ids':[]}]})
+        identifier = saved['candidate']['candidate_id']
+        assert app.state.context.rule_candidates.pending_reviews(project, [identifier])
+        scope = saved['scope_review'][0]
+        response = client.post(prefix + '/rule-candidates/' + identifier + '/scope-batch', json={
+            'operation_id':uuid4().hex, 'expected_basis_id':saved['candidate']['basis_id'], 'expected_revision':saved['candidate']['revision'],
+            'choices':[{'requirement_id':scope['source']['requirement_id'], 'requirement_fingerprint':scope['fingerprint'],
+                'disposition':'PREPARATION', 'requirement':'登录只用于准备测试账号。', 'reason':'不新增业务权限', 'time_scope':'NOT_APPLICABLE'}]})
+        assert response.status_code == 201, response.text
+        assert app.state.context.rule_candidates.pending_reviews(project, [identifier]) == []
+        assert client.get(prefix).json()['data']['policy_epoch'] == 0
+
+
 pytestmark = [pytest.mark.level3]
