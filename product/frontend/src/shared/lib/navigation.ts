@@ -10,7 +10,7 @@ export function scopedPath(path:string,projectId?:string){
 export function go(path:string,projectId?:string){location.hash=scopedPath(path,projectId)}
 export function returnDestination(value:string|null){
   // 返回位置只允许产品内的已知任务页面，不把任意传入值当作可跳转目的地。
-  if(!value||!/^\/(reports|permissions|changes)(\?|$)/.test(value))return null
+  if(!value||!/^\/(reports|permissions|changes|preparation)(\?|$)/.test(value))return null
   return value
 }
 export function historyLocation(projectId?:string){

@@ -33,7 +33,7 @@
   --bad-soft: #fdf0f0;
   --warn: #915b12;
   --warn-soft: #fff8e8;
-  --focus: #8da4ef;
+  --focus: var(--accent);
   --overlay: rgb(26 39 65 / 28%);
   --canvas-light: rgb(143 174 227 / 14%);
   --surface-shadow: none;
@@ -48,6 +48,8 @@
   --text-body: 14px;
   --text-section: 20px;
   --text-title: 28px;
+  --surface-heading: var(--inset);
+  --border-subtle: color-mix(in srgb,var(--line) 72%,transparent);
   --popover-shadow: 0 8px 24px color-mix(in srgb,var(--ink) 12%,transparent), 0 2px 6px color-mix(in srgb,var(--ink) 6%,transparent);
   --motion-hover-in: 60ms;
   --motion-hover-out: 100ms;

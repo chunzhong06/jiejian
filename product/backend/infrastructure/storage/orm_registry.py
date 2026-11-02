@@ -6,6 +6,7 @@ from importlib import import_module
 
 
 _STORAGE_ORM_MODULES = (
+    "product.backend.infrastructure.storage.execution.check_routines",
     "product.backend.infrastructure.storage.runtime.collaboration",
     "product.backend.infrastructure.storage.preparation.operation_flows",
     "product.backend.infrastructure.storage.workspace",

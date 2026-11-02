@@ -66,13 +66,13 @@ export function Agent({ projectId, name, onError }: {
         </>}
       </section>
     </div>
-    {confirm && <Dialog title={confirm === 'connect' ? '配置开发工具连接' : confirm === 'restore' ? '恢复工具配置' : confirm === 'forget' ? '解除工具配对' : '更新工具权限'} onClose={() => setConfirm(undefined)} actions={dismiss => <><Button disabled={busy} onClick={dismiss}>取消</Button><Button kind="primary" busy={busy} onClick={() => void act(async () => { if (confirm === 'connect') {
+    {confirm && <Dialog title={confirm === 'connect' ? '配置开发工具连接' : confirm === 'restore' ? '恢复工具配置' : confirm === 'forget' ? '解除工具配对' : '更新工具权限'} onClose={() => setConfirm(undefined)} actions={dismiss => <><Button disabled={busy} onClick={dismiss}>取消</Button><Button kind={confirm === 'forget' ? 'danger' : 'primary'} busy={busy} onClick={() => void act(async () => { if (confirm === 'connect') {
         const value = await agentConnectionsApi.connect(client, profile || undefined);
         setMessage(value.message);
     }
     else if (confirm === 'restore') { const value = await agentConnectionsApi.restore(client); setMessage(value.message); } else if (confirm === 'forget') { await mcpAccessApi.forget(); setMessage('工具配对已解除。需要重新配置连接才能继续访问。'); } else if (projectId) {
         await mcpAccessApi.setProjectAccess(projectId, chosenLevel);
         setLevel(undefined);
-    } })}>确认</Button></>}><p>{confirm === 'restore' ? '恢复界鉴配置连接前保存的工具设置。当前客户端可能需要重新加载。' : confirm === 'forget' ? '解除所有开发工具的本地配对和应用授权。现有规则、材料与报告保留。' : confirm === 'connect' ? '界鉴会更新 ' + selectedClient.name + ' 的本地连接配置，并保存恢复所需的信息。连接后的默认权限为只读。' : '允许开发工具在“' + (name ?? '当前应用') + '”内' + levels[chosenLevel] + '。权限规则的生效仍需由你审阅批准。'}</p></Dialog>}
+    } })}>{confirm === 'forget' ? '解除配对' : confirm === 'restore' ? '恢复配置' : confirm === 'connect' ? '配置连接' : '更新权限'}</Button></>}><p>{confirm === 'restore' ? '恢复界鉴配置连接前保存的工具设置。当前客户端可能需要重新加载。' : confirm === 'forget' ? '解除所有开发工具的本地配对和应用授权。现有规则、材料与报告保留。' : confirm === 'connect' ? '界鉴会更新 ' + selectedClient.name + ' 的本地连接配置，并保存恢复所需的信息。连接后的默认权限为只读。' : '允许开发工具在“' + (name ?? '当前应用') + '”内' + levels[chosenLevel] + '。权限规则的生效仍需由你审阅批准。'}</p></Dialog>}
   </>;
 }

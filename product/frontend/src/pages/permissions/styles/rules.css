@@ -1,9 +1,11 @@
 .jj-rule-workspace, .jj-rule-detail-header, .jj-rule-issue, .jj-rule-current, .jj-rule-change-list, .jj-rule-history { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); overflow: hidden; }
-.jj-rule-summary { display: flex; gap: 18px; padding: 24px 28px; align-items: center; background: var(--inset); border-bottom: 1px solid var(--line); }
+.jj-rule-summary { display: flex;flex-wrap:wrap; gap: 18px; padding: 22px 24px; align-items: center; background: var(--surface-heading); border-bottom: 1px solid var(--line); }
 .jj-rule-summary > .anticon { font-size: var(--text-section); color: var(--accent-ink); }
 .jj-rule-summary > div:first-of-type { display: grid; gap: 4px; }
 .jj-rule-summary > div:first-of-type > span, .jj-rule-totals { color: var(--muted); font-size: var(--text-meta); }
-.jj-rule-totals { display: flex; gap: 28px; margin-left: auto; }
+.jj-rule-totals { display: flex;flex-wrap:wrap;gap:8px; margin-left: auto; }
+.jj-rule-totals>.jj-button { font-size:var(--text-meta);font-weight:400;padding:8px 12px; }
+.jj-rule-totals>.jj-button[aria-pressed=true] { background:var(--accent-soft);color:var(--accent-ink); }
 .jj-rule-totals strong { font-size: var(--text-body); color: var(--ink); }
 .jj-rule-matrix { gap: 0; }
 .jj-rule-matrix .jj-rule-toolbar { padding: 20px 24px; }

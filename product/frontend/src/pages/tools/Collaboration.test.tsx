@@ -28,7 +28,7 @@ it('通过产品接口展示同一任务，区分请求回执和后台完成',as
   fireEvent.click(await screen.findByRole('button',{name:'确认并执行'}))
   expect(await screen.findByText('本次范围符合规则')).toBeVisible()
   expect(await screen.findByText('执行已完成')).not.toBeVisible()
-  fireEvent.click(screen.getByText('后台执行记录'))
+  fireEvent.click(screen.getByText('查看处理记录'))
   expect(screen.getByText('执行已完成')).toBeVisible()
   expect(screen.getByText('已取得回执')).toBeVisible()
   expect(screen.getByRole('link',{name:'查看检查报告'})).toHaveAttribute('href',expect.stringContaining('run_id=run'))
@@ -82,14 +82,22 @@ it('等待接续时突出实际启动入口，打开确认前不调用本地模�
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const path=String(input);
     if(path.endsWith('/execute')){executionCalls++;return response({})}
-    if(path==='/api/collaboration/executor?project_id=app')return response({available:true,ready:true,provider:'codex-app-server',read_only:true});
+    if(path==='/api/collaboration/executor?project_id=app')return response({available:true,ready:true,provider:'codex-app-server',read_only:false});
     if(path.endsWith('/activity'))return response([]);
     if(path==='/api/projects/app/collaboration/task')return response(task);
     throw new Error(path);
   }));
   render(<Collaboration projectId="app" taskId="task"/>);
   fireEvent.click(await screen.findByRole('button',{name:'继续本地 Agent'}));
-  expect(await screen.findByRole('dialog',{name:'在界鉴中继续这项任务'})).toBeVisible();
+  expect(await screen.findByRole('dialog',{name:'启动本地 Agent'})).toBeVisible();
   expect(executionCalls).toBe(0);
+  expect(screen.getByRole('checkbox',{name:'允许修改当前应用的源码'})).not.toBeChecked();
+  expect(screen.getByText(/可能产生费用/)).toBeVisible();
+  fireEvent.click(screen.getByText('执行方式与权限边界'));
+  expect(screen.getByRole('checkbox',{name:'持续推进当前任务'})).toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox',{name:'持续推进当前任务'}));
+  expect(screen.getByText('执行 1 个模型回合')).toBeVisible();
+  fireEvent.click(screen.getByRole('checkbox',{name:'持续推进当前任务'}));
+  expect(screen.getByText(/最多 8 个模型回合/)).toBeVisible();
   expect(screen.queryByRole('heading',{name:'处理记录'})).not.toBeInTheDocument();
 });

@@ -14,12 +14,12 @@ beforeEach(()=>{
   vi.spyOn(preparationApi,'material').mockResolvedValue(structuredClone(details))
   vi.spyOn(preparationApi,'previewMaterial').mockResolvedValue(impact)
 })
-async function select(){fireEvent.click(await screen.findByRole('radio'));fireEvent.click(screen.getByRole('button',{name:'核对采用影响'}))}
+async function select(){fireEvent.click(await screen.findByRole('radio'));fireEvent.click(screen.getByRole('button',{name:'核对后用于检查'}))}
 
 it('先核对影响，明确采用后才写入一次',async()=>{
   const save=vi.spyOn(preparationApi,'saveMaterial').mockImplementation(async(_,value)=>({...impact,operation_id:value.operation_id,created_at_us:100,result:'SAVED'}))
   render(<MaterialEditor {...props()}/>);await select()
-  const adopt=await screen.findByRole('button',{name:'采用这份记录'})
+  const adopt=await screen.findByRole('button',{name:'确认使用这份录制'})
   expect(save).not.toHaveBeenCalled()
   expect(preparationApi.previewMaterial).toHaveBeenCalledWith('project',expect.objectContaining({material:reference,expected_fingerprint:'basis',candidate_recording_id:'new'}))
   fireEvent.click(adopt)
@@ -30,7 +30,7 @@ it('回执未知时只查询原操作，不再次保存',async()=>{
   const save=vi.spyOn(preparationApi,'saveMaterial').mockRejectedValue(new Error('response unavailable'))
   const receipt=vi.spyOn(preparationApi,'materialReceipt').mockImplementation(async(_,operation_id)=>({...impact,operation_id,created_at_us:100,result:'SAVED'}))
   const p=props();render(<MaterialEditor {...p}/>);await select()
-  fireEvent.click(await screen.findByRole('button',{name:'采用这份记录'}))
+  fireEvent.click(await screen.findByRole('button',{name:'确认使用这份录制'}))
   const query=await screen.findByRole('button',{name:'查询本次采用'})
   expect(save).toHaveBeenCalledOnce()
   expect(receipt).not.toHaveBeenCalled()
@@ -46,7 +46,7 @@ it('陈旧依据被服务拒绝后不能出现采用操作',async()=>{
   const save=vi.spyOn(preparationApi,'saveMaterial')
   const p=props();render(<MaterialEditor {...p}/>);await select()
   await waitFor(()=>expect(p.onError).toHaveBeenCalledOnce())
-  expect(screen.queryByRole('button',{name:'采用这份记录'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'确认使用这份录制'})).not.toBeInTheDocument()
   expect(save).not.toHaveBeenCalled()
 })
 
@@ -54,7 +54,7 @@ it.each(['transport','server'])('%s 回执不明后刷新恢复原操作，并�
   const save=vi.spyOn(preparationApi,'saveMaterial').mockRejectedValue(kind==='transport' ? new Error('response unavailable') : new ApiError('STORAGE_FAILURE','写入结果无法确认'))
   const receipt=vi.spyOn(preparationApi,'materialReceipt').mockRejectedValue(new ApiError('RECORD_NOT_FOUND','尚未形成回执'))
   const p=props(),first=render(<MaterialEditor {...p}/>);await select()
-  fireEvent.click(await screen.findByRole('button',{name:'采用这份记录'}))
+  fireEvent.click(await screen.findByRole('button',{name:'确认使用这份录制'}))
   await screen.findByRole('button',{name:'查询本次采用'})
   const operation=save.mock.calls[0][1].operation_id
   first.unmount()

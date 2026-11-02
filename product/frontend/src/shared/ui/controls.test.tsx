@@ -25,6 +25,20 @@ it('选择菜单展开后将所选值交给业务调用方',async()=>{
   expect(change).toHaveBeenCalledWith('b',expect.anything())
 })
 
+it('原选项失效时保留原值并提示，不自动选择可用对象',async()=>{
+  const change=vi.fn()
+  render(<Choice aria-label="操作账号" value="removed" onValueChange={change}><option value="owner">负责人</option></Choice>)
+  expect(screen.getByText('原选项已不可用')).toBeVisible()
+  expect(screen.queryByText('removed')).not.toBeInTheDocument()
+  expect(change).not.toHaveBeenCalled()
+  fireEvent.mouseDown(screen.getByRole('combobox'))
+  const removed=await screen.findByRole('option',{name:'原选项已不可用'})
+  fireEvent.click(removed)
+  expect(change).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('option',{name:'负责人'}))
+  expect(change).toHaveBeenCalledWith('owner',expect.anything())
+})
+
 it('对话框中的选择器关联字段名称，键盘跳过禁用项，Escape 只关闭选项',async()=>{
   const close=vi.fn(),change=vi.fn()
   function Scene(){const [value,setValue]=useState('0');return <Dialog title="准备数据" onClose={close}><Field label="数据所有者"><Choice value={value} onValueChange={next=>{setValue(next);change(next)}}><option value="0">负责人</option><option value="1" disabled>已停用账号</option><option value="2">评审</option></Choice></Field></Dialog>}

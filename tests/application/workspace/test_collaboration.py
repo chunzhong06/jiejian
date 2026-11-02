@@ -4,7 +4,7 @@ import pytest
 
 from product.backend.application.agent_access.capabilities import Capability, Empty
 from product.backend.application.agent_access.tasks import CreateCollaboration, CollaborationAction, CollaborationQuestion
-from product.backend.domain.errors import JiejianError
+from product.backend.domain.errors import ErrorCode, JiejianError
 from tests.support.builders.preparation.action_preparation import build_preparation_harness
 
 
@@ -244,3 +244,183 @@ def test_local_executor_does_not_read_project_before_source_authorization(harnes
     with pytest.raises(JiejianError, match='先明确允许读取'):
         executor.start(harness.project_id, value['task_id'], execution.StartAgent(operation_id=uuid4().hex))
     assert executor.active == {}
+
+
+def test_continuous_executor_waits_for_answer_then_resumes_same_session(harness, monkeypatch):
+    from threading import Event
+    from types import SimpleNamespace
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    monkeypatch.setattr(execution, '_codex_executable', lambda:'fixture-client')
+    understanding = harness.core.application_understanding.get(harness.project_id).model_copy(update={'source_analysis_authorized':True})
+    monkeypatch.setattr(harness.core.application_understanding, 'get', lambda _:understanding)
+    access = SimpleNamespace(view=lambda:SimpleNamespace(paired=True), level_for=lambda _:MCPAccessLevel.PREPARE)
+    value, calls, resumed = task(harness), [], Event()
+    question = CollaborationQuestion(question_id=uuid4().hex, question='成员是否允许查看其他人的工单？', options=['允许','禁止'])
+    def runner(**arguments):
+        calls.append(arguments['session_id'])
+        if len(calls)==1:
+            harness.core.collaboration.ask(harness.project_id, value['task_id'], question)
+        else:
+            resumed.set()
+        return dict(state='FINISHED',session_id='same-session',failed_tools=len(calls)==1)
+    executor = execution.AgentExecution(harness.core,access,SimpleNamespace(prepare_managed_profile=lambda _:'fixture-profile'),runner=runner)
+    try:
+        executor.start(harness.project_id,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,continuous=True))
+        import time
+        deadline=time.monotonic()+4
+        while time.monotonic()<deadline:
+            current=harness.core.collaboration.show(harness.project_id,value['task_id'])
+            if current['execution']['state']=='WAITING': break
+            time.sleep(.02)
+        assert current['execution']['state']=='WAITING'
+        assert calls==[None]
+        harness.core.collaboration.answer(harness.project_id,value['task_id'],question.question_id,'禁止')
+        assert resumed.wait(4)
+        assert calls==[None,'same-session']
+    finally:
+        executor.close()
+
+
+def test_completed_check_is_a_deliverable_even_when_it_finds_a_violation(harness, monkeypatch):
+    capabilities=harness.core.agent_capabilities
+    monkeypatch.setattr(capabilities,'latest_check',lambda *args:dict(run_id='published',lifecycle='COMPLETED',verdict='BLOCK'))
+    outcome=capabilities.goal_outcome(harness.project_id,task(harness))
+    assert outcome['fulfilled'] is True
+    assert outcome['destination']=='/reports?run_id=published'
+    assert '符合' not in outcome['title']
+
+
+def test_service_restart_revokes_waiting_native_execution(harness):
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    service.execution_started(project,value['task_id'],dict(operation_id=uuid4().hex,state='WAITING',continuous=True))
+    service.recover_executions()
+    current=service.show(project,value['task_id'])
+    assert current['execution']['state']=='UNKNOWN'
+    assert current['state']=='BLOCKED'
+
+
+def test_repair_goal_cannot_be_satisfied_by_another_problem_report(harness,monkeypatch):
+    from types import SimpleNamespace
+    service=harness.core.collaboration
+    value=service.create(harness.project_id,CreateCollaboration(operation_id=uuid4().hex,
+        goal='修复原问题',purpose='REPAIR',references={'run_id':'original'}))
+    monkeypatch.setattr(harness.core.agent_capabilities,'latest_check',lambda *args:dict(run_id='unrelated',lifecycle='COMPLETED',verdict='PASS'))
+    monkeypatch.setattr(harness.core.project_repair,'evaluate',lambda _:SimpleNamespace(tasks=[
+        SimpleNamespace(status='VERIFIED',history=[SimpleNamespace(source_run_id='different')])]))
+    assert service.assess(harness.project_id,value['task_id'])['fulfilled'] is False
+
+
+def test_turn_budget_stops_a_task_even_when_each_round_makes_changes(harness,monkeypatch):
+    import time
+    from types import SimpleNamespace
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    monkeypatch.setattr(execution,'_codex_executable',lambda:'fixture-client')
+    understanding=harness.core.application_understanding.get(harness.project_id).model_copy(update={'source_analysis_authorized':True})
+    monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:understanding)
+    access=SimpleNamespace(view=lambda:SimpleNamespace(paired=True),level_for=lambda _:MCPAccessLevel.PREPARE)
+    service,project,value,calls=harness.core.collaboration,harness.project_id,task(harness),[]
+    def runner(**arguments):
+        calls.append(arguments['session_id'])
+        question=CollaborationQuestion(question_id=uuid4().hex,question='核对本轮业务范围')
+        service.ask(project,value['task_id'],question)
+        service.answer(project,value['task_id'],question.question_id,'仅当前测试资源')
+        return dict(state='FINISHED',session_id='bounded-session')
+    executor=execution.AgentExecution(harness.core,access,SimpleNamespace(prepare_managed_profile=lambda _:'fixture-profile'),runner=runner)
+    try:
+        executor.start(project,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,continuous=True,max_turns=2))
+        deadline=time.monotonic()+4
+        while time.monotonic()<deadline:
+            current=service.show(project,value['task_id'])
+            if current['execution']['state']=='LIMIT_REACHED':break
+            time.sleep(.02)
+        assert current['execution']['state']=='LIMIT_REACHED'
+        assert calls==[None,'bounded-session']
+        assert current['state']!='COMPLETED'
+    finally:
+        executor.close()
+
+
+def test_changed_goal_cannot_be_closed_by_an_earlier_assessment(harness,monkeypatch):
+    from product.backend.application.agent_access.tasks import CollaborationFollowup
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    def outcome(*args):
+        service.followup(project,CollaborationFollowup(operation_id=uuid4().hex,task_id=value['task_id'],
+            goal='继续处理刚发现的新问题',purpose='REPAIR',references={'run_id':'new-problem'}))
+        return dict(fulfilled=True,title='旧目标产物已形成',destination='/reports')
+    monkeypatch.setattr(service.capabilities,'goal_outcome',outcome)
+    assert service.assess(project,value['task_id'])['fulfilled'] is False
+    with pytest.raises(JiejianError) as error:
+        service.control(project,value['task_id'],'finish',require_fulfilled=True)
+    assert error.value.code == ErrorCode.STATE_PRECONDITION
+    assert service.show(project,value['task_id'])['state']!='COMPLETED'
+
+
+def test_paused_task_cannot_claim_another_model_turn(harness):
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    operation=uuid4().hex
+    service.execution_started(project,value['task_id'],dict(operation_id=operation,state='WAITING',continuous=True))
+    service.control(project,value['task_id'],'pause')
+    assert service.claim_turn(project,value['task_id'],operation,2) is False
+    assert service.show(project,value['task_id'])['state']=='PAUSED'
+
+
+def test_mcp_question_input_error_is_not_reported_as_damaged_storage(harness):
+    from types import SimpleNamespace
+    from mcp import MCPError
+    from product.backend.interfaces.http.mcp.collaboration import register_collaboration_tools
+    from product.backend.interfaces.http.mcp.errors import _invoke
+    tools={}
+    def register(**metadata):
+        def accept(function):
+            tools[metadata['name']]=function
+            return function
+        return accept
+    register_collaboration_tools(SimpleNamespace(tool=register),harness.core,None,require_level=lambda *a,**k:None,invoke=_invoke)
+    value=task(harness)
+    with pytest.raises(MCPError) as error:
+        tools['jiejian_collaboration_question'](None,harness.project_id,value['task_id'],'invalid-id','fixture-user-note')
+    assert error.value.data['error_code']==ErrorCode.INPUT_INVALID.value
+    assert 'fixture-user-note' not in str(error.value.data)
+    assert harness.core.collaboration.show(harness.project_id,value['task_id'])['questions']==[]
+
+
+def test_ready_deliverable_after_wait_does_not_spend_another_model_turn(harness,monkeypatch):
+    import time
+    from threading import Event
+    from types import SimpleNamespace
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    monkeypatch.setattr(execution,'_codex_executable',lambda:'fixture-client')
+    understanding=harness.core.application_understanding.get(harness.project_id).model_copy(update={'source_analysis_authorized':True})
+    monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:understanding)
+    ready=Event()
+    monkeypatch.setattr(harness.core.agent_capabilities,'latest_check',lambda *a:
+        dict(run_id='published',lifecycle='COMPLETED',verdict='PASS') if ready.is_set() else None)
+    service,project,value,calls=harness.core.collaboration,harness.project_id,task(harness),[]
+    question=CollaborationQuestion(question_id=uuid4().hex,question='确认本次报告所属范围')
+    def runner(**arguments):
+        calls.append(arguments['session_id'])
+        service.ask(project,value['task_id'],question)
+        return dict(state='FINISHED',session_id='deliverable-session')
+    access=SimpleNamespace(view=lambda:SimpleNamespace(paired=True),level_for=lambda _:MCPAccessLevel.PREPARE)
+    executor=execution.AgentExecution(harness.core,access,SimpleNamespace(prepare_managed_profile=lambda _:'fixture-profile'),runner=runner)
+    try:
+        executor.start(project,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,continuous=True))
+        deadline=time.monotonic()+4
+        while time.monotonic()<deadline:
+            if service.show(project,value['task_id'])['execution']['state']=='WAITING':break
+            time.sleep(.02)
+        ready.set();service.answer(project,value['task_id'],question.question_id,'当前指定范围')
+        while time.monotonic()<deadline:
+            current=service.show(project,value['task_id'])
+            if current['state']=='COMPLETED':break
+            time.sleep(.02)
+        assert current['state']=='COMPLETED'
+        assert current['outcome']['fulfilled']
+        assert current['events'][-1]['actor']=='SYSTEM'
+        assert current['execution']['state']=='FINISHED'
+        assert calls==[None]
+    finally:
+        executor.close()

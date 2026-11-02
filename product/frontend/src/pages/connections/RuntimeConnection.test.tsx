@@ -11,6 +11,17 @@ beforeEach(()=>{vi.spyOn(api,'runtimeCapabilities').mockResolvedValue({project_i
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
+it('从证明缺口返回时直接展示已有启动配置，不重新选择方式或执行启动',async()=>{
+    vi.spyOn(api,'runtime').mockResolvedValue(idle);
+    const start=vi.spyOn(api,'runtimeStart');
+    const confirm=vi.spyOn(api,'confirmEndpoint');
+    render(<RuntimeConnection {...props} initialMethod="managed"/>);
+    expect(await screen.findByRole('textbox',{name:'启动文件'})).toHaveValue('app.mjs');
+    expect(screen.getByRole('radio',{name:'由界鉴启动'})).toBeChecked();
+    expect(start).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+});
+
 it('切换运行方式保留草稿，不提交地址或启动进程', async () => {
     vi.spyOn(api, 'runtime').mockResolvedValue(idle);
     const confirm = vi.spyOn(api, 'confirmEndpoint');

@@ -55,15 +55,14 @@
 @media(max-width:1050px) and (min-width:801px) { .jj-preparation-workbench { grid-template-columns: 264px minmax(0,1fr); } .jj-material-detail { padding: 26px 24px; } .jj-material-select { padding-inline: 9px; gap: 10px; } }
 @media(max-width:650px) { .jj-preparation-workbench { grid-template-columns: minmax(0,1fr); } .jj-material-index { border-right: 0; border-bottom: 1px solid var(--line); padding: 18px 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; } .jj-material-index-heading { grid-column: 1/-1; padding-bottom: 0; } .jj-material-index-heading > span { display: none; } .jj-material-section { margin: 0; } .jj-material-select { grid-template-columns: 28px minmax(0,1fr) auto; padding: 10px; gap: 8px; } .jj-material-icon { width: 27px; height: 27px; border-radius: 7px; } .jj-material-select > .anticon { display: none; } .jj-material-detail { padding: 24px 20px; } .jj-material-detail > header { align-items: flex-start; } .jj-preparation-footer { flex-wrap: wrap; padding: 20px; } .jj-preparation-footer > .jj-button { margin-left: auto; } .jj-batch-items, .jj-preparation-consent ul { grid-template-columns: minmax(0,1fr); } .jj-consent-review > .jj-panel { padding: 24px 20px; } }
 
-.jj-account-entities { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,230px),1fr)); gap: 16px; }
-.jj-account-entity { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
-.jj-account-entity > header { display: flex; align-items: flex-start; gap: 10px; }
+.jj-account-entities { display: grid;gap:0;border:1px solid var(--line);border-radius:var(--radius-control);overflow:hidden; }
+.jj-account-entity { display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:16px;background:var(--surface);border-bottom:1px solid var(--line); }
+.jj-account-entity:last-child { border-bottom:0; }
 .jj-account-entity-icon { width: 22px; height: 22px; display: grid; place-items: center; color: var(--muted); flex: none; }
 .jj-account-entity h3 { font-weight: 600; }
 .jj-account-entity p { margin-top: 6px; color: var(--muted); font-size: var(--text-meta); }
-.jj-account-entity > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
 .jj-account-entity .jj-button { font-size: var(--text-meta); min-height: 32px; padding: 6px 8px; }
-@media(max-width:700px) { .jj-account-entities { grid-template-columns: minmax(0,1fr); } }
+@container material-detail (max-width:600px) { .jj-account-entity { grid-template-columns:22px minmax(0,1fr) auto; }.jj-account-entity>.jj-button { grid-column:2/-1;justify-self:end; }.jj-account-entity>div { min-width:0; } }
 
 .jj-preparation-impact { padding: 0; border: 0; background: transparent; }
 .jj-preparation-impact > summary { width: 100%; padding: 12px 16px; background: var(--inset); border: 1px solid var(--line); border-radius: var(--radius-control); }

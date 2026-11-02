@@ -63,7 +63,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>全部权限规则</Button></div>
         <Heading title="编写权限要求"><p>定义业务角色和操作，再明确每条访问要求。</p></Heading>
         {changed && <Notice>正式规则已变化，草稿保留。请返回核对当前规则后再整理。</Notice>}
-        <div className="jj-rule-authoring">
+        <div className="jj-rule-authoring" data-preview={draft.permissions.length>0}>
             <div className="jj-rule-authoring-editor">
                 <Tabs label="权限编写分区" value={section} items={[
                     { value: 'actors', label: '业务角色 ' + draft.actors.length },
@@ -147,23 +147,23 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                     {section !== 'permissions' && <footer className="jj-initial-next"><Button onClick={() => setSection(section === 'actors' ? 'actions' : 'permissions')}>{section === 'actors' ? '继续定义操作与结果' : '继续编写访问规则'}<ArrowRightOutlined aria-hidden="true" /></Button></footer>}
                 </div>
             </div>
-            <aside className="jj-initial-preview" data-section={section} aria-label="权限草稿预览">
+            {draft.permissions.length>0&&<aside className="jj-initial-preview" data-section={section} aria-label="权限草稿预览">
                 <header><span className="jj-initial-preview-symbol"><SafetyOutlined aria-hidden="true" /></span><h2>权限预览</h2><Badge>尚未生效</Badge></header>
-                {draft.permissions.length ? <div className="jj-initial-preview-rules">{draft.permissions.map((rule, index) => {
+                <div className="jj-initial-preview-rules">{draft.permissions.map((rule, index) => {
                     const actor = draft.actors.find(item => item.item_id === rule.subject_actor_item_id), owner = draft.actors.find(item => item.item_id === rule.resource_owner_actor_item_id), action = draft.actions.find(item => item.item_id === rule.business_action_item_id);
                     const relation = rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '同角色其他账号的资源' : (owner?.display_name || '指定角色') + '的资源';
                     return <Button kind="quiet" className="jj-initial-preview-rule" data-tone={rule.expectation === 'ALLOW' ? 'positive' : 'negative'} key={rule.item_id} onClick={() => setSection('permissions')} aria-label={'编辑规则 ' + (index + 1)}>
                         {rule.expectation === 'ALLOW' ? <CheckCircleOutlined aria-hidden="true" /> : <StopOutlined aria-hidden="true" />}
                         <span><strong>{rule.conditions?.principal === 'ANONYMOUS' ? '未登录访客' : actor?.display_name || '未命名角色'}{rule.expectation === 'ALLOW' ? '可以' : '不得'}{action?.display_name || '执行操作'}</strong><small>{relation}</small>{conditionLabels(rule.conditions).length > 0 && <small>{conditionLabels(rule.conditions).join("，")}</small>}{action?.effects.filter(effect => rule.protected_effect_item_ids.includes(effect.item_id)).map(effect => <span className="jj-initial-preview-effect" key={effect.item_id}>{effect.business_label || '未命名结果'}</span>)}</span>
                     </Button>;
-                })}</div> : <div className="jj-initial-preview-empty"><p>尚未添加访问规则</p><span>填写角色与操作后，在这里核对完整的权限要求。</span></div>}
+                })}</div>
                 {section === 'permissions' && <details className="jj-initial-provenance"><summary>补充规则依据（选填）</summary><Field label="权限要求的依据"><textarea disabled={disabled} rows={3} maxLength={512} value={draft.provenance} onChange={event => edit({ provenance: event.target.value })} /></Field></details>}
                 <div className="jj-initial-submit">
                     {!!missing.length && <details className="jj-initial-missing"><summary>仍需填写 {missing.length} 项</summary><div>{missing.map(item => <Button kind="quiet" key={item.label} onClick={() => setSection(item.section)}>{item.label}<ArrowRightOutlined aria-hidden="true" /></Button>)}</div></details>}
                     <p>生成提案后，审阅并批准才会生效。</p>
                     <Button kind="primary" busy={busy} disabled={!valid || disabled} onClick={submit}>生成完整提案<ArrowRightOutlined aria-hidden="true" /></Button>
                 </div>
-            </aside>
+            </aside>}
         </div>
         {draft.uncertain && <Notice>提案结果尚未确认，草稿已保留。<Button busy={busy} onClick={() => void run(async () => { const value = await api.proposals(projectId, true); setProposals(value.proposals.map(item => item.proposal.proposal_id)); })}>查询已接收的提案</Button></Notice>}
         {(draft.proposal_id ? [draft.proposal_id] : proposals).map((value, index) => <Button key={value} onClick={() => void run(() => onProposal(value))}>审阅提案{proposals.length > 1 ? ' ' + (index + 1) : ''}</Button>)}

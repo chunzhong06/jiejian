@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,waitFor} from '@testing-library/react'
+import {fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {beforeEach,expect,it,vi} from 'vitest'
 import {Report} from './Report'
 import {EvidenceInspector} from './EvidenceInspector'
@@ -27,6 +27,20 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
+
+it('结果筛选保留对应检查项，空筛选可以返回全部结果',()=>{
+  const value=story(),safe=structuredClone(value.actions[0]);safe.case_id='safe';safe.judgement='检查结果符合已批准的权限要求';safe.display_name='正常下载'
+  value.actions.push(safe)
+  render(<Report {...props(value)}/>)
+  const filters=screen.getByRole('group',{name:'按检查结果筛选'})
+  fireEvent.click(within(filters).getByRole('button',{name:/符合规则/}))
+  expect(screen.getByRole('button',{name:'查看成员正常下载的依据'})).toBeVisible()
+  expect(screen.queryByRole('button',{name:'查看成员导出资料的依据'})).not.toBeInTheDocument()
+  fireEvent.click(within(filters).getByRole('button',{name:/尚未确认/}))
+  expect(screen.getByText('本次没有这类结果')).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'查看全部结果'}))
+  expect(screen.getByRole('button',{name:'查看成员导出资料的依据'})).toBeVisible()
+})
 
 function recordView():EvidenceRecordView {
   return {project_id:'p1',run_id:'r1',case_id:'c1',action_id:'a1',evidence_id:'ev1',
@@ -116,3 +130,40 @@ it('未知记录不退回第一条，也不读取不存在的片段',async()=>{
   await waitFor(()=>expect(screen.getByRole('alert')).toBeInTheDocument())
   expect(read).not.toHaveBeenCalled()
 })
+
+it('复验先比较修改前后，原始依据只在选中项中查阅；缺少对应场景不能显示已解决',()=>{
+  const value=story();value.verdict='PASS';value.actions[0].judgement='本次权限要求已得到验证';
+  value.repair_verification={repair_reference:'repair',source_run_id:'before',run_id:'r1',status:'VERIFIED',reason_codes:[]};
+  value.repair_comparison=[{role:'DENY',source_case_id:'old',action_label:'导出资料',subject_label:'成员',resource_owner_label:'负责人',resource_id:'resource',effect_labels:['完整交付包'],before_verdict:'VULNERABLE',before_evidence_refs:['original'],after_case_id:'c1',match_status:'MATCHED'}];
+  const p=props(value),view=render(<Report {...p}/>);
+  const table=screen.getByRole('table');
+  expect(within(table).getByRole('columnheader',{name:'修改前'})).toBeVisible();
+  expect(within(table).getByText('存在权限问题')).toBeVisible();
+  expect(within(table).getByText('已解决')).toBeVisible();
+  fireEvent.click(within(table).getByRole('button',{name:'查看成员不得导出资料的复验依据'}));
+  expect(location.hash).toContain('run_id=r1&case_id=c1');
+  view.rerender(<Report {...p} selectedCaseId="c1"/>);
+  const inspector=screen.getByRole('complementary',{name:'检查依据'});
+  const prior=within(inspector).getByText('修改前的结果与原检查').closest('details')!;
+  expect(prior).not.toHaveAttribute('open');
+  fireEvent.click(within(inspector).getByText('修改前的结果与原检查'));
+  fireEvent.click(within(prior).getByRole('button',{name:'查看原检查依据'}));
+  expect(location.hash).toContain('run_id=before&case_id=old');
+  value.repair_comparison[0].match_status='NOT_FOUND';
+  view.rerender(<Report {...p}/>);
+  expect(screen.queryByText('已解决')).not.toBeInTheDocument();
+  expect(screen.getByText('缺少对应场景')).toBeVisible();
+});
+
+it('连续查阅不同检查项后，关闭依据返回最后选中的检查项',()=>{
+  const value=story(),second=structuredClone(value.actions[0]);second.case_id='c2';second.display_name='预览资料';value.actions.push(second);
+  const p=props(value),view=render(<Report {...p}/>);
+  screen.getByRole('button',{name:'查看成员导出资料的依据'}).focus();
+  fireEvent.click(document.activeElement!);
+  view.rerender(<Report {...p} selectedCaseId="c1"/>);
+  const target=screen.getByRole('button',{name:'查看成员预览资料的依据'});target.focus();fireEvent.click(target);
+  view.rerender(<Report {...p} selectedCaseId="c2"/>);
+  fireEvent.click(screen.getByRole('button',{name:'关闭检查依据'}));
+  view.rerender(<Report {...p}/>);
+  expect(screen.getByRole('button',{name:'查看成员预览资料的依据'})).toHaveFocus();
+});

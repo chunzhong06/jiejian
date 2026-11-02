@@ -1,6 +1,7 @@
 import './styles.css'
 import { useRef, useState } from 'react';
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import CodeOutlined from '@ant-design/icons/CodeOutlined';
 import FolderOpenOutlined from '@ant-design/icons/FolderOpenOutlined';
 import AppstoreOutlined from '@ant-design/icons/AppstoreOutlined';
@@ -15,7 +16,7 @@ import { ApiError } from '../../shared/api/http';
 import { operationId, readPending, savePending } from '../../shared/lib/operations';
 import { assertProject } from '../../shared/model/page';
 import { date } from '../../shared/lib/format';
-import { go } from '../../shared/lib/navigation';
+import { go, readRoute, returnDestination, scopedPath } from '../../shared/lib/navigation';
 import { useRead } from '../../shared/lib/useRead';
 import { ActionLink, Button } from "../../shared/ui/actions";
 import { Heading, Field } from "../../shared/ui/layout";
@@ -77,7 +78,9 @@ export function Connect({ selected, environment, mode = 'application', onChanged
     const resumable = Boolean(official?.workspace_retained && official.history_project_id);
     const value = current.data;
     const exampleProject = official?.project_id ?? (official?.workspace_retained ? official.history_project_id : undefined);
+    const returnTo = returnDestination(readRoute().query.get('return_to'));
     return <>
+    {mode === 'application' && returnTo?.startsWith('/preparation') && <div className="jj-back-link"><ActionLink href={'#'+scopedPath(returnTo,selected?.project_id)}><ArrowLeftOutlined aria-hidden="true"/>返回结果证明</ActionLink></div>}
     <Heading title={mode === 'environment' ? '官方示例' : '应用连接'} actions={mode === 'application' && selected && !connecting && <Button onClick={() => setConnecting(true)} icon={<FolderOpenOutlined aria-hidden="true"/>}>连接其他应用</Button>}/>
     {mode === 'application' ? <>
       {current.loading && selected ? <Loading page>正在读取应用连接</Loading> : value && !connecting && <section className="jj-application-workspace" aria-label="应用连接设置">
@@ -92,7 +95,7 @@ export function Connect({ selected, environment, mode = 'application', onChanged
               {value.analysis_completed_at_us && <Button kind="quiet" onClick={() => go('/application?view=business')}>核对业务名称<ArrowRightOutlined aria-hidden="true"/></Button>}
             </div>
           </section>
-        {selected && <RuntimeConnection key={selected.project_id} projectId={selected.project_id} revision={value.revision} confirmedEndpoint={value.confirmed_endpoint} canStart={!selected.official_sample && value.source_analysis_authorized} onChanged={current.reload} onError={onError}/>}
+        {selected && <RuntimeConnection key={selected.project_id} projectId={selected.project_id} revision={value.revision} confirmedEndpoint={value.confirmed_endpoint} canStart={!selected.official_sample && value.source_analysis_authorized} initialMethod={!selected.official_sample&&value.source_analysis_authorized&&readRoute().query.get('runtime_method')==='managed'?'managed':undefined} onChanged={current.reload} onError={onError}/>}
       </section>
         {selected && <Capabilities projectId={selected.project_id} revision={value.revision}/>}
       </div>

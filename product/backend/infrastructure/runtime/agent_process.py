@@ -6,6 +6,7 @@ import subprocess
 import time
 from queue import Empty, Full, Queue
 from threading import Event, Thread
+from product.backend import __version__
 
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.runtime.process.tree import spawn_managed_process, terminate_process_tree
@@ -54,7 +55,7 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
     restricted, failed_tools, tool_calls = False, False, []
     try:
         reader.start()
-        send(dict(id=1, method='initialize', params=dict(clientInfo=dict(name='jiejian', title='界鉴', version='1.3.3'))))
+        send(dict(id=1, method='initialize', params=dict(clientInfo=dict(name='jiejian', title='界鉴', version=__version__))))
         while time.monotonic() - started < timeout_seconds:
             if cancelled.is_set():
                 if turn_id and not interrupted:

@@ -40,7 +40,7 @@ export function RuleWorkbench({ projectId, route, refresh, onError, onManage, re
             throw new Error('权限工作区格式不受支持。');
         return value;
     });
-    const [query, setQuery] = useState(''), [filter, setFilter] = useState('ALL');
+    const [query, setQuery] = useState(''), [filter, setFilter] = useState('ALL'), [stateFilter,setStateFilter]=useState<'ALL'|'ATTENTION'|'SAFE'>('ALL');
     if (state.loading)
         return <PageSkeleton view="/permissions"/>;
     if (state.error || !state.data)
@@ -62,13 +62,14 @@ export function RuleWorkbench({ projectId, route, refresh, onError, onManage, re
     const roles = boundary.actors.filter(role => role.effective_state === 'ACTIVE');
     const actions = boundary.actions.filter(action => action.effective_state === 'ACTIVE');
     const active = new Set(boundary.permission_intents.filter(intent => intent.effective_state === 'ACTIVE' && actions.some(action => action.action_id === intent.business_action_id && action.revision === intent.action_revision) && roles.some(role => role.actor_id === intent.subject_actor_id && role.revision === intent.subject_actor_revision) && roles.some(role => role.actor_id === intent.resource_owner_actor_id && role.revision === intent.resource_owner_actor_revision)).map(intent => intent.intent_id + '@' + intent.revision));
-    const visible = rules.filter(rule => active.has(rule.permission.intent_id + '@' + rule.permission.revision) && (filter === 'ALL' || rule.expectation === filter) && (!query.trim() || [rule.title, rule.subject, rule.action, rule.resource_scope, ...conditionLabels(rule.conditions)].some(value => value.includes(query.trim()))));
-    const open = rules.flatMap(rule => rule.issues).filter(issue => !['VERIFIED', 'STALE'].includes(issue.status)).length;
+    const needsAttention=(rule:RuleItem)=>['VULNERABLE','INCONCLUSIVE','REPAIR_PENDING','STALE','UNCONFIRMED'].includes(rule.state)||rule.issues.some(issue=>!['VERIFIED','STALE'].includes(issue.status));
+    const visible = rules.filter(rule => active.has(rule.permission.intent_id + '@' + rule.permission.revision) && (filter === 'ALL' || rule.expectation === filter) && (stateFilter==='ALL'||(stateFilter==='SAFE'?rule.state==='SAFE':needsAttention(rule))) && (!query.trim() || [rule.title, rule.subject, rule.action, rule.resource_scope, ...conditionLabels(rule.conditions)].some(value => value.includes(query.trim()))));
+    const attention = rules.filter(needsAttention).length;
     return <>
     <Heading title="权限规则" actions={<><Button onClick={onManage}>编辑权限要求</Button><Button kind="primary" onClick={() => go('/reports?view=plan')}>检查权限<ArrowRightOutlined aria-hidden="true"/></Button></>}/>
     {reviewActions}
     <section className="jj-rule-workspace jj-rule-matrix">
-      <header className="jj-rule-summary"><SafetyOutlined aria-hidden="true"/><div><strong>{rules.length} 条权限规则</strong><span>权限版本 {state.data.policy_epoch}，按已登记源码检查</span></div><div className="jj-rule-totals"><span><strong>{open}</strong> 个待处理问题</span><span><strong>{rules.filter(rule => rule.state === 'SAFE').length}</strong> 条检查通过</span></div></header>
+      <header className="jj-rule-summary"><SafetyOutlined aria-hidden="true"/><div><strong>{rules.length} 条权限规则</strong><span>权限版本 {state.data.policy_epoch}，按已登记源码检查</span></div><div className="jj-rule-totals"><Button kind="quiet" aria-pressed={stateFilter==='ATTENTION'} onClick={()=>setStateFilter(stateFilter==='ATTENTION'?'ALL':'ATTENTION')}><strong>{attention}</strong> 条需要处理</Button><Button kind="quiet" aria-pressed={stateFilter==='SAFE'} onClick={()=>setStateFilter(stateFilter==='SAFE'?'ALL':'SAFE')}><strong>{rules.filter(rule => rule.state === 'SAFE').length}</strong> 条检查通过</Button></div></header>
       <div className="jj-rule-toolbar"><input aria-label="查找规则" value={query} onChange={event => setQuery(event.target.value)} placeholder="查找角色、操作或资源"/><div className="jj-toggle-group" aria-label="筛选规则">{[['ALL', '全部'], ['ALLOW', '允许'], ['DENY', '禁止']].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
       <div className="jj-scroll-table jj-permission-table"><table className="jj-rule-table"><colgroup><col className="jj-rule-meaning-column"/><col className="jj-rule-condition-column"/><col className="jj-rule-state-column"/><col className="jj-rule-date-column"/><col className="jj-rule-open-column"/></colgroup><thead><tr><th scope="col">访问要求</th><th scope="col">适用条件</th><th scope="col" className="jj-table-state">检查情况</th><th scope="col">最近检查</th><th scope="col"><span className="jj-sr-only">操作</span></th></tr></thead><tbody>{visible.map(rule => <tr key={rule.permission.intent_id}>
         <th scope="row"><div className="jj-rule-meaning"><span className="jj-rule-expectation" data-allowed={rule.expectation === 'ALLOW'} aria-label={rule.expectation === 'ALLOW' ? '允许' : '禁止'}>{rule.expectation === 'ALLOW' ? <CheckOutlined aria-hidden="true"/> : <MinusOutlined aria-hidden="true"/>}</span><div><strong>{text(rule.title)}</strong><small>{text(rule.resource_scope)}</small></div></div></th>
@@ -76,7 +77,7 @@ export function RuleWorkbench({ projectId, route, refresh, onError, onManage, re
         <td className="jj-table-state"><Badge tone={tone(rule.state)}>{stateLabels[rule.state]}</Badge></td><td className="jj-rule-date">{rule.latest ? date(rule.latest.created_at_us) : <span className="jj-muted">尚无记录</span>}</td>
         <td><ActionLink href={'#' + scopedPath(rulePath(rule), projectId)} aria-label={'查看' + text(rule.title) + '，' + text(rule.resource_scope) + (conditionLabels(rule.conditions).length ? '，' + conditionLabels(rule.conditions).join('，') : '')}>查看<ArrowRightOutlined aria-hidden="true"/></ActionLink></td>
       </tr>)}</tbody></table></div>
-      {!visible.length && <Empty title="没有符合条件的规则"/>}
+      {!visible.length && <Empty title="没有符合条件的规则" action={<Button onClick={()=>{setQuery('');setFilter('ALL');setStateFilter('ALL')}}>显示全部规则</Button>}/>}
     </section>
     <div className="jj-rule-archive"><Button kind="quiet" onClick={() => go('/reports')}>全部检查记录<ArrowRightOutlined aria-hidden="true"/></Button><Button kind="quiet" onClick={() => go('/changes')}>代码变更档案<ArrowRightOutlined aria-hidden="true"/></Button></div>
   </>;

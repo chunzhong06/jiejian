@@ -4,7 +4,7 @@
 .jj-context-tabs > button[aria-current=page] { color: var(--accent-ink); font-weight: 550; }
 .jj-context-tabs > button[aria-current=page]::after { content: ''; position: absolute; height: 2px; bottom: -1px; left: 0; right: 0; border-radius: 2px; background: var(--accent); }
 .jj-connection-workbench, .jj-connect-new, .jj-example-overview, .jj-understanding-workspace { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); overflow: hidden; }
-.jj-application-workspace { min-width: 0; container: application-workspace / inline-size; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); overflow: hidden; }
+.jj-application-workspace { min-width: 0; container: application-workspace / inline-size; }
 .jj-source-connection { padding: 28px; min-width: 0; }
 .jj-source-connection { border-bottom:1px solid var(--line); }
 .jj-source-connection > .jj-path { margin-top: 10px; }
@@ -73,8 +73,8 @@
 .jj-application-runtime { min-width:0; padding:28px; }
 .jj-application-runtime > header { display:flex; align-items:center; gap:16px; margin-bottom:20px; }
 .jj-runtime-methods { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border:0; padding:0; margin:0 0 24px; }
-.jj-runtime-method { display:grid; grid-template-columns:16px minmax(0,1fr); align-items:start; gap:12px; padding:14px; border:1px solid var(--line); border-radius:var(--radius-control); cursor:pointer; position:relative; isolation:isolate; }
-.jj-runtime-method > input { margin-top:3px; }
+.jj-runtime-method { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:start; gap:12px; padding:14px; border:1px solid var(--line); border-radius:var(--radius-control); cursor:pointer; position:relative; isolation:isolate; }
+.jj-runtime-method > input { margin-top:max(0px,calc((1lh - 18px)/2)); }
 .jj-runtime-method strong { display:block; font-weight:550; }
 .jj-runtime-method small { display:block; margin-top:4px; color:var(--muted); font-size:var(--text-meta); }
 .jj-runtime-method:has(input:checked) { background:var(--selected); border-color:var(--accent); }
@@ -132,12 +132,11 @@
 .jj-application-capabilities h2,.jj-application-capabilities h3 { font-size:var(--text-body); }
 @media(max-width:700px) { .jj-connect-new { grid-template-columns:minmax(0,1fr); } .jj-connect-new > header { padding:22px 20px; border-right:0; border-bottom:1px solid var(--line); } }
 
-.jj-application-workspace > .jj-workspace-header { border-bottom:1px solid var(--line); }
-.jj-connection-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:stretch; }
-.jj-connection-layout > .jj-connection-workbench { border:0; border-radius:0; background:var(--surface); }
-.jj-connection-layout > .jj-application-capabilities { margin:0; border:0; border-left:1px solid var(--line); border-radius:0; background:var(--inset); padding:24px; }
+.jj-application-workspace > .jj-workspace-header { padding:0 0 24px; background:transparent; }
+.jj-connection-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:start; gap:24px; }
+.jj-connection-layout > .jj-application-capabilities { margin:0; border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--inset); padding:24px; }
 .jj-connection-layout .jj-application-capabilities > header { padding:0 0 20px; border:0; background:transparent; }
-@container application-workspace (max-width:880px) { .jj-connection-layout { grid-template-columns:minmax(0,1fr); } .jj-connection-layout > .jj-application-capabilities { border-left:0; border-top:1px solid var(--line); } }
+@container application-workspace (max-width:880px) { .jj-connection-layout { grid-template-columns:minmax(0,1fr); gap:20px; } }
 
 @container application-workspace (min-width:881px) {
   .jj-source-connection { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:0 20px; }

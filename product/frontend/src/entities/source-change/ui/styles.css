@@ -29,3 +29,5 @@
 @media(max-width:800px) { .jj-registration-fields { grid-template-columns: minmax(0,1fr); padding: 20px; } .jj-change-registration > header, .jj-change-registration > footer { padding: 20px; } }
 
 .jj-registration-targets label:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.jj-registration-targets label > input { align-self:start; margin-top:max(0px,calc((1lh - 18px)/2)); }

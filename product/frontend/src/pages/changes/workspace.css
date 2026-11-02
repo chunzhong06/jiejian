@@ -5,7 +5,7 @@
 .jj-repair-scope > div > section { padding: 24px 28px; }
 .jj-repair-scope > div > section + section { border-left: 1px solid var(--line); }
 .jj-repair-scope p { margin-top: 8px; color: var(--muted); font-size: var(--text-meta); max-width: 65ch; }
-.jj-changes-workspace > header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.jj-changes-workspace > header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--line); background: var(--surface-heading); }
 .jj-changes-workspace > header > span { color: var(--muted); font-size: var(--text-meta); }
 .jj-change-entry { border-bottom: 1px solid var(--line); }
 .jj-change-entry:last-child { border: 0; }

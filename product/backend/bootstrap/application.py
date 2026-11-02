@@ -332,6 +332,8 @@ class ApplicationCore:
         from product.backend.application.agent_access.capabilities import ProductCapabilities
         from product.backend.application.agent_access.tasks import CollaborationTasks
         self.agent_capabilities = ProductCapabilities(self)
+        from product.backend.application.checks.routines import CheckRoutines
+        self.check_routines = CheckRoutines(factory, self.business_boundaries)
         self.collaboration = CollaborationTasks(factory, self.projects, self.agent_capabilities, clock_us=clock_us)
 
     def _validate_connections(self) -> None:

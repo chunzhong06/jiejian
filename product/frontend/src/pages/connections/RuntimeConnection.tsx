@@ -11,17 +11,18 @@ import { Badge, ErrorNote, Loading, Notice } from '../../shared/ui/feedback';
 type ConnectionMethod = 'existing' | 'managed';
 type PendingStart = { preview: RuntimePreview; operation: string };
 
-export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canStart, onChanged, onError }: {
+export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canStart, initialMethod, onChanged, onError }: {
     projectId: string;
     revision: number;
     confirmedEndpoint: string | null;
     canStart: boolean;
+    initialMethod?: ConnectionMethod;
     onChanged: () => void;
     onError: (error: unknown) => void;
 }) {
     const key = 'jiejian.studio.start-runtime:' + projectId;
     const [pending, setPending] = useState(() => readPending<PendingStart>(key));
-    const [method, setMethod] = useState<ConnectionMethod>();
+    const [method, setMethod] = useState<ConnectionMethod|undefined>(initialMethod);
     const [endpoint, setEndpoint] = useState<string>();
     const [entry, setEntry] = useState<string>();
     const [port, setPort] = useState<string>();
@@ -100,7 +101,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
         </fieldset>}
         <div className="jj-runtime-panel" id={panelId} key={currentMethod}>
             {currentMethod === 'existing' ? <>
-                <div className="jj-endpoint-form"><Field label="应用地址"><input type="url" disabled={busy} value={endpoint ?? confirmedEndpoint ?? ''} placeholder="http://127.0.0.1:端口" onChange={event => setEndpoint(event.target.value)}/></Field><Button kind="primary" busy={busy} disabled={!(endpoint ?? confirmedEndpoint ?? '').trim()} onClick={() => void act(() => confirmAddress(endpoint ?? confirmedEndpoint ?? ''))}>使用此地址</Button></div>
+                <div className="jj-endpoint-form"><Field label="应用地址"><input type="url" disabled={busy} value={endpoint ?? confirmedEndpoint ?? ''} placeholder="http://127.0.0.1:端口" onChange={event => setEndpoint(event.target.value)}/></Field><Button busy={busy} disabled={!(endpoint ?? confirmedEndpoint ?? '').trim()} onClick={() => void act(() => confirmAddress(endpoint ?? confirmedEndpoint ?? ''))}>使用此地址</Button></div>
                 <p className="jj-small jj-muted">用于登录、录制和检查。</p>
                 {state.data?.running && <div className="jj-runtime-retained"><span>界鉴启动的实例仍在运行</span><Button kind="quiet" onClick={() => setMethod('managed')}>管理运行实例</Button></div>}
             </> : <>

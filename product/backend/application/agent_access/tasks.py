@@ -17,7 +17,7 @@ class CreateCollaboration(TaskInput):
     """目标和精确业务引用组成一次委派；同一请求标识不能改成另一项目任务。"""
     operation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
     goal: str = Field(min_length=1, max_length=2000)
-    purpose: str = Field(pattern=r'^(CHECK|REPAIR|SETUP|RULES|UNDERSTAND|MAINTENANCE)$')
+    purpose: str = Field(pattern=r'^(CHECK|CHECK_AND_REPAIR|REPAIR|SETUP|RULES|UNDERSTAND|MAINTENANCE)$')
     references: dict[str, str] = Field(default_factory=dict, max_length=12)
 
 
@@ -49,6 +49,7 @@ class CollaborationTasks:
         self.uow, self.projects, self.capabilities = uow_factory, projects, capabilities
         self.clock = clock_us or (lambda: time.time_ns() // 1000)
         self.on_control = lambda task: None
+        self.on_change = lambda task: None
 
     def create(self, project, command: CreateCollaboration):
         self.projects.get(project)
@@ -118,6 +119,8 @@ class CollaborationTasks:
             followups.append(dict(operation_id=command.operation_id, fingerprint=fingerprint,
                 goal=command.goal, purpose=command.purpose, references=command.references))
             value['references'].update(command.references)
+            value.update(goal=command.goal, purpose=command.purpose)
+            value.pop('outcome', None)
             self._event(value, 'USER', command.goal, self._next_state(value))
         return self._update(project, command.task_id, update)
 
@@ -133,16 +136,31 @@ class CollaborationTasks:
         """只更新当前回合；旧回合迟到的消息不能覆盖已续接的执行状态。"""
         def update(value):
             if value['execution']['operation_id'] != operation_id:
-                return
+                return False
+            if all(value['execution'].get(key)==item for key,item in changes.items()):
+                return False
             value['execution'].update(changes)
             value['state'] = self._next_state(value)
         return self._update(project, task, update)
+
+    def claim_turn(self, project, task, operation_id, turn):
+        """与暂停、结束使用同一写锁；接续不能越过已提交的停止意图。"""
+        with self.uow() as work:
+            work.acquire_write_lock()
+            value = self._get(work, project, task)
+            if value['state'] in ('PAUSED','CANCELLED','COMPLETED') or value['execution']['operation_id'] != operation_id:
+                return False
+            value['execution'].update(state='RUNNING', turn_count=turn)
+            value['state'] = self._next_state(value)
+            work.collaboration.save(value)
+            work.commit()
+        return True
 
     def recover_executions(self):
         with self.uow() as work:
             work.acquire_write_lock()
             for value in work.collaboration.active():
-                if value['execution'] and value['execution']['state'] == 'RUNNING':
+                if value['execution'] and value['execution']['state'] in ('RUNNING', 'WAITING'):
                     value['execution'].update(state='UNKNOWN', message='服务已重启，请核对原业务回执后继续同一任务')
                     if value['state'] not in ('PAUSED', 'CANCELLED'):
                         self._event(value, 'SYSTEM', '原 Agent 回合需要核对', 'BLOCKED')
@@ -155,8 +173,18 @@ class CollaborationTasks:
         if capability.level != 'READ' or capability.approval:
             raise JiejianError(ErrorCode.MCP_PERMISSION_REQUIRED, '此入口只接受读取能力')
         arguments = capability.accept(supplied)
-        self.show(project, task)
-        return dict(state='READ', result=self.capabilities.public(capability.invoke(project, arguments, uuid4().hex)))
+        current = self.show(project, task)
+        result = self.capabilities.public(capability.invoke(project, arguments, uuid4().hex))
+        if key == 'application.read' and not current.get('application_read'):
+            self._update(project, task, lambda value:value.update(application_read=True))
+        if key == 'results.report' and arguments.run_id not in current.get('read_reports', []):
+            def observed(value):
+                reads = value.setdefault('read_reports', [])
+                if arguments.run_id not in reads:
+                    reads.append(arguments.run_id)
+                    del reads[:-16]
+            self._update(project, task, observed)
+        return dict(state='READ', result=result)
 
     def act(self, project, task, command: CollaborationAction, *, actor='AGENT', approved=False):
         """接受一次具名动作；需审阅的写入只登记，GUI 决定后才调用原用例。
@@ -183,6 +211,11 @@ class CollaborationTasks:
             value = self._get(work, project, task)
             if value['state'] in ('PAUSED', 'CANCELLED', 'COMPLETED'):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '任务已经停止，请先恢复或建立新的目标')
+            execution = value.get('execution') or {}
+            if execution.get('continuous') and actor == 'AGENT':
+                levels = {'READ':0, 'PREPARE':1, 'EXECUTE':2}
+                if capability.level not in levels or levels[capability.level] > levels[execution['access_level']]:
+                    raise JiejianError(ErrorCode.MCP_PERMISSION_REQUIRED, '此能力超出本次持续协作的授权')
             operation = next((item for item in value['operations'] if item['operation_id'] == command.operation_id), None)
             if operation:
                 if operation['fingerprint'] != fingerprint:
@@ -190,6 +223,8 @@ class CollaborationTasks:
                 if not (approved and operation['state'] == 'WAITING_USER'):
                     return operation
             else:
+                if execution.get('continuous') and actor == 'AGENT' and len(value['operations'])-execution['operation_baseline'] >= 128:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '本次持续协作已达到操作上限，请核对已形成的产物')
                 if len(value['operations']) >= 512:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '本次目标的操作记录已满，请结束后建立新任务')
                 operation = dict(operation_id=command.operation_id, capability=capability.key, title=capability.title,
@@ -198,6 +233,7 @@ class CollaborationTasks:
             if capability.approval and not approved:
                 self._event(value, 'AGENT', '请核对：' + capability.title, 'WAITING_USER')
                 work.collaboration.save(value); work.commit()
+                self.on_change(task)
                 return operation
             if any(item['operation_id'] != command.operation_id and item['state'] in ('RUNNING', 'UNKNOWN')
                 for task_value in work.collaboration.list(project, limit=None) for item in task_value['operations']):
@@ -263,8 +299,10 @@ class CollaborationTasks:
             self._event(value, 'USER', '已补充业务决定', self._next_state(value))
         return self._update(project, task, update)
 
-    def control(self, project, task, action):
+    def control(self, project, task, action, *, require_fulfilled=False):
         """暂停只停止 Agent；取消还向本任务所属业务执行者请求停止，清理状态仍须回读。"""
+        if action == 'finish' and not require_fulfilled:
+            self.assess(project, task)
         if action == 'cancel':
             value = self.show(project, task)
             if value['state'] == 'CANCELLED':
@@ -277,6 +315,9 @@ class CollaborationTasks:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '本次协作已结束，历史内容仍可查看')
             running = any(item['state'] in ('RUNNING', 'UNKNOWN') for item in value['operations'])
             if action == 'finish':
+                if require_fulfilled and (not value.get('outcome',{}).get('fulfilled') or
+                    value['outcome'].get('goal_fingerprint') != self._goal_key(value)):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '任务目标已经变化，不能沿用原产物结束协作')
                 if (running or (value['execution'] and value['execution']['state'] == 'RUNNING')
                     or any(item['state'] == 'WAITING_USER' for item in value['operations'])
                     or any(q['answer'] is None for q in value['questions'])):
@@ -286,6 +327,8 @@ class CollaborationTasks:
                     item['phase'] not in ('SUCCEEDED', 'FAILED', 'CANCELLED') for item in
                     self.capabilities.operation_progress(project, value['operations'], limit=None, work=work)):
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '仍有业务任务或待审内容，请先处理原任务')
+                if require_fulfilled and value['execution']:
+                    value['execution'].update(state='FINISHED', message='已完成本次目标')
                 state, title = 'COMPLETED', '协作已结束，业务结果以所属报告为准'
             elif action == 'resume':
                 value['state'] = 'WAITING_AGENT'
@@ -294,7 +337,7 @@ class CollaborationTasks:
                 state, title = ('PAUSED' if action == 'pause' else 'CANCELLED'), '已停止接收后续操作，已提交的业务任务仍需核对'
             else:
                 raise JiejianError(ErrorCode.INPUT_INVALID, '未知任务操作')
-            self._event(value, 'USER', title, state)
+            self._event(value, 'SYSTEM' if require_fulfilled else 'USER', title, state)
         with self.uow() as work:
             work.acquire_write_lock()
             value = self._get(work, project, task)
@@ -342,9 +385,31 @@ class CollaborationTasks:
         with self.uow() as work:
             work.acquire_write_lock()
             value = self._get(work, project, task)
-            update(value)
+            if update(value) is False:
+                return self._public(value)
             work.collaboration.save(value); work.commit()
-            return self._public(value)
+            result = self._public(value)
+        self.on_change(task)
+        return result
+
+    def assess(self, project, task):
+        """只在推进边界核对目标产物；不在页面轮询中重读全部修复历史。"""
+        value = self.show(project, task)
+        key = self._goal_key(value)
+        outcome = dict(self.capabilities.goal_outcome(project, value), goal_fingerprint=key)
+        if outcome != value.get('outcome'):
+            def publish(current):
+                if self._goal_key(current) != key:
+                    return False
+                current['outcome'] = outcome
+            current = self._update(project, task, publish)
+            if self._goal_key(current) != key:
+                return dict(fulfilled=False, title='任务目标已更新，等待核对新的产物', destination='/workspace')
+        return outcome
+
+    @staticmethod
+    def _goal_key(value):
+        return boundary_sha256({key:value[key] for key in ('goal','purpose','references')})
 
     @staticmethod
     def _get(work, project, task):

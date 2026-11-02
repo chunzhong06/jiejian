@@ -4,7 +4,7 @@
 .jj-system-page > .jj-tabs > button { min-height:44px; padding:12px 8px; border:0; background:transparent; color:var(--muted); font:inherit; cursor:pointer; }
 .jj-system-page > .jj-tabs > button[aria-selected=true] { color:var(--accent-ink); font-weight:600; }
 .jj-system-workspace { min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); }
-.jj-system-workspace > header { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); }
+.jj-system-workspace > header { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); background:var(--surface-heading); }
 .jj-system-workspace header p { margin-top:6px; font-size:var(--text-meta); color:var(--muted); }
 .jj-system-workspace footer { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 28px; border-top:1px solid var(--line); background:var(--inset); }
 .jj-system-workspace footer p { font-size:var(--text-meta); color:var(--muted); max-width:58ch; }

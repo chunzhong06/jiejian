@@ -40,6 +40,7 @@ from product.backend.infrastructure.storage.boundaries.permission_intents import
 from product.backend.infrastructure.storage.preparation.test_identities import TestIdentityRepository
 from product.backend.infrastructure.storage.preparation.operation_flows import OperationFlowRepository
 from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRepository
+from product.backend.infrastructure.storage.execution.check_routines import CheckRoutineRepository
 
 
 class StorageUnitOfWork:
@@ -91,6 +92,7 @@ class StorageUnitOfWork:
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
         self.collaboration = CollaborationRepository(session, self._known_secrets)
+        self.check_routines = CheckRoutineRepository(session, self._known_secrets)
         self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
         self.application_understanding = ApplicationUnderstandingRepository(
             session,

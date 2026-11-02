@@ -9,18 +9,23 @@
 .jj-choice.ant-select-focused .ant-select-selector { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .jj-choice:has(input:focus-visible) .ant-select-selector { outline: 2px solid var(--focus); outline-offset: 3px; box-shadow: none; }
 .jj-choice.ant-select-disabled .ant-select-selector { opacity: .5; cursor: default; }
+.jj-choice.ant-select[data-unavailable=true] .ant-select-selector { border-color:var(--warn); }
+.jj-choice.ant-select[data-unavailable=true] .ant-select-selection-item { color:var(--warn); }
 .jj-choice input.ant-select-selection-search-input { border: 0; min-height: 0; padding: 0; box-shadow: none; background: transparent; outline: 0; }
-.jj-choice-menu.ant-select-dropdown { padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--popover-shadow); }
+.jj-choice-menu.ant-select-dropdown { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-float); background: var(--surface); box-shadow: var(--popover-shadow); }
 .jj-choice-menu .ant-select-item { border-radius: 7px; min-height: 40px; padding: 10px 14px; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
 .jj-choice-menu .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
 .jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { background: var(--hover); }
 .jj-choice-menu .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { background: var(--accent-soft); color: var(--accent-ink); }
 .jj-choice-menu .ant-select-item-option-state { color: var(--accent-ink); padding-left: 16px; }
 .jj-choice-menu .ant-select-item-option-disabled { opacity: .45; }
+html[data-input-mode=keyboard] .jj-example-menu.ant-dropdown .ant-dropdown-menu-item:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+/* 选择器的 DOM 焦点留在输入框，键盘当前候选仍需在浮层中单独标记。 */
+html[data-input-mode=keyboard] .jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { outline:2px solid var(--focus); outline-offset:-2px; }
 .jj-hint .ant-tooltip-inner { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--popover-shadow); padding: 7px 10px; font-size: var(--text-meta); line-height: 1.5; }
 .jj-hint .ant-tooltip-arrow { --antd-arrow-background-color: var(--surface); }
 .jj-popover-anchor { display: inline-flex; }
-.jj-info-popover .ant-popover-inner { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--popover-shadow); }
+.jj-info-popover .ant-popover-inner { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-float); background: var(--surface); color: var(--ink); box-shadow: var(--popover-shadow); }
 .jj-info-popover .ant-popover-arrow { --antd-arrow-background-color: var(--surface); }
 .jj-info-popover section { width: min(280px,calc(100vw - 72px)); outline: 0; }
 .jj-info-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -33,7 +38,8 @@
 .jj-system-popover-footer > .jj-button { margin-right:-8px; padding-inline:8px; font-size:var(--text-meta); }
 .jj-system-refresh { width: 32px; min-height: 32px; padding: 7px; flex: none; }
 .jj-info-popover .jj-notice { margin-top: 16px; }
-input[type=checkbox], input[type=radio] { appearance: none; width: 18px; height: 18px; min-height: 18px; margin: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); display: inline-grid; place-content: center; vertical-align: middle; cursor: pointer; }
+/* 方框以标签行高定位，不能继承文本输入固定的 20px 行高。 */
+input[type=checkbox], input[type=radio] { appearance: none; width: 18px; height: 18px; min-height: 18px; line-height: inherit; margin: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); display: inline-grid; place-content: center; vertical-align: middle; cursor: pointer; }
 input[type=checkbox]::before { content: '✓'; color: var(--on-accent); font-size: var(--text-meta); font-weight: 650; line-height: 1; transform: scale(.3); opacity: 0; }
 input[type=radio] { border-radius: 50%; }
 input[type=radio]::before { content: ''; width: 6px; height: 6px; background: var(--on-accent); border-radius: 50%; transform: scale(.3); opacity: 0; }

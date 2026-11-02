@@ -13,12 +13,12 @@ const basis: BoundaryMaintenanceDraftDto = { project_id: 'app', boundary_state_f
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
-it('未完成清单按需展开，具体缺口可以带回对应编辑区', () => {
+it('空白草稿先填写当前分区，尚无规则时不展示空预览和提交操作', () => {
     const create = vi.spyOn(api, 'createMaintenanceProposal');
     render(<InitialRules projectId="app" basis={basis} onBack={() => {}} onProposal={vi.fn()} onError={vi.fn()} />);
-    expect(screen.getByRole('button', { name: '生成完整提案' })).toBeDisabled();
-    fireEvent.click(screen.getByText(/^仍需填写/));
-    fireEvent.click(screen.getByRole('button', { name: '业务操作与结果依据' }));
+    expect(screen.queryByRole('button', { name: '生成完整提案' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', {name:'权限草稿预览'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /^操作与结果/ }));
     expect(screen.getByRole('tab', { name: /^操作与结果/ })).toHaveAttribute('aria-selected', 'true');
     expect(create).not.toHaveBeenCalled();
 });

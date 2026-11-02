@@ -17,10 +17,11 @@ import { Button } from "../../../shared/ui/actions";
 import { Heading } from "../../../shared/ui/layout";
 import { Dialog } from "../../../shared/ui/Dialog";
 import {AccountAuthentication} from './AccountAuthentication';
-export function Accounts({ projectId, actions, requestedPreparation, onBack, onError }: {
+export function Accounts({ projectId, actions, requestedPreparation, requestedSlot, onBack, onError }: {
     projectId: string;
     actions: ActionPreparation[];
     requestedPreparation?: string | null;
+    requestedSlot?: string | null;
     onBack: () => void;
     onError: (error: unknown) => void;
 }) {
@@ -154,6 +155,7 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
         slot: ActionPreparation['identity_requirements']['slots'][number];
         identity?: TestIdentityDto;
         actions: string[];
+        slots: string[];
     }>();
     for (const action of state.data?.actions ?? actions)
         for (const slot of action.identity_requirements.slots) {
@@ -161,7 +163,8 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
             const identity = state.data?.identities.find(item => item.identity_id === slot.test_identity_id) ?? (matches.length === 1 && matches[0].status === 'NEEDS_REVIEW' && slot.requirement.ordinal === 1 ? matches[0] : undefined);
             // 动作内的 slot_id 不代表独立账户；同角色同序号跨动作复用，已绑定的真实账户按身份保留。
             const id = identity ? 'identity:' + identity.identity_id : 'required:' + slot.requirement.actor_id + ':' + slot.requirement.actor_revision + ':' + slot.requirement.ordinal;
-            const entry = accounts.get(id) ?? { slot, identity, actions: [] };
+            const entry = accounts.get(id) ?? { slot, identity, actions: [], slots: [] };
+            entry.slots.push(slot.requirement.slot_id);
             if (!entry.actions.includes(action.display_name))
                 entry.actions.push(action.display_name);
             accounts.set(id, entry);
@@ -169,8 +172,9 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
     const loginAccount = [...accounts.values()].find(item => item.identity?.identity_id === current?.identity_id);
     const accountEntries = [...accounts];
     const selectedId = accountEntries.find(([id]) => id === selectedAccount)?.[0]
-        ?? accountEntries.find(([, item]) => item.identity?.identity_id === current?.identity_id)?.[0]
-        ?? accountEntries.find(([, item]) => item.identity?.status !== 'PREPARED')?.[0] ?? accountEntries[0]?.[0];
+        ?? (requestedSlot ? accountEntries.find(([, item]) => item.slots.includes(requestedSlot))?.[0]
+            : accountEntries.find(([, item]) => item.identity?.identity_id === current?.identity_id)?.[0]
+                ?? accountEntries.find(([, item]) => item.identity?.status !== 'PREPARED')?.[0] ?? accountEntries[0]?.[0]);
     const readyCount = accountEntries.filter(([, item]) => item.identity?.status === 'PREPARED').length;
     const loginTitle = loginAccount ? text(loginAccount.slot.actor_display_name) + '账号登录' : '测试账号登录';
     const loginStep = current ? ({ STARTING: 0, WAITING_FOR_LOGIN: 1, SAVING: 2, PREPARED: 3, CANCELLING: -1, FAILED: -1, CANCELLED: -1, UNSUPPORTED: -1 })[current.status] : -1;
@@ -191,7 +195,7 @@ export function Accounts({ projectId, actions, requestedPreparation, onBack, onE
     {state.loading ? <Loading page/> : <section className="jj-accounts-workspace">
       <header><div><h2>登录检查所需的账号</h2><p className="jj-small jj-muted">每个账号只需准备一次，可用于多项操作。</p></div><Badge tone={readyCount === accounts.size ? 'positive' : 'neutral'}>{readyCount} / {accounts.size} 已准备</Badge></header>
       <div className="jj-accounts-console"><nav className="jj-account-index" aria-label="待准备的账号">{accountEntries.map(([id,{slot,identity}])=><Button key={id} kind="quiet" aria-current={selectedId===id?'page':undefined} onClick={()=>setSelectedAccount(id)}><UserOutlined aria-hidden="true"/><span>{text(slot.actor_display_name)}账号{slot.requirement.ordinal>1?' '+slot.requirement.ordinal:''}<small>{identity?.status==='PREPARED'?'已准备':identity?.status==='NEEDS_REVIEW'?'需要重新登录':'待登录'}</small></span>{identity?.status==='PREPARED'&&<CheckOutlined aria-hidden="true"/>}</Button>)}</nav>
-      <div className="jj-account-detail">{accountEntries.filter(([id])=>id===selectedId).map(([id, { slot, identity, actions: usedBy }]) => <article className="jj-account-row" data-current={current?.identity_id === identity?.identity_id && Boolean(identity)} key={id}>
+      <div className="jj-account-detail">{requestedSlot&&!selectedId&&<Notice>这项账号需求已发生变化，请从左侧重新选择账号。</Notice>}{accountEntries.filter(([id])=>id===selectedId).map(([id, { slot, identity, actions: usedBy }]) => <article className="jj-account-row" data-current={current?.identity_id === identity?.identity_id && Boolean(identity)} key={id}>
         <header>
         <span className="jj-account-symbol"><UserOutlined aria-hidden="true"/></span>
         <div className="jj-account-body"><div className="jj-item-heading"><h3>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ' ' + slot.requirement.ordinal : ''}</h3><Badge tone={identity?.status === 'PREPARED' ? 'positive' : identity?.status === 'NEEDS_REVIEW' ? 'caution' : 'neutral'}>{identity?.status === 'PREPARED' ? '已登录' : identity?.status === 'NEEDS_REVIEW' ? '需要核对' : '待登录'}</Badge></div>{identity && <p className="jj-small jj-muted">{text(identity.label)}</p>}</div>

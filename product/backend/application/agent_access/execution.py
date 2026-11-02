@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import os
 import sys
+import time
 from pathlib import Path
 from threading import Event, RLock, Thread
 
@@ -15,8 +16,12 @@ from product.backend.infrastructure.runtime.agent_process import run_codex
 
 
 class StartAgent(TaskInput):
+    """一次授权窗口包含等待时间；单回合模式不自动使用剩余回合额度。"""
     operation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
     allow_changes: bool = False
+    continuous: bool = False
+    max_turns: int = Field(default=8, ge=1, le=8)
+    max_seconds: int = Field(default=1800, ge=30, le=1800)
 
 
 def _codex_executable():
@@ -35,14 +40,15 @@ class AgentExecution:
     """
     def __init__(self, core, access, connections, *, runner=run_codex):
         self.core, self.access, self.connections, self.runner = core, access, connections, runner
-        self.lock, self.active = RLock(), {}
+        self.lock, self.active, self.signals = RLock(), {}, {}
         core.collaboration.on_control = self.stop
+        core.collaboration.on_change = self.wake
         # 上一控制面的进程存活已无法由本实例证明，先收为未知，再由用户续接。
         core.collaboration.recover_executions()
 
     def capabilities(self, project=None):
         result = dict(provider='codex-app-server', available=_codex_executable() is not None,
-            supports_start=True, supports_resume=True, supports_cancel=True,
+            supports_start=True, supports_resume=True, supports_cancel=True, supports_continuous=True,
             model_call_requires_user_action=True)
         if project is not None:
             current = self.core.application_understanding.get(project)
@@ -82,28 +88,39 @@ class AgentExecution:
             stop = Event()
             session = previous.get('session_id') if previous else None
             execution = dict(operation_id=command.operation_id, state='RUNNING', session_id=session,
-                allow_changes=command.allow_changes, message='正在连接本地 Agent')
+                allow_changes=command.allow_changes, message='正在连接本地 Agent', continuous=command.continuous,
+                max_turns=command.max_turns, max_seconds=command.max_seconds, turn_count=1,
+                operation_baseline=len(value['operations']),
+                access_level=self.access.level_for(project).value, started_at_us=time.time_ns()//1000)
             self.core.collaboration.execution_started(project, task, execution)
             thread = Thread(target=self._run, args=(project, task, executable, understanding.source_root,
-                str(profile), command.allow_changes, session, stop, command.operation_id), name='jiejian-agent-worker', daemon=True)
+                str(profile), command.allow_changes, session, stop, command), name='jiejian-agent-worker', daemon=True)
+            self.signals[task] = Event()
             self.active[task] = (stop, thread)
             try:
                 thread.start()
             except RuntimeError:
                 self.active.pop(task)
+                self.signals.pop(task, None)
                 self.core.collaboration.execution_progress(project, task, command.operation_id,
                     state='FAILED', message='执行进程未启动，请继续原任务')
                 raise
             return self.core.collaboration.show(project, task)
+
+    def wake(self, task):
+        # 通知只唤醒原监督者，不能凭一次数据库变化新建模型调用或扩大授权。
+        signal = self.signals.get(task)
+        if signal: signal.set()
 
     def stop(self, task):
         """请求中断当前所属回合；实际进程树释放由执行适配器确认。"""
         with self.lock:
             current = self.active.get(task)
             if current: current[0].set()
+            self.wake(task)
 
     def close(self):
-        """先中断并等待监督线程，未确认退出时不让共享数据库提前关闭。"""
+        """请求中断并等待所属线程；未能收口时报告退出错误。"""
         with self.lock:
             active = list(self.active.values())
             for stop, thread in active: stop.set()
@@ -112,9 +129,94 @@ class AgentExecution:
             if thread.is_alive():
                 raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, '本地 Agent 尚未确认退出')
 
-    def _run(self, project, task, executable, cwd, profile, allow_changes, session, stop, operation_id):
+    def _run(self, project, task, executable, cwd, profile, allow_changes, session, stop, command):
+        operation_id, started = command.operation_id, time.monotonic()
+        service, signal = self.core.collaboration, self.signals[task]
+        try:
+            for turn in range(1, command.max_turns+1):
+                before = service.show(project, task)
+                remaining = command.max_seconds - (time.monotonic()-started)
+                if remaining <= 0:
+                    break
+                current = self.core.application_understanding.get(project)
+                if (not current.source_analysis_authorized or current.source_root != cwd
+                    or self.access.level_for(project).value != before['execution']['access_level']):
+                    service.execution_progress(project, task, operation_id, state='RESTRICTED', message='应用或授权范围已变化，请重新核对后继续')
+                    return
+                if not service.claim_turn(project, task, operation_id, turn):
+                    return
+                result = self._turn(project, task, executable, cwd, profile, allow_changes, session, stop,
+                    operation_id, min(900, remaining))
+                if not command.continuous or stop.is_set() or result.get('state') != 'FINISHED':
+                    return
+                session = result.get('session_id')
+                if result.get('restricted'):
+                    return
+                outcome = service.assess(project, task)
+                if outcome['fulfilled']:
+                    service.control(project, task, 'finish', require_fulfilled=True)
+                    return
+                waiting = False
+                while not stop.is_set():
+                    signal.clear()
+                    value = service.show(project, task)
+                    if value['state'] in ('PAUSED', 'CANCELLED', 'COMPLETED'):
+                        return
+                    if any(item['state'] in ('UNKNOWN','RUNNING') for item in value['operations']):
+                        service.execution_progress(project, task, operation_id, state='NEEDS_INPUT', message='原操作的执行结果待核对，尚未继续调用模型')
+                        return
+                    jobs = self.core.agent_capabilities.operation_progress(project, value['operations'], limit=None)
+                    blocked = bool(value.get('reviews')) or any(item['state']=='WAITING_USER' for item in value['operations']) or any(
+                        item['answer'] is None for item in value['questions']) or any(item['phase'] not in ('SUCCEEDED','FAILED','CANCELLED') for item in jobs)
+                    if not blocked:
+                        break
+                    if not waiting:
+                        service.execution_progress(project, task, operation_id, state='WAITING', message='等待当前确认或后台执行，完成后将自动接续')
+                        waiting = True
+                    # Worker 独立进程无法发送内存通知，只在确有待办时观察数据库提交代次。
+                    revision = self.core.workspace_revision.read()
+                    while not stop.is_set() and not signal.wait(1):
+                        if time.monotonic()-started >= command.max_seconds:
+                            break
+                        if self.core.workspace_revision.read() != revision:
+                            break
+                    if time.monotonic()-started >= command.max_seconds:
+                        break
+                if stop.is_set():
+                    return
+                if time.monotonic()-started >= command.max_seconds:
+                    break
+                if waiting and service.assess(project, task)['fulfilled']:
+                    # 后台已形成完整产物时直接收口，不再付费调用模型来复述同一结果。
+                    service.control(project, task, 'finish', require_fulfilled=True)
+                    return
+                # 参数错误可能已在本轮纠正；按实际产物推进，不能丢弃后来成功提交的业务工作。
+                if not waiting and self._progress(before) == self._progress(service.show(project, task)):
+                    service.execution_progress(project, task, operation_id, state='NEEDS_INPUT', message='本轮没有形成新的产物或决定，请补充目标后继续')
+                    return
+            service.execution_progress(project, task, operation_id, state='LIMIT_REACHED', message='已到本次授权的运行上限，已完成内容保留；核对后可继续原任务')
+        except Exception as error:
+            code = error.code if isinstance(error, JiejianError) else 'AGENT_EXECUTION_FAILED'
+            service.execution_progress(project, task, operation_id, state='FAILED', error_code=code, message='接续未完成，原任务和业务回执保留')
+        finally:
+            try:
+                value = service.show(project, task)
+                if value['execution']['state'] == 'WAITING':
+                    service.execution_progress(project, task, operation_id, state='INTERRUPTED', message='已停止后续接续，已提交业务仍按原回执收口')
+            finally:
+                with self.lock:
+                    self.active.pop(task, None)
+                    self.signals.pop(task, None)
+
+    @staticmethod
+    def _progress(value):
+        return ([{key:item.get(key) for key in ('capability','arguments','state')} for item in value['operations']],
+            value['questions'], value.get('read_reports', []), value.get('application_read'))
+
+    def _turn(self, project, task, executable, cwd, profile, allow_changes, session, stop, operation_id, timeout):
         prompt = f'''你正在处理界鉴协作任务。project_id={project}，task_id={task}。
 先调用 jiejian_collaboration_context，并按需读取 jiejian_collaboration_capability 的参数。
+操作与问题编号使用32位小写十六进制；同一请求保留原编号。
 已有事实通过 jiejian_collaboration_read 读取，写入通过 jiejian_collaboration_action 提交。
 通过同一任务协调接入、业务理解、规则候选、运行、账号、操作流程、证明、检查、修改与复验、恢复和维护。
 读取已有值并复用；缺少业务意图用 jiejian_collaboration_question 提出具体问题。
@@ -135,13 +237,14 @@ class AgentExecution:
             result = self.runner(executable=executable, cwd=str(cwd), profile=profile,
                 connector=str(Path(__file__).with_name('connector.py').resolve()), python=sys.executable,
                 prompt=prompt, session_id=session, allow_changes=allow_changes,
-                read_only=self.access.level_for(project) == MCPAccessLevel.READ, cancelled=stop, on_event=event)
+                read_only=self.access.level_for(project) == MCPAccessLevel.READ, cancelled=stop, on_event=event,
+                timeout_seconds=timeout)
             self.core.collaboration.execution_progress(project, task, operation_id, **result,
                 message='有工具调用未完成，请核对当前任务后继续' if result.get('restricted') or result.get('failed_tools')
                     else '本轮 Agent 已返回，后续以任务及业务回执为准')
+            return result
         except Exception as error:
             code = error.code if isinstance(error, JiejianError) else 'AGENT_EXECUTION_FAILED'
             self.core.collaboration.execution_progress(project, task, operation_id,
                 state='FAILED', message='本轮未完成，已形成的业务记录保留', error_code=code)
-        finally:
-            with self.lock: self.active.pop(task, None)
+            return dict(state='FAILED')

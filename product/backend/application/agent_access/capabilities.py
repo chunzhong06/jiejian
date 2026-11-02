@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, ValidationError, create_model
 from pydantic_core import to_jsonable_python
 
 from product.backend.application.agent_access.tasks import TaskInput
+from product.backend.application.checks.routines import SaveCheckRoutine
 from product.backend.application.preparation.materials.models import MaterialChange
 from product.backend.application.preparation.proofs.commands import (
     AdoptProofSource, CancelProofPreflight, GrantProofScope, SaveProofSource, StartProofPreflight,
@@ -190,6 +191,10 @@ class ProductCapabilities:
             lambda p, a, o: core.proof_preparation.adopt(p, a)['result'], approval=True)
         add('checks.preview', '核对本次检查范围', '检查与结果', 'READ', CheckScope,
             lambda p, a, o: core.checks.preview(p, change_id=a.change_id, selected_permissions=a.selected_permissions))
+        add('checks.routines', '读取保存的检查范围及变化', '检查与结果', 'READ', Empty,
+            lambda p, a, o: core.check_routines.list(p))
+        add('checks.remember', '保存本次规则选择供以后使用', '检查与结果', 'PREPARE', SaveCheckRoutine,
+            lambda p, a, o: core.check_routines.save(p, a))
         add('checks.start', '执行已核对的检查', '检查与结果', 'EXECUTE', CheckStart,
             lambda p, a, o: self._start_check(p, a, o), approval=True)
         add('checks.status', '读取本次检查与结果状态', '检查与结果', 'READ', RunReference,
@@ -307,6 +312,51 @@ class ProductCapabilities:
                 verdict=None if run.verdict is None else run.verdict.value,
                 selected_scope=operation['arguments'].get('selected_permissions') is not None,
                 revalidation=operation['arguments'].get('change_id') is not None)
+
+    def goal_outcome(self, project, task):
+        """完成依据来自原业务所有者；协作结束和安全通过始终分开。"""
+        purpose, refs = task['purpose'], task['references']
+        check = self.latest_check(project, task['operations'])
+        if purpose in ('CHECK','UNDERSTAND') and refs.get('run_id') and not check:
+            read = refs['run_id'] in task.get('read_reports', [])
+            return dict(fulfilled=read, title='指定报告已读取' if read else '等待读取指定报告',
+                destination='/reports?run_id='+refs['run_id'])
+        if purpose in ('REPAIR','CHECK_AND_REPAIR'):
+            sources = {refs['run_id']} if refs.get('run_id') else set()
+            with self.core.uow_factory() as work:
+                for operation in task['operations']:
+                    if operation['capability']=='checks.start' and operation['state']=='SUCCEEDED':
+                        run = work.runs.get(operation['result']['run_id'])
+                        if run and run.verdict and run.verdict.value=='BLOCK': sources.add(run.run_id)
+            if purpose=='CHECK_AND_REPAIR' and not sources:
+                ready = bool(check and check['lifecycle']=='COMPLETED' and check['verdict']=='PASS')
+                return dict(fulfilled=ready, title='本次检查未发现权限问题' if ready else '等待检查及必要的问题处理',
+                    destination='/reports?run_id='+check['run_id'] if check else '/reports?plan=1')
+            repair = self.core.project_repair.evaluate(project)
+            relevant = [item for item in repair.tasks if any(event.source_run_id in sources for event in item.history)]
+            verified = bool(relevant) and all(item.status == 'VERIFIED' for item in relevant)
+            return dict(fulfilled=verified, title='原问题已解决，正常功能保留' if verified else '原问题仍需取得完整复验依据',
+                destination='/reports?run_id='+check['run_id'] if check else '/changes')
+        if purpose == 'CHECK':
+            ready = check is not None and check['lifecycle'] == 'COMPLETED' and check['verdict'] is not None
+            return dict(fulfilled=ready, title='本次检查报告已形成' if ready else '等待本次检查报告',
+                destination='/reports?run_id='+check['run_id'] if check else '/reports?plan=1')
+        if purpose == 'RULES':
+            saved = any(item['capability'] == 'rules.save' and item['state'] == 'SUCCEEDED' for item in task['operations'])
+            ready = saved and not self.pending_reviews(project, task['operations'])
+            return dict(fulfilled=ready, title='权限要求已处理' if ready else '权限要求尚需整理或审阅', destination='/permissions')
+        if purpose == 'SETUP':
+            preview = self.core.checks.preview(project)
+            return dict(fulfilled=preview.can_execute, title='本次检查材料已齐备' if preview.can_execute else '检查材料仍有缺口', destination='/preparation')
+        if purpose == 'UNDERSTAND':
+            ready = task.get('application_read', False)
+            return dict(fulfilled=ready, title='应用业务内容已读取' if ready else '等待读取应用业务内容', destination='/application')
+        if purpose == 'MAINTENANCE':
+            executed = [item for item in task['operations'] if item['capability']=='maintenance.execute']
+            ready = bool(executed) and all(item['state']=='SUCCEEDED' for item in executed)
+            return dict(fulfilled=ready, title='维护操作已取得结果' if ready else '等待本次维护结果', destination='/storage')
+        # 未声明产物判据的目标留给用户核对，不能退化为按工具调用次数宣布完成。
+        return dict(fulfilled=False, title='核对本次产物后结束协作', destination='/preparation' if purpose == 'SETUP' else '/application')
 
     def pending_reviews(self, project, operations, *, work=None):
         candidates = [item['result']['candidate']['candidate_id'] for item in operations

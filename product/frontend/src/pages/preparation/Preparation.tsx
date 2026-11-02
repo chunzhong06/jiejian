@@ -70,7 +70,7 @@ export function Preparation(props: PageProps) {
         else
             query.set(key, value);
     } go('/preparation' + (query.size ? '?' + query : '')); };
-    const closeMaterial = () => { setOpened(undefined); navigate({ material_kind: null, member_id: null, identities: null, proof_sources: null, source_id: null, recording_id: null, preparation_id: null }); reload(); };
+    const closeMaterial = () => { setOpened(undefined); navigate({ material_kind: null, member_id: null, identities: null, account_slot: null, proof_sources: null, source_id: null, recording_id: null, preparation_id: null }); reload(); };
     const act = async (callback: () => Promise<unknown>) => { if (lock.current)
         return; lock.current = true; setBusy(true); try {
         await callback();
@@ -104,7 +104,7 @@ export function Preparation(props: PageProps) {
     if (currentMaterial)
         return <MaterialEditor resumeRecordingId={route.query.get('recording_id') ?? undefined} projectId={projectId} reference={currentMaterial.ref} label={currentMaterial.label} actionName={preparation.actions.find(item => item.action_id === currentMaterial.ref.action_id)?.display_name} onBack={closeMaterial} onError={onError}/>;
     if (opened === 'identity')
-        return <Accounts projectId={projectId} actions={preparation.actions} requestedPreparation={route.query.get('preparation_id')} onBack={closeMaterial} onError={onError}/>;
+        return <Accounts projectId={projectId} actions={preparation.actions} requestedSlot={route.query.get('account_slot')} requestedPreparation={route.query.get('preparation_id')} onBack={closeMaterial} onError={onError}/>;
     if (opened === 'evidence')
         return <Sources projectId={projectId} actionId={action?.action_id} requestedSource={route.query.get('source_id')} onLocate={id => navigate({ action_id: action?.action_id ?? null, source_id: id, proof_sources: '1' })} onBack={closeMaterial} onError={onError}/>;
     if (plan)
@@ -127,9 +127,9 @@ export function Preparation(props: PageProps) {
     const nextKind: Kind | undefined = action?.next_material ?? undefined;
     const focus = focused ?? route.query.get('focus') ?? nextKind ?? 'identity';
     const selectedGroup = groups.find(group => group.key === focus) ?? groups[0];
-    const openMaterial = (kind: Kind) => { if (kind === 'identity' || kind === 'evidence') {
+    const openMaterial = (kind: Kind, slotId?: string) => { if (kind === 'identity' || kind === 'evidence') {
         setOpened(kind);
-        navigate({ action_id: action.action_id, [kind === 'identity' ? 'identities' : 'proof_sources']: '1' });
+        navigate({ action_id: action.action_id, account_slot: kind === 'identity' ? slotId ?? null : null, [kind === 'identity' ? 'identities' : 'proof_sources']: '1' });
     }
     else if (kind === 'execution' || kind === 'recovery')
         navigate({ action_id: action.action_id, material_kind: kind });
@@ -174,7 +174,7 @@ export function Preparation(props: PageProps) {
           <header><h2>{materialNames[selectedGroup.key]}</h2>{selectedGroup.key !== 'identity' && <Badge tone={status(selectedGroup.items).tone}>{status(selectedGroup.items).label}</Badge>}</header>
           <div className="jj-material-reading"><div className="jj-material-primary">
           <div className="jj-material-requirements">
-            {selectedGroup.key === 'identity' ? <div className="jj-account-entities">{action.identity_requirements.slots.map(slot => <article className="jj-account-entity" key={slot.requirement.slot_id}><header><span className="jj-account-entity-icon"><UserOutlined aria-hidden="true"/></span><div><h3>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ` ${slot.requirement.ordinal}` : ''}</h3><p>{action.resources.some(resource => resource.owner_slot_id === slot.requirement.slot_id) ? '提供本次检查所用资源' : '执行对应角色的业务操作'}</p></div></header><footer><Badge tone={status([slot]).tone}>{status([slot]).label}</Badge><Button kind="quiet" disabled={busy || changed} onClick={() => openMaterial('identity')}>{slot.test_identity_id ? '核对账号' : '准备账号'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></article>)}</div> :
+            {selectedGroup.key === 'identity' ? <div className="jj-account-entities">{action.identity_requirements.slots.map(slot => <article className="jj-account-entity" key={slot.requirement.slot_id}><span className="jj-account-entity-icon"><UserOutlined aria-hidden="true"/></span><div><h3>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ` ${slot.requirement.ordinal}` : ''}</h3><p>{action.resources.some(resource => resource.owner_slot_id === slot.requirement.slot_id) ? '提供本次检查所用资源' : '执行对应角色的业务操作'}</p></div><Badge tone={status([slot]).tone}>{status([slot]).label}</Badge><Button kind="quiet" disabled={busy || changed} onClick={() => openMaterial('identity', slot.requirement.slot_id)}>{slot.test_identity_id ? '核对账号' : '准备账号'}<ArrowRightOutlined aria-hidden="true"/></Button></article>)}</div> :
                     selectedGroup.key === 'evidence' ? action.effect_evidence.map(item => <div className="jj-material-requirement" key={item.effect_id}><span>{text(effectName(item.effect_id))}</span><span data-tone={status([item]).tone}>{status([item]).label}</span></div>) :
                         selectedGroup.key === 'resource' ? action.resources.map((item, index) => <div className="jj-material-requirement" key={item.owner_slot_id}><span>测试资源 {index + 1}</span><Button kind="quiet" disabled={busy || changed || !item.owner_test_identity_id} onClick={() => navigate({ action_id: action.action_id, material_kind: 'resource', member_id: item.owner_test_identity_id })}>{item.owner_test_identity_id ? '确认测试数据' : '先准备所有者账号'}</Button></div>) :
                             <div className="jj-material-requirement"><span>{selectedGroup.key === 'execution' ? text(action.display_name) : action.recovery.status === 'NOT_REQUIRED' ? '本项操作不改变业务数据' : '恢复本次操作改变的数据'}</span><span data-tone={status(selectedGroup.items).tone}>{status(selectedGroup.items).label}</span></div>}

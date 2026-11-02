@@ -1,6 +1,6 @@
 .jj-accounts-workspace, .jj-proof-workspace, .jj-source-review, .jj-recording-workspace { border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); overflow: hidden; min-width: 0; }
 .jj-accounts-workspace { container: account-workspace / inline-size; }
-.jj-accounts-workspace > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); background: var(--inset); }
+.jj-accounts-workspace > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); background: var(--surface-heading); }
 .jj-accounts-workspace > header h2 { font-size: var(--text-body); }
 .jj-accounts-workspace > header > span { font-size: var(--text-meta); color: var(--muted); }
 .jj-account-row { display: grid; flex: 1 1 340px; grid-template-columns: minmax(0,1fr); align-content: space-between; gap: 24px; min-width: 0; padding: 24px; background: var(--surface); }
@@ -233,3 +233,5 @@
 .jj-rule-data-editor .jj-field { flex: 1; min-width: 0; }
 .jj-condition-source { margin-top: 20px; display: grid; gap: 16px; }
 @media (max-width: 650px) { .jj-rule-data-editor { flex-wrap: wrap; } .jj-rule-data-editor .jj-field { flex-basis: 100%; } }
+
+.jj-recording-list > label > input { align-self:start; margin-top:max(0px,calc((1lh - 18px)/2)); }

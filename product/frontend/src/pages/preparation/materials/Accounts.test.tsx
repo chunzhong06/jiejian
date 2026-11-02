@@ -2,7 +2,7 @@ import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import {Accounts} from './Accounts';
 import {testIdentitiesApi as identities} from '../../../entities/preparation/api/testIdentities';
-import {preparationApi} from '../../../entities/preparation/api/preparation';
+import {preparationApi,type ActionPreparation} from '../../../entities/preparation/api/preparation';
 import {AccountAuthentication} from './AccountAuthentication';
 import type {TestIdentityDto} from '../../../entities/preparation/api/testIdentities';
 
@@ -33,4 +33,21 @@ it('明确返回原登录任务时，不被另一个进行中任务覆盖',async
     render(<Accounts projectId="app" actions={[]} requestedPreparation="original" onBack={()=>{}} onError={()=>{}}/>);
     expect(await screen.findByText('本次登录已取消')).toBeVisible();
     await waitFor(()=>expect(screen.queryByRole('button',{name:'我已完成登录'})).not.toBeInTheDocument());
+});
+
+it.each(['member-slot','missing-slot'])('按被点击的账号需求定位，不悄悄换成另一个账号：%s',async(requestedSlot)=>{
+    sessionStorage.clear();
+    const action:ActionPreparation={action_id:'edit',action_revision:1,display_name:'更新工单',preparation_complete:false,next_material:'identity',permissions:[],assurance_contract:{allow_controls:[]},identity_requirements:{status:'NEEDS_USER',reason_codes:[],allocation_mode:'ROLE',slots:[
+        {requirement:{slot_id:'owner-slot',actor_id:'owner',actor_revision:1,ordinal:1},actor_display_name:'负责人',test_identity_id:null,status:'NEEDS_USER',reason_codes:[]},
+        {requirement:{slot_id:'member-slot',actor_id:'member',actor_revision:1,ordinal:1},actor_display_name:'成员',test_identity_id:null,status:'NEEDS_USER',reason_codes:[]},
+    ]},execution:{status:'NEEDS_USER',reason_codes:[]},resources:[],effect_evidence:[],recovery:{status:'NOT_REQUIRED',reason_codes:[]},reason_codes:[]};
+    vi.spyOn(identities,'list').mockResolvedValue([]);
+    vi.spyOn(identities,'preparations').mockResolvedValue([]);
+    vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[action],preparation_complete:false,recommended_action_id:'edit',basis_fingerprint:null,policy_epoch:1,source_fingerprint:null,impacts:[]});
+    render(<Accounts projectId="app" actions={[action]} requestedSlot={requestedSlot} onBack={()=>{}} onError={()=>{}}/>);
+    if(requestedSlot==='member-slot')expect(await screen.findByRole('heading',{name:'成员账号'})).toBeVisible();
+    else expect(await screen.findByText('这项账号需求已发生变化，请从左侧重新选择账号。')).toBeVisible();
+    expect(screen.queryByRole('heading',{name:'负责人账号'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:/负责人账号/}));
+    expect(await screen.findByRole('heading',{name:'负责人账号'})).toBeVisible();
 });
