@@ -4,9 +4,29 @@ import {expect,it,vi} from 'vitest'
 import {Button} from './actions'
 import {Choice} from './Choice'
 import {Dialog} from './Dialog'
-import {InfoPopover} from './InfoPopover'
-import {Tabs} from './Tabs'
+import {Tabs,LinkTabs} from './Tabs'
 import {Field} from './layout'
+import {IndexSelection} from './IndexSelection'
+import {Notice} from './feedback'
+
+it('普通通知默认中性，风险提示显式声明且保留操作与状态文字',()=>{
+  const retry=vi.fn()
+  render(<><Notice>资料已读取</Notice><Notice tone="caution">原回执未确认<Button kind="quiet" onClick={retry}>查询原操作</Button></Notice></>)
+  expect(screen.getByText('资料已读取').closest('[role=status]')).toHaveClass('is-neutral')
+  expect(screen.getByText('原回执未确认').closest('[role=status]')).toHaveClass('is-caution')
+  fireEvent.click(screen.getByRole('button',{name:'查询原操作'}))
+  expect(retry).toHaveBeenCalledOnce()
+})
+
+it('局部索引过滤掉当前项后清除旧选择面，保留业务按钮的状态与行为',()=>{
+  const change=vi.fn(),view=render(<IndexSelection as="nav" label="资料索引" identity="a"><button className="jj-index-item" aria-current="page">原资料</button><button className="jj-index-item" onClick={change}>其他资料</button></IndexSelection>)
+  expect(view.container.querySelector('.jj-index-surface')).toBeInTheDocument()
+  view.rerender(<IndexSelection as="nav" label="资料索引" identity="filtered"><button className="jj-index-item" onClick={change}>其他资料</button><button className="jj-index-item" disabled>不可用资料</button></IndexSelection>)
+  expect(view.container.querySelector('.jj-index-surface')).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'其他资料'}))
+  expect(change).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button',{name:'不可用资料'})).toBeDisabled()
+})
 
 it('提交期间按钮不可再次激活，并保留可访问状态',()=>{
   const action=vi.fn()
@@ -14,6 +34,16 @@ it('提交期间按钮不可再次激活，并保留可访问状态',()=>{
   const button=screen.getByRole('button',{name:'提交检查'})
   fireEvent.click(button)
   expect(button).toBeDisabled();expect(button).toHaveAttribute('aria-busy','true');expect(action).not.toHaveBeenCalled()
+})
+
+it('有提示的按钮进入忙碌后保留同一元素，恢复后继续可用',()=>{
+  const view=render(<Button aria-label="刷新" tip="刷新状态"/>),button=screen.getByRole('button',{name:'刷新'})
+  view.rerender(<Button aria-label="刷新" tip="刷新状态" busy/> )
+  expect(screen.getByRole('button',{name:'刷新'})).toBe(button)
+  expect(button).toBeDisabled()
+  view.rerender(<Button aria-label="刷新" tip="刷新状态"/> )
+  expect(screen.getByRole('button',{name:'刷新'})).toBe(button)
+  expect(button).toBeEnabled()
 })
 
 it('选择菜单展开后将所选值交给业务调用方',async()=>{
@@ -57,21 +87,28 @@ it('对话框中的选择器关联字段名称，键盘跳过禁用项，Escape 
 })
 
 it('页签键盘切换同步选中值和焦点',()=>{
-  const change=vi.fn()
-  render(<Tabs label="检查依据" value="result" onValueChange={change} items={[{value:'result',label:'业务结果'},{value:'trace',label:'操作经过'}]}/>)
+  function Scene(){const [value,setValue]=useState('result');return <Tabs label="检查依据" value={value} onValueChange={setValue} items={[{value:'result',label:'业务结果'},{value:'trace',label:'操作经过'}]}/>}
+  render(<Scene/>)
   fireEvent.keyDown(screen.getByRole('tab',{name:'业务结果'}),{key:'ArrowRight'})
-  expect(change).toHaveBeenCalledWith('trace')
   expect(screen.getByRole('tab',{name:'操作经过'})).toHaveFocus()
+  expect(screen.getByRole('tab',{name:'操作经过'})).toHaveAttribute('aria-selected','true')
+  expect(screen.getByRole('tab',{name:'业务结果'})).toHaveAttribute('tabindex','-1')
+  fireEvent.keyDown(screen.getByRole('tab',{name:'操作经过'}),{key:'Home'})
+  expect(screen.getByRole('tab',{name:'业务结果'})).toHaveFocus()
+  expect(screen.getByRole('tab',{name:'业务结果'})).toHaveAttribute('aria-selected','true')
 })
 
-it('附着运行信息浮层可关闭，并把焦点返回入口',async()=>{
-  render(<InfoPopover label="本地运行环境" trigger={<button>运行状态</button>}><p>执行服务可用</p></InfoPopover>)
-  const trigger=screen.getByRole('button',{name:'运行状态'})
-  fireEvent.click(trigger)
-  await screen.findByRole('dialog',{name:'本地运行环境'})
-  fireEvent.keyDown(document,{key:'Escape'})
-  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'本地运行环境'})).not.toBeInTheDocument())
-  expect(trigger).toHaveFocus()
+it('路由分类沿用链接语义，预载不切换位置或触发业务提交',()=>{
+  const intent=vi.fn(),submit=vi.fn()
+  render(<form onSubmit={submit}><LinkTabs label="设置分类" value="tools" onIntent={intent} items={[{value:'tools',label:'开发工具',href:'#/settings?section=tools'},{value:'storage',label:'本地存储',href:'#/settings?section=storage'}]}/><Tabs label="局部内容" value="a" items={[{value:'a',label:'当前内容'}]} onValueChange={vi.fn()}/></form>)
+  const link=screen.getByRole('link',{name:'本地存储'})
+  expect(screen.getByRole('link',{name:'开发工具'})).toHaveAttribute('aria-current','page')
+  expect(link).toHaveAttribute('href','#/settings?section=storage')
+  fireEvent.focus(link)
+  expect(intent).toHaveBeenCalledWith('storage')
+  expect(link).not.toHaveAttribute('aria-current')
+  fireEvent.click(screen.getByRole('tab',{name:'当前内容'}))
+  expect(submit).not.toHaveBeenCalled()
 })
 
 it('取消对话框不会执行提交，并在退出后返回原入口',async()=>{

@@ -1,4 +1,4 @@
-import {routePage} from './routePage'
+import {routePage} from '../shared/lib/routePage'
 import {PageSkeleton} from '../shared/ui/PageSkeleton'
 import type { ProjectDto } from '../entities/application/api/projects';
 import type { OfficialExperienceDto } from '../entities/application/api/experience';
@@ -9,11 +9,21 @@ import { go } from '../shared/lib/navigation';
 import { Button } from "../shared/ui/actions";
 import { Empty } from "../shared/ui/feedback";
 import { Heading } from "../shared/ui/layout";
-const overview = () => import('../pages/overview/Home'), permissions = () => import('../pages/permissions/Permissions'), preparation = () => import('../pages/preparation/Preparation'), checks = () => import('../pages/checks/Reports'), connection = () => import('../pages/connections/Connect'), changes = () => import('../pages/changes/Changes'), tools = () => import('../pages/tools/Agent'), storage = () => import('../pages/storage/Storage'), archive = () => import('../pages/checks/ArchivedExample'), business = () => import('../pages/connections/Understanding');
-const Home = routePage(() => overview().then(module => ({ default: module.Home })),'/workspace'), Permissions = routePage(() => permissions().then(module => ({ default: module.Permissions })),'/permissions'), Preparation = routePage(() => preparation().then(module => ({ default: module.Preparation })),'/preparation'), Reports = routePage(() => checks().then(module => ({ default: module.Reports })),'/reports'), Connect = routePage(() => connection().then(module => ({ default: module.Connect })),'/application'), Changes = routePage(() => changes().then(module => ({ default: module.Changes })),'/changes'), Agent = routePage(() => tools().then(module => ({ default: module.Agent })),'/tools'), Storage = routePage(() => storage().then(module => ({ default: module.Storage })),'/storage'), ArchivedExample = routePage(() => archive().then(module => ({ default: module.ArchivedExample })),'/archive'), Understanding = routePage(() => business().then(module => ({ default: module.Understanding })),'/application');
+import {SettingsWorkspace} from './shell/SettingsWorkspace'
+import {settingsSection} from '../shared/lib/settings'
+const overview = () => import('../pages/overview/Home'), permissions = () => import('../pages/permissions/Permissions'), preparation = () => import('../pages/preparation/Preparation'), checks = () => import('../pages/checks/Reports'), connection = () => import('../pages/connections/Connect'), changes = () => import('../pages/changes/Changes'), tools = () => import('../pages/tools/Agent'), storage = () => import('../pages/storage/Storage'), archive = () => import('../pages/checks/ArchivedExample');
+const Home = routePage(() => overview().then(module => ({ default: module.Home })),'/workspace'), Permissions = routePage(() => permissions().then(module => ({ default: module.Permissions })),'/permissions'), Preparation = routePage(() => preparation().then(module => ({ default: module.Preparation })),'/preparation'), Reports = routePage(() => checks().then(module => ({ default: module.Reports })),'/reports'), Connect = routePage(() => connection().then(module => ({ default: module.Connect })),'/application'), Changes = routePage(() => changes().then(module => ({ default: module.Changes })),'/changes'), Agent = routePage(() => tools().then(module => ({ default: module.Agent })),'/tools'), Storage = routePage(() => storage().then(module => ({ default: module.Storage })),'/storage'), ArchivedExample = routePage(() => archive().then(module => ({ default: module.ArchivedExample })),'/archive');
 const System = routePage(() => import('../pages/system/System').then(module=>({default:module.System})),'/system');
+const ApplicationWorkbench = routePage(() => import('../pages/connections/ApplicationWorkbench').then(module=>({default:module.ApplicationWorkbench})),'/application');
+const Testing = routePage(() => import('../pages/testing/Testing').then(module=>({default:module.Testing})),'/testing');
+const Issues = routePage(() => import('../pages/issues/Issues').then(module=>({default:module.Issues})),'/issues');
 const Collaboration = routePage(() => import('../pages/tools/Collaboration').then(module=>({default:module.Collaboration})),'/workspace');
-const loaders: Record<string, () => Promise<unknown>> = { '/system': System.preload, '/workspace': Home.preload, '/permissions': Permissions.preload, '/preparation': Preparation.preload, '/reports': Reports.preload, '/application': Connect.preload, '/environment': Connect.preload, '/changes': Changes.preload, '/tools': Agent.preload, '/storage': Storage.preload, '/archive': ArchivedExample.preload };
+const CollaborationHub = routePage(() => import('../pages/tools/CollaborationHub').then(module=>({default:module.CollaborationHub})),'/workspace');
+const loaders: Record<string, () => Promise<unknown>> = { '/system': System.preload, '/workspace': Home.preload, '/permissions': Permissions.preload, '/preparation': Preparation.preload, '/reports': Reports.preload, '/application': ApplicationWorkbench.preload, '/testing': Testing.preload, '/issues': Issues.preload, '/environment': Connect.preload, '/changes': Changes.preload, '/tools': Agent.preload, '/storage': Storage.preload, '/archive': ArchivedExample.preload };
+loaders['/settings']=Agent.preload
+loaders['/settings?section=tools']=Agent.preload
+loaders['/settings?section=storage']=Storage.preload
+loaders['/settings?section=system']=System.preload
 export function preloadRoute(path: string) { void loaders[path]?.().catch(() => { }); }
 type Props = {
     current: string;
@@ -28,16 +38,15 @@ type Props = {
 };
 export function RouteContent({ current, route, context, project, loading, workspace, environment, onConnected, onError }: Props) {
     if (current === '/workspace' && route.query.get('view') === 'collaboration' && context && route.query.get('task_id'))
-        return <Collaboration projectId={context.projectId} taskId={route.query.get('task_id')!}/>;
-    if (current === '/system') return <System route={route} projectId={project?.project_id}/>;
-    if (current === '/tools')
-        return <Agent key={project?.project_id} projectId={project?.project_id} name={project?.name} onError={onError}/>;
-    if (current === '/storage')
-        return <Storage />;
+        return <Collaboration key={route.query.get('task_id')} projectId={context.projectId} taskId={route.query.get('task_id')!}/>;
+    if (current === '/workspace' && route.query.get('view') === 'collaboration' && context)
+        return <CollaborationHub projectId={context.projectId}/>;
+    const setting=settingsSection(route)
+    if(setting)return <SettingsWorkspace onPreload={preloadRoute} route={route} projectId={project?.project_id}>{setting==='tools'?<Agent key={project?.project_id} projectId={project?.project_id} name={project?.name} onError={onError} embedded/>:setting==='storage'?<Storage embedded/>:<System route={route} projectId={project?.project_id} embedded/>}</SettingsWorkspace>;
     if (current === '/archive')
         return <ArchivedExample route={route} onError={onError}/>;
-    if (current === '/application' && route.query.get('view') === 'business' && context)
-        return <Understanding projectId={context.projectId} onError={onError}/>;
+    if (current === '/application' && (project || route.query.get('view') !== 'source'))
+        return <ApplicationWorkbench key={route.query.get('view')==='create'?'create':project?.project_id} selected={route.query.get('view')==='create'?undefined:project} onChanged={onConnected}/>;
     if (current === '/application' || current === '/environment')
         return <Connect key={project?.project_id} mode={current === '/environment' ? 'environment' : 'application'} selected={project} environment={environment} onChanged={onConnected} onError={onError}/>;
     if (loading && !project)
@@ -48,6 +57,8 @@ export function RouteContent({ current, route, context, project, loading, worksp
         return <Home {...context} workspace={workspace} experience={environment ?? null}/>;
     if (current === '/permissions')
         return <Permissions key={context.projectId} {...context}/>;
+    if (current === '/testing') return <Testing key={context.projectId} {...context}/>;
+    if (current === '/issues') return <Issues key={context.projectId} {...context}/>;
     if (current === '/preparation')
         return <Preparation key={context.projectId} {...context}/>;
     if (current === '/reports')

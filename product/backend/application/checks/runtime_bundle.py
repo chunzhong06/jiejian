@@ -20,7 +20,6 @@ from product.protocols.observer.config import ObserverSpec
 from product.protocols.web.response import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
 from product.protocols.recording.flow_draft import canonical_flow_draft_json_bytes
 from product.protocols.web.request import HttpRequestTemplate
-from product.backend.domain.identities.models import identity_source_fingerprint
 
 
 def _incomplete(reason):
@@ -93,7 +92,7 @@ class CheckRuntimeBuilder:
         from product.backend.domain.preparation.requirements import compile_action_assurance
         selected = None if selected_permissions is None else resolve_selected_permissions(boundary.permission_intents, selected_permissions)
         understanding = work.application_understanding.get(project_id)
-        if understanding is None or not understanding.source_fingerprint or not understanding.confirmed_endpoint:
+        if understanding is None or (understanding.source_fingerprint is None and understanding.environment is None) or not understanding.confirmed_endpoint:
             raise _incomplete("CHECK_SOURCE_UNAVAILABLE")
         registered = self._registry.snapshot(project_id)
         if registered is not None and registered.source_fingerprint != understanding.source_fingerprint:
@@ -151,7 +150,11 @@ class CheckRuntimeBuilder:
                     expected_state=effect.expected_state, protected_projection=effect.protected_projection,
                     binding_fingerprint=binding.binding_fingerprint, observation_identity_id=binding.subject_test_identity_id,
                     source_label=effect.business_label, source_location=f"recordings/{binding.source_recording_id}/{binding.step_id}")
-                if binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
+                if binding.kind is ActionEvidenceKind.HTTP_ENTITY_QUERY:
+                    proof.update(rule='HTTP_ENTITY_QUERY',entity_query=binding.entity_query.model_dump(mode='json'),
+                        operation_flow_id=binding.operation_flow_id,operation_flow_revision=binding.operation_flow_revision,
+                        source_location=f'operation-flows/{binding.operation_flow_id}/entity-query')
+                elif binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
                     runtime = self._registry.proof(project_id, binding.observer_reference, effect_id)
                     if runtime is None or runtime.effect != effect or not (runtime.closure_supported and runtime.resource_correlation_supported):
                         raise _incomplete("REGISTERED_EFFECT_PROOF_UNAVAILABLE")
@@ -211,15 +214,18 @@ class CheckRuntimeBuilder:
             actor_label = actor_labels.get((record.actor_id, record.actor_revision))
             if actor_label is None:
                 raise _incomplete("TEST_IDENTITY_UNAVAILABLE")
-            identities.append(dict(identity_id=identity_id, actor_id=record.actor_id, actor_revision=record.actor_revision,
-                identity_fingerprint=identity_source_fingerprint(record), label=record.label,
-                actor_label=actor_label,
-                binding=binding.binding.model_dump(mode="json"), verification=verification[identity_id].model_dump(mode="json") if identity_id in verification else None))
+            from product.backend.application.test_identities.freezing import freeze_check_identity
+            identities.append(freeze_check_identity(record,binding,actor_label,verification.get(identity_id),
+                environment=understanding.environment))
         for config in configs:
             config["steps"] = derive_target_classifiers(config, specs, identities)
         payload=dict(project_id=project_id,
             source_fingerprint=understanding.source_fingerprint, target=target.model_dump(mode="json"),
             budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))
+        if understanding.environment is not None:
+            if target != understanding.environment.target:
+                raise _incomplete('CHECK_ENVIRONMENT_SCOPE_CHANGED')
+            payload.update(schema_version='2', environment=understanding.environment.model_dump(mode='json'))
         reference = None if self._runtime_reference_reader is None else self._runtime_reference_reader(project_id)
         if reference is not None:
             if reference.source_fingerprint!=understanding.source_fingerprint:

@@ -585,6 +585,19 @@
           "title": "Expected Application Subject Id",
           "type": "string"
         },
+        "expected_role": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Role"
+        },
         "namespace": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Namespace",
@@ -592,6 +605,19 @@
         },
         "request": {
           "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "role_json_path": {
+          "anyOf": [
+            {
+              "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Json Path"
         },
         "subject_json_path": {
           "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
@@ -664,6 +690,17 @@
           "title": "Effect Kind",
           "type": "string"
         },
+        "entity_query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpEntityQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "exclusive_resource_window": {
           "default": false,
           "title": "Exclusive Resource Window",
@@ -701,6 +738,32 @@
           "default": null,
           "title": "Observer Id"
         },
+        "operation_flow_id": {
+          "anyOf": [
+            {
+              "pattern": "^ofl_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Id"
+        },
+        "operation_flow_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation Flow Revision"
+        },
         "protected_projection": {
           "default": [],
           "items": {
@@ -732,7 +795,8 @@
           "enum": [
             "HTTP_RESOURCE_PRESENCE",
             "REGISTERED_EFFECT",
-            "RECORDED_SUPPORT"
+            "RECORDED_SUPPORT",
+            "HTTP_ENTITY_QUERY"
           ],
           "title": "Rule",
           "type": "string"
@@ -923,6 +987,37 @@
         "protected_effect_ids"
       ],
       "title": "FrozenPermission",
+      "type": "object"
+    },
+    "HttpEntityQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "data_path": {
+          "default": "$",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,8}$",
+          "title": "Data Path",
+          "type": "string"
+        },
+        "owner_path": {
+          "default": "$.owner_id",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Owner Path",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "resource_path": {
+          "default": "$.id",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Resource Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "HttpEntityQuery",
       "type": "object"
     },
     "HttpOutcomeClassifier": {

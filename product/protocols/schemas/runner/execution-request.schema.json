@@ -71,6 +71,7 @@
         "reference": {
           "discriminator": {
             "mapping": {
+              "OPERATION_HTTP_ENTITY": "#/$defs/OperationProofReference",
               "RECORDED_OBSERVATION": "#/$defs/RecordedProofReference",
               "REGISTERED_OBSERVER": "#/$defs/ObserverProofReference"
             },
@@ -82,6 +83,9 @@
             },
             {
               "$ref": "#/$defs/ObserverProofReference"
+            },
+            {
+              "$ref": "#/$defs/OperationProofReference"
             }
           ],
           "title": "Reference"
@@ -96,7 +100,8 @@
           "enum": [
             "HTTP_RESOURCE_PRESENCE",
             "REGISTERED_EFFECT",
-            "RECORDED_SUPPORT"
+            "RECORDED_SUPPORT",
+            "HTTP_ENTITY_QUERY"
           ],
           "title": "Rule",
           "type": "string"
@@ -276,9 +281,16 @@
           "type": "array"
         },
         "source_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Source Fingerprint",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Fingerprint"
         },
         "subject_actor_id": {
           "pattern": "^bar_[0-9a-f]{32}$",
@@ -404,6 +416,28 @@
       "title": "ExecutionTwin",
       "type": "object"
     },
+    "ExternalRecheckContext": {
+      "additionalProperties": false,
+      "properties": {
+        "deployment_statement": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Deployment Statement",
+          "type": "string"
+        },
+        "source_environment_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Environment Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_environment_fingerprint",
+        "deployment_statement"
+      ],
+      "title": "ExternalRecheckContext",
+      "type": "object"
+    },
     "FrozenCheckSelection": {
       "additionalProperties": false,
       "properties": {
@@ -457,6 +491,58 @@
         "pending_review_ids"
       ],
       "title": "FrozenCheckSelection",
+      "type": "object"
+    },
+    "FrozenEnvironment": {
+      "additionalProperties": false,
+      "properties": {
+        "deployment_label": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deployment Label"
+        },
+        "deployment_verification": {
+          "const": "UNVERIFIED",
+          "default": "UNVERIFIED",
+          "title": "Deployment Verification",
+          "type": "string"
+        },
+        "environment_id": {
+          "pattern": "^env_[0-9a-f]{32}$",
+          "title": "Environment Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/WebTargetScope"
+        }
+      },
+      "required": [
+        "environment_id",
+        "revision",
+        "name",
+        "target"
+      ],
+      "title": "FrozenEnvironment",
       "type": "object"
     },
     "FrozenPermission": {
@@ -664,6 +750,39 @@
         "observer_id"
       ],
       "title": "ObserverProofReference",
+      "type": "object"
+    },
+    "OperationProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "flow_id": {
+          "pattern": "^ofl_[0-9a-f]{32}$",
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OPERATION_HTTP_ENTITY",
+          "default": "OPERATION_HTTP_ENTITY",
+          "title": "Kind",
+          "type": "string"
+        },
+        "query_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Query Fingerprint",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "flow_id",
+        "revision",
+        "query_fingerprint"
+      ],
+      "title": "OperationProofReference",
       "type": "object"
     },
     "PermissionConditions": {
@@ -1015,9 +1134,16 @@
           "type": "string"
         },
         "source_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Source Fingerprint",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Fingerprint"
         }
       },
       "required": [
@@ -1031,6 +1157,77 @@
         "config_fingerprint"
       ],
       "title": "TwinInvariants",
+      "type": "object"
+    },
+    "WebTargetScope": {
+      "additionalProperties": false,
+      "description": "Web 目标的协议级授权范围。",
+      "properties": {
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "allowed_ports": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Allowed Ports",
+          "type": "array"
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "follow_redirects": {
+          "const": false,
+          "default": false,
+          "title": "Follow Redirects",
+          "type": "boolean"
+        },
+        "max_requests": {
+          "default": 64,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "base_url",
+        "allowed_origins",
+        "allowed_hosts",
+        "allowed_ports"
+      ],
+      "title": "WebTargetScope",
       "type": "object"
     }
   },
@@ -1077,6 +1274,28 @@
       "title": "Engine Version",
       "type": "string"
     },
+    "environment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FrozenEnvironment"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "external_recheck": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExternalRecheckContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "plan_fingerprint": {
       "pattern": "^[0-9a-f]{64}$",
       "title": "Plan Fingerprint",
@@ -1113,8 +1332,11 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "1",
       "default": "1",
+      "enum": [
+        "1",
+        "2"
+      ],
       "title": "Schema Version",
       "type": "string"
     },
@@ -1130,9 +1352,16 @@
       "default": null
     },
     "source_fingerprint": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Source Fingerprint",
-      "type": "string"
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source Fingerprint"
     }
   },
   "required": [

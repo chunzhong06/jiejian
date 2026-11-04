@@ -51,7 +51,7 @@ class RunRow(Base):
     )
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     plan_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     policy_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -91,7 +91,7 @@ class RunRecord(StorageRecord):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     request_hash: str = Field(pattern=SHA256_PATTERN)
     plan_fingerprint: str = Field(pattern=SHA256_PATTERN)
-    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    source_fingerprint: str | None = Field(pattern=SHA256_PATTERN)
     policy_epoch: int = Field(ge=0)
     engine_version: str = Field(min_length=1, max_length=64)
     lifecycle: RunLifecycle

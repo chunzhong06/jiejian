@@ -137,7 +137,7 @@ class TestIdentityService:
             record = material_fact(work, work.test_identities, ("get", identity_id), lambda: work.test_identities.get(identity_id))
             if record is None:
                 raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, '测试账号不存在')
-            return self._view(record, self._actor_for_record(work, record))
+            return self._view(record, self._actor_for_record(work, record), work=work)
         record, actor = self._load(identity_id)
         return self._view(record, actor)
 
@@ -179,6 +179,10 @@ class TestIdentityService:
                 "测试账号登录状态尚未完整写入安全存储",
                 details={"missing_count": len(missing)},
             )
+        understanding = work.application_understanding.get(current.project_id)
+        verification = state.verification
+        if verification is not None and understanding is not None and understanding.environment is not None:
+            verification = verification.model_copy(update=dict(environment_fingerprint=understanding.environment.fingerprint))
         prepared = TestIdentity(
             **(
                 current.model_dump()
@@ -189,12 +193,12 @@ class TestIdentityService:
                     "prepared_at_us": state.prepared_at_us,
                     "refreshed_at_us": state.prepared_at_us,
                     "updated_at_us": max(self._clock_us(), state.prepared_at_us),
-                    'verification':state.verification,
+                    'verification':verification,
                 }
             )
         )
         work.test_identities.replace(prepared)
-        return self._view(prepared, actor)
+        return self._view(prepared, actor, work=work)
 
     def configure_authentication(self, identity_id, profile, *, expected_updated_at_us):
         with self._uow_factory() as work:
@@ -302,9 +306,17 @@ class TestIdentityService:
             actor = self._actor_for_record(work, record)
         return record, actor
 
-    def _view(self, record: TestIdentity, actor: BusinessActorRevision) -> TestIdentityView:
+    def _view(self, record: TestIdentity, actor: BusinessActorRevision, *, work=None) -> TestIdentityView:
+        if work is None:
+            with self._uow_factory() as current:
+                return self._view(record,actor,work=current)
         reasons: tuple[str, ...] = ()
         if record.auth_method is not None:
+            understanding = work.application_understanding.get(record.project_id)
+            environment = None if understanding is None else understanding.environment
+            if environment is not None and (record.verification is None
+                or record.verification.environment_fingerprint != environment.fingerprint):
+                reasons += ('IDENTITY_ENVIRONMENT_CHANGED',)
             if record.authentication is not None:
                 verification = record.verification
                 if verification is None or verification.profile_fingerprint != boundary_sha256(record.authentication.model_dump(mode='json')) or verification.session_prepared_at_us != record.prepared_at_us:

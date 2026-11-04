@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict
 
 
@@ -20,5 +21,5 @@ class ApiResponse(ApiModel):
 def data_response(value: Any, *, status_code: int = 200) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content={"schema_version": "1", "data": value},
+        content={"schema_version": "1", "data": jsonable_encoder(value)},
     )

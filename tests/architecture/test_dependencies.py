@@ -1,5 +1,6 @@
 # 验证领域与共用界面的依赖方向和源码职责，不锁定历史目录名称。
 import ast
+import re
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -22,6 +23,21 @@ def test_shared_frontend_does_not_depend_on_pages_entities_or_application():
         text=path.read_text('utf-8')
         if any('/'+layer+'/' in text for layer in ['pages','entities','app']):violations.append(path.name)
     assert violations==[]
+
+
+def test_tab_presentation_is_owned_by_the_shared_component():
+    """公共页签的外观不能退回页面补齐，外围放置仍由页面布局负责。"""
+    source=ROOT/'product/frontend/src'
+    owner=source/'shared/ui/Tabs.css'
+    placement={'margin','margin-top','margin-bottom','margin-inline','margin-inline-start','margin-inline-end','padding-inline','min-width','max-width','width','flex','flex-grow','flex-shrink','flex-basis','grid-column','grid-row','align-self','justify-self'}
+    violations=[]
+    for path in source.rglob('*.css'):
+        if path==owner:continue
+        for selector,body in re.findall(r'([^{}]+)\{([^{}]*)\}',path.read_text('utf-8')):
+            if not re.search(r'\.jj-(?:tabs|tab-indicator)\b',selector):continue
+            properties=re.findall(r'(?:^|;)\s*([\w-]+)\s*:',body)
+            violations.extend((str(path.relative_to(source)),property) for property in properties if property not in placement)
+    assert violations==[], '页签外观应在 Tabs.css 或其明确变体中维护'
 
 def test_python_child_launches_explicitly_select_an_environment_role():
     sites=[]

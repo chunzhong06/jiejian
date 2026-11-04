@@ -880,6 +880,9 @@ class IdentityPreparationHandler:
                 # 事务只采用引用，外部秘密写入的补偿仍由监督器的 journal 清理负责。
                 self._identities.save_prepared_state(current.identity_id, prepared, work=work)
             if verification is not None:
+                understanding = work.application_understanding.get(current.project_id)
+                if understanding is not None and understanding.environment is not None:
+                    verification = verification.model_copy(update=dict(environment_fingerprint=understanding.environment.fingerprint))
                 work.test_identities.update_verification(current.identity_id,verification)
             work.identity_preparations.update(row["preparation_id"], phase=phase, now_us=now)
             append_job_event(

@@ -60,6 +60,8 @@ function Sync-FrontendWorkspaceSources([string]$Workspace, $Inputs) {
     }
     foreach ($input in $Inputs) {
         $destination = Join-Path $Workspace ([string]$input.relative).Replace("/", "\")
+        # 核对双方实际内容，外部修改投影或保留时间戳也不能冒充命中。
+        if ((Test-Path -LiteralPath $destination -PathType Leaf) -and (Get-FileDigest ([string]$input.source)) -eq (Get-FileDigest $destination)) { continue }
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         Copy-Item -LiteralPath ([string]$input.source) -Destination $destination -Force
     }

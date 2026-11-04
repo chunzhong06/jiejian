@@ -15,6 +15,7 @@ from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, EFFECT
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, SHA256_PATTERN, TEST_IDENTITY_ID_PATTERN
 from product.backend.domain.redaction import REDACTED
 from product.protocols.checks.execution_request import PermissionReference
+from product.protocols.preparation.http_entity import HttpEntityQuery
 
 
 _UNSAFE_TEXT = re.compile(
@@ -33,6 +34,7 @@ class ResourceInjectionKind(StrEnum):
 
 
 class ActionEvidenceKind(StrEnum):
+    HTTP_ENTITY_QUERY = 'HTTP_ENTITY_QUERY'
     RECORDED_OBSERVATION = "RECORDED_OBSERVATION"
     REGISTERED_OBSERVER = "REGISTERED_OBSERVER"
 
@@ -202,6 +204,9 @@ def rule_case_resource(base, permission, selection):
 
 
 class ActionEvidenceBinding(_ActionBinding):
+    operation_flow_id: str | None = Field(default=None, pattern=r'^ofl_[0-9a-f]{32}$',exclude_if=lambda value:value is None)
+    operation_flow_revision: int | None = Field(default=None,ge=1,exclude_if=lambda value:value is None)
+    entity_query: HttpEntityQuery | None = Field(default=None,exclude_if=lambda value:value is None)
     effect_id: str = Field(pattern=EFFECT_ID_PATTERN)
     kind: ActionEvidenceKind
     source_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
@@ -215,6 +220,12 @@ class ActionEvidenceBinding(_ActionBinding):
     def validate_source(self) -> ActionEvidenceBinding:
         recorded = (self.source_recording_id, self.source_draft_revision, self.source_draft_sha256,
                     self.step_id, self.request_template)
+        if self.kind is ActionEvidenceKind.HTTP_ENTITY_QUERY:
+            if self.operation_flow_id is None or self.operation_flow_revision is None or self.entity_query is None or any(item is not None for item in recorded) or self.observer_reference is not None:
+                raise ValueError('entity evidence requires its exact operation flow query')
+            return self
+        if self.operation_flow_id is not None or self.operation_flow_revision is not None or self.entity_query is not None:
+            raise ValueError('other evidence cannot contain operation entity queries')
         if self.kind is ActionEvidenceKind.RECORDED_OBSERVATION:
             if any(item is None for item in recorded) or self.observer_reference is not None:
                 raise ValueError("recorded evidence requires its exact recording source")

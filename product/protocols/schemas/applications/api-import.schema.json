@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "SourceParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "enum": [
+            "PATH",
+            "QUERY",
+            "HEADER",
+            "BODY"
+          ],
+          "title": "Location",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "sensitive": {
+          "default": false,
+          "title": "Sensitive",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "location"
+      ],
+      "title": "SourceParameter",
+      "type": "object"
+    },
+    "SourceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "pattern": "^req_[0-9a-f]{32}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "parameters": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceParameter"
+          },
+          "maxItems": 128,
+          "title": "Parameters",
+          "type": "array"
+        },
+        "path": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "pointer": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "method",
+        "path",
+        "label",
+        "pointer"
+      ],
+      "title": "SourceRequest",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidate_id": {
+      "pattern": "^imp_[0-9a-f]{32}$",
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "document_type": {
+      "const": "jiejian.api-import",
+      "default": "jiejian.api-import",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Fingerprint",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "OPENAPI",
+        "HAR",
+        "POSTMAN"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "requests": {
+      "items": {
+        "$ref": "#/$defs/SourceRequest"
+      },
+      "maxItems": 512,
+      "title": "Requests",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "project_id",
+    "kind",
+    "requests",
+    "warnings",
+    "fingerprint"
+  ],
+  "title": "ApiImportDocument",
+  "type": "object"
+}

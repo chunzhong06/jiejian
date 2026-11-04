@@ -1,5 +1,38 @@
 {
   "$defs": {
+    "ApiSourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "pattern": "^req_[0-9a-f]{32}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "request_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Fingerprint",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "source_id": {
+          "pattern": "^src_[0-9a-f]{32}$",
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "revision",
+        "item_id",
+        "request_fingerprint"
+      ],
+      "title": "ApiSourceReference",
+      "type": "object"
+    },
     "BaselineIntegrityMode": {
       "enum": [
         "EXACT_RESTORE",
@@ -96,6 +129,108 @@
         }
       },
       "title": "FormUrlEncodedBody",
+      "type": "object"
+    },
+    "FrozenEnvironment": {
+      "additionalProperties": false,
+      "properties": {
+        "deployment_label": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deployment Label"
+        },
+        "deployment_verification": {
+          "const": "UNVERIFIED",
+          "default": "UNVERIFIED",
+          "title": "Deployment Verification",
+          "type": "string"
+        },
+        "environment_id": {
+          "pattern": "^env_[0-9a-f]{32}$",
+          "title": "Environment Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/WebTargetScope"
+        }
+      },
+      "required": [
+        "environment_id",
+        "revision",
+        "name",
+        "target"
+      ],
+      "title": "FrozenEnvironment",
+      "type": "object"
+    },
+    "HttpEntityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "query": {
+          "$ref": "#/$defs/HttpEntityQuery"
+        }
+      },
+      "required": [
+        "effect_id",
+        "query"
+      ],
+      "title": "HttpEntityEvidence",
+      "type": "object"
+    },
+    "HttpEntityQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "data_path": {
+          "default": "$",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,8}$",
+          "title": "Data Path",
+          "type": "string"
+        },
+        "owner_path": {
+          "default": "$.owner_id",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Owner Path",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "resource_path": {
+          "default": "$.id",
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Resource Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "HttpEntityQuery",
       "type": "object"
     },
     "HttpOutcomeClassifier": {
@@ -1257,6 +1392,26 @@
       "title": "Document Type",
       "type": "string"
     },
+    "entity_evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HttpEntityEvidence"
+      },
+      "maxItems": 16,
+      "title": "Entity Evidence",
+      "type": "array"
+    },
+    "environment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FrozenEnvironment"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "id": {
       "pattern": "^ofl_[0-9a-f]{32}$",
       "title": "Id",
@@ -1301,15 +1456,25 @@
       "type": "integer"
     },
     "schema_version": {
-      "const": "1",
       "default": "1",
+      "enum": [
+        "1",
+        "2"
+      ],
       "title": "Schema Version",
       "type": "string"
     },
     "source_fingerprint": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Source Fingerprint",
-      "type": "string"
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source Fingerprint"
     },
     "source_recording_id": {
       "anyOf": [
@@ -1323,6 +1488,17 @@
       ],
       "default": null,
       "title": "Source Recording Id"
+    },
+    "source_request": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApiSourceReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "subject_test_identity_id": {
       "pattern": "^tid_[0-9a-f]{32}$",

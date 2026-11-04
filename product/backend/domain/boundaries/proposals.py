@@ -70,7 +70,7 @@ class CandidateSourceSnapshot(BoundaryModel):
 class BoundarySourceSnapshot(BoundaryModel):
     basis_version: Literal[1, 2] = 1
     application_understanding_revision: int = Field(ge=0, le=1_000_000)
-    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    source_fingerprint: str | None = Field(pattern=SHA256_PATTERN)
     candidates: tuple[CandidateSourceSnapshot, ...] = Field(default=(), max_length=768)
 
     @field_validator("candidates")

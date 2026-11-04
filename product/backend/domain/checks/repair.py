@@ -103,6 +103,9 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
             "observation_identity_id", "exclusive_resource_window", "descriptor_fingerprint")}
         payload["identity_verification"] = verification.model_dump(mode="json")
         payload["request"] = None if proof.request is None else proof.request.model_dump(mode="json")
+        if proof.rule == 'HTTP_ENTITY_QUERY':
+            payload['entity_query'] = proof.entity_query.model_dump(mode='json')
+            payload['comparison_semantics'] = 'EXACT_RESOURCE_OWNER_FIELD_ENTITY'
         payload["observer"] = None if proof.observer_id is None else observers[proof.observer_id].model_dump(mode="json")
         standards.append(content_hash("RepairEvidenceStandard", payload))
     if not standards or len(set(standards)) != len(standards):
@@ -181,6 +184,7 @@ def current_request_permissions(request) -> tuple[PermissionReference, ...]:
 
 
 class CurrentRepairVerification(WireModel):
+    verification_scope: Literal['SOURCE_CHANGE','EXTERNAL_OBSERVATION'] = Field(default='SOURCE_CHANGE',exclude_if=lambda value:value=='SOURCE_CHANGE')
     repair_reference: Hash
     source_run_id: LogicalId
     run_id: LogicalId
@@ -199,6 +203,31 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
         or (request.repair_context != repair_context(contract) and contract.reference() not in linked_repair_references) or expected_change_context is None
         or request.change_context != expected_change_context):
         return answer("INCONCLUSIVE","REPAIR_CONTEXT_MISMATCH")
+    return _compare_repair_cases(contract,request=request,bundle=bundle,result=result,evidence=evidence,
+        answer=answer,require_runtime=True)
+
+
+def verify_external_recheck(contract, *, request, bundle, result, evidence, source_environment):
+    """验证同一环境中再次观察的原题行为；不推导源码修复或部署版本对应。"""
+    def answer(status,reason):
+        return CurrentRepairVerification(repair_reference=contract.repair_fingerprint,
+            source_run_id=contract.source_run_id,run_id=result.run_id,status=status,reason_codes=(reason,),
+            verification_scope='EXTERNAL_OBSERVATION')
+    if request.policy_epoch != contract.original_policy_epoch or current_request_permissions(request) != contract.original_intents:
+        return answer('STALE','REPAIR_POLICY_CHANGED')
+    context=request.external_recheck
+    if (context is None or source_environment is None or request.environment is None
+        or context.source_environment_fingerprint != source_environment.fingerprint
+        or request.environment.environment_id != source_environment.environment_id
+        or request.environment.target != source_environment.target or bundle.runtime.kind != 'EXTERNAL_WEB'
+        or request.source_fingerprint is not None or result.run_id == contract.source_run_id
+        or request.project_id != contract.project_id or request.repair_context != repair_context(contract)):
+        return answer('INCONCLUSIVE','EXTERNAL_RECHECK_CONTEXT_MISMATCH')
+    return _compare_repair_cases(contract,request=request,bundle=bundle,result=result,evidence=evidence,
+        answer=answer,require_runtime=False)
+
+
+def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer, require_runtime):
     candidates = {}
     for action in request.actions:
         for case in action.cases:
@@ -219,7 +248,7 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
                 and any(fact.state == "CONFIRMED" and fact.complete and fact.reliable and fact.correlated and fact.authoritative for fact in facts)):
                 return answer("NOT_VERIFIED","REPAIR_FORBIDDEN_EFFECT_REMAINS")
     correspondence = getattr(result, "runtime_correspondence", None)
-    if correspondence is None or correspondence.before != "MATCHED" or correspondence.after != "MATCHED":
+    if require_runtime and (correspondence is None or correspondence.before != "MATCHED" or correspondence.after != "MATCHED"):
         return answer("INCONCLUSIVE", "REPAIR_RUNTIME_NOT_CONFIRMED")
     for requirement in (contract.deny,contract.selected_control,*contract.regressions):
         matches = candidates.get(requirement.identity.fingerprint(),[])
@@ -242,4 +271,4 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
         if standards != requirement.evidence_standard_fingerprints:
             return answer("INCONCLUSIVE","REPAIR_STANDARD_CHANGED")
     # 修复只覆盖本合同全部义务；其他禁止场景的违规仍保留在各自问题与整轮结论中。
-    return answer("VERIFIED","REPAIR_ORIGINAL_REQUIREMENTS_VERIFIED")
+    return answer("VERIFIED","REPAIR_ORIGINAL_REQUIREMENTS_VERIFIED" if require_runtime else 'EXTERNAL_ORIGINAL_BEHAVIOR_VERIFIED')

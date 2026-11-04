@@ -16,7 +16,8 @@ export type ProjectDto = {
 
 export type ApplicationUnderstandingDto = {
   project_id: string
-  source_root: string
+  source_root: string | null
+  environment?: import('./workbench').ApplicationEnvironment
   confirmed_endpoint: string | null
   endpoint_source_fingerprint: string | null
   endpoint_confirmed_at_us: number | null

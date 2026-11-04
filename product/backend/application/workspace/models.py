@@ -36,7 +36,7 @@ class WorkspaceProjectView(WorkspaceModel):
 
 class WorkspaceConnectionView(WorkspaceModel):
     endpoint_status: Literal["NEEDS_CONFIRMATION", "CONFIRMED", "UNAVAILABLE"]
-    source_analysis_status: Literal["NOT_AUTHORIZED", "PENDING", "COMPLETED"]
+    source_analysis_status: Literal["NOT_AUTHORIZED", "PENDING", "COMPLETED", "NOT_PROVIDED"]
 
 
 class ActorWorkspaceView(WorkspaceModel):

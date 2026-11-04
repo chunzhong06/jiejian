@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 
 // 标识来自受控构建输入；同一标识同时写入脚本和独立清单，避免只比较产品版本号。
 function frontendBuildId() {
@@ -32,6 +33,13 @@ export default defineConfig({
     name: 'jiejian-frontend-identity', apply: 'build', enforce: 'post',
     // Vite 会在普通生成钩子中补写预加载依赖；清单须摘要这些改写后的字节。
     generateBundle: { order: 'post', handler(_options,bundle) {
+      // 预压缩保持字体与脚本原字节；请求时只选择已发布的静态表示。
+      for (const item of Object.values(bundle)) {
+        const bytes=item.type==='chunk'?Buffer.from(item.code):Buffer.from(item.source)
+        if(!item.fileName.startsWith('assets/')||bytes.length<1024)continue
+        const compressed=gzipSync(bytes,{level:9})
+        if(compressed.length<bytes.length*.9)this.emitFile({type:'asset',fileName:item.fileName+'.gz',source:compressed})
+      }
       const assets = Object.values(bundle).map(item => ({path:item.fileName,
         sha256:createHash('sha256').update(item.type === 'chunk' ? item.code : item.source).digest('hex')}))
       this.emitFile({type:'asset',fileName:'frontend-manifest.json',source:JSON.stringify({schema_version:'1',build_id:buildId,assets})})

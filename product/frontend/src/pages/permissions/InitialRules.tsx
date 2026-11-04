@@ -62,7 +62,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
     return <>
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>全部权限规则</Button></div>
         <Heading title="编写权限要求"><p>定义业务角色和操作，再明确每条访问要求。</p></Heading>
-        {changed && <Notice>正式规则已变化，草稿保留。请返回核对当前规则后再整理。</Notice>}
+        {changed && <Notice tone="caution">正式规则已变化，草稿保留。请返回核对当前规则后再整理。</Notice>}
         <div className="jj-rule-authoring" data-preview={draft.permissions.length>0}>
             <div className="jj-rule-authoring-editor">
                 <Tabs label="权限编写分区" value={section} items={[
@@ -132,7 +132,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                                 const update = (value: Partial<typeof rule>) => edit({ permissions: draft.permissions.map((item, i) => i === index ? { ...item, ...value } : item) });
                                 const action = draft.actions.find(item => item.item_id === rule.business_action_item_id);
                                 return <article className="jj-initial-permission" key={rule.item_id}>
-                                    <header><Badge tone={rule.expectation === 'ALLOW' ? 'positive' : 'negative'}>{rule.expectation === 'ALLOW' ? '允许访问' : '禁止访问'}</Badge><Button kind="quiet" aria-label={'移除规则 ' + (index + 1)} icon={<DeleteOutlined aria-hidden="true" />} onClick={() => edit({ permissions: draft.permissions.filter(item => item.item_id !== rule.item_id) })} /></header>
+                                    <header><Badge>{rule.expectation === 'ALLOW' ? '允许访问' : '禁止访问'}</Badge><Button kind="quiet" aria-label={'移除规则 ' + (index + 1)} icon={<DeleteOutlined aria-hidden="true" />} onClick={() => edit({ permissions: draft.permissions.filter(item => item.item_id !== rule.item_id) })} /></header>
                                     <div className="jj-initial-permission-fields">
                                         <Field label="操作角色"><Choice disabled={disabled} value={rule.subject_actor_item_id} onValueChange={value => update({ subject_actor_item_id: value, resource_owner_actor_item_id: rule.relation === 'OTHER_ROLE' ? rule.resource_owner_actor_item_id : value })}>{draft.actors.map(item => <option key={item.item_id} value={item.item_id}>{item.display_name || '未命名角色'}</option>)}</Choice></Field>
                                         <Field label="访问要求"><Choice disabled={disabled} value={rule.expectation} onValueChange={value => update({ expectation: value as 'ALLOW' | 'DENY' })}><option value="ALLOW">允许</option><option value="DENY">禁止</option></Choice></Field>
@@ -152,7 +152,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 <div className="jj-initial-preview-rules">{draft.permissions.map((rule, index) => {
                     const actor = draft.actors.find(item => item.item_id === rule.subject_actor_item_id), owner = draft.actors.find(item => item.item_id === rule.resource_owner_actor_item_id), action = draft.actions.find(item => item.item_id === rule.business_action_item_id);
                     const relation = rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '同角色其他账号的资源' : (owner?.display_name || '指定角色') + '的资源';
-                    return <Button kind="quiet" className="jj-initial-preview-rule" data-tone={rule.expectation === 'ALLOW' ? 'positive' : 'negative'} key={rule.item_id} onClick={() => setSection('permissions')} aria-label={'编辑规则 ' + (index + 1)}>
+                    return <Button kind="quiet" className="jj-initial-preview-rule" key={rule.item_id} onClick={() => setSection('permissions')} aria-label={'编辑规则 ' + (index + 1)}>
                         {rule.expectation === 'ALLOW' ? <CheckCircleOutlined aria-hidden="true" /> : <StopOutlined aria-hidden="true" />}
                         <span><strong>{rule.conditions?.principal === 'ANONYMOUS' ? '未登录访客' : actor?.display_name || '未命名角色'}{rule.expectation === 'ALLOW' ? '可以' : '不得'}{action?.display_name || '执行操作'}</strong><small>{relation}</small>{conditionLabels(rule.conditions).length > 0 && <small>{conditionLabels(rule.conditions).join("，")}</small>}{action?.effects.filter(effect => rule.protected_effect_item_ids.includes(effect.item_id)).map(effect => <span className="jj-initial-preview-effect" key={effect.item_id}>{effect.business_label || '未命名结果'}</span>)}</span>
                     </Button>;
@@ -165,7 +165,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 </div>
             </aside>}
         </div>
-        {draft.uncertain && <Notice>提案结果尚未确认，草稿已保留。<Button busy={busy} onClick={() => void run(async () => { const value = await api.proposals(projectId, true); setProposals(value.proposals.map(item => item.proposal.proposal_id)); })}>查询已接收的提案</Button></Notice>}
+        {draft.uncertain && <Notice tone="caution">提案结果尚未确认，草稿已保留。<Button busy={busy} onClick={() => void run(async () => { const value = await api.proposals(projectId, true); setProposals(value.proposals.map(item => item.proposal.proposal_id)); })}>查询已接收的提案</Button></Notice>}
         {(draft.proposal_id ? [draft.proposal_id] : proposals).map((value, index) => <Button key={value} onClick={() => void run(() => onProposal(value))}>审阅提案{proposals.length > 1 ? ' ' + (index + 1) : ''}</Button>)}
     </>;
 }

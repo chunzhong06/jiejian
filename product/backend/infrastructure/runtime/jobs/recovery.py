@@ -61,6 +61,7 @@ class JobRecovery:
                     preflight_id=job.preflight_id,
                     reference_capture_id=job.reference_capture_id,
                     identity_preparation_id=job.identity_preparation_id,
+                    flow_trial_id=job.flow_trial_id,
                     attempt=job.attempt,
                     max_attempts=job.max_attempts,
                     lease_owner=job.lease_owner,

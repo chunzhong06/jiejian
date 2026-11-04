@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.application.agent_access.handoff import EditorHandoff
 
 
 class TaskInput(BaseModel):
@@ -19,6 +20,7 @@ class CreateCollaboration(TaskInput):
     goal: str = Field(min_length=1, max_length=2000)
     purpose: str = Field(pattern=r'^(CHECK|CHECK_AND_REPAIR|REPAIR|SETUP|RULES|UNDERSTAND|MAINTENANCE)$')
     references: dict[str, str] = Field(default_factory=dict, max_length=12)
+    editor: EditorHandoff | None = None
 
 
 class CollaborationAction(TaskInput):
@@ -54,7 +56,7 @@ class CollaborationTasks:
     def create(self, project, command: CreateCollaboration):
         self.projects.get(project)
         task_id = 'ctk_' + command.operation_id
-        fingerprint = boundary_sha256(command.model_dump())
+        fingerprint = boundary_sha256(command.model_dump(exclude={'editor'} if command.editor is None else set()))
         with self.uow() as work:
             work.acquire_write_lock()
             value = work.collaboration.get(project, task_id)
@@ -66,6 +68,7 @@ class CollaborationTasks:
             value = dict(schema_version='1', task_id=task_id, project_id=project, state='WAITING_AGENT', revision=1,
                 created_at_us=now, updated_at_us=now, request_fingerprint=fingerprint,
                 goal=command.goal, purpose=command.purpose, references=command.references,
+                editor=None if command.editor is None else command.editor.model_dump(mode='json'),
                 operations=[], questions=[], events=[], execution=None)
             self._event(value, 'USER', '已建立协作任务', 'WAITING_AGENT')
             work.collaboration.save(value)
@@ -107,19 +110,25 @@ class CollaborationTasks:
     def followup(self, project, command: CollaborationFollowup):
         """将报告或修复目标接回用户选定的原任务，保留此前操作和精确引用。"""
         def update(value):
-            if value['state'] in ('CANCELLED', 'COMPLETED'):
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, '原任务已结束，请建立新的协作目标')
             followups = value.setdefault('followups', [])
-            fingerprint = boundary_sha256(command.model_dump())
+            fingerprint = boundary_sha256(command.model_dump(exclude={'editor'} if command.editor is None else set()))
             existing = next((item for item in followups if item['operation_id'] == command.operation_id), None)
             if existing:
                 if existing['fingerprint'] != fingerprint:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '原补充请求已经用于其他目标')
                 return
+            if value['state'] in ('CANCELLED', 'COMPLETED'):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '原任务已结束，请建立新的协作目标')
             followups.append(dict(operation_id=command.operation_id, fingerprint=fingerprint,
-                goal=command.goal, purpose=command.purpose, references=command.references))
-            value['references'].update(command.references)
+                goal=command.goal, purpose=command.purpose, references=command.references,
+                editor=None if command.editor is None else command.editor.model_dump(mode='json'),
+                previous={key:value.get(key) for key in ('goal','purpose','references','editor')}))
+            value['references'] = command.references
             value.update(goal=command.goal, purpose=command.purpose)
+            value['editor'] = None if command.editor is None else command.editor.model_dump(mode='json')
+            value['goal_operation_baseline'] = len(value['operations'])
+            value.pop('read_reports', None)
+            value.pop('application_read', None)
             value.pop('outcome', None)
             self._event(value, 'USER', command.goal, self._next_state(value))
         return self._update(project, command.task_id, update)
@@ -409,7 +418,7 @@ class CollaborationTasks:
 
     @staticmethod
     def _goal_key(value):
-        return boundary_sha256({key:value[key] for key in ('goal','purpose','references')})
+        return boundary_sha256({**{key:value[key] for key in ('goal','purpose','references')}, 'editor':value.get('editor')})
 
     @staticmethod
     def _get(work, project, task):

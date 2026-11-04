@@ -1,5 +1,7 @@
 import {createElement,useEffect,useSyncExternalStore,type ComponentType,type ComponentProps} from 'react'
-import {PageSkeleton} from '../shared/ui/PageSkeleton'
+import {PageSkeleton} from '../ui/PageSkeleton'
+import {PageError} from '../ui/feedback'
+import {usePageRefresh} from './pageRefresh'
 
 // 模块就绪立即挂载，不把数据等待叠加到 Suspense 回退周期。
 export function routePage<C extends ComponentType<any>>(read:()=>Promise<{default:C}>,view:string){
@@ -8,7 +10,8 @@ export function routePage<C extends ComponentType<any>>(read:()=>Promise<{defaul
   const listeners=new Set<()=>void>()
   const subscribe=(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener)}}
   const snapshot=()=>state
-  const preload=()=>{
+  const preload=(retry=false)=>{
+    if(retry&&state.error){state={};pending=undefined}
     if(!pending)pending=read().then(
       module=>{state={Component:module.default};listeners.forEach(listener=>listener())},
       error=>{state={error:error instanceof Error?error:new Error('页面暂时无法打开，请重新加载。')};listeners.forEach(listener=>listener())}
@@ -17,8 +20,9 @@ export function routePage<C extends ComponentType<any>>(read:()=>Promise<{defaul
   }
   function Page(props:ComponentProps<C>){
     const {Component,error}=useSyncExternalStore(subscribe,snapshot)
+    usePageRefresh(()=>error?preload(true):undefined)
     useEffect(()=>{void preload()},[])
-    if(error)throw error
+    if(error)return <PageError title="打开界面" error={error}/>
     return Component?createElement(Component,props):<PageSkeleton view={view}/>
   }
   return Object.assign(Page,{preload})

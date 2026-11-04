@@ -105,7 +105,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                 <p className="jj-small jj-muted">用于登录、录制和检查。</p>
                 {state.data?.running && <div className="jj-runtime-retained"><span>界鉴启动的实例仍在运行</span><Button kind="quiet" onClick={() => setMethod('managed')}>管理运行实例</Button></div>}
             </> : <>
-                {state.loading ? <Loading>正在读取运行实例</Loading> : state.error ? <ErrorNote error={state.error} onRetry={state.reload}/> : !pending && state.data?.running ? <div className="jj-runtime-instance">
+                {state.loading ? <Loading>正在读取运行实例</Loading> : state.error ? <ErrorNote error={state.error}/> : !pending && state.data?.running ? <div className="jj-runtime-instance">
                     <header><strong>界鉴启动的应用</strong><Badge tone={state.data.source_matches ? 'positive' : 'caution'}>{state.data.source_matches ? '正在运行' : '源码已有变化'}</Badge></header>
                     <dl><div><dt>访问地址</dt><dd>{runtimeAddress}</dd></div><div><dt>入口文件</dt><dd>{state.data.configuration?.entry}</dd></div></dl>
                     <footer>{usingRuntime ? <Badge tone="positive">已用于检查</Badge> : <div className="jj-small jj-muted">{confirmedEndpoint ? <>当前检查地址：<span className="jj-path">{confirmedEndpoint}</span></> : '尚未设置检查地址'}</div>}<div className="jj-inline-actions"><Button kind="quiet" busy={busy} onClick={() => void act(async () => { await api.runtimeStop(projectId, state.data!.operation!.instance_id); setMethod('managed'); state.reload(); onChanged(); })}>停止应用</Button>{!usingRuntime && <Button kind="primary" busy={busy} onClick={() => void act(() => confirmAddress(runtimeAddress!))}>使用此应用</Button>}</div></footer>
@@ -122,11 +122,11 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                     <footer><Button disabled={busy} onClick={()=>{setPreview(undefined);setAck(false)}}>返回修改</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(start)}>启动测试实例</Button></footer>
                 </section>}
                 {!preview && terminalState === 'FAILED' && <Notice tone="caution">本次启动未完成，请重新预览启动范围。检查地址未因启动失败而改变。</Notice>}
-                {!preview && terminalState === 'CANCELLED' && <Notice>本次启动已取消。</Notice>}
+                {!preview && terminalState === 'CANCELLED' && <Notice tone="neutral">本次启动已取消。</Notice>}
             </>}
         </div>
-        {currentMethod === 'existing' && state.error && <ErrorNote error={state.error} onRetry={state.reload}/>}
-        {operation.error && <ErrorNote error={operation.error} onRetry={operation.reload}/>}
-        {pending && <Notice>{state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'}。离开页面后仍可查询结果。<Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>恢复原启动请求</Button>}</Notice>}
+        {currentMethod === 'existing' && state.error && <ErrorNote error={state.error}/>}
+        {operation.error && <ErrorNote error={operation.error}/>}
+        {pending && <Notice tone={operation.data?'accent':'caution'}>{state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'}。离开页面后仍可查询结果。<Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>恢复原启动请求</Button>}</Notice>}
     </section>;
 }

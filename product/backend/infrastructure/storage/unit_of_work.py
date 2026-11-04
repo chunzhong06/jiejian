@@ -39,8 +39,11 @@ from product.backend.infrastructure.storage.execution.runs import RunRepository
 from product.backend.infrastructure.storage.boundaries.permission_intents import PermissionIntentRepository
 from product.backend.infrastructure.storage.preparation.test_identities import TestIdentityRepository
 from product.backend.infrastructure.storage.preparation.operation_flows import OperationFlowRepository
+from product.backend.infrastructure.storage.preparation.flow_trials import FlowTrialRepository
 from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRepository
 from product.backend.infrastructure.storage.execution.check_routines import CheckRoutineRepository
+from product.backend.infrastructure.storage.applications.environments import EnvironmentRepository
+from product.backend.infrastructure.storage.applications.api_sources import ApiSourceRepository
 
 
 class StorageUnitOfWork:
@@ -91,6 +94,8 @@ class StorageUnitOfWork:
         self._session = session
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
+        self.environments = EnvironmentRepository(session, self._known_secrets)
+        self.api_sources = ApiSourceRepository(session, self._known_secrets)
         self.collaboration = CollaborationRepository(session, self._known_secrets)
         self.check_routines = CheckRoutineRepository(session, self._known_secrets)
         self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
@@ -109,6 +114,7 @@ class StorageUnitOfWork:
         self.proof_artifacts = ProofArtifactRepository(session,self._known_secrets)
         self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
         self.operation_flows = OperationFlowRepository(session,self._known_secrets)
+        self.flow_trials = FlowTrialRepository(session,self._known_secrets)
         self.runs = RunRepository(session, self._known_secrets)
         self.recordings = RecordingRepository(session, self._known_secrets)
         self.flow_drafts = FlowDraftRevisionRepository(

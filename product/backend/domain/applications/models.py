@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
+from product.protocols.web.environment import FrozenEnvironment
 
 
 def canonical_role_key(value: str) -> str:
@@ -135,7 +136,8 @@ class ActionCandidate(UnderstandingModel):
 
 class ApplicationUnderstanding(UnderstandingModel):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    source_root: str = Field(min_length=1, max_length=32_768)
+    source_root: str | None = Field(default=None, min_length=1, max_length=32_768)
+    environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value: value is None)
     confirmed_endpoint: str | None = Field(default=None, min_length=1, max_length=2048)
     endpoint_source_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
     endpoint_confirmed_at_us: int | None = Field(default=None, ge=0)
@@ -153,6 +155,8 @@ class ApplicationUnderstanding(UnderstandingModel):
 
     @model_validator(mode="after")
     def validate_state_pairs(self) -> ApplicationUnderstanding:
+        if self.source_root is None and (self.source_analysis_authorized or self.source_fingerprint is not None):
+            raise ValueError('source analysis requires an actual source directory')
         endpoint_values = (
             self.confirmed_endpoint,
             self.endpoint_source_fingerprint,

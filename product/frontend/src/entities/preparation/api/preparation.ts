@@ -1,4 +1,4 @@
-// 准备页只读当前材料与服务端入口建议，不依赖完整工作区聚合。
+// 工作面读取当前材料与服务端入口建议，不依赖完整工作区聚合。
 import { request } from '../../../shared/api/http'
 import type { PermissionIntentRevisionDto } from '../../permission/api/businessBoundaries'
 

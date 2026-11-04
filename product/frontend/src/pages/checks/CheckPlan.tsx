@@ -7,7 +7,7 @@ import { preparationApi, type PermissionReference } from '../../entities/prepara
 import { testIdentitiesApi } from '../../entities/preparation/api/testIdentities';
 import { ApiError } from '../../shared/api/http';
 import { Button } from '../../shared/ui/actions';
-import { Badge, ErrorNote, Notice } from '../../shared/ui/feedback';
+import {PageError,  Badge, ErrorNote, Notice } from '../../shared/ui/feedback';
 import { Heading } from '../../shared/ui/layout';
 import { PageSkeleton } from '../../shared/ui/PageSkeleton';
 import { assertProject, type PageProps } from '../../shared/model/page';
@@ -69,7 +69,7 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
         assertProject(result.run.project_id, projectId); open(result.run.run_id);
     };
     if (state.loading) return <PageSkeleton view="/reports" title="检查范围"/>;
-    if (!state.data || state.error) return <ErrorNote error={state.error} onRetry={state.reload}/>;
+    if (!state.data || state.error) return <PageError title="核对本次检查范围" error={state.error}/>;
     const { materials, identities } = state.data;
     const preview = activePreview;
     // 只合并重复说明；每份要求的定位和服务端预览的执行门槛保持独立。
@@ -83,11 +83,11 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))}>{origin ? '返回修复任务' : ruleId ? '返回权限规则' : '全部检查记录'}</Button></div>
         <Heading eyebrow="提交前预览" title="核对本次检查范围"/>
         {changeId && <RuleCheckScope projectId={projectId} changeId={changeId}/>}
-        {pending && <Notice>上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)}>查询原检查</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>重试原提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
+        {pending && <Notice tone="caution">上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)}>查询原检查</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>重试原提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
         <div className="jj-plan-layout" data-revalidation={Boolean(changeId)}>
         {!changeId && <CheckScopePicker materials={materials} selected={selected} disabled={Boolean(pending) || busy} onChange={select}/>}
         <div className="jj-plan-output">
-        {chosen.error && <><ErrorNote error={chosen.error} onRetry={() => {state.reload(); chosen.reload();}}/><Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button></>}
+        {chosen.error && <><ErrorNote error={chosen.error}/><Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button></>}
         {preview ? <section className="jj-panel jj-check-preview jj-plan-workspace" aria-busy={selected !== null && chosen.loading}>
             <header className="jj-plan-overview"><div><h2>{preview.case_count ? `将执行 ${preview.case_count} 项检查` : '准备检查材料'}</h2><p className="jj-small jj-muted">{preview.action_count} 项业务操作{preview.selection && `，含 ${preview.selection.added_controls.length} 项正常对照，另有 ${preview.selection.omitted.length} 条规则未检查`}</p></div><Badge tone={preview.can_execute ? 'positive' : 'caution'}>{preview.can_execute ? '可以开始' : '尚缺材料'}</Badge></header>
             <div className="jj-plan-reading">{materials.actions.filter(action => !selected || preview.actions.some(item => item.action_id === action.action_id)).map(action => {
@@ -98,14 +98,14 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
                     </div>
                     <div className="jj-plan-task-preparation">
                         {gaps.length > 0 && <ul className="jj-plan-gaps">{gaps.map(({ kind, gap, messages }) => <li key={kind}><div><strong>{messages[0]}</strong>{messages.length > 1 && <p>{messages.slice(1).join('；')}</p>}</div><Button onClick={() => go(gapDestination(gap, returnTo, changeId))}>{gapAction(kind)}<ArrowRightOutlined aria-hidden="true"/></Button></li>)}</ul>}
-                        {!!plan?.cases.length && <section className="jj-plan-objects" aria-label="实际执行场景"><div className="jj-scroll-table"><table className="jj-plan-case-table"><thead><tr><th scope="col">操作账号</th><th scope="col" className="jj-table-state">预期结果</th><th scope="col">数据所有者</th><th scope="col">测试数据</th></tr></thead><tbody>{plan.cases.map(item=><tr key={item.case_id}><td>{text(item.subject_test_identity_id === null ? '未登录访客' : identities.find(identity=>identity.identity_id===item.subject_test_identity_id)?.label??'所选测试账号')}</td><td className="jj-table-state"><span className="jj-plan-expectation" data-tone={item.permission.expectation==='DENY'?'caution':'positive'}>{item.permission.expectation==='DENY'?'不应完成':'应当完成'}</span></td><td>{text(identities.find(identity=>identity.identity_id===item.resource_owner_test_identity_id)?.label??'所选资源账号')}</td><td>{item.resource_id}{conditionLabels(item.permission.conditions).length > 0 && <small>{conditionLabels(item.permission.conditions).join("，")}</small>}</td></tr>)}</tbody></table></div></section>}
+                        {!!plan?.cases.length && <section className="jj-plan-objects" aria-label="实际执行场景"><div className="jj-scroll-table"><table className="jj-plan-case-table"><thead><tr><th scope="col">操作账号</th><th scope="col" className="jj-table-state">预期结果</th><th scope="col">数据所有者</th><th scope="col">测试数据</th></tr></thead><tbody>{plan.cases.map(item=><tr key={item.case_id}><td>{text(item.subject_test_identity_id === null ? '未登录访客' : identities.find(identity=>identity.identity_id===item.subject_test_identity_id)?.label??'所选测试账号')}</td><td className="jj-table-state"><span className="jj-plan-expectation">{item.permission.expectation==='DENY'?'不应完成':'应当完成'}</span></td><td>{text(identities.find(identity=>identity.identity_id===item.resource_owner_test_identity_id)?.label??'所选资源账号')}</td><td>{item.resource_id}{conditionLabels(item.permission.conditions).length > 0 && <small>{conditionLabels(item.permission.conditions).join("，")}</small>}</td></tr>)}</tbody></table></div></section>}
                     </div>
                 </article>;
             })}{!materials.actions.length && <p>请先确认本应用的权限规则。</p>}</div>
             {[...requirementGaps].map(([key, items]) => <section className="jj-plan-boundary-group" key={key}><p>{text(items[0].message)}</p>{items.length === 1 ? <Button onClick={() => go(items[0].review_url.replace(/^#/, ''))}>核对要求<ArrowRightOutlined aria-hidden="true"/></Button> : <details><summary>查看 {items.length} 份相关要求</summary>{items.map(gap => <div key={gap.issue_id}><p>{text(preview.requirement_scope?.find(scope => scope.candidate_id === gap.candidate_id && scope.revision === gap.revision)?.requirements[0]?.requirement ?? '已确认的权限要求')}</p><Button onClick={() => go(gap.review_url.replace(/^#/, ''))}>核对要求<ArrowRightOutlined aria-hidden="true"/></Button></div>)}</details>}</section>)}
             {!!preview.requirement_scope?.length && <details className="jj-plan-scope"><summary>业务要求与覆盖范围</summary>{preview.requirement_scope.flatMap(scope => scope.requirements.map(item => ({...item, scope}))).map(({scope, ...item}, index) => <div className="jj-scope-item" key={index}><Badge>{item.disposition === 'IN_SCOPE' ? (preview.selection?.uncovered_requirements.includes(`${scope.candidate_id}@${scope.revision}/${item.requirement_id}`) ? '本次未覆盖' : '纳入检查') : item.disposition === 'PREPARATION' ? '准备条件' : '未覆盖'}</Badge><p>{text(item.requirement)}</p></div>)}</details>}
             {!!preview.omitted_review_gaps?.length && <details className="jj-plan-scope"><summary>{preview.omitted_review_gaps.length} 项未决要求未纳入本次检查</summary>{preview.omitted_review_gaps.map(item => <p key={item.issue_id}>{text(item.message)}</p>)}</details>}
-            <footer className="jj-plan-confirmation"><div><strong>{preview.can_execute ? '执行前会核对当前条件' : '请先补齐上方材料'}</strong><p className="jj-small jj-muted">{preview.can_execute ? '将执行真实操作，检查期间可离开此页。' : '已有材料保留，无需重新准备。'}</p></div><div className="jj-inline-actions"><Button disabled={busy} onClick={() => {state.reload(); chosen.reload();}}>重新核对</Button><Button kind="primary" busy={busy} disabled={!preview.can_execute || Boolean(pending)} onClick={() => void act(submit)}>开始检查<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
+            <footer className="jj-plan-confirmation"><div><strong>{preview.can_execute ? '执行前会核对当前条件' : '请先补齐上方材料'}</strong><p className="jj-small jj-muted">{preview.can_execute ? '将执行真实操作，检查期间可离开此页。' : '已有材料保留，无需重新准备。'}</p></div><div className="jj-inline-actions"><Button kind="primary" busy={busy} disabled={!preview.can_execute || Boolean(pending)} onClick={() => void act(submit)}>开始检查<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
         </section> : !chosen.error && <section className="jj-panel jj-plan-selection-empty" role="status">{selected?.length ? '正在核对所选规则与必要材料…' : '选中左侧规则，即可查看将执行的场景。'}</section>}
         </div></div>
     </>;

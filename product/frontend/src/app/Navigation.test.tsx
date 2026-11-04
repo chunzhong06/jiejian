@@ -1,15 +1,18 @@
-import {fireEvent,render,screen,within} from '@testing-library/react'
+import {fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
 import {Breadcrumbs,pageTransitionKey} from './Navigation'
 import {AppShell} from './shell/AppShell'
+import {SettingsWorkspace} from './shell/SettingsWorkspace'
+import {settingsSection} from '../shared/lib/settings'
 import {historyLocation,type Route} from '../shared/lib/navigation'
+import {subscribePageRefresh} from '../shared/lib/pageRefresh'
 
 const route=(path:string,query=''):Route=>({path,query:new URLSearchParams(query)})
 
 it('报告面包屑回到当前应用和对应历史列表',()=>{
   render(<Breadcrumbs route={route('/reports','run_id=run_a')} projectName="数字展馆" projectId="project-a"/>)
   expect(screen.getByRole('link',{name:'数字展馆'})).toHaveAttribute('href','#/workspace?project_id=project-a')
-  expect(screen.getByRole('link',{name:'检查记录'})).toHaveAttribute('href','#/reports?project_id=project-a')
+  expect(screen.getByRole('link',{name:'运行记录'})).toHaveAttribute('href','#/reports?project_id=project-a')
   expect(screen.getByText('报告详情')).toHaveAttribute('aria-current','page')
 })
 
@@ -17,6 +20,8 @@ it('页面身份区分业务对象，证据页签不重新播放整页过渡',()
   expect(pageTransitionKey(route('/reports','run_id=a&tab=trace'),'app')).toBe(pageTransitionKey(route('/reports','run_id=a&tab=records'),'app'))
   expect(pageTransitionKey(route('/reports','run_id=a'),'app')).not.toBe(pageTransitionKey(route('/reports','run_id=b'),'app'))
   expect(pageTransitionKey(route('/preparation'),'app')).not.toBe(pageTransitionKey(route('/preparation','identities=1'),'app'))
+  expect(pageTransitionKey(route('/application','view=sources'),'app')).toBe(pageTransitionKey(route('/application','view=business'),'app'))
+  expect(pageTransitionKey(route('/application','view=create'),'app')).not.toBe(pageTransitionKey(route('/application','view=environment'),'app'))
 })
 
 it('历史返回不接受报告详情或其他页面作为列表地址',()=>{
@@ -28,18 +33,82 @@ it('历史返回不接受报告详情或其他页面作为列表地址',()=>{
 
 it('面包屑链接可由键盘聚焦',()=>{
   render(<Breadcrumbs route={route('/preparation','identities=1')} projectName="展馆" projectId="app"/>)
-  const link=screen.getByRole('link',{name:'检查准备'})
+  const link=screen.getByRole('link',{name:'测试准备'})
   fireEvent.focus(link)
   expect(link).toHaveAttribute('href','#/preparation?project_id=app')
 })
 
-vi.mock('./shell/RuntimeStatus',()=>({RuntimeStatus:()=>null}))
+vi.mock('../entities/runtime/api/collaboration',async importOriginal=>{const actual=await importOriginal<typeof import('../entities/runtime/api/collaboration')>();return {...actual,collaborationApi:{...actual.collaborationApi,current:vi.fn(async()=>null)}}})
 vi.mock('./shell/Activity',()=>({Activity:()=>null}))
 
-it('全局工具入口保留当前应用归属，返回工作区时仍指向原应用',()=>{
-  render(<AppShell route={route('/tools','project_id=app-a')} current="/tools" project={{project_id:'app-a',name:'工单'}} choose={vi.fn()} appearance="light" toggleAppearance={vi.fn()}><h1>开发工具</h1></AppShell>)
+it('Agent入口位于应用资料后，设置为侧栏底部图文入口，链接保留应用归属',async()=>{
+  render(<AppShell route={route('/workspace','project_id=app-a&view=collaboration&task_id=old')} current="/workspace" project={{project_id:'app-a',name:'工单'}} choose={vi.fn()} appearance="light" toggleAppearance={vi.fn()}><h1>协作任务</h1></AppShell>)
   const tools=within(screen.getByRole('navigation',{name:'全局工具'}))
-  expect(tools.getByRole('link',{name:'开发工具'})).toHaveAttribute('href','#/tools?project_id=app-a')
-  expect(tools.getByRole('link',{name:'本地存储'})).toHaveAttribute('href','#/storage?project_id=app-a')
-  expect(within(screen.getByRole('navigation',{name:'应用工作区'})).getByRole('link',{name:'应用概览'})).toHaveAttribute('href','#/workspace?project_id=app-a')
+  const settings=within(screen.getByRole('navigation',{name:'设置入口'})).getByRole('button',{name:'设置'})
+  expect(settings).toHaveTextContent('设置')
+  expect(tools.queryByRole('button',{name:'设置'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('navigation',{name:'本地维护'})).not.toBeInTheDocument()
+  expect(tools.getAllByRole('button').at(-1)).toHaveAccessibleName('退出界鉴')
+  expect(tools.queryByRole('button',{name:'Agent 协作，开始任务'})).not.toBeInTheDocument()
+  expect(within(screen.getByRole('navigation',{name:'Agent协作'})).getByRole('button',{name:'Agent 协作，开始任务'})).toHaveTextContent('Agent 协作')
+  expect(within(screen.getByRole('navigation',{name:'Agent协作'})).getByRole('button')).toHaveAttribute('aria-current','page')
+  expect(screen.getByRole('link',{name:'工作台'})).not.toHaveAttribute('aria-current')
+  expect(within(screen.getByRole('navigation',{name:'当前位置'})).getByText('Agent 协作')).toHaveAttribute('aria-current','page')
+  expect(tools.getAllByRole('button')).toHaveLength(3)
+  expect(tools.getAllByRole('button')[0]).toHaveAccessibleName('刷新当前界面')
+  fireEvent.click(settings)
+  expect(location.hash).toBe('#/settings?project_id=app-a')
+  expect(screen.queryByRole('dialog',{name:'设置'})).not.toBeInTheDocument()
+  expect(within(screen.getByRole('navigation',{name:'应用工作区'})).getByRole('link',{name:'工作台'})).toHaveAttribute('href','#/workspace?project_id=app-a')
+  expect(within(screen.getByRole('navigation',{name:'应用工作区'})).getAllByRole('link')).toHaveLength(4)
+  expect(screen.queryByRole('navigation',{name:'应用与示例'})).not.toBeInTheDocument()
+  expect(within(screen.getByRole('navigation',{name:'应用资料'})).getByRole('link',{name:'应用与来源'})).toHaveAttribute('href','#/application?project_id=app-a')
+})
+
+it('顶栏刷新等待当前读取，持续点击不重复启动且不重新挂载正文',async()=>{
+  let finish!:()=>void
+  const read=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve})),unsubscribe=subscribePageRefresh(read)
+  try{
+    render(<AppShell route={route('/workspace')} current="/workspace" choose={vi.fn()} appearance="light" toggleAppearance={vi.fn()}><input aria-label="草稿" defaultValue="未提交"/></AppShell>)
+    const draft=screen.getByLabelText('草稿'),refresh=screen.getByRole('button',{name:'刷新当前界面'})
+    fireEvent.click(refresh)
+    expect(screen.getByRole('button',{name:'刷新当前界面'})).toBeDisabled()
+    fireEvent.click(screen.getByRole('button',{name:'刷新当前界面'}))
+    expect(read).toHaveBeenCalledOnce()
+    finish()
+    await waitFor(()=>expect(screen.getByRole('button',{name:'刷新当前界面'})).toBeEnabled())
+    expect(screen.getByLabelText('草稿')).toBe(draft)
+    expect(draft).toHaveValue('未提交')
+  }finally{unsubscribe()}
+})
+
+it('应用菜单分开切换与新建命令，示例不占业务导航',async()=>{
+  const choose=vi.fn()
+  render(<AppShell route={route('/workspace')} current="/workspace" project={{project_id:'app-a',name:'工单'}} projects={[{project_id:'app-a',name:'工单'},{project_id:'app-b',name:'结算'}]} choose={choose} appearance="light" toggleAppearance={vi.fn()}><h1>工单</h1></AppShell>)
+  fireEvent.click(screen.getByRole('button',{name:'切换应用，当前：工单'}))
+  expect(await screen.findByRole('link',{name:'新建应用工作区'})).toHaveAttribute('href','#/application?view=create&project_id=app-a')
+  expect(screen.getByRole('link',{name:'官方示例'})).toHaveAttribute('href','#/environment')
+  fireEvent.click(screen.getByRole('menuitem',{name:'结算'}))
+  expect(choose).toHaveBeenCalledWith('app-b')
+})
+
+it('设置分类保留应用归属，导航不重复展示服务状态',()=>{
+  const preload=vi.fn()
+  render(<SettingsWorkspace onPreload={preload} route={route('/settings','section=storage')} projectId="app-a"><h2>存储内容</h2></SettingsWorkspace>)
+  const categories=within(screen.getByRole('navigation',{name:'设置分类'}))
+  expect(categories.getByRole('link',{name:'本地存储'})).toHaveAttribute('href','#/settings?section=storage&project_id=app-a')
+  expect(categories.getByRole('link',{name:'本地存储'})).toHaveAttribute('aria-current','page')
+  fireEvent.pointerEnter(categories.getByRole('link',{name:'运行与维护'}))
+  expect(preload).toHaveBeenCalledWith('/settings?section=system')
+  expect(categories.getByRole('link',{name:'运行与维护'})).toHaveAttribute('href','#/settings?section=system&project_id=app-a')
+  expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1)
+})
+
+it('旧设置链接和新分类共享页面归属，分类切换保留外层页面',()=>{
+  for(const [path,section] of [['/tools','tools'],['/settings/models','tools'],['/storage','storage'],['/system','system']])expect(settingsSection(route(path))).toBe(section)
+  expect(settingsSection(route('/settings','section=unknown'))).toBe('tools')
+  expect(pageTransitionKey(route('/settings','section=tools'),'app')).toBe(pageTransitionKey(route('/settings','section=storage'),'app'))
+  render(<Breadcrumbs route={route('/storage')} projectId="app-a"/>)
+  expect(screen.getByRole('link',{name:'设置'})).toHaveAttribute('href','#/settings?project_id=app-a')
+  expect(screen.getByText('本地存储')).toHaveAttribute('aria-current','page')
 })

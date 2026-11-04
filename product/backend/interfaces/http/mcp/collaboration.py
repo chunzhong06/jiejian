@@ -4,6 +4,7 @@ from mcp.server.mcpserver import Context
 from mcp.types import ToolAnnotations
 
 from product.backend.application.agent_access.service import MCPAccessLevel
+from product.backend.application.agent_access.handoff import EditorHandoff
 from product.backend.application.agent_access.tasks import (
     CreateCollaboration, CollaborationAction, CollaborationQuestion,
 )
@@ -24,9 +25,9 @@ def register_collaboration_tools(server, core, access, *, require_level, invoke)
     @server.tool(name='jiejian_collaboration_create', structured_output=True)
     def create(ctx: Context, project_id: str, operation_id: OperationId, goal: str,
         purpose: Literal['CHECK','CHECK_AND_REPAIR','REPAIR','SETUP','RULES','UNDERSTAND','MAINTENANCE']='CHECK',
-        references: dict[str, str] | None=None) -> dict[str, Any]:
+        references: dict[str, str] | None=None, editor: EditorHandoff | None=None) -> dict[str, Any]:
         require_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        command = invoke(lambda: CreateCollaboration(operation_id=operation_id, goal=goal, purpose=purpose, references=references or {}), input_model=CreateCollaboration, input_root='task')
+        command = invoke(lambda: CreateCollaboration(operation_id=operation_id, goal=goal, purpose=purpose, references=references or {}, editor=editor), input_model=CreateCollaboration, input_root='task')
         return invoke(lambda: core.collaboration.create(project_id, command))
 
     @server.tool(name='jiejian_collaboration_context', structured_output=True, annotations=read)

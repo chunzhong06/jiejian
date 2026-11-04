@@ -194,7 +194,7 @@ class ReadyResponse(ApiModel):
     status: Literal["ready"]
     worker: Literal["running", "stopped", "unavailable"]
     worker_capabilities: tuple[
-        Literal["CHECK", "RECORDING", "PROOF_PREFLIGHT", "REFERENCE_CAPTURE", "IDENTITY_PREPARATION"], ...
+        Literal["CHECK", "RECORDING", "PROOF_PREFLIGHT", "REFERENCE_CAPTURE", "IDENTITY_PREPARATION", "FLOW_TRIAL"], ...
     ]
     check: Literal["available", "unavailable"]
     recovered_jobs: int

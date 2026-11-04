@@ -1,0 +1,12 @@
+.jj-index-selection { position:relative; isolation:isolate; min-width:0; background:transparent; }
+.jj-index-surface { position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; list-style:none; background:var(--selected); pointer-events:none; transition:transform var(--motion-indicator) var(--ease-layout),width var(--motion-indicator) var(--ease-layout),height var(--motion-indicator) var(--ease-layout); }
+.jj-index-surface::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent); }
+.jj-index-selection .jj-index-item { position:relative; z-index:1; width:100%; min-height:50px; padding:11px 20px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ink); text-align:left; font-size:var(--text-body); font-weight:550; cursor:pointer; --state-fill:var(--hover); }
+.jj-index-item :is(small,time,code) { font-weight:400; }
+.jj-index-item > .anticon:first-child { display:inline-flex; align-items:center; justify-content:center; flex:none; width:28px; height:28px; }
+.jj-index-selection .jj-index-item > .jj-result-symbol { width:28px; height:28px; align-self:center; margin:0; }
+.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) { background:transparent; color:var(--accent-ink); box-shadow:none; --state-fill:transparent; }
+/* 选中蓝底上的短状态文字沿用选中前景，避免语义色直接叠在另一种底色上。 */
+.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) :is(small,time,[data-tone]) { color:inherit; }
+.jj-index-selection .jj-index-item.jj-button:active { transform:none; }
+.jj-index-selection .jj-index-item:disabled { cursor:default; }

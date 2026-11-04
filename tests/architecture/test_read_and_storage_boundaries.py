@@ -11,13 +11,14 @@ from product.backend.infrastructure.storage.base import Base
 ROOT=Path(__file__).resolve().parents[2]
 
 
-def test_result_routes_are_read_only_and_forward_the_exact_evidence_context():
+@pytest.mark.parametrize('record_id',[None,'original-record'])
+def test_result_routes_are_read_only_and_forward_the_exact_evidence_context(record_id):
     read=Mock(return_value={'evidence':[]})
     router=build_results_router(SimpleNamespace(check_results=SimpleNamespace(evidence_bundle=read)))
     assert router.routes and all(route.methods=={'GET'} for route in router.routes)
     endpoint=next(route.endpoint for route in router.routes if route.path.endswith('/evidence-bundle'))
-    endpoint(run_id='original-run',project_id='original-project',case_id='original-case',evidence_id=['original-evidence'])
-    read.assert_called_once_with('original-project','original-run','original-case',['original-evidence'])
+    endpoint(run_id='original-run',project_id='original-project',case_id='original-case',evidence_id=['original-evidence'],record_id=record_id)
+    read.assert_called_once_with('original-project','original-run','original-case',['original-evidence'],record_id=record_id)
 
 
 def test_result_readers_do_not_write_facts_or_execute_target_adapters():

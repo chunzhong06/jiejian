@@ -113,10 +113,34 @@ def test_docs_uses_existing_python_without_full_prepare_or_uv(tmp_path, powershe
         f"$Update={'$true' if update else '$false'};$CommandArguments=@();$script:seen=@();Invoke-Docs;"
         "[pscustomobject]@{calls=@($script:seen)}|ConvertTo-Json -Depth 4 -Compress")
     calls=powershell_record(command)['calls']
-    assert [call['stage'] for call in calls]==(['docs','docs-check'] if update else ['docs'])
+    assert [call['stage'] for call in calls]==['docs']
     assert all(Path(call['args'][0])==tmp_path/'python.exe' and '-B' in call['args'] for call in calls)
     assert ('--update' in calls[0]['args']) is update
     assert all('--update' not in call['args'] for call in calls[1:])
+
+
+def test_frontend_projection_reuses_bytes_and_repairs_same_timestamp_corruption(tmp_path,powershell_record):
+    source=tmp_path/'source.ts';source.write_text('actual input',encoding='utf-8')
+    workspace=tmp_path/'workspace';workspace.mkdir()
+    command=(f". {_powershell_literal(ROOT/'scripts/development/files.ps1')};"
+        f". {_powershell_literal(MODULE_ROOT/'frontend-workspace.ps1')};"
+        f". {_powershell_literal(MODULE_ROOT/'frontend.ps1')};"
+        "$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);"
+        f"$workspace={_powershell_literal(workspace)};"
+        f"$inputs=@([pscustomobject]@{{source={_powershell_literal(source)};relative='source.ts'}});"
+        "Sync-FrontendWorkspaceSources $workspace $inputs;$target=Join-Path $workspace 'source.ts';"
+        "$old=(Get-Item -LiteralPath $target).LastWriteTimeUtc;"
+        "Sync-FrontendWorkspaceSources $workspace $inputs;"
+        "$same=(Get-Item -LiteralPath $target).LastWriteTimeUtc -eq $old;"
+        "[IO.File]::WriteAllText($target,'wrong bytes!');(Get-Item -LiteralPath $target).LastWriteTimeUtc=$old;"
+        "Sync-FrontendWorkspaceSources $workspace $inputs;"
+        f"$expected={_powershell_literal(tmp_path/'expected')};New-Item -ItemType Directory -Path $expected|Out-Null;"
+        "Copy-Item -LiteralPath $target -Destination (Join-Path $expected 'source.ts');"
+        "Remove-Item -LiteralPath (Join-Path $workspace '.jiejian-source-manifest.json');"
+        "$equal=Test-FrontendInstanceContent $expected $workspace;"
+        "[IO.File]::WriteAllText($target,'wrong bytes!');"
+        "[pscustomobject]@{unchanged=$same;repaired=$equal;corruption_rejected=(-not (Test-FrontendInstanceContent $expected $workspace))}|ConvertTo-Json -Compress")
+    assert powershell_record(command)==dict(unchanged=True,repaired=True,corruption_rejected=True)
 
 
 def _run_environment_restore_probe(*, raise_after_mutation: bool) -> dict[str, object]:
@@ -197,19 +221,19 @@ def test_frontend_type_failure_stops_vitest_and_restores_location(tmp_path):
         f". {_powershell_literal(MODULE_ROOT / 'commands.ps1')};"
         f"$script:DevelopmentRoot={_powershell_literal(tmp_path)};$script:VarDir=$script:DevelopmentRoot;"
         f"$script:ProjectRoot={_powershell_literal(ROOT)};$script:Node='fixture';$script:PnpmRunner=@('fixture');"
-        "$script:calls=@();$before=(Get-Location).Path;"
+        "$script:Utf8NoBom=New-Object Text.UTF8Encoding($false);$script:calls=@();$before=(Get-Location).Path;"
         "function Remove-LegacyFrontendArtifacts {};function Get-FrontendSourceInputs {};"
         "function Get-FrontendDependencyDigest {'fixture'};function Prepare-FrontendWorkspace {};"
         f"function Get-FrontendWorkspace {{{_powershell_literal(tmp_path)}}};"
         "function Invoke-External {param($Stage,$Invocation) $script:calls+=$Stage;if($Stage -eq 'frontend-types'){throw 'TYPE_CONTRACT_FAILED'}};"
-        "try {Invoke-FrontendTest $null;exit 3}catch{if($_.Exception.Message -ne 'TYPE_CONTRACT_FAILED'){exit 4}};"
+        "try {Invoke-FrontendTest $null;exit 3}catch{if($_.Exception.Message -ne 'TYPE_CONTRACT_FAILED'){throw}};"
         "[pscustomobject]@{calls=$script:calls;location_restored=((Get-Location).Path -eq $before)}|ConvertTo-Json -Compress"
     )
     completed = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT,
                                text=True, capture_output=True, check=False)
-    assert completed.returncode == 0, completed.stdout
+    assert completed.returncode == 0, completed.stdout + completed.stderr
     record = json.loads(completed.stdout.strip().splitlines()[-1])
-    assert record == {"calls": ["frontend-editor", "frontend-types"], "location_restored": True}
+    assert record == {"calls": ["frontend-editor", "test-identity", "frontend-types"], "location_restored": True}
 
 @pytest.mark.parametrize('arguments',[[],['one value','--literal']])
 def test_external_command_wrapper_preserves_arguments(tmp_path, powershell_record, arguments):

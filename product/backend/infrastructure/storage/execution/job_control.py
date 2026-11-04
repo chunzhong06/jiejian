@@ -78,6 +78,7 @@ class JobControlRepository:
                         JobRow.operation_type == "RUNTIME_LOAD"),
                     and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None),
                         JobRow.operation_type == "PROOF_PREFLIGHT"),
+                    and_("FLOW_TRIAL" in target_types,JobRow.flow_trial_id.is_not(None),JobRow.operation_type=="FLOW_TRIAL"),
                     and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None),
                         JobRow.operation_type=='REFERENCE_CAPTURE'),
                     and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None),
@@ -282,6 +283,7 @@ class JobControlRepository:
                     and_("RUNTIME_LOAD" in target_types, JobRow.runtime_load_id.is_not(None)),
                     and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None)),
                     and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None)),
+                    and_("FLOW_TRIAL" in target_types,JobRow.flow_trial_id.is_not(None)),
                     and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None))),
             )
             .order_by(JobRow.lease_expires_at_us, JobRow.created_at_us, JobRow.job_id)
@@ -509,6 +511,17 @@ class JobControlRepository:
         """仅在原授权仍有效的发布事务中调用；不改变任何Run或权限结论。"""
         changed_id=_scalar_value(self._session,update(JobRow).where(JobRow.job_id==job_id,
             JobRow.reference_capture_id==capture_id,JobRow.operation_type=='REFERENCE_CAPTURE',
+            JobRow.request_hash==request_hash,JobRow.state==JobState.RUNNING.value,JobRow.attempt==attempt,
+            JobRow.lease_owner==lease_owner,JobRow.fencing_token==fencing_token,
+            JobRow.lease_expires_at_us>now_us if require_active_lease else JobRow.lease_expires_at_us.is_not(None),
+            JobRow.updated_at_us<=now_us,JobRow.cancel_requested_at_us.is_(None)).values(
+            state=JobState.SUCCEEDED.value,lease_owner=None,lease_expires_at_us=None,updated_at_us=now_us).returning(JobRow.job_id))
+        return None if changed_id is None else self._jobs.get(changed_id)
+
+    def complete_flow_trial(self,*,job_id,trial_id,request_hash,attempt,lease_owner,fencing_token,now_us,require_active_lease=True):
+        """仅在原授权仍有效的发布事务中调用；不改变任何Run或权限结论。"""
+        changed_id=_scalar_value(self._session,update(JobRow).where(JobRow.job_id==job_id,
+            JobRow.flow_trial_id==trial_id,JobRow.operation_type=='FLOW_TRIAL',
             JobRow.request_hash==request_hash,JobRow.state==JobState.RUNNING.value,JobRow.attempt==attempt,
             JobRow.lease_owner==lease_owner,JobRow.fencing_token==fencing_token,
             JobRow.lease_expires_at_us>now_us if require_active_lease else JobRow.lease_expires_at_us.is_not(None),

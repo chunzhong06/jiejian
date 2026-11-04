@@ -19,7 +19,7 @@ export function RuleCheckScope({ projectId, changeId }: {
     if (state.loading)
         return <Loading>正在读取本次修复目标</Loading>;
     if (state.error)
-        return <ErrorNote error={state.error} onRetry={state.reload}/>;
+        return <ErrorNote error={state.error}/>;
     if (!state.data)
         return null;
     const { workspace, change } = state.data;

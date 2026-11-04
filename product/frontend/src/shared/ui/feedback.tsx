@@ -1,13 +1,20 @@
 import type {ReactNode} from 'react'
 import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
-import {Button} from './actions'
+import ExclamationCircleOutlined from '@ant-design/icons/ExclamationCircleOutlined';
+import {Heading} from './layout'
 
-export function Badge({children,tone='neutral'}:{children:ReactNode;tone?:'neutral'|'positive'|'negative'|'caution'|'accent'}){return <span className={`jj-badge is-${tone}`}>{children}</span>}
+export type FeedbackTone='neutral'|'positive'|'negative'|'caution'|'accent'
 
-export function Empty({title,children,action}:{title:string;children?:ReactNode;action?:ReactNode}){return <section className="jj-empty"><span className="jj-empty-mark" aria-hidden="true">[ ]</span><h2>{title}</h2>{children&&<p>{children}</p>}{action}</section>}
+export function Badge({children,tone='neutral'}:{children:ReactNode;tone?:FeedbackTone}){return <span className={`jj-badge is-${tone}`}>{children}</span>}
+
+export function Empty({title,children,action}:{title:string;children?:ReactNode;action?:ReactNode}){return <section className="jj-empty"><div className="jj-empty-copy"><h2>{title}</h2>{children&&<p>{children}</p>}</div>{action&&<div className="jj-empty-actions">{action}</div>}</section>}
 
 export function Loading({children='正在读取',page=false}:{children?:ReactNode;page?:boolean}){return <div className="jj-loading" role="status" data-page-pending={page||undefined}><LoadingOutlined aria-hidden="true" spin/>{children}</div>}
 
-export function ErrorNote({error,onRetry}:{error:unknown;onRetry?:()=>void}){return <div className="jj-notice is-negative" role="alert"><span>{error instanceof Error?error.message:'请求未完成，请重新读取。'}</span>{onRetry&&<Button kind="quiet" onClick={onRetry}>重新读取</Button>}</div>}
+export function ErrorNote({error}:{error:unknown}){return <div className="jj-notice is-negative" role="alert"><span>{error instanceof Error?error.message:'请求未完成，可通过右上角刷新重新读取。'}</span></div>}
 
-export function Notice({children,tone='caution'}:{children:ReactNode;tone?:string}){return <div className={`jj-notice is-${tone}`} role="status">{children}</div>}
+export function PageError({title,error}:{title:string;error:unknown}){
+  return <section className="jj-page-state"><Heading title={title}/><div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>已保存的资料保留。处理下面的原因后，可使用右上角刷新继续工作。</p><ErrorNote error={error}/></div></div></section>
+}
+
+export function Notice({children,tone='neutral'}:{children:ReactNode;tone?:FeedbackTone}){return <div className={`jj-notice is-${tone}`} role="status">{children}</div>}

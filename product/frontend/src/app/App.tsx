@@ -43,8 +43,8 @@ export default function App(){
   return <UIProvider appearance={appearance}>
     <AppShell route={route} current={current} project={project} projects={projects.data} choose={application.choose} appearance={appearance} toggleAppearance={toggle}>
       {Boolean(error)&&<div className="jj-global-error"><ErrorNote error={error}/><Button kind="quiet" aria-label="关闭错误提示" icon={<CloseOutlined aria-hidden="true"/>} onClick={()=>setError(undefined)}/></div>}
-      {projects.error&&<ErrorNote error={projects.error} onRetry={projects.reload}/>}
-      <PageSurface transitionKey={key} view={current+(route.query.has('proposal_id')?'/review':route.query.get('view')==='plan'?'/plan':route.query.has('run_id')?'/result':'')}>
+      {projects.error&&<ErrorNote error={projects.error}/>}
+      <PageSurface route={route.path+(route.query.size?'?'+route.query.toString():'')} transitionKey={key} view={current+(route.query.has('proposal_id')?'/review':route.query.get('view')==='plan'?'/plan':route.query.has('run_id')?'/result':'')}>
         <RouteBoundary key={key}>
           {application.resolutionError?<ErrorNote error={application.resolutionError}/>:application.resolving?<PageSkeleton view={current}/>:<RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} environment={environment.data} onConnected={application.connected} onError={setError}/>}
         </RouteBoundary>

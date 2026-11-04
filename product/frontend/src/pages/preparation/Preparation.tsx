@@ -1,10 +1,11 @@
+import {IndexSelection} from '../../shared/ui/IndexSelection'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
 import {RuleCaseData} from './materials/RuleCaseData';
 import { materialReasons } from './materials/reasons';
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import './styles/preparation.css'
 import './styles/materials.css'
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import UserOutlined from '@ant-design/icons/UserOutlined';
 import VideoCameraOutlined from '@ant-design/icons/VideoCameraOutlined';
@@ -22,7 +23,7 @@ import { assertProject, type PageProps } from '../../shared/model/page';
 import { go, returnDestination } from '../../shared/lib/navigation';
 import { text } from '../../shared/lib/format';
 import { useRead } from '../../shared/lib/useRead';
-import { Badge, Empty, ErrorNote, Notice } from "../../shared/ui/feedback";
+import {PageError,  Badge, Empty, ErrorNote, Notice } from "../../shared/ui/feedback";
 import { Button } from "../../shared/ui/actions";
 import { Heading } from "../../shared/ui/layout";
 import { Accounts } from './materials/Accounts';
@@ -86,7 +87,7 @@ export function Preparation(props: PageProps) {
     if (state.loading)
         return <PageSkeleton view="/preparation"/>;
     if (state.error && !state.data)
-        return <ErrorNote error={state.error} onRetry={state.reload}/>;
+        return <PageError title="检查准备" error={state.error}/>;
     if (!state.data)
         return null;
     const preparation = state.data, batch = batchState.data;
@@ -97,14 +98,14 @@ export function Preparation(props: PageProps) {
     const pending = Boolean(sessionStorage.getItem(key)) && !batch;
     const changed = state.error !== undefined || batchState.error !== undefined || batchState.loading;
     if (ruleId && !ruleAction)
-        return <><Heading title="检查准备"/><Notice>这条规则已不在当前准备范围中。<Button onClick={() => go('/permissions?rule_id=' + encodeURIComponent(ruleId))}>重新核对规则</Button></Notice></>;
+        return <><Heading title="检查准备"/><Notice tone="caution">这条规则已不在当前准备范围中。<Button onClick={() => go('/permissions?rule_id=' + encodeURIComponent(ruleId))}>重新核对规则</Button></Notice></>;
     const requestedKind = route.query.get('material_kind') as Kind | null;
     const requestedMaterial = action && requestedKind && ['execution', 'recovery', 'resource', 'evidence'].includes(requestedKind) ? { ref: { action_id: action.action_id, action_revision: action.action_revision, kind: requestedKind as MaterialReference['kind'], member_id: route.query.get('member_id') }, label: materialNames[requestedKind] } : undefined;
     const currentMaterial = requestedMaterial;
     if (currentMaterial)
         return <MaterialEditor resumeRecordingId={route.query.get('recording_id') ?? undefined} projectId={projectId} reference={currentMaterial.ref} label={currentMaterial.label} actionName={preparation.actions.find(item => item.action_id === currentMaterial.ref.action_id)?.display_name} onBack={closeMaterial} onError={onError}/>;
     if (opened === 'identity')
-        return <Accounts projectId={projectId} actions={preparation.actions} requestedSlot={route.query.get('account_slot')} requestedPreparation={route.query.get('preparation_id')} onBack={closeMaterial} onError={onError}/>;
+        return <Accounts projectId={projectId} actions={preparation.actions} requestedIdentity={route.query.get('identity_id')} requestedSlot={route.query.get('account_slot')} requestedPreparation={route.query.get('preparation_id')} onBack={closeMaterial} onError={onError}/>;
     if (opened === 'evidence')
         return <Sources projectId={projectId} actionId={action?.action_id} requestedSource={route.query.get('source_id')} onLocate={id => navigate({ action_id: action?.action_id ?? null, source_id: id, proof_sources: '1' })} onBack={closeMaterial} onError={onError}/>;
     if (plan)
@@ -142,9 +143,9 @@ export function Preparation(props: PageProps) {
     else if (selectedGroup)
         openMaterial(selectedGroup.key); };
     const effectName = (id: string) => action?.effect_evidence.find(item => item.effect_id === id)?.business_label ?? '业务结果';
-    return <>{returnTo && <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(returnTo)}>返回本次检查</Button></div>}<Heading title="检查准备" actions={preparation.actions.length > 0 ? <Button busy={busy} disabled={Boolean(running) || pending || changed} onClick={() => void act(async () => { setAck(false); setPlan(await batches.preview(projectId, official ? 'OFFICIAL' : 'REVIEWED')); })}>{preparation.preparation_complete ? '核对整批材料' : official ? '准备示例材料' : '核对整批材料'}</Button> : undefined}/>{state.error && <ErrorNote error={state.error} onRetry={state.reload}/>}{batchState.error && <ErrorNote error={batchState.error} onRetry={batchState.reload}/>}
+    return <>{returnTo && <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(returnTo)}>返回本次检查</Button></div>}<Heading title="检查准备" actions={preparation.actions.length > 0 ? <Button busy={busy} disabled={Boolean(running) || pending || changed} onClick={() => void act(async () => { setAck(false); setPlan(await batches.preview(projectId, official ? 'OFFICIAL' : 'REVIEWED')); })}>{preparation.preparation_complete ? '核对整批材料' : official ? '准备示例材料' : '核对整批材料'}</Button> : undefined}/>{state.error && <ErrorNote error={state.error}/>}{batchState.error && <ErrorNote error={batchState.error}/>}
     {running && <section className="jj-panel"><div className="jj-panel-heading"><h2>正在准备材料</h2><Badge tone="accent">{batch.completed} / {batch.total}</Badge></div><progress value={batch.completed} max={batch.total || 1}/><div className="jj-batch-items">{batch.identities?.map(item => <div key={item.account}><span>{item.account === 'curator' ? '负责人账号' : item.account === 'judge' ? '评审账号' : item.account}</span><span>{item.state === 'PREPARED' ? '已登录' : item.state === 'FAILED' ? '准备中断' : '处理中'}</span></div>)}{batch.items?.map(item => <div key={item.label}><span>{text(item.label)}</span><span>{({ READY: '已就绪', CHECKING: '正在核对', BLOCKED: '需要处理', WAITING: '等待处理' } as Record<string, string>)[item.state] ?? text(item.state)}</span></div>)}</div><Button kind="quiet" disabled={batch.cancel_requested} onClick={() => void act(async () => { await batches.cancel(projectId, batch.operation_id); reload(); })}>{batch.cancel_requested ? '正在停止' : '停止准备'}</Button></section>}
-    {pending && <Notice>准备请求的结果尚未确认。<Button onClick={batchState.reload}>查询本次准备</Button></Notice>}{batch?.state === 'BLOCKED' && <Notice tone={batch.error_code === 'PREPARATION_INTERNAL_ERROR' ? 'negative' : 'caution'}>{text(batch.message)}</Notice>}{batch?.state === 'CANCELLED' && <Notice tone="neutral">{text(batch.message)}</Notice>}
+    {pending && <Notice tone="caution">准备请求的结果尚未确认。<Button onClick={batchState.reload}>查询本次准备</Button></Notice>}{batch?.state === 'BLOCKED' && <Notice tone={batch.error_code === 'PREPARATION_INTERNAL_ERROR' ? 'negative' : 'caution'}>{text(batch.message)}</Notice>}{batch?.state === 'CANCELLED' && <Notice tone="neutral">{text(batch.message)}</Notice>}
     {preparation.impacts?.some(item=>['STALE','BLOCKED'].includes(item.status)) && <details className="jj-preparation-impact"><summary>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).length} 项材料需要处理，{preparation.impacts.filter(item=>item.status==='SATISFIED').length} 项仍可沿用</summary><div>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).map((item,index)=><article key={item.action_id+item.kind+index}><div><strong>{text(item.action_label)} / {materialNames[item.kind]}{item.member_label ? ' / '+text(item.member_label) : ''}</strong>{materialReasons(item.reason_codes).map(reason=><p className="jj-small jj-muted" key={reason}>{reason}</p>)}</div><span className="jj-small jj-muted">涉及 {item.permission_ids.length} 条规则</span><Button onClick={()=>{setSelected(item.action_id);setFocused(item.kind);navigate({action_id:item.action_id,focus:item.kind,rule_id:null,material_kind:['execution','resource','recovery'].includes(item.kind)?item.kind:null,member_id:item.member_id,identities:item.kind==='identity'?'1':null,proof_sources:item.kind==='evidence'?'1':null});}}>核对材料</Button></article>)}</div></details>}
     {!preparation.actions.length ? <Empty title="先确认要检查的权限" action={<Button kind="primary" onClick={() => go('/permissions')}>打开权限规则</Button>}/> : <>
       {action.assurance_contract.allow_controls.filter(control => !control.resolved_allow_permission && control.candidate_allow_permissions.length > 1).map(control => <section className="jj-panel" key={control.selection_fingerprint}><h3>选择用来确认正常功能的操作</h3><fieldset className="jj-choice-field">{control.candidate_allow_permissions.map(candidate => { const permission = action.permissions.find(item => item.intent_id === candidate.intent_id), actor = actorName(permission?.subject_actor_id), owner = actorName(permission?.resource_owner_actor_id); return <label key={candidate.intent_id}><input type="radio" name={control.selection_fingerprint} checked={controls[control.selection_fingerprint] === candidate.intent_id} onChange={() => setControls(value => ({ ...value, [control.selection_fingerprint]: candidate.intent_id }))}/><span>{text(actor ?? '指定账号')}{text(action.display_name)}<small>{permission?.relation === 'OWNS' ? '使用自己的资源' : `使用${text(owner ?? '对应所有者')}的资源`}</small></span></label>; })}</fieldset><Button kind="primary" busy={busy} disabled={!controls[control.selection_fingerprint] || changed} onClick={() => void act(async () => { const selected = control.candidate_allow_permissions.find(item => item.intent_id === controls[control.selection_fingerprint]); if (selected) {
@@ -156,20 +157,20 @@ export function Preparation(props: PageProps) {
           <div className="jj-item-heading"><h2>{text(action.display_name)}</h2><Badge tone={action.preparation_complete ? 'positive' : 'neutral'}>{action.preparation_complete ? '材料齐备' : '准备检查材料'}</Badge></div>
           {preparation.actions.length > 1 && <div className="jj-action-tabs" aria-label="选择业务动作">{preparation.actions.map(item => <button key={item.action_id} aria-current={action.action_id === item.action_id ? 'page' : undefined} onClick={() => { setSelected(item.action_id); setOpened(undefined); setFocused(undefined); navigate({ action_id: item.action_id, rule_id: null, focus: null, material_kind: null, member_id: null }); }}>{item.preparation_complete && <CheckOutlined aria-hidden="true"/>}{text(item.display_name)}</button>)}</div>}
         </header>
-        <div className="jj-material-index">
+        <MaterialIndex identity={action.action_id+selectedGroup?.key}>
           <div className="jj-material-index-heading"><h2>所需材料</h2></div>
           {materialSections.map(section => <div className="jj-material-section" key={section.title}>
             <h3>{section.title}</h3>
             {groups.filter(group => section.kinds.includes(group.key)).map(group => {
                     const state = status(group.items);
-                    return <button className="jj-material-select" key={group.key} aria-pressed={selectedGroup?.key === group.key} aria-label={`查看${materialNames[group.key]}`} onClick={() => { setFocused(group.key); navigate({ action_id: action.action_id, focus: group.key }); }}>
+                    return <button className="jj-material-select jj-index-item" key={group.key} aria-pressed={selectedGroup?.key === group.key} aria-label={`查看${materialNames[group.key]}`} onClick={() => { setFocused(group.key); navigate({ action_id: action.action_id, focus: group.key }); }}>
               <span className="jj-material-icon">{group.icon}</span>
               <strong className="jj-material-select-label">{materialNames[group.key]}</strong><span className="jj-material-select-status" data-tone={state.tone} title={state.label}>{state.tone === 'positive' && <CheckOutlined aria-hidden="true"/>}{state.label === '需要重新核对' ? '需核对' : state.label}</span>
               <RightOutlined aria-hidden="true"/>
             </button>;
                 })}
           </div>)}
-        </div>
+        </MaterialIndex>
         {selectedGroup && <div className="jj-material-detail" data-material-kind={selectedGroup.key} key={action.action_id + selectedGroup.key}>
           <header><h2>{materialNames[selectedGroup.key]}</h2>{selectedGroup.key !== 'identity' && <Badge tone={status(selectedGroup.items).tone}>{status(selectedGroup.items).label}</Badge>}</header>
           <div className="jj-material-reading"><div className="jj-material-primary">
@@ -186,7 +187,7 @@ export function Preparation(props: PageProps) {
           <section className="jj-material-used-by"><h3>使用这些材料的规则</h3><ul>{action.permissions.map((rule, index) => { const subject = rule.conditions?.principal==='ANONYMOUS'?'未登录访客':actorName(rule.subject_actor_id) ?? '操作人', owner = actorName(rule.resource_owner_actor_id) ?? '资源所有者'; return <li key={rule.intent_id ?? index}><span className="jj-material-rule-mark" data-allowed={rule.expectation === 'ALLOW'} aria-hidden="true">{rule.expectation === 'ALLOW' ? <CheckOutlined /> : '−'}</span><div><p>{text(subject)}{rule.expectation === 'ALLOW' ? '可以' : '不得'}{text(action.display_name)}</p><small>{rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `其他${text(owner)}账号的资源` : `${text(owner)}的资源`}{conditionLabels(rule.conditions).length>0?"，"+conditionLabels(rule.conditions).join("，"):""}</small></div></li>; })}</ul></section>
           </div>
         </div>}
-        <footer className="jj-preparation-footer"><div className="jj-preparation-progress">{preparation.preparation_complete ? <CheckCircleOutlined aria-hidden="true"/> : <ClockCircleOutlined aria-hidden="true"/>}<div><strong>{preparation.preparation_complete ? '所有业务操作的材料已齐备' : `${preparation.actions.filter(item => item.preparation_complete).length} / ${preparation.actions.length} 项业务操作已准备`}</strong><p>{preparation.preparation_complete ? '提交前还会核对本次检查范围。' : nextKind ? `下一步：${materialNames[nextKind]}` : '按当前材料状态继续核对。'}</p></div></div><Button kind="primary" onClick={primary} disabled={changed || Boolean(running) || pending}>{preparation.preparation_complete ? '预览检查' : nextKind ? '准备' + materialNames[nextKind].replace(/^测试|^业务/, '') : '查看当前材料'}<ArrowRightOutlined aria-hidden="true"/></Button></footer>
+        <footer className="jj-preparation-footer"><div className="jj-preparation-progress">{preparation.preparation_complete ? <CheckCircleOutlined aria-hidden="true"/> : <ClockCircleOutlined aria-hidden="true"/>}<strong>{preparation.preparation_complete ? '所有业务操作的材料已齐备' : `${preparation.actions.filter(item => item.preparation_complete).length} / ${preparation.actions.length} 项业务操作已准备`}</strong></div><div className="jj-preparation-next"><p>{preparation.preparation_complete ? '先核对本次规则、账号与资源，再确认检查范围。' : nextKind ? `下一步：${materialNames[nextKind]}` : '打开当前材料，查看尚未完成的项目。'}</p><Button kind="primary" onClick={primary} disabled={changed || Boolean(running) || pending}>{preparation.preparation_complete ? '预览检查' : nextKind ? '准备' + materialNames[nextKind].replace(/^测试|^业务/, '') : '查看当前材料'}<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
       </section>
     </>}
   </>;
@@ -196,3 +197,7 @@ function groupsFor(action: ActionPreparation): Array<{
     icon: React.ReactNode;
     items: PreparationItem[];
 }> { return [{ key: 'identity', icon: <UserOutlined aria-hidden="true"/>, items: action.identity_requirements.slots }, { key: 'execution', icon: <VideoCameraOutlined aria-hidden="true"/>, items: [action.execution] }, { key: 'resource', icon: <DatabaseOutlined aria-hidden="true"/>, items: action.resources }, { key: 'evidence', icon: <FileDoneOutlined aria-hidden="true"/>, items: action.effect_evidence }, { key: 'recovery', icon: <UndoOutlined aria-hidden="true"/>, items: [action.recovery] }]; }
+
+function MaterialIndex({identity,children}:{identity:string;children:ReactNode}) {
+  return <IndexSelection className="jj-material-index" identity={identity}>{children}</IndexSelection>
+}

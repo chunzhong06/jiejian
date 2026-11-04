@@ -14,7 +14,7 @@ class EffectMaterialSummary(BoundaryModel):
     resource_concept: str
     material_status: PreparationStatus
     binding_fingerprint: str | None = None
-    source_kind: Literal["RECORDED_OBSERVATION", "REGISTERED_OBSERVER"] | None = None
+    source_kind: Literal["RECORDED_OBSERVATION", "REGISTERED_OBSERVER", "HTTP_ENTITY_QUERY"] | None = None
     source_label: str = "尚无证明材料"
     registered_source_available: bool | None = None
     closure_supported: bool | None = None

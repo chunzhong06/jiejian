@@ -25,7 +25,7 @@ export function RuleCaseData({projectId,action,onSaved}:{projectId:string;action
         groups.set(key,[...(groups.get(key)??[]),row]);
     }
     if(!rows.length)return null;
-    return <section className="jj-rule-data"><h3>不同状态的测试数据</h3>{state.error?<ErrorNote error={state.error} onRetry={state.reload}/>:Array.from(groups,([key,items])=>{
+    return <section className="jj-rule-data"><h3>不同状态的测试数据</h3>{state.error?<ErrorNote error={state.error}/>:Array.from(groups,([key,items])=>{
         const {rule,base,current}=items[0];
         return <article key={key}><header><div><strong>状态为 {rule.conditions!.resource_states.join('、')}</strong><p className="jj-small jj-muted">{current?`数据 ${current}，用于 ${items.length} 条规则`:'先确认这项操作的测试数据'}</p></div><Button kind="quiet" disabled={busy||!base?.binding_fingerprint} onClick={()=>{setEditing(key);setResourceId(current??'');setError(undefined);}}>选择数据</Button></header>
             {editing===key&&<div className="jj-rule-data-editor"><Field label={`测试数据编号，用于这 ${items.length} 条规则`}><input value={resourceId} disabled={busy} onChange={event=>setResourceId(event.target.value)}/></Field><Button disabled={busy} onClick={()=>setEditing(undefined)}>取消</Button><Button kind="primary" busy={busy} disabled={!resourceId.trim()||!base?.binding_fingerprint} onClick={async()=>{

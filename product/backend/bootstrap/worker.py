@@ -20,6 +20,7 @@ from product.backend.application.recording.lifecycle import RecordingLifecycle
 from product.backend.infrastructure.storage.db import require_current_database
 from product.backend.application.preparation.proofs.jobs import ProofPreflightJobs
 from product.backend.application.preparation.proofs.capture_jobs import ReferenceCaptureJobs
+from product.backend.application.preparation.trial_jobs import FlowTrialJobs
 
 
 class WorkerContainer:
@@ -65,6 +66,7 @@ class WorkerContainer:
             self._build_recording_submission,
             proof_publisher=ProofPreflightJobs(self.var_dir, self.uow_factory),
             capture_publisher=ReferenceCaptureJobs(self.var_dir,self.uow_factory),
+            trial_publisher=FlowTrialJobs(self.var_dir,self.uow_factory),
         )
         self._closed = False
 

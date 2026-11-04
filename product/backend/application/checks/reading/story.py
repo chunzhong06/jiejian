@@ -15,7 +15,7 @@ from product.backend.application.checks.reading.observation_reading import Obser
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
 from product.protocols.runtime.request_activity import RequestActivity
 from product.backend.application.reading import projection_read
-from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, FrozenRequirementScope, FrozenCheckSelection, WireModel
+from product.protocols.checks.execution_request import ChangeContext, ExternalRecheckContext, FrozenPermission, FrozenRequirementScope, FrozenCheckSelection, WireModel
 
 
 JUDGEMENTS = {
@@ -154,6 +154,7 @@ class ActionResultStory(WireModel):
 
 
 class ResultStory(WireModel):
+    external_recheck: ExternalRecheckContext | None = Field(default=None,exclude_if=lambda value:value is None)
     run_id: str
     project_id: str
     verdict: RunVerdict
@@ -323,7 +324,7 @@ class CheckStoryBuilder:
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
             technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),
-            change_context=package.request.change_context,repair_verification=verification,
+            change_context=package.request.change_context,repair_verification=verification,external_recheck=package.request.external_recheck,
             repair_comparison=repair_comparison, repair_reviews=repair_reviews)
 
 

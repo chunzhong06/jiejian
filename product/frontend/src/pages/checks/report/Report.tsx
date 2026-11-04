@@ -1,3 +1,5 @@
+import {IndexSelection} from '../../../shared/ui/IndexSelection'
+import {Segmented} from '../../../shared/ui/Segmented'
 import {conditionLabels} from '../../../entities/permission/ui/RuleConditions';
 import { useEffect, useRef, useState } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
@@ -8,7 +10,7 @@ import QuestionCircleOutlined from '@ant-design/icons/QuestionCircleOutlined';
 import type { ActionResultStory, ResultStory } from '../../../entities/check/api/currentChecks';
 import type { RepairComparisonRow } from '../../../entities/check/api/repairs';
 import { Badge, Empty, Notice } from "../../../shared/ui/feedback";
-import { Button } from "../../../shared/ui/actions";
+import { ActionLink, Button } from "../../../shared/ui/actions";
 import { AgentHandoff } from '../../../entities/check/ui/AgentHandoff';
 import { repairReference } from '../../../entities/check/api/repairs';
 import { Heading } from "../../../shared/ui/layout";
@@ -16,7 +18,7 @@ import { date, text } from '../../../shared/lib/format';
 import { go } from '../../../shared/lib/navigation';
 import { actual, gaps, judgement, judgementLabels, owner, requirement, repairGap, resultTitle, subject, type Tone } from '../../../entities/check/model/checks';
 import { EvidenceInspector } from './EvidenceInspector';
-export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proofId, stepId, checkedAt, onError, readOnly = false, basePath = '/reports', returnPath = '/reports', returnLabel = '全部报告' }: {
+export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proofId, stepId, checkedAt, onError, readOnly = false, basePath = '/reports', returnPath = '/reports', returnLabel = '全部报告', archiveName }: {
     story: ResultStory;
     selectedCaseId: string | null;
     tab: string | null;
@@ -30,6 +32,7 @@ export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proof
     basePath?: string;
     returnPath?: string;
     returnLabel?: string;
+    archiveName?: string;
 }) {
     const [page, setPage] = useState(1), [assist, setAssist] = useState(false), [resultFilter,setResultFilter]=useState<Tone|'all'>('all');
     const trigger = useRef<HTMLElement | null>(null), root = useRef<HTMLDivElement>(null), scroll = useRef(0);
@@ -51,6 +54,8 @@ export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proof
         title: string;
     }> = [{ tone: 'negative', title: '不符合规则的结果' }, { tone: 'caution', title: '尚未确认的结果' }, { tone: 'neutral', title: '其他已发布结果' }, { tone: 'positive', title: '符合规则的结果' }];
     const ordered = [...story.actions].sort((a, b) => groups.findIndex(item => item.tone === judgement(a)) - groups.findIndex(item => item.tone === judgement(b)));
+    const requirementCounts = new Map<string, number>();
+    for (const action of ordered) requirementCounts.set(requirement(action), (requirementCounts.get(requirement(action)) ?? 0) + 1);
     const filtered=ordered.filter(action=>resultFilter==='all'||judgement(action)===resultFilter);
     const visible = filtered.slice((page - 1) * 10, page * 10);
     const navigateEvidence = (kind: string, evidence?: string, record?: string, proof?: string, step?: string) => { if (!selectedCaseId)
@@ -61,18 +66,18 @@ export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proof
         query.set('step_id', (step ?? stepId)!); go(address(query.toString())); };
     const reportTone = story.verdict === 'PASS' ? 'positive' : story.verdict === 'BLOCK' ? 'negative' : 'caution';
     return <div ref={root} className="jj-report">
-    <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(returnPath)}>{returnLabel}</Button></div>
+    <div className="jj-back-link jj-report-navigation"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(returnPath)}>{returnLabel}</Button>{archiveName&&<ActionLink href="#/environment">返回官方示例<ArrowRightOutlined aria-hidden="true"/></ActionLink>}</div>
     <section className="jj-report-workspace" aria-label="检查报告" data-tone={reportTone}>
     <section className="jj-report-hero" data-tone={reportTone}>
-      <div className="jj-report-heading"><span className="jj-report-symbol" aria-hidden="true">{reportTone === 'positive' ? <CheckCircleOutlined /> : reportTone === 'negative' ? <ExclamationCircleOutlined /> : <QuestionCircleOutlined />}</span><Heading eyebrow={story.repair_verification ? '修复复验' : story.selection ? '选定规则检查' : '检查报告'} title={resultTitle(story)} actions={<><Button kind="quiet" onClick={() => setAssist(true)}>交给 Agent 解读</Button>{!readOnly && story.verdict === 'INCONCLUSIVE' && <Button kind="primary" onClick={resolveGap}>处理证据缺口</Button>}{!readOnly && story.verdict === 'BLOCK' && story.actions.some(item => item.repair_requirement) && <Button kind="primary" onClick={() => go('/permissions?repair_reference=' + encodeURIComponent((caseItem?.repair_requirement ?? story.actions.find(item => item.repair_requirement)!.repair_requirement!).repair_fingerprint))}>处理权限问题</Button>}</>}/></div>
-      <div className="jj-report-context"><div className="jj-report-metadata"><span>{story.actions.length} 项检查</span>{checkedAt && <span>{date(checkedAt)}</span>}<span>权限版本 {story.policy_epoch}</span>{story.runtime_status === 'MATCHED' && <span>运行代码已核对</span>}</div>{!readOnly && <Button kind="quiet" onClick={() => go(caseItem?.permission.intent_id ? '/permissions?rule_id=' + encodeURIComponent(caseItem.permission.intent_id) : '/permissions')}>{caseItem ? '查看这条权限规则' : '权限规则'}<ArrowRightOutlined aria-hidden="true"/></Button>}</div>
+      <div className="jj-report-heading"><Heading titleIcon={<span className="jj-report-symbol" aria-hidden="true">{reportTone === 'positive' ? <CheckCircleOutlined /> : reportTone === 'negative' ? <ExclamationCircleOutlined /> : <QuestionCircleOutlined />}</span>} eyebrow={story.repair_verification?.verification_scope==='EXTERNAL_OBSERVATION'?'外部应用再次验证':story.repair_verification ? '修复复验' : story.selection ? '选定规则检查' : '检查报告'} title={resultTitle(story)} actions={<><Button kind="quiet" onClick={() => setAssist(true)}>交给 Agent 解读</Button>{!readOnly && story.verdict === 'INCONCLUSIVE' && <Button kind="primary" onClick={resolveGap}>处理证据缺口</Button>}{!readOnly && story.verdict === 'BLOCK' && story.actions.some(item => item.repair_requirement) && <Button kind="primary" onClick={() => go('/permissions?repair_reference=' + encodeURIComponent((caseItem?.repair_requirement ?? story.actions.find(item => item.repair_requirement)!.repair_requirement!).repair_fingerprint))}>处理权限问题</Button>}</>}/></div>
+      <div className="jj-report-context"><div className="jj-report-metadata">{archiveName&&<span className="jj-archive-label"><Badge>已归档</Badge>{text(archiveName)}</span>}<span>{story.actions.length} 项检查</span>{checkedAt && <span>{date(checkedAt)}</span>}<span>权限版本 {story.policy_epoch}</span>{story.runtime_status === 'MATCHED' && <span>运行代码已核对</span>}</div>{!readOnly && <Button kind="quiet" onClick={() => go(caseItem?.permission.intent_id ? '/permissions?rule_id=' + encodeURIComponent(caseItem.permission.intent_id) : '/permissions')}>{caseItem ? '查看这条权限规则' : '权限规则'}<ArrowRightOutlined aria-hidden="true"/></Button>}</div>
     </section>
-    {story.runtime_status !== 'MATCHED' && <Notice>运行代码尚未对应到本次检查。本报告保留检查时的事实，暂不能用于验收当前源码。</Notice>}
+    {story.runtime_status !== 'MATCHED' && <Notice tone="caution">运行代码尚未对应到本次检查。本报告保留检查时的事实，暂不能用于验收当前源码。</Notice>}
     {story.selection && <div className="jj-selected-coverage"><strong>选定 {story.selection.selected.length} 条规则</strong><span>正常对照 {story.selection.added_controls.length} 条</span><span>另有 {story.selection.omitted.length} 条规则未检查</span>{story.selection.pending_review_ids.length > 0 && <span>{story.selection.pending_review_ids.length} 项未决要求不在本次结论内</span>}</div>}
-    {!story.repair_verification&&<div className="jj-report-summary jj-toggle-group" role="group" aria-label="按检查结果筛选">{([{tone:'all',label:'全部结果'}, {tone:'negative',label:'存在问题'}, {tone:'caution',label:'尚未确认'}, {tone:'positive',label:'符合规则'}] as const).map(item=><button key={item.tone} data-tone={item.tone} aria-pressed={resultFilter===item.tone} onClick={()=>{setResultFilter(item.tone);setPage(1);if(selectedCaseId)open(null)}}><strong>{item.tone==='all'?ordered.length:ordered.filter(action=>judgement(action)===item.tone).length}</strong><span>{item.label}</span></button>)}</div>}
+    {!story.repair_verification&&<Segmented label="按检查结果筛选" className="jj-report-summary" value={resultFilter} items={([{tone:'all',label:'全部结果'},{tone:'negative',label:'存在问题'},{tone:'caution',label:'尚未确认'},{tone:'positive',label:'符合规则'}] as const).map(item=>({value:item.tone,tone:item.tone,label:<><strong>{item.tone==='all'?ordered.length:ordered.filter(action=>judgement(action)===item.tone).length}</strong><span>{item.label}</span></>}))} onValueChange={value=>{setResultFilter(value);setPage(1);if(selectedCaseId)open(null)}}/>}
     <div className={`jj-report-layout${selectedCaseId ? ' has-inspector' : ''}`}>
-      <div className="jj-report-results is-balanced">
-        {story.repair_verification ? <RepairReading story={story} selectedCaseId={selectedCaseId} onInspect={open}/> : story.actions.length ? <div className="jj-result-groups" aria-label="逐项检查结果">{groups.map(group => { const items = visible.filter(action => judgement(action) === group.tone); return items.length > 0 ? <section className="jj-report-group" key={group.tone}><div className="jj-section-header"><h2>{group.title}</h2><span>{items.length} 项</span></div><div className="jj-result-list">{items.map(action => <ResultRow key={action.case_id} action={action} selected={selectedCaseId === action.case_id} compact={Boolean(selectedCaseId)} onOpen={() => open(action.case_id)}/>)}</div></section> : null; })}</div> : <Empty title="本报告没有可读取的检查项"/>}
+      <div className="jj-report-results is-balanced">{story.repair_verification?.verification_scope==='EXTERNAL_OBSERVATION'&&<Notice tone="caution">本次核对原问题和正常对照在当前观察窗口中的行为。源码修复及部署版本对应尚未独立核验。{story.external_recheck&&<p>本次部署声明：{story.external_recheck.deployment_statement}</p>}</Notice>}
+        {story.repair_verification ? <RepairReading story={story} selectedCaseId={selectedCaseId} onInspect={open}/> : story.actions.length ? <div className="jj-result-groups" aria-label="逐项检查结果">{groups.map(group => { const items = visible.filter(action => judgement(action) === group.tone); return items.length > 0 ? <section className="jj-report-group" key={group.tone}><div className="jj-section-header"><h2>{group.title}</h2><span>{items.length} 项</span></div><IndexSelection className="jj-result-list" identity={selectedCaseId??""}>{items.map(action => <ResultRow key={action.case_id} action={action} selected={selectedCaseId === action.case_id} compact={Boolean(selectedCaseId)} compactContext={(requirementCounts.get(requirement(action)) ?? 0) > 1 ? owner(action) + "的资源" : undefined} onOpen={() => open(action.case_id)}/>)}</IndexSelection></section> : null; })}</div> : <Empty title="本报告没有可读取的检查项"/>}
         {!story.repair_verification&&story.actions.length>0&&!filtered.length&&<Empty title="本次没有这类结果" action={<Button onClick={()=>setResultFilter('all')}>查看全部结果</Button>}/>}
         {!story.repair_verification && filtered.length > 10 && <div className="jj-pagination"><Button disabled={page === 1} onClick={() => setPage(value => value - 1)}>上一页</Button><span>第 {page} / {Math.ceil(filtered.length / 10)} 页</span><Button disabled={page * 10 >= filtered.length} onClick={() => setPage(value => value + 1)}>下一页</Button></div>}
       </div>
@@ -83,15 +88,16 @@ export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proof
 
   </div>;
 }
-function ResultRow({ action, onOpen, selected = false, compact = false }: {
+function ResultRow({ action, onOpen, selected = false, compact = false, compactContext }: {
     action: ActionResultStory;
     onOpen: () => void;
     selected?: boolean;
     compact?: boolean;
+    compactContext?: string;
 }) {
     const tone = judgement(action), missing = gaps(action);
     if (compact)
-        return <article className="jj-result-row is-compact" data-tone={tone} data-selected={selected}><button className="jj-case-select" data-case={action.case_id} aria-pressed={selected} aria-label={`查看${subject(action)}${text(action.display_name)}的依据`} onClick={onOpen}><span className="jj-result-symbol" aria-hidden="true">{tone === 'positive' ? <CheckCircleOutlined /> : tone === 'negative' ? <ExclamationCircleOutlined /> : <QuestionCircleOutlined />}</span><span><strong>{requirement(action)}</strong><small>{owner(action)}的资源</small><span className="jj-case-outcome">{action.fact_comparison.effects.slice(0, 1).map(effect => actual(effect))}</span><span className="jj-sr-only">{judgementLabels[tone]}</span></span><ArrowRightOutlined aria-hidden="true"/></button></article>;
+        return <article className="jj-result-row is-compact" data-tone={tone} data-selected={selected}><button className="jj-case-select jj-index-item" data-case={action.case_id} aria-pressed={selected} aria-label={`查看${subject(action)}${text(action.display_name)}的依据`} onClick={onOpen}><span className="jj-result-symbol" aria-hidden="true">{tone === 'positive' ? <CheckCircleOutlined /> : tone === 'negative' ? <ExclamationCircleOutlined /> : <QuestionCircleOutlined />}</span><span><strong>{requirement(action)}</strong>{compactContext && <small>{compactContext}</small>}<span className="jj-sr-only">{judgementLabels[tone]}</span></span><ArrowRightOutlined aria-hidden="true"/></button></article>;
     return <article className="jj-result-row" data-tone={tone} data-selected={selected}>
     <div className="jj-result-reading">
       <div className="jj-result-expectation"><div className="jj-result-object"><span className="jj-result-symbol" aria-hidden="true">{tone === 'positive' ? <CheckCircleOutlined /> : tone === 'negative' ? <ExclamationCircleOutlined /> : <QuestionCircleOutlined />}</span><div><h3>{requirement(action)}</h3><p>{owner(action)}的资源{conditionLabels(action.permission.conditions).length>0?"，"+conditionLabels(action.permission.conditions).join("，"):""}</p></div></div>{tone === 'caution' && <Badge tone={tone}>{judgementLabels[tone]}</Badge>}</div>
@@ -128,19 +134,19 @@ function RepairReading({story, selectedCaseId, onInspect}: {story: ResultStory; 
         const items = rows.filter(item => section.id === 'DENY' ? item.roles.has('DENY') : !item.roles.has('DENY'));
         return <section className="jj-report-group jj-repair-group" key={section.id}>
             <div className="jj-section-header"><h2>{section.title}</h2><span>{items.length} 项</span></div>
-            {items.length ? <div className="jj-repair-cards">{selectedCaseId ? items.map((entry, index) => {
+            {items.length ? <IndexSelection className="jj-repair-cards" identity={selectedCaseId??""}>{selectedCaseId ? items.map((entry, index) => {
                 const action = entry.row.match_status === 'MATCHED' ? story.actions.find(item => item.case_id === entry.row.after_case_id) : undefined;
                 const result = repairResult(entry, action);
                 return <article className="jj-result-row is-compact" data-selected={selectedCaseId === action?.case_id} data-tone={result.tone} key={index}>
-                    {action ? <button className="jj-case-select jj-repair-select" data-case={action.case_id} aria-pressed={selectedCaseId === action.case_id} aria-label={'查看' + requirement(action) + '的复验依据'} onClick={() => onInspect(action.case_id)}><span className="jj-result-symbol" aria-hidden="true">{result.tone === 'positive' ? <CheckCircleOutlined/> : result.tone === 'negative' ? <ExclamationCircleOutlined/> : <QuestionCircleOutlined/>}</span><span><strong>{requirement(action)}</strong><small>{owner(action)}的资源</small><span className="jj-repair-status" data-tone={result.tone}>{result.label}</span></span><ArrowRightOutlined aria-hidden="true"/></button> : <div className="jj-repair-unmatched"><strong>{text(entry.row.subject_label ?? '原测试账号')}{text(entry.row.action_label)}</strong><p>{result.label}</p></div>}
+                    {action ? <button className="jj-case-select jj-repair-select jj-index-item" data-case={action.case_id} aria-pressed={selectedCaseId === action.case_id} aria-label={'查看' + requirement(action) + '的复验依据'} onClick={() => onInspect(action.case_id)}><span className="jj-result-symbol" aria-hidden="true">{result.tone === 'positive' ? <CheckCircleOutlined/> : result.tone === 'negative' ? <ExclamationCircleOutlined/> : <QuestionCircleOutlined/>}</span><span><strong>{requirement(action)}</strong><span className="jj-repair-status" data-tone={result.tone}>{result.label}</span></span><ArrowRightOutlined aria-hidden="true"/></button> : <div className="jj-repair-unmatched"><strong>{text(entry.row.subject_label ?? '原测试账号')}{text(entry.row.action_label)}</strong><p>{result.label}</p></div>}
                 </article>;
             }) : <div className="jj-scroll-table"><table className="jj-repair-table"><thead><tr><th scope="col">核对事项</th><th scope="col">修改前</th><th scope="col">本次复验</th><th scope="col"><span className="jj-sr-only">依据</span></th></tr></thead><tbody>{items.map((entry, index) => {
                 const action = entry.row.match_status === 'MATCHED' ? story.actions.find(item => item.case_id === entry.row.after_case_id) : undefined, result = repairResult(entry, action);
                 return <tr key={index}><td><strong>{action ? requirement(action) : text(entry.row.subject_label ?? '原测试账号') + text(entry.row.action_label)}</strong><small>{action ? owner(action) : text(entry.row.resource_owner_label ?? '原资源所有者')}的资源</small></td><td>{beforeLabels[entry.row.before_verdict]}</td><td><Badge tone={result.tone}>{result.label}</Badge></td><td>{action && <Button kind="quiet" data-case={action.case_id} aria-label={'查看' + requirement(action) + '的复验依据'} onClick={() => onInspect(action.case_id)}>查看依据<ArrowRightOutlined aria-hidden="true"/></Button>}</td></tr>;
-            })}</tbody></table></div>}</div> : <Notice>缺少对应的检查场景，无法完成这部分验收。</Notice>}
+            })}</tbody></table></div>}</IndexSelection> : <Notice tone="caution">缺少对应的检查场景，无法完成这部分验收。</Notice>}
         </section>;
     })}{story.actions.filter(item => !covered.has(item.case_id)).length > 0 && <section className="jj-report-group"><div className="jj-section-header"><h2>本轮其他检查</h2></div><div className="jj-result-cards">{story.actions.filter(item => !covered.has(item.case_id)).map(action => <ResultRow key={action.case_id} action={action} onOpen={() => onInspect(action.case_id)}/>)}</div></section>}
-    {[...new Set(reviews.filter(review => ['INCONCLUSIVE', 'STALE'].includes(review.verification.status)).map(review => repairGap(review.verification.reason_codes)))].map(message => <Notice key={message}>{message}</Notice>)}</>;
+    {[...new Set(reviews.filter(review => ['INCONCLUSIVE', 'STALE'].includes(review.verification.status)).map(review => repairGap(review.verification.reason_codes)))].map(message => <Notice tone="caution" key={message}>{message}</Notice>)}</>;
 }
 function RepairPrior({story, caseId}: {story: ResultStory; caseId: string}) {
     const entries = repairEntries(story).rows.filter(item => item.row.match_status === 'MATCHED' && item.row.after_case_id === caseId);

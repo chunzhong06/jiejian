@@ -45,6 +45,6 @@ export function useApplication(current:string,route:Route){
   useEffect(()=>{if(project)localStorage.setItem('jiejian.studio.project',project.project_id)},[project?.project_id])
   const choose=(id:string)=>{setSelected(id);go('/workspace',id)}
   const refresh=()=>{workspace.reload();projects.reload();environment.reload()}
-  const connected=(id:string)=>{projects.reload();setSelected(id);environment.reload();go('/workspace',id)}
+  const connected=(id:string)=>{projects.reload();setSelected(id);environment.reload();const query=new URLSearchParams(route.query);query.delete('project_id');if(query.get('view')==='create')query.delete('view');go(current==='/application'?'/application'+(query.size?'?'+query:''):'/workspace',id)}
   return {project,projects,environment,workspace,choose,refresh,connected,resolutionError:legacy.error??resolved.error,resolving:legacy.loading||resolved.loading}
 }

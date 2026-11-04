@@ -24,7 +24,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     if (state.loading)
         return <PageSkeleton view="/permissions" title="编辑权限要求"/>;
     if (state.error || !state.data)
-        return <ErrorNote error={state.error} onRetry={state.reload}/>;
+        return <ErrorNote error={state.error}/>;
     const value = state.data;
     if (!value.permissions.length) return <InitialRules projectId={projectId} basis={value} onBack={onBack} onProposal={onProposal} onError={onError}/>;
     const changed = value.permissions.some(item => (changes[item.item_id] && changes[item.item_id] !== item.expectation) || (item.item_id in conditionChanges && JSON.stringify(conditionChanges[item.item_id]) !== JSON.stringify(item.conditions ?? null)));
@@ -54,7 +54,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
           return <tr key={item.item_id}>
             <td><h3>{text(actor?.display_name ?? '当前角色')}{text(action?.display_name ?? '当前业务操作')}</h3><p className="jj-small jj-muted">{scope}</p></td>
             <td><RuleConditionsEditor value={item.item_id in conditionChanges ? conditionChanges[item.item_id] : item.conditions} relation={item.relation} disabled={busy || uncertain} onChange={conditions => setConditionChanges(current => ({...current, [item.item_id]:conditions}))}/></td>
-            <td><Badge tone={item.expectation === 'ALLOW' ? 'positive' : 'negative'}>{item.expectation === 'ALLOW' ? '允许' : '禁止'}</Badge></td>
+            <td><Badge>{item.expectation === 'ALLOW' ? '允许' : '禁止'}</Badge></td>
             <td><Choice aria-label={`调整${actor?.display_name}${action?.display_name}对${scope}的权限`} value={changes[item.item_id] ?? item.expectation} disabled={busy || uncertain} onValueChange={value => setChanges(current => ({ ...current, [item.item_id]: value as 'ALLOW' | 'DENY' }))}><option value="ALLOW">允许</option><option value="DENY">禁止</option></Choice></td>
           </tr>;
         })}</tbody>
@@ -70,5 +70,5 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
         else
             setUncertain(true);
         throw error;
-    } })}>生成待审变更</Button></div>{uncertain && <Notice>生成结果尚未确认，请先读取已经保存的提案。<Button busy={busy} onClick={() => void act(async () => { const result = await api.proposals(projectId, true); assertProject(result.project_id, projectId); result.proposals.forEach(item => assertProject(item.proposal.project_id, projectId)); setProposals(result.proposals.map(item => item.proposal.proposal_id)); })}>读取待审提案</Button></Notice>}{proposals.map((id, index) => <Button key={id} onClick={() => void act(() => onProposal(id))}>审阅提案 {index + 1}</Button>)}</section></>;
+    } })}>生成待审变更</Button></div>{uncertain && <Notice tone="caution">生成结果尚未确认，请先读取已经保存的提案。<Button busy={busy} onClick={() => void act(async () => { const result = await api.proposals(projectId, true); assertProject(result.project_id, projectId); result.proposals.forEach(item => assertProject(item.proposal.project_id, projectId)); setProposals(result.proposals.map(item => item.proposal.proposal_id)); })}>读取待审提案</Button></Notice>}{proposals.map((id, index) => <Button key={id} onClick={() => void act(() => onProposal(id))}>审阅提案 {index + 1}</Button>)}</section></>;
 }

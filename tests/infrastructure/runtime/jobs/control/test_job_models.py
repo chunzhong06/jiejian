@@ -116,7 +116,7 @@ def test_current_worker_registry_is_explicit():
 
 
 @pytest.mark.parametrize("target,operation", [("run_id", "CHECK"), ("recording_id", "RECORDING"),
-                                           ("runtime_load_id", "RUNTIME_LOAD"), ("preflight_id", "PROOF_PREFLIGHT"), ("reference_capture_id", "REFERENCE_CAPTURE"), ("identity_preparation_id", "IDENTITY_PREPARATION")])
+                                           ("runtime_load_id", "RUNTIME_LOAD"), ("preflight_id", "PROOF_PREFLIGHT"), ("reference_capture_id", "REFERENCE_CAPTURE"), ("identity_preparation_id", "IDENTITY_PREPARATION"), ("flow_trial_id", "FLOW_TRIAL")])
 def test_current_jobs_are_valid_and_carry_all_target_fields(target, operation):
     job = current_job(target=target, operation_type=operation)
     assert all(hasattr(job, name) for name in JOB_TARGET_FIELDS)

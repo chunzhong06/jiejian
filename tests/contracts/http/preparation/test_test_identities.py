@@ -156,7 +156,8 @@ def _login_view():
         message="正在打开独立登录浏览器…", log_path="var/logs/identity-preparations/test.log")
 
 
-def test_identity_login_routes_delegate_exact_ids_and_get_does_not_launch(tmp_path, monkeypatch):
+@pytest.mark.parametrize('verify_only',[False,True])
+def test_identity_login_routes_delegate_exact_ids_and_get_does_not_launch(tmp_path, monkeypatch,verify_only):
     app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecrets(), environ={})
     manager = app.state.context.identity_preparations
     view = _login_view()
@@ -173,10 +174,10 @@ def test_identity_login_routes_delegate_exact_ids_and_get_does_not_launch(tmp_pa
             ("confirm", base + "/confirm", view.preparation_id),
             ("cancel", base + "/cancel", view.preparation_id),
         ):
-            response = client.post(path, json={"schema_version": "1"})
+            response = client.post(path, json={"schema_version": "1"} | ({'verify_only':True} if name=='start' and verify_only else {}))
             assert response.status_code == 200 and response.json()["data"] == view.model_dump(mode="json")
             if name == 'start':
-                mocks[name].assert_called_once_with(argument, operation_id=None)
+                mocks[name].assert_called_once_with(argument, operation_id=None,verify_only=verify_only)
             else:
                 mocks[name].assert_called_once_with(argument)
 

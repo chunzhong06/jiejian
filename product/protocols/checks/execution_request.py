@@ -6,10 +6,11 @@ import json
 import re
 from enum import StrEnum
 from typing import Annotated, Literal
-from product.protocols.codec import encode_json, decode_document
+from product.protocols.codec import encode_json, decode_document, decode_json
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from product.protocols.checks.conditions import PermissionConditions
+from product.protocols.web.environment import FrozenEnvironment
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
 Hash = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -91,20 +92,29 @@ class ObserverProofReference(WireModel):
     observer_id: LogicalId
 
 
+class OperationProofReference(WireModel):
+    kind: Literal['OPERATION_HTTP_ENTITY'] = 'OPERATION_HTTP_ENTITY'
+    flow_id: str = Field(pattern=r'^ofl_[0-9a-f]{32}$')
+    revision: int = Field(ge=1)
+    query_fingerprint: Hash
+
+
 class EffectProofRequirement(WireModel):
     effect_id: EffectId
     level: Literal["VERDICT_REQUIRED", "DIAGNOSIS_REQUIRED", "SUPPORTING"]
-    rule: Literal["HTTP_RESOURCE_PRESENCE", "REGISTERED_EFFECT", "RECORDED_SUPPORT"]
+    rule: Literal["HTTP_RESOURCE_PRESENCE", "REGISTERED_EFFECT", "RECORDED_SUPPORT", "HTTP_ENTITY_QUERY"]
     binding_fingerprint: Hash
     resource_id: Annotated[str, Field(min_length=1, max_length=256)]
-    reference: Annotated[RecordedProofReference | ObserverProofReference, Field(discriminator="kind")]
+    reference: Annotated[RecordedProofReference | ObserverProofReference | OperationProofReference, Field(discriminator="kind")]
     proof_fingerprint: Hash
 
     @model_validator(mode="after")
     def validate_proof(self):
         if self.rule == "REGISTERED_EFFECT" and not isinstance(self.reference, ObserverProofReference):
             raise ValueError("proof reference kind")
-        if self.rule != "REGISTERED_EFFECT" and not isinstance(self.reference, RecordedProofReference):
+        if self.rule == 'HTTP_ENTITY_QUERY' and not isinstance(self.reference,OperationProofReference):
+            raise ValueError('entity query proof reference kind')
+        if self.rule not in {"REGISTERED_EFFECT", 'HTTP_ENTITY_QUERY'} and not isinstance(self.reference, RecordedProofReference):
             raise ValueError("proof reference kind")
         if self.rule == "RECORDED_SUPPORT" and self.level != "SUPPORTING":
             raise ValueError("support cannot decide verdict")
@@ -157,7 +167,7 @@ class ExecutionCase(WireModel):
     protected_effect_ids: tuple[EffectId, ...] = Field(min_length=1, max_length=16)
     proof_requirements: tuple[EffectProofRequirement, ...] = Field(min_length=1, max_length=48)
     recovery: RecoveryReference | None
-    source_fingerprint: Hash
+    source_fingerprint: Hash | None
     config_fingerprint: Hash
 
     @model_validator(mode="after")
@@ -199,7 +209,7 @@ class TwinInvariants(WireModel):
     execution: ExecutionAssetReference
     proof_fingerprints: tuple[Hash, ...] = Field(min_length=1, max_length=48)
     recovery_fingerprint: Hash | None
-    source_fingerprint: Hash
+    source_fingerprint: Hash | None
     config_fingerprint: Hash
 
 
@@ -320,6 +330,11 @@ class RepairContext(WireModel):
         return self
 
 
+class ExternalRecheckContext(WireModel):
+    source_environment_fingerprint: Hash
+    deployment_statement: str = Field(min_length=1,max_length=256)
+
+
 class FrozenRequirement(WireModel):
     requirement_id: str = Field(pattern=r'^req_[0-9a-f]{16}$')
     requirement: str = Field(min_length=1, max_length=1024)
@@ -357,11 +372,12 @@ class FrozenCheckSelection(WireModel):
 
 class ExecutionRequest(WireModel):
     document_type: Literal["jiejian.execution-request"] = "jiejian.execution-request"
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1", "2"] = "1"
+    environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value: value is None)
     requirement_scope: tuple[FrozenRequirementScope, ...] = Field(default=(), max_length=200)
     selection: FrozenCheckSelection | None = None
     project_id: LogicalId
-    source_fingerprint: Hash
+    source_fingerprint: Hash | None
     policy_epoch: int = Field(ge=0)
     engine_version: str = Field(pattern=r"^[a-zA-Z0-9_.-]{1,64}$")
     plan_fingerprint: Hash
@@ -370,6 +386,7 @@ class ExecutionRequest(WireModel):
     budget_fingerprint: Hash
     change_context: ChangeContext | None = None
     repair_context: RepairContext | None = None
+    external_recheck: ExternalRecheckContext | None = Field(default=None,exclude_if=lambda value:value is None)
 
     @model_serializer(mode="wrap")
     def preserve_full_request_encoding(self, handler):
@@ -381,6 +398,16 @@ class ExecutionRequest(WireModel):
 
     @model_validator(mode="after")
     def validate_project(self):
+        if (self.schema_version == '2') != (self.environment is not None):
+            raise ValueError('environment snapshot requires execution request version 2')
+        if self.source_fingerprint is None and self.environment is None:
+            raise ValueError('source-free execution requires a frozen environment')
+        if self.external_recheck is not None and (self.environment is None or self.source_fingerprint is not None
+            or self.repair_context is None or self.change_context is not None or self.selection is not None):
+            raise ValueError('external recheck requires its original contract and external environment')
+        if self.environment is None and any(proof.rule == 'HTTP_ENTITY_QUERY'
+            for action in self.actions for case in action.cases for proof in case.proof_requirements):
+            raise ValueError('entity proof requires a frozen environment')
         if len({item.action_id for item in self.actions}) != len(self.actions):
             raise ValueError("duplicate action")
         ids = [case.case_id for action in self.actions for case in action.cases]
@@ -469,7 +496,10 @@ def canonical_execution_request_bytes(request: ExecutionRequest) -> bytes:
 
 def parse_execution_request(raw: bytes) -> ExecutionRequest:
     try:
-        decode_document(raw, document_type="jiejian.execution-request", version="1", limit=RUNNER_INPUT_MAX_BYTES)
+        version = decode_json(raw, limit=RUNNER_INPUT_MAX_BYTES).get('schema_version')
+        if version not in {'1', '2'}:
+            raise ValueError('unsupported execution request version')
+        decode_document(raw, document_type="jiejian.execution-request", version=version, limit=RUNNER_INPUT_MAX_BYTES)
         request = ExecutionRequest.model_validate_json(raw, strict=True)
         if canonical_execution_request_bytes(request) != raw:
             raise ValueError("noncanonical execution order")

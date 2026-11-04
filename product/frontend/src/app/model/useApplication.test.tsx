@@ -39,3 +39,12 @@ it('修订变化提前刷新工作区，独立文件核验仍按原周期进行'
     expect(workspace).toHaveBeenCalledTimes(3)
   }finally{view.unmount();vi.useRealTimers()}
 })
+
+it('从已有应用新建后退出创建视图，进入新应用环境',async()=>{
+  vi.spyOn(projectsApi,'projects').mockResolvedValue([{project_id:'a',name:'展馆'},{project_id:'b',name:'新应用'}] as never)
+  vi.spyOn(experienceApi,'status').mockResolvedValue({} as never)
+  const view=renderHook(()=>useApplication('/application',{path:'/application',query:new URLSearchParams('view=create')}))
+  await waitFor(()=>expect(view.result.current.project).toBeDefined())
+  act(()=>view.result.current.connected('b'))
+  expect(location.hash).toBe('#/application?project_id=b')
+})

@@ -56,3 +56,20 @@ def source(tmp_path):
     (folder/'package.json').write_text('{"name":"local-fixture","scripts":{"start":"node server.mjs"}}',encoding='utf-8')
     (folder/'server.mjs').write_text('export const name = "local fixture";\n',encoding='utf-8')
     return folder
+
+
+@pytest.fixture(scope='session')
+def readonly_official_review():
+    """只读布局与菜单巡检共享业务准备；每个用例仍创建独立浏览器上下文。"""
+    import json
+    from pathlib import Path
+    from uuid import uuid4
+    from tests.support.runtime_server import launch
+    from tests.support.official import OfficialScenario
+    root=Path(__file__).resolve().parents[1]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/audit/readonly-review'/uuid4().hex
+    with launch(output,Path(receipt['frontend']['dist'])) as server:
+        scenario=OfficialScenario(server.client)
+        scenario.start()
+        yield server,scenario,receipt

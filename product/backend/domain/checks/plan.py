@@ -57,7 +57,7 @@ class ActionCheckPlan(WireModel):
 
 class ProjectCheckPlan(WireModel):
     project_id: LogicalId
-    source_fingerprint: Hash
+    source_fingerprint: Hash | None
     policy_epoch: int = Field(ge=0)
     engine_version: str
     actions: tuple[ActionCheckPlan, ...]
@@ -92,7 +92,14 @@ def classify_http_resource_presence(status: int | None, *, same_resource: bool, 
 
 def derive_effect_proof(effect, binding, resource_id, capabilities=()):
     """只有已绑定 descriptor 精确能力或资源形成的只读 GET 可以作为裁决证明。"""
-    if binding.kind.value == "REGISTERED_OBSERVER":
+    if binding.kind.value == 'HTTP_ENTITY_QUERY':
+        from product.protocols.checks.execution_request import OperationProofReference
+        if effect.effect_kind.value != 'DATA_DISCLOSURE':
+            raise ValueError('HTTP entity queries only prove declared field disclosure')
+        reference = OperationProofReference(flow_id=binding.operation_flow_id,revision=binding.operation_flow_revision,
+            query_fingerprint=content_hash('HttpEntityQuery',binding.entity_query.model_dump(mode='json')))
+        rule, level = 'HTTP_ENTITY_QUERY', 'VERDICT_REQUIRED'
+    elif binding.kind.value == "REGISTERED_OBSERVER":
         ref = binding.observer_reference
         capability = next((item for item in capabilities
             if (item.descriptor_id, item.descriptor_fingerprint, item.observer_id, item.effect_id)

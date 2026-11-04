@@ -49,3 +49,55 @@ def test_recovery_preserves_legacy_hash_fields_and_rejects_mixed_origins():
     edited=RecoveryReference(**fields,operation_flow_id='ofl_'+'c'*32,operation_flow_revision=2)
     assert 'recording_id' not in edited.model_dump(mode='json')
     with pytest.raises(ValidationError):RecoveryReference(**legacy.model_dump(),operation_flow_id='ofl_'+'c'*32,operation_flow_revision=2)
+
+
+def test_explicit_dynamic_secret_requires_a_matching_secret_extractor():
+    document=flow_document()
+    steps=document['workflow']['steps']
+    steps[0]['request_template']['response_extractors'][0]['secret']=True
+    steps[0]['output_extractors'][0]['secret']=True
+    steps[1]['request_template']['input_slots'][0]['secret']=True
+    steps[1]['input_slots'][0]['secret']=True
+    document['workflow']['workflow_fingerprint']=None
+    value=OperationFlow.model_validate_json(json.dumps(document))
+    assert value.steps[1].input_slots[0].secret
+    document['workflow']['steps'][0]['request_template']['response_extractors'][0]['secret']=False
+    document['workflow']['steps'][0]['output_extractors'][0]['secret']=False
+    with pytest.raises(ValidationError):
+        OperationFlow.model_validate_json(json.dumps(document))
+
+
+@pytest.mark.parametrize('consumer,expected', [('QUERY','query.order_id'),('JSON_BODY','$.items[0].order')])
+def test_resource_position_supports_one_exact_query_or_nested_json_field(consumer,expected):
+    document=flow_document()
+    workflow=document['workflow']
+    workflow['workflow_fingerprint']=None
+    target=workflow['steps'][1]
+    target.pop('input_slots',None)
+    request=target['request_template']
+    request['path']='/orders'
+    resource=next(slot for slot in request['input_slots'] if slot['source']=='CASE_RESOURCE_ID')
+    resource['consumer']=consumer
+    if consumer=='QUERY':request['query']=[dict(name='order_id',slot_id=resource['slot_id'])]
+    else:request['body']['value']['items']=[{'order':{'$slot':resource['slot_id']}}]
+    parsed=HttpWorkflowBinding.model_validate_json(json.dumps(workflow))
+    injection=operation_resource_injection(parsed)
+    assert (injection.consumer.value,injection.location)==(consumer,expected)
+    document['workflow']=parsed.model_dump(mode='json')
+    document['resource_injection']=injection.model_dump(mode='json')
+    assert OperationFlow.model_validate_json(json.dumps(document)).resource_injection==injection
+
+
+@pytest.mark.parametrize('value', [
+    {'first':{'$slot':'case_resource_id'},'second':{'$slot':'case_resource_id'}},
+    {'ambiguous.key':{'$slot':'case_resource_id'}},
+])
+def test_resource_json_position_rejects_multiple_or_ambiguous_fields(value):
+    document=flow_document()
+    workflow=document['workflow'];workflow['workflow_fingerprint']=None
+    target=workflow['steps'][1];target.pop('input_slots',None)
+    request=target['request_template'];request['path']='/orders'
+    request['input_slots']=[dict(slot_id='case_resource_id',source='CASE_RESOURCE_ID',consumer='JSON_BODY')]
+    request['body']['value']=value
+    parsed=HttpWorkflowBinding.model_validate_json(json.dumps(workflow))
+    with pytest.raises(ValueError):operation_resource_injection(parsed)

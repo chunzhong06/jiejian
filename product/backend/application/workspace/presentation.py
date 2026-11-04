@@ -86,7 +86,7 @@ def task_view(
 
 def journey_view(connection, boundary_attention, preparation_complete, task, result, change, active):
     """只把已有事实投影为位置提示，不以位置顺序反推完成或另选主任务。"""
-    connected = connection.endpoint_status == "CONFIRMED" and connection.source_analysis_status == "COMPLETED"
+    connected = connection.endpoint_status == "CONFIRMED" and connection.source_analysis_status in {"COMPLETED", "NOT_PROVIDED"}
     kind = task.task_kind if task else None
     needs_source_review = kind == "REGISTER_SOURCE_CHANGE"
     rules_current = connected and not boundary_attention
@@ -171,6 +171,8 @@ def endpoint_status(understanding: ApplicationUnderstanding) -> str:
 
 
 def source_status(understanding: ApplicationUnderstanding) -> str:
+    if understanding.source_root is None:
+        return 'NOT_PROVIDED'
     if not understanding.source_analysis_authorized:
         return "NOT_AUTHORIZED"
     return "COMPLETED" if understanding.analysis_completed_at_us is not None else "PENDING"

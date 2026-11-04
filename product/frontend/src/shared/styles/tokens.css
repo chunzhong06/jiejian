@@ -51,6 +51,7 @@
   --surface-heading: var(--inset);
   --border-subtle: color-mix(in srgb,var(--line) 72%,transparent);
   --popover-shadow: 0 8px 24px color-mix(in srgb,var(--ink) 12%,transparent), 0 2px 6px color-mix(in srgb,var(--ink) 6%,transparent);
+  --menu-shadow: 0 6px 20px rgb(24 39 69 / 12%);
   --motion-hover-in: 60ms;
   --motion-hover-out: 100ms;
   --motion-press: 140ms;
@@ -70,6 +71,7 @@
 }
 :root[data-ui-font=misans] { --font-ui: MiSansUI, 'Microsoft YaHei', system-ui, sans-serif; }
 :root[data-studio-theme=dark] {
+  --menu-shadow: 0 6px 20px rgb(10 17 31 / 28%);
   --popover-shadow: 0 8px 24px color-mix(in srgb,var(--rail) 65%,transparent), 0 2px 6px color-mix(in srgb,var(--rail) 45%,transparent);
   color-scheme: dark;
   --bg: #243149;

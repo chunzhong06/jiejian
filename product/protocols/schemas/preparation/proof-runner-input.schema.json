@@ -357,6 +357,19 @@
           "title": "Expected Application Subject Id",
           "type": "string"
         },
+        "expected_role": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Role"
+        },
         "namespace": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Namespace",
@@ -364,6 +377,19 @@
         },
         "request": {
           "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "role_json_path": {
+          "anyOf": [
+            {
+              "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Json Path"
         },
         "subject_json_path": {
           "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",

@@ -21,6 +21,8 @@ def recording_endpoint_fingerprint(understanding, *, controlled_instance_id=None
         "confirmed_endpoint": understanding.confirmed_endpoint,
         "endpoint_source_fingerprint": understanding.endpoint_source_fingerprint,
     }
+    if understanding.environment is not None:
+        value['environment_fingerprint'] = understanding.environment.fingerprint
     # 未托管项目保持既有算法；托管实例变化时，即便地址被复用也不能继承旧现场材料。
     if controlled_instance_id is not None:
         value["controlled_instance_id"] = controlled_instance_id

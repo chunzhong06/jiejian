@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { Button } from "../shared/ui/actions";
+import {subscribePageRefresh} from '../shared/lib/pageRefresh';
 import { Notice } from "../shared/ui/feedback";
 export class RouteBoundary extends Component<{
     children: ReactNode;
@@ -7,6 +7,9 @@ export class RouteBoundary extends Component<{
     failed: boolean;
 }> {
     state = { failed: false };
+    private unsubscribe?:()=>void;
+    componentDidMount(){this.unsubscribe=subscribePageRefresh(()=>{if(this.state.failed)this.setState({failed:false})})}
+    componentWillUnmount(){this.unsubscribe?.()}
     static getDerivedStateFromError() { return { failed: true }; }
-    render() { return this.state.failed ? <Notice>界面暂时未能打开。<Button onClick={() => location.reload()}>重新打开界面</Button></Notice> : this.props.children; }
+    render() { return this.state.failed ? <Notice tone="negative">界面暂时未能打开，可通过右上角刷新重新尝试。</Notice> : this.props.children; }
 }

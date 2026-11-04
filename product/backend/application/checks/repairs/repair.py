@@ -1,7 +1,7 @@
 # 从严格已发布包重建原题合同并派生 NEW Run 复验；不持久化第二套修复结论。
 from __future__ import annotations
 
-from product.backend.domain.checks.repair import CurrentRepairContract, CurrentRepairReference, RepairCaseRequirement, current_request_permissions, repair_case_identity, repair_evidence_standards, verify_current_repair
+from product.backend.domain.checks.repair import CurrentRepairContract, CurrentRepairReference, RepairCaseRequirement, current_request_permissions, repair_case_identity, repair_evidence_standards, verify_current_repair, verify_external_recheck
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.lifecycle import CaseVerdict, RunVerdict
 from product.protocols.checks.execution_request import CaseRole, content_hash
@@ -74,6 +74,13 @@ class CurrentRepairService:
         package = self._reader.package(run_id)
         return self.verification_from_verified_package(package)
 
+    def external_source(self,project_id,reference):
+        contract=self.resolve(project_id,reference)
+        source=self._reader.package(contract.source_run_id,project_id=project_id)
+        if source.request.source_fingerprint is not None or source.bundle.runtime.kind!='EXTERNAL_WEB' or source.bundle.environment is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'此问题须沿源码修改的原题复验路径处理')
+        return contract,source.bundle.environment
+
     def verification_from_verified_package(self, package):
         """当前包来自严格reader；涉及另一源Run时仍独立核验其发布包。"""
         return self.review_from_verified_package(package)[0]
@@ -87,6 +94,10 @@ class CurrentRepairService:
         matches = [item for item in self.contracts_from_verified_package(source) if item.repair_fingerprint == context.repair_reference]
         if len(matches) != 1:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"原题修复引用无法核对")
+        if package.request.external_recheck is not None:
+            verification=verify_external_recheck(matches[0],request=package.request,bundle=package.bundle,
+                result=package.result,evidence=package.evidence,source_environment=source.bundle.environment)
+            return verification,build_repair_comparison(matches[0],source,package)
         change = package.request.change_context
         expected = None if change is None else self._change_context_reader(package.request.project_id,change.change_id)
         verification = verify_current_repair(matches[0],request=package.request,bundle=package.bundle,
@@ -94,6 +105,10 @@ class CurrentRepairService:
         return verification, build_repair_comparison(matches[0], source, package)
 
     def verification_for_contract(self, package, contract):
+        if package.request.external_recheck is not None:
+            source=self._reader.package(contract.source_run_id,project_id=package.request.project_id)
+            return verify_external_recheck(contract,request=package.request,bundle=package.bundle,result=package.result,
+                evidence=package.evidence,source_environment=source.bundle.environment)
         change = package.request.change_context
         expected = None if change is None else self._change_context_reader(package.request.project_id, change.change_id)
         targets = () if change is None or self._rule_targets_reader is None else self._rule_targets_reader(

@@ -1,5 +1,7 @@
 # 当前检查的独立冻结配置：只保存严格叶模型、受控引用与有限预算，不依赖 backend。
 from __future__ import annotations
+from product.protocols.web.environment import FrozenEnvironment
+from product.protocols.preparation.http_entity import HttpEntityQuery
 
 import hashlib
 import json
@@ -80,7 +82,10 @@ class CheckProofConfig(WireModel):
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")], ...] = Field(default=(), max_length=64)
     binding_fingerprint: Hash
-    rule: Literal["HTTP_RESOURCE_PRESENCE", "REGISTERED_EFFECT", "RECORDED_SUPPORT"]
+    rule: Literal["HTTP_RESOURCE_PRESENCE", "REGISTERED_EFFECT", "RECORDED_SUPPORT", "HTTP_ENTITY_QUERY"]
+    entity_query: HttpEntityQuery | None = Field(default=None,exclude_if=lambda value:value is None)
+    operation_flow_id: str | None = Field(default=None,pattern=r'^ofl_[0-9a-f]{32}$',exclude_if=lambda value:value is None)
+    operation_flow_revision: int | None = Field(default=None,ge=1,exclude_if=lambda value:value is None)
     observation_identity_id: IdentityId
     request: HttpRequestTemplate | None = None
     observer_id: LogicalId | None = None
@@ -96,7 +101,16 @@ class CheckProofConfig(WireModel):
         source_ids = [source.observer_id for source in self.auxiliary_sources]
         if len(set(source_ids)) != len(source_ids) or self.observer_id in source_ids:
             raise ValueError("duplicate proof source")
-        if self.rule == "REGISTERED_EFFECT":
+        if self.rule != 'HTTP_ENTITY_QUERY' and (self.operation_flow_id is not None or self.operation_flow_revision is not None):
+            raise ValueError('operation evidence reference belongs only to entity evidence')
+        if self.rule == 'HTTP_ENTITY_QUERY':
+            if self.operation_flow_id is None or self.operation_flow_revision is None:
+                raise ValueError('entity query must name its adopted operation flow revision')
+            if self.effect_kind!='DATA_DISCLOSURE' or self.entity_query is None or self.request is not None or self.observer_id is not None or not 1<=len(self.protected_projection)<=16:
+                raise ValueError('entity proof requires its independent read-only business query')
+        elif self.entity_query is not None:
+            raise ValueError('entity query is only valid for HTTP entity evidence')
+        elif self.rule == "REGISTERED_EFFECT":
             if self.request is not None or self.observer_id is None or self.descriptor_fingerprint is None:
                 raise ValueError("registered proof requires a frozen observer")
         elif self.request is None or self.request.method != "GET" or self.observer_id is not None:
@@ -258,9 +272,10 @@ class CheckRuntimeBundle(WireModel):
     document_type: Literal["jiejian.check-runtime"] = "jiejian.check-runtime"
     runtime: RuntimeSpec = Field(default_factory=ExternalWebRuntime)
     proof_sources: tuple[FrozenProofSource, ...] = Field(default=(), max_length=256)
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1", "2"] = "1"
+    environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value: value is None)
     project_id: LogicalId
-    source_fingerprint: Hash
+    source_fingerprint: Hash | None
     target_type: Literal["WEB"] = "WEB"
     target: WebTargetScope
     budget: CheckBudget
@@ -270,6 +285,14 @@ class CheckRuntimeBundle(WireModel):
 
     @model_validator(mode="after")
     def validate_references_and_limits(self):
+        if (self.schema_version == '2') != (self.environment is not None):
+            raise ValueError('environment snapshot requires runtime version 2')
+        if self.source_fingerprint is None and (self.environment is None or self.runtime.kind != 'EXTERNAL_WEB'):
+            raise ValueError('source-free execution requires an external environment')
+        if self.environment is not None and self.environment.target != self.target:
+            raise ValueError('runtime target must match the frozen environment')
+        if self.environment is None and any(proof.rule=='HTTP_ENTITY_QUERY' for action in self.actions for proof in action.proofs):
+            raise ValueError('HTTP entity proof requires a frozen environment')
         identities = {item.identity_id for item in self.identities}
         observers = {item.observer_id for item in self.observers}
         observer_specs = {item.observer_id: item for item in self.observers}
@@ -394,7 +417,11 @@ def check_runtime_fingerprint(bundle: CheckRuntimeBundle) -> str:
 
 def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
     try:
-        decode_document(raw, document_type="jiejian.check-runtime", version="1", limit=CHECK_DOCUMENT_MAX_BYTES)
+        from product.protocols.codec import decode_json
+        version = decode_json(raw, limit=CHECK_DOCUMENT_MAX_BYTES).get('schema_version')
+        if version not in {'1', '2'}:
+            raise ValueError('unsupported check runtime version')
+        decode_document(raw, document_type="jiejian.check-runtime", version=version, limit=CHECK_DOCUMENT_MAX_BYTES)
         bundle = CheckRuntimeBundle.model_validate_json(raw, strict=True)
         if canonical_check_runtime_bytes(bundle) != raw:
             raise ValueError("noncanonical runtime")

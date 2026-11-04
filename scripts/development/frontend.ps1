@@ -32,7 +32,19 @@ function Read-FrontendBuildReceipt([string]$BuildRoot) {
 
 function Test-FrontendBuild([string]$BuildRoot, [string]$BuildDigest, [string]$DependencyDigest) {
     $record = Read-FrontendBuildReceipt $BuildRoot
-    return $null -ne $record -and [string]$record.build_digest -eq $BuildDigest -and [string]$record.dependency_digest -eq $DependencyDigest -and (Test-Path -LiteralPath (Join-Path $BuildRoot "dist\index.html") -PathType Leaf)
+    if ($null -eq $record -or [string]$record.build_digest -ne $BuildDigest -or [string]$record.dependency_digest -ne $DependencyDigest) { return $false }
+    $dist = Join-Path $BuildRoot "dist"
+    $manifest = Join-Path $dist "frontend-manifest.json"
+    if ($record.PSObject.Properties.Name -notcontains "manifest_sha256" -or -not (Test-Path -LiteralPath $manifest -PathType Leaf) -or [string]$record.manifest_sha256 -ne (Get-FileDigest $manifest)) { return $false }
+    try {
+        $assets = @((Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json).assets)
+        if (@(Get-ChildItem -LiteralPath $dist -File -Recurse -Force).Count -ne $assets.Count + 1) { return $false }
+        foreach ($asset in $assets) {
+            $file = [IO.Path]::GetFullPath((Join-Path $dist ([string]$asset.path)))
+            if (-not $file.StartsWith([IO.Path]::GetFullPath($dist).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $file -PathType Leaf) -or (Get-FileDigest $file) -ne [string]$asset.sha256) { return $false }
+        }
+        return $true
+    } catch { return $false }
 }
 
 function Publish-FrontendBuild([string]$Workspace, [string]$BuildDigest, [string]$DependencyDigest) {
@@ -46,6 +58,7 @@ function Publish-FrontendBuild([string]$Workspace, [string]$BuildDigest, [string
         if (-not (Test-Path -LiteralPath (Join-Path $temporaryDist "index.html") -PathType Leaf)) { Fail-Development "frontend-build" "前端构建没有生成共享 build 的 index.html" "检查 TypeScript/Vite 输出" }
         $record = [ordered]@{
             schema_version = "1"; dependency_digest = $DependencyDigest; build_digest = $BuildDigest
+            manifest_sha256 = Get-FileDigest (Join-Path $temporaryDist "frontend-manifest.json")
             node_executable = $script:Node; node_version = $script:NodeVersion
             pnpm_executable = $script:PnpmRunner[1]; pnpm_version = $script:PnpmVersion
         }
@@ -57,17 +70,32 @@ function Publish-FrontendBuild([string]$Workspace, [string]$BuildDigest, [string
     return Read-FrontendBuildReceipt $buildRoot
 }
 
+function Test-FrontendInstanceContent([string]$Source, [string]$Destination) {
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { return $false }
+    $sourceRoot = [IO.Path]::GetFullPath($Source).TrimEnd('\')+'\'
+    $files = @(Get-ChildItem -LiteralPath $Source -File -Recurse -Force)
+    if ($files.Count -ne @(Get-ChildItem -LiteralPath $Destination -File -Recurse -Force).Count) { return $false }
+    foreach ($file in $files) {
+        $target = Join-Path $Destination $file.FullName.Substring($sourceRoot.Length)
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf) -or (Get-FileDigest $file.FullName) -ne (Get-FileDigest $target)) { return $false }
+    }
+    return $true
+}
+
 function Copy-FrontendBuildToInstance([string]$BuildRoot, [string]$BuildDigest, [string]$DependencyDigest, $Record) {
     $source = Join-Path $BuildRoot "dist"
     $dist = Join-Path $script:VarDir "runtime\frontend"
     $temporary = Join-Path $script:VarDir ("runtime\frontend-{0}.tmp" -f [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path (Split-Path -Parent $temporary) -Force | Out-Null
-    try {
-        Copy-Item -LiteralPath $source -Destination $temporary -Recurse -Force
-        if (-not (Test-Path -LiteralPath (Join-Path $temporary "index.html") -PathType Leaf)) { Fail-Development "frontend-build" "共享前端 build 副本缺少 index.html" "删除对应 var/development/frontend/builds 后重试" }
-        if (Test-Path -LiteralPath $dist) { Remove-Item -LiteralPath $dist -Recurse -Force }
-        [IO.Directory]::Move($temporary, $dist)
-    } finally { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }
+    # 只复用内容集合完全一致的实例副本，不能仅信任旧回执或时间戳。
+    if (-not (Test-FrontendInstanceContent $source $dist)) {
+        try {
+            Copy-Item -LiteralPath $source -Destination $temporary -Recurse -Force
+            if (-not (Test-Path -LiteralPath (Join-Path $temporary "index.html") -PathType Leaf)) { Fail-Development "frontend-build" "共享前端 build 副本缺少 index.html" "删除对应 var/development/frontend/builds 后重试" }
+            if (Test-Path -LiteralPath $dist) { Remove-Item -LiteralPath $dist -Recurse -Force }
+            [IO.Directory]::Move($temporary, $dist)
+        } finally { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }
+    }
     $instanceReceipt = Join-Path $script:VarDir "runtime\build\frontend-receipt.json"
     $instanceTemporary = "$instanceReceipt.$([guid]::NewGuid().ToString('N')).tmp"
     $payload = [ordered]@{

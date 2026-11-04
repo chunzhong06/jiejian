@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "FlowTrialStep": {
+      "additionalProperties": false,
+      "properties": {
+        "classification": {
+          "enum": [
+            "ACCEPTED",
+            "DENIED",
+            "UNKNOWN"
+          ],
+          "title": "Classification",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "purpose": {
+          "enum": [
+            "SETUP",
+            "TARGET",
+            "RESTORE"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "response_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Bytes"
+        },
+        "status_code": {
+          "anyOf": [
+            {
+              "maximum": 599,
+              "minimum": 100,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Code"
+        },
+        "step_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "step_id",
+        "purpose",
+        "classification"
+      ],
+      "title": "FlowTrialStep",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "const": 1,
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "finished_at_us": {
+      "minimum": 0,
+      "title": "Finished At Us",
+      "type": "integer"
+    },
+    "flow_attempted": {
+      "title": "Flow Attempted",
+      "type": "boolean"
+    },
+    "identity_status": {
+      "enum": [
+        "MATCH",
+        "MISMATCH",
+        "UNKNOWN"
+      ],
+      "title": "Identity Status",
+      "type": "string"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_owner": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "recovery": {
+      "enum": [
+        "NOT_REQUIRED",
+        "NOT_ATTEMPTED",
+        "REQUEST_ACCEPTED",
+        "REQUEST_DENIED",
+        "UNCONFIRMED"
+      ],
+      "title": "Recovery",
+      "type": "string"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/FlowTrialStep"
+      },
+      "maxItems": 33,
+      "title": "Steps",
+      "type": "array"
+    },
+    "target_attempted": {
+      "title": "Target Attempted",
+      "type": "boolean"
+    },
+    "trial_id": {
+      "pattern": "^ftr_[0-9a-f]{32}$",
+      "title": "Trial Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trial_id",
+    "job_id",
+    "request_hash",
+    "fencing_token",
+    "lease_owner",
+    "steps",
+    "identity_status",
+    "target_attempted",
+    "flow_attempted",
+    "recovery",
+    "finished_at_us"
+  ],
+  "title": "FlowTrialReport",
+  "type": "object"
+}

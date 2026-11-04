@@ -208,13 +208,15 @@ def test_portable_executor_uses_declared_client_without_host_path(tmp_path,monke
     assert execution._codex_executable() is None
 
 
-def test_read_only_executor_can_read_results_but_cannot_request_source_writes(harness, monkeypatch):
+@pytest.mark.parametrize('source_free',[False,True])
+def test_read_only_executor_can_read_results_but_cannot_request_source_writes(harness, monkeypatch, source_free):
     from types import SimpleNamespace
     from product.backend.application.agent_access import execution
     from product.backend.application.agent_access.service import MCPAccessLevel
     monkeypatch.setattr(execution.shutil,'which',lambda _: 'installed-codex')
     current=harness.core.application_understanding.get(harness.project_id)
-    monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:current.model_copy(update={'source_analysis_authorized':True}))
+    monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:current.model_copy(update={
+        'source_root':None if source_free else current.source_root,'source_analysis_authorized':not source_free}))
     access=SimpleNamespace(view=lambda:SimpleNamespace(paired=True),level_for=lambda _:MCPAccessLevel.READ)
     calls=[]
     def runner(**arguments):
@@ -223,6 +225,12 @@ def test_read_only_executor_can_read_results_but_cannot_request_source_writes(ha
     executor=execution.AgentExecution(harness.core,access,SimpleNamespace(prepare_managed_profile=lambda _: 'protected-profile'),runner=runner)
     value=task(harness)
     assert executor.capabilities(harness.project_id)['read_only'] is True
+    assert executor.capabilities(harness.project_id)['ready'] is True
+    if source_free:
+        access.level_for=lambda _:MCPAccessLevel.PREPARE
+        with pytest.raises(JiejianError,match='先明确允许读取'):
+            executor.start(harness.project_id,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,allow_changes=True))
+        access.level_for=lambda _:MCPAccessLevel.READ
     with pytest.raises(JiejianError,match='当前协作为只读'):
         executor.start(harness.project_id,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,allow_changes=True))
     executor.start(harness.project_id,value['task_id'],execution.StartAgent(operation_id=uuid4().hex))
@@ -424,3 +432,72 @@ def test_ready_deliverable_after_wait_does_not_spend_another_model_turn(harness,
         assert calls==[None]
     finally:
         executor.close()
+
+
+def test_editor_handoff_accepts_structure_but_rejects_raw_parameter_values():
+    from pydantic import ValidationError
+    from product.backend.application.agent_access.handoff import FlowHandoff
+    shape = dict(kind='FLOW', flow_id='ofl_'+'a'*32, revision=1, action_id='action', action_revision=1,
+        target_step_id='read', steps=[dict(id='read', method='GET', path='/orders/{case_resource_id}',
+        parameters=[dict(location='HEADER', name='Authorization', source='PRIOR_STEP_JSON_PATH', secret=True)])])
+    assert FlowHandoff(**shape).steps[0].parameters[0].secret
+    shape['steps'][0]['parameters'][0]['value'] = 'credential-canary'
+    with pytest.raises(ValidationError): FlowHandoff(**shape)
+    shape['steps'][0]['parameters'][0].pop('value')
+    shape['steps'][0]['path'] = '/orders?token=credential-canary'
+    with pytest.raises(ValidationError): FlowHandoff(**shape)
+
+
+def test_followup_replaces_target_without_reusing_old_completion_or_losing_history(harness,monkeypatch):
+    from product.backend.application.agent_access.tasks import CollaborationFollowup
+    service,project=harness.core.collaboration,harness.project_id
+    value=service.create(project,CreateCollaboration(operation_id=uuid4().hex,goal='解读原报告',purpose='UNDERSTAND',references={'run_id':'old-report'}))
+    marker=Capability('fixture.saved','保存测试产物','测试','PREPARE',Empty,lambda *args:{'saved':True})
+    harness.core.agent_capabilities.items[marker.key]=marker
+    service.act(project,value['task_id'],CollaborationAction(operation_id=uuid4().hex,capability=marker.key))
+    service.control(project,value['task_id'],'pause')
+    command=CollaborationFollowup(operation_id=uuid4().hex,task_id=value['task_id'],goal='整理另一项业务权限',purpose='RULES',references={'action_id':'new-action'})
+    result=service.followup(project,command)
+    assert result['state']=='PAUSED'
+    assert result['references']=={'action_id':'new-action'}
+    assert result['followups'][0]['previous']['references']=={'run_id':'old-report'}
+    assert len(result['operations'])==result['goal_operation_baseline']==1
+    assert service.followup(project,command)['revision']==result['revision']
+    monkeypatch.setattr(harness.core.agent_capabilities,'pending_reviews',lambda *args,**kwargs:[])
+    assert harness.core.agent_capabilities.goal_outcome(project,result)['fulfilled'] is False
+
+
+def test_agent_flow_candidate_returns_exact_revision_and_waits_for_explicit_adoption(harness):
+    import json
+    from product.protocols.preparation.operation_flow import OperationFlowDraft
+    service,project=harness.core.collaboration,harness.project_id
+    draft=OperationFlowDraft.model_validate_json(json.dumps(dict(id='ofl_'+uuid4().hex,revision=1,
+        business_action_id=harness.action.action_id,action_revision=harness.action.revision,
+        subject_test_identity_id=harness.identities[0].identity_id,resource_owner_test_identity_id=harness.identities[0].identity_id,
+        source_fingerprint=harness.core.application_understanding.get(project).source_fingerprint,
+        actual_resource_id='document-1',target_step_id='update',steps=[dict(id='update',purpose='TARGET',identity_id='CASE_SUBJECT',
+            request_template=dict(method='PATCH',path='/documents/{case_resource_id}',body=dict(kind='EMPTY'),
+                input_slots=[dict(slot_id='case_resource_id',source='CASE_RESOURCE_ID',consumer='PATH')]),
+            classifier=dict(accepted=[dict(kind='STATUS_IN',statuses=[200])],denied=[]),depends_on_step_ids=[])],
+        recovery=dict(method='POST',relative_path='/restore/{case_resource_id}',json_body={})) ))
+    document=harness.core.operation_flows.candidate(project,draft)
+    value=service.create(project,CreateCollaboration(operation_id=uuid4().hex,goal='补全当前流程',purpose='SETUP'))
+    service.act(project,value['task_id'],CollaborationAction(operation_id=uuid4().hex,capability='flows.save',arguments=document.model_dump(mode='json')))
+    reviewed=service.show(project,value['task_id'])
+    assert reviewed['state']=='WAITING_USER'
+    assert 'flow_id='+document.id in reviewed['reviews'][0]['destination']
+    assert 'revision=1' in reviewed['reviews'][0]['destination']
+    assert harness.core.operation_flows.read(project,document.id,1)==document
+    with pytest.raises(JiejianError):harness.core.operation_flows.read('other-project',document.id,1)
+    harness.core.operation_flows.adopt(project,document.id,1)
+    assert service.show(project,value['task_id'])['reviews']==[]
+
+
+def test_legacy_agent_review_location_keeps_stage_and_exact_report_reference(harness,monkeypatch):
+    from types import SimpleNamespace
+    service=harness.core.agent_workflow
+    monkeypatch.setattr(service.results,'status',lambda *args,**kwargs:SimpleNamespace(run=SimpleNamespace(lifecycle=SimpleNamespace(value='COMPLETED'))))
+    monkeypatch.setattr(service.results,'package',lambda *args,**kwargs:SimpleNamespace(evidence=[SimpleNamespace(case=SimpleNamespace(case_id='case-1'))]))
+    value=service.read(harness.project_id,'RESULTS',run_id='run-1',case_id='case-1')
+    assert value['review_url'].startswith('#/reports?')
+    assert 'run_id=run-1' in value['review_url'] and 'case_id=case-1' in value['review_url']

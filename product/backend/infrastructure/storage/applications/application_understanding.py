@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from product.backend.domain.applications.models import ActionCandidate, ApplicationUnderstanding, RoleCandidate
+from product.protocols.web.environment import FrozenEnvironment
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.storage.base import (
     Base,
@@ -34,7 +35,7 @@ from product.backend.infrastructure.storage.base import (
 class ApplicationUnderstandingRow(Base):
     __tablename__ = "application_understanding"
     __table_args__ = (
-        CheckConstraint("length(source_root) BETWEEN 1 AND 32768", name="source_root_length"),
+        CheckConstraint("source_root IS NULL OR length(source_root) BETWEEN 1 AND 32768", name="source_root_length"),
         CheckConstraint(
             "confirmed_endpoint IS NULL OR length(confirmed_endpoint) BETWEEN 1 AND 2048",
             name="endpoint_length",
@@ -79,7 +80,8 @@ class ApplicationUnderstandingRow(Base):
         ForeignKey("projects.project_id", ondelete="RESTRICT"),
         primary_key=True,
     )
-    source_root: Mapped[str] = mapped_column(String(32_768), nullable=False)
+    source_root: Mapped[str | None] = mapped_column(String(32_768), nullable=True)
+    environment_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     confirmed_endpoint: Mapped[str | None] = mapped_column(String(2048))
     endpoint_source_fingerprint: Mapped[str | None] = mapped_column(String(64))
     endpoint_confirmed_at_us: Mapped[int | None] = mapped_column(BigInteger)
@@ -152,8 +154,9 @@ class ApplicationUnderstandingRepository:
     def _row_values(record: ApplicationUnderstanding) -> dict[str, object]:
         values = record.model_dump(
             mode="json",
-            exclude={"role_candidates", "action_candidates"},
+            exclude={"role_candidates", "action_candidates", "environment"},
         )
+        values['environment_json'] = None if record.environment is None else _canonical_json(record.environment.model_dump(mode='json'))
         values["role_candidates_json"] = _canonical_json(
             [item.model_dump(mode="json") for item in record.role_candidates]
         )
@@ -188,6 +191,7 @@ class ApplicationUnderstandingRepository:
             {
                 "project_id": row.project_id,
                 "source_root": row.source_root,
+                "environment": None if row.environment_json is None else FrozenEnvironment.model_validate_json(row.environment_json),
                 "confirmed_endpoint": row.confirmed_endpoint,
                 "endpoint_source_fingerprint": row.endpoint_source_fingerprint,
                 "endpoint_confirmed_at_us": row.endpoint_confirmed_at_us,

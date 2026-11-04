@@ -21,9 +21,11 @@ class JobTargetType(StrEnum):
     PROOF_PREFLIGHT = "PROOF_PREFLIGHT"
     REFERENCE_CAPTURE='REFERENCE_CAPTURE'
     IDENTITY_PREPARATION = 'IDENTITY_PREPARATION'
+    FLOW_TRIAL = 'FLOW_TRIAL'
 
     @classmethod
     def from_job(cls, job: JobRecord) -> JobTargetType:
+        if job.flow_trial_id is not None:return cls.FLOW_TRIAL
         if job.identity_preparation_id is not None:return cls.IDENTITY_PREPARATION
         if job.reference_capture_id is not None:return cls.REFERENCE_CAPTURE
         if job.preflight_id is not None:
@@ -262,3 +264,17 @@ class IdentityPreparationTargetHandler:
         work.identity_preparations.update(job.identity_preparation_id,
             phase='CANCELLED' if outcome is JobTargetOutcome.CANCELLED else 'FAILED', now_us=now_us)
         return None, None
+
+
+class FlowTrialTargetHandler:
+    def load(self,work,job):
+        request=work.flow_trials.get(job.project_id,job.flow_trial_id)
+        if request is None or proof_fingerprint(request)!=job.request_hash:
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT,'试运行任务与冻结输入不一致')
+        return None,None
+
+    def advance_after_claim(self,work,job,now_us):
+        return self.load(work,job)
+
+    def finish(self,work,job,now_us,outcome):
+        return self.load(work,job)

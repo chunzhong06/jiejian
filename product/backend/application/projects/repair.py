@@ -145,16 +145,19 @@ class CurrentProjectRepairService:
                             break
                 linked = (change_context is not None and contract.reference() in references
                     and (request.repair_context == repair_context(contract) or contract.reference() in targets))
+                # 外部原题明确关联冻结合同；其行为复验不依赖本地源码变更记录。
+                linked = linked or (request is not None and request.external_recheck is not None
+                    and request.repair_context == repair_context(contract))
                 if linked:
                     if package is None:
                         lifecycle = entry.run.lifecycle
                         active = lifecycle in {"QUEUED", "RUNNING"}
                         events.append(RepairHistoryEvent(kind="CHECK_PENDING" if active else "CHECK_INTERRUPTED",
                             run_id=entry.run.run_id, source_run_id=contract.source_run_id,
-                            created_at_us=entry.run.created_at_us, change_id=change_context.change_id))
+                            created_at_us=entry.run.created_at_us, change_id=None if change_context is None else change_context.change_id))
                         continue
                     verification = self._repairs.verification_for_contract(package, contract)
-                    status, run_id, linked_change = verification.status, entry.run.run_id, change_context.change_id
+                    status, run_id, linked_change = verification.status, entry.run.run_id, None if change_context is None else change_context.change_id
                     if status == "VERIFIED":
                         last_verified = run_id
                         resolved = True

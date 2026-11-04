@@ -1,0 +1,74 @@
+# product/frontend/src/pages 模块
+
+<!-- generated:modules -->
+
+[返回总索引](../模块索引.md)
+
+| 文件 | 行数 | 公开声明 |
+| --- | ---: | --- |
+| [product/frontend/src/pages/changes/Changes.tsx](../../../product/frontend/src/pages/changes/Changes.tsx) | 76 | Changes |
+| [product/frontend/src/pages/changes/workspace.css](../../../product/frontend/src/pages/changes/workspace.css) | 37 | 包、内部机制或样式 |
+| [product/frontend/src/pages/checks/ArchivedExample.tsx](../../../product/frontend/src/pages/checks/ArchivedExample.tsx) | 21 | ArchivedExample |
+| [product/frontend/src/pages/checks/CheckPlan.tsx](../../../product/frontend/src/pages/checks/CheckPlan.tsx) | 137 | Plan、gapDestination、gapName |
+| [product/frontend/src/pages/checks/CheckRun.tsx](../../../product/frontend/src/pages/checks/CheckRun.tsx) | 44 | Run |
+| [product/frontend/src/pages/checks/CheckScopePicker.tsx](../../../product/frontend/src/pages/checks/CheckScopePicker.tsx) | 37 | CheckScopePicker |
+| [product/frontend/src/pages/checks/History.tsx](../../../product/frontend/src/pages/checks/History.tsx) | 64 | History、HistoryMemory、restoreHistory |
+| [product/frontend/src/pages/checks/report/EvidenceInspector.tsx](../../../product/frontend/src/pages/checks/report/EvidenceInspector.tsx) | 177 | EvidenceInspector |
+| [product/frontend/src/pages/checks/report/EvidenceRecord.tsx](../../../product/frontend/src/pages/checks/report/EvidenceRecord.tsx) | 28 | EvidenceRecord |
+| [product/frontend/src/pages/checks/report/Report.tsx](../../../product/frontend/src/pages/checks/report/Report.tsx) | 155 | Report |
+| [product/frontend/src/pages/checks/Reports.tsx](../../../product/frontend/src/pages/checks/Reports.tsx) | 11 | Reports |
+| [product/frontend/src/pages/checks/RuleCheckScope.tsx](../../../product/frontend/src/pages/checks/RuleCheckScope.tsx) | 28 | RuleCheckScope |
+| [product/frontend/src/pages/checks/SavedChecks.tsx](../../../product/frontend/src/pages/checks/SavedChecks.tsx) | 51 | SavedChecks |
+| [product/frontend/src/pages/checks/styles.css](../../../product/frontend/src/pages/checks/styles.css) | 340 | 包、内部机制或样式 |
+| [product/frontend/src/pages/checks/types.ts](../../../product/frontend/src/pages/checks/types.ts) | 3 | ReportsProps |
+| [product/frontend/src/pages/checks/workspace.css](../../../product/frontend/src/pages/checks/workspace.css) | 0 | 包、内部机制或样式 |
+| [product/frontend/src/pages/connections/ApplicationWorkbench.tsx](../../../product/frontend/src/pages/connections/ApplicationWorkbench.tsx) | 90 | ApplicationWorkbench |
+| [product/frontend/src/pages/connections/Capabilities.tsx](../../../product/frontend/src/pages/connections/Capabilities.tsx) | 33 | Capabilities |
+| [product/frontend/src/pages/connections/Connect.tsx](../../../product/frontend/src/pages/connections/Connect.tsx) | 141 | Connect |
+| [product/frontend/src/pages/connections/ExampleLab.tsx](../../../product/frontend/src/pages/connections/ExampleLab.tsx) | 62 | ExampleLab |
+| [product/frontend/src/pages/connections/exampleLifecycle.ts](../../../product/frontend/src/pages/connections/exampleLifecycle.ts) | 47 | useExampleLifecycle |
+| [product/frontend/src/pages/connections/RuntimeConnection.tsx](../../../product/frontend/src/pages/connections/RuntimeConnection.tsx) | 132 | RuntimeConnection |
+| [product/frontend/src/pages/connections/RuntimeOptions.tsx](../../../product/frontend/src/pages/connections/RuntimeOptions.tsx) | 54 | RuntimeOptions |
+| [product/frontend/src/pages/connections/SourceLibrary.tsx](../../../product/frontend/src/pages/connections/SourceLibrary.tsx) | 78 | SourceLibrary |
+| [product/frontend/src/pages/connections/SourceRequestDetails.tsx](../../../product/frontend/src/pages/connections/SourceRequestDetails.tsx) | 63 | SourceDraft、SourceRequestDetails |
+| [product/frontend/src/pages/connections/sources.css](../../../product/frontend/src/pages/connections/sources.css) | 66 | 包、内部机制或样式 |
+| [product/frontend/src/pages/connections/styles.css](../../../product/frontend/src/pages/connections/styles.css) | 168 | 包、内部机制或样式 |
+| [product/frontend/src/pages/connections/understanding.css](../../../product/frontend/src/pages/connections/understanding.css) | 15 | 包、内部机制或样式 |
+| [product/frontend/src/pages/connections/Understanding.tsx](../../../product/frontend/src/pages/connections/Understanding.tsx) | 54 | Understanding |
+| [product/frontend/src/pages/connections/workbench.css](../../../product/frontend/src/pages/connections/workbench.css) | 78 | 包、内部机制或样式 |
+| [product/frontend/src/pages/issues/Issues.tsx](../../../product/frontend/src/pages/issues/Issues.tsx) | 39 | Issues |
+| [product/frontend/src/pages/issues/workspace.css](../../../product/frontend/src/pages/issues/workspace.css) | 26 | 包、内部机制或样式 |
+| [product/frontend/src/pages/overview/Home.tsx](../../../product/frontend/src/pages/overview/Home.tsx) | 80 | Home |
+| [product/frontend/src/pages/overview/workbench.css](../../../product/frontend/src/pages/overview/workbench.css) | 35 | 包、内部机制或样式 |
+| [product/frontend/src/pages/permissions/BusinessIssue.tsx](../../../product/frontend/src/pages/permissions/BusinessIssue.tsx) | 30 | BusinessIssue |
+| [product/frontend/src/pages/permissions/InitialRules.tsx](../../../product/frontend/src/pages/permissions/InitialRules.tsx) | 171 | InitialRules |
+| [product/frontend/src/pages/permissions/Permissions.tsx](../../../product/frontend/src/pages/permissions/Permissions.tsx) | 181 | Permissions |
+| [product/frontend/src/pages/permissions/RepairTask.tsx](../../../product/frontend/src/pages/permissions/RepairTask.tsx) | 59 | RepairTask |
+| [product/frontend/src/pages/permissions/RuleEditor.tsx](../../../product/frontend/src/pages/permissions/RuleEditor.tsx) | 74 | RuleEditor |
+| [product/frontend/src/pages/permissions/RuleWorkbench.tsx](../../../product/frontend/src/pages/permissions/RuleWorkbench.tsx) | 135 | RuleWorkbench |
+| [product/frontend/src/pages/permissions/styles/permissions.css](../../../product/frontend/src/pages/permissions/styles/permissions.css) | 129 | 包、内部机制或样式 |
+| [product/frontend/src/pages/permissions/styles/rules.css](../../../product/frontend/src/pages/permissions/styles/rules.css) | 120 | 包、内部机制或样式 |
+| [product/frontend/src/pages/permissions/workspace.css](../../../product/frontend/src/pages/permissions/workspace.css) | 33 | 包、内部机制或样式 |
+| [product/frontend/src/pages/preparation/materials/AccountAuthentication.tsx](../../../product/frontend/src/pages/preparation/materials/AccountAuthentication.tsx) | 49 | AccountAuthentication |
+| [product/frontend/src/pages/preparation/materials/Accounts.tsx](../../../product/frontend/src/pages/preparation/materials/Accounts.tsx) | 218 | Accounts |
+| [product/frontend/src/pages/preparation/materials/draft.ts](../../../product/frontend/src/pages/preparation/materials/draft.ts) | 13 | requiredVariables、sourceChoice |
+| [product/frontend/src/pages/preparation/materials/MaterialEditor.tsx](../../../product/frontend/src/pages/preparation/materials/MaterialEditor.tsx) | 168 | MaterialEditor |
+| [product/frontend/src/pages/preparation/materials/reasons.ts](../../../product/frontend/src/pages/preparation/materials/reasons.ts) | 17 | materialReasons |
+| [product/frontend/src/pages/preparation/materials/RuleCaseData.tsx](../../../product/frontend/src/pages/preparation/materials/RuleCaseData.tsx) | 44 | RuleCaseData |
+| [product/frontend/src/pages/preparation/materials/SourceConfiguration.tsx](../../../product/frontend/src/pages/preparation/materials/SourceConfiguration.tsx) | 89 | SourceConfiguration |
+| [product/frontend/src/pages/preparation/materials/Sources.tsx](../../../product/frontend/src/pages/preparation/materials/Sources.tsx) | 227 | Sources |
+| [product/frontend/src/pages/preparation/Preparation.tsx](../../../product/frontend/src/pages/preparation/Preparation.tsx) | 203 | Preparation |
+| [product/frontend/src/pages/preparation/styles/materials.css](../../../product/frontend/src/pages/preparation/styles/materials.css) | 193 | 包、内部机制或样式 |
+| [product/frontend/src/pages/preparation/styles/preparation.css](../../../product/frontend/src/pages/preparation/styles/preparation.css) | 82 | 包、内部机制或样式 |
+| [product/frontend/src/pages/storage/Storage.tsx](../../../product/frontend/src/pages/storage/Storage.tsx) | 235 | Storage |
+| [product/frontend/src/pages/storage/styles.css](../../../product/frontend/src/pages/storage/styles.css) | 57 | 包、内部机制或样式 |
+| [product/frontend/src/pages/system/styles.css](../../../product/frontend/src/pages/system/styles.css) | 88 | 包、内部机制或样式 |
+| [product/frontend/src/pages/system/System.tsx](../../../product/frontend/src/pages/system/System.tsx) | 79 | System |
+| [product/frontend/src/pages/testing/Testing.tsx](../../../product/frontend/src/pages/testing/Testing.tsx) | 56 | Testing |
+| [product/frontend/src/pages/testing/TestingEditor.tsx](../../../product/frontend/src/pages/testing/TestingEditor.tsx) | 25 | TestingEditor |
+| [product/frontend/src/pages/testing/workspace.css](../../../product/frontend/src/pages/testing/workspace.css) | 4 | 包、内部机制或样式 |
+| [product/frontend/src/pages/tools/Agent.tsx](../../../product/frontend/src/pages/tools/Agent.tsx) | 85 | Agent |
+| [product/frontend/src/pages/tools/collaboration.css](../../../product/frontend/src/pages/tools/collaboration.css) | 80 | 包、内部机制或样式 |
+| [product/frontend/src/pages/tools/Collaboration.tsx](../../../product/frontend/src/pages/tools/Collaboration.tsx) | 194 | Collaboration |
+| [product/frontend/src/pages/tools/CollaborationHub.tsx](../../../product/frontend/src/pages/tools/CollaborationHub.tsx) | 23 | CollaborationHub |
+| [product/frontend/src/pages/tools/workspace.css](../../../product/frontend/src/pages/tools/workspace.css) | 44 | 包、内部机制或样式 |

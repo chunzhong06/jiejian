@@ -4,8 +4,9 @@ import { request } from '../../../shared/api/http'
 export type TestIdentityStatus = 'NOT_PREPARED' | 'PREPARED' | 'NEEDS_REVIEW'
 export type TestIdentityAuthMethod = 'COOKIE_SESSION' | 'BEARER'
 export type AuthenticationProfile = {
-  method:'BROWSER_SESSION'|'BEARER'|'API_LOGIN'; login_path:string; username_field:string; password_field:string; token_path:string[];
-  verification:{path:string;subject_path:string[];role_path:string[];expected_subject:string;expected_role:string}
+  method:'BROWSER_SESSION'|'BEARER'|'API_LOGIN'|'OAUTH2_CLIENT_CREDENTIALS'|'OAUTH2_REFRESH'; login_path:string; username_field:string; password_field:string; token_path:string[];
+  principal_kind?:'USER'|'SERVICE';oauth_client_id?:string|null;oauth_scope?:string|null;
+  verification:{path:string;subject_path:string[];role_path:string[];expected_subject:string;expected_role:string|null}
 }
 export type IdentityVerification = {status:'VERIFIED'|'AUTH_EXPIRED'|'SUBJECT_MISMATCH'|'ROLE_MISMATCH'|'FIELD_MISSING'|'UNAVAILABLE';checked_at_us:number;subject:string|null;role:string|null}
 export type AuthenticationOptions = {identity_id:string;templates:Array<{identity_id:string;label:string;profile:Omit<AuthenticationProfile,'verification'>&{verification:Omit<AuthenticationProfile['verification'],'expected_subject'|'expected_role'>};expected_role:string|null}>}

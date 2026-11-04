@@ -7,6 +7,19 @@ import pytest
 
 ROOT=Path(__file__).resolve().parents[2]
 
+
+def test_module_index_keeps_production_testing_pages_and_content_invalidates_parse_cache(tmp_path):
+    from scripts.docs.sources import modules,routes
+    directory=tmp_path/'product/frontend/src/pages/testing';directory.mkdir(parents=True)
+    (directory/'Testing.tsx').write_text('export function Testing() {}',encoding='utf-8')
+    (directory/'Testing.test.tsx').write_text('test fixture',encoding='utf-8')
+    assert [item[0] for item in modules(tmp_path)]==['product/frontend/src/pages/testing/Testing.tsx']
+    router=tmp_path/'product/backend/interfaces/http/routers/example.py';router.parent.mkdir(parents=True)
+    router.write_text("@router.get('/before')\ndef read(): pass",encoding='utf-8')
+    assert routes(tmp_path)[0][1]=='/before'
+    router.write_text("@router.get('/after')\ndef read(): pass",encoding='utf-8')
+    assert routes(tmp_path)[0][1]=='/after'
+
 def test_current_documents_are_self_contained():
     assert check_documents(ROOT)==[]
 

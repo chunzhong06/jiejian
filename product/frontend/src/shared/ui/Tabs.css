@@ -1,0 +1,52 @@
+.jj-tabs {
+  --tab-selected-fill:color-mix(in srgb,var(--selected) 68%,transparent);
+  position:relative;
+  display:flex;
+  align-items:stretch;
+  gap:4px;
+  min-width:0;
+  max-width:100%;
+  margin:0;
+  padding:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:thin;
+  border:0;
+  border-radius:0;
+  background:transparent;
+}
+.jj-tabs[data-divider=true] { border-bottom:1px solid var(--line); }
+.jj-tabs > :is(button,a) {
+  --state-fill:color-mix(in srgb,var(--hover) 32%,transparent);
+  position:relative;
+  isolation:isolate;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  gap:8px;
+  min-height:44px;
+  padding:10px 16px;
+  border:0;
+  border-radius:3px 3px 0 0;
+  background:transparent;
+  box-shadow:none;
+  color:var(--muted);
+  font:inherit;
+  font-size:var(--text-body);
+  line-height:24px;
+  white-space:nowrap;
+  text-decoration:none;
+  cursor:pointer;
+  transition:background-color var(--motion-indicator) var(--ease-layout),color var(--motion-hover-in) var(--ease-respond);
+}
+.jj-tabs[data-density=compact] > :is(button,a) { padding-inline:12px; font-size:var(--text-meta); }
+.jj-tabs > :is(button,a):hover { color:var(--ink); }
+.jj-tabs > :is(button,a)::before { content:''; position:absolute; inset:0; z-index:-1; border-radius:inherit; background:var(--state-fill); pointer-events:none; opacity:0; transition:opacity var(--motion-hover-out) var(--ease-respond); }
+@media(hover:hover) and (pointer:fine) { .jj-tabs > :is(button,a):not(:disabled):hover::before { opacity:1; transition-duration:var(--motion-hover-in); } }
+/* 悬停只反馈所在项，不能移动或遮盖当前分类的选中表面和指示线。 */
+.jj-tabs > :is([aria-selected=true],[aria-current=page]) { --state-fill:transparent; background:var(--tab-selected-fill); color:var(--accent-ink); font-weight:600; }
+.jj-tabs > :is(button,a):focus-visible { outline:2px solid var(--focus); outline-offset:-3px; }
+html[data-input-mode=pointer] .jj-tabs > :is(button,a):focus-visible { outline:none; }
+.jj-tab-indicator { position:absolute; left:0; top:0; z-index:3; height:2px; background:var(--accent); pointer-events:none; transition:transform var(--motion-indicator) var(--ease-layout),width var(--motion-indicator) var(--ease-layout); }
+@media(prefers-reduced-motion:reduce) { .jj-tabs > :is(button,a),.jj-tabs > :is(button,a)::before,.jj-tab-indicator { transition:none; } }

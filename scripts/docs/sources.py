@@ -1,5 +1,6 @@
 # 静态提取当前模块、HTTP声明、公共格式与迁移元数据，不执行产品。
 import ast
+from functools import lru_cache
 import json
 import re
 from pathlib import Path
@@ -7,8 +8,13 @@ from pathlib import Path
 IGNORED={'__pycache__','node_modules','dist','coverage'}
 SUFFIXES={'.py','.ts','.tsx','.css','.ps1','.cmd','.mjs','.cjs','.c'}
 
+@lru_cache(maxsize=1024)
+def _parsed(text, filename):
+    return ast.parse(text, filename=filename)
+
 def tree(path):
-    return ast.parse(path.read_text('utf-8-sig'),filename=str(path))
+    # 内容参与缓存键，同一生成过程复用 AST，改动后不会接受旧语法树。
+    return _parsed(path.read_text('utf-8-sig'), str(path))
 
 def literal(node):
     try:return ast.literal_eval(node)
@@ -19,7 +25,7 @@ def modules(root):
     for folder in ('product/backend','product/frontend/src','product/frontend/tooling','product/protocols','product/launcher','scripts'):
         for path in sorted((root/folder).rglob('*')):
             if not path.is_file() or path.suffix not in SUFFIXES or set(path.parts)&IGNORED:continue
-            if '.test.' in path.name or '.fixtures.' in path.name or 'testing' in path.parts:continue
+            if '.test.' in path.name or '.fixtures.' in path.name:continue
             if path.is_symlink():raise ValueError('源码索引拒绝链接')
             text=path.read_text('utf-8-sig')
             if path.suffix=='.py':

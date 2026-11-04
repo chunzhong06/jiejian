@@ -6,6 +6,7 @@ from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data
 from product.backend.bootstrap import ApplicationCore
 from product.protocols.checks.execution_request import PermissionReference
 from product.backend.application.checks.routines import SaveCheckRoutine
+from product.backend.application.checks.service import ExternalRecheckCommand
 
 
 class CheckScopeRequest(ApiModel):
@@ -14,6 +15,10 @@ class CheckScopeRequest(ApiModel):
 
 def build_checks_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
+
+    @router.post('/api/projects/{project_id}/external-recheck-preview',response_model=ApiResponse)
+    def external_preview(project_id:str,body:ExternalRecheckCommand):
+        return data_response(context.checks.preview(project_id,external_recheck=body))
 
     @router.get('/api/projects/{project_id}/check-routines', response_model=ApiResponse)
     def routines(project_id: str):

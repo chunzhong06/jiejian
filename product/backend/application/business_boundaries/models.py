@@ -30,6 +30,12 @@ class BoundaryProposalCommand(BoundaryWorkflowModel):
     unresolved_questions: tuple[str, ...] = Field(default=(), max_length=128)
     provenance: str = Field(min_length=1, max_length=512)
 
+    @field_validator('proposed_actors', 'proposed_actions', 'proposed_permissions')
+    @classmethod
+    def canonical_item_order(cls, values):
+        # 指纹使用与正式提案一致的稳定顺序，不能依赖用户编辑列表的排列。
+        return tuple(sorted(values,key=lambda item:item.item_id))
+
 
 class BoundaryDraftCandidate(BoundaryWorkflowModel):
     candidate_kind: str

@@ -106,7 +106,7 @@ class PreparationService:
             from product.backend.domain.checks.selection import resolve_selected_permissions, select_action_input
             selected = None if selected_permissions is None else resolve_selected_permissions(boundary.permission_intents, selected_permissions)
             understanding = work.application_understanding.get(project_id)
-            if understanding is None or understanding.source_fingerprint is None:
+            if understanding is None or (understanding.source_fingerprint is None and understanding.environment is None):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             repository = work.action_preparation
             for action in boundary.actions:
@@ -175,6 +175,10 @@ class PreparationService:
         payload.update(config_fingerprint=config_fingerprint, budget_fingerprint=budget_fingerprint,
                        change_context=None if change_context is None else change_context.model_dump(mode="json"),
                        repair_context=None if repair_context is None else repair_context.model_dump(mode="json"))
+        with self._uow_factory() as work:
+            understanding = work.application_understanding.get(project_id)
+            if understanding.environment is not None:
+                payload.update(schema_version='2', environment=understanding.environment.model_dump(mode='json'))
         return ExecutionRequest.model_validate_json(json.dumps(payload), strict=True)
 
     def case_data(self, project_id):
@@ -289,7 +293,7 @@ class PreparationService:
                 codes=tuple(sorted({item['reason'] for item in affected}))
                 technical=technical.model_copy(update={'resources':tuple(item.model_copy(update={
                     'status':PreparationStatus.BLOCKED,'reason_codes':tuple(dict.fromkeys((*item.reason_codes,*codes)))})
-                    if any(gap['reason']=='REFERENCE_CAPTURE_IN_PROGRESS' or gap['owner_identity_id']==item.owner_test_identity_id for gap in affected) else item
+                    if any(gap['reason'] in {'REFERENCE_CAPTURE_IN_PROGRESS','FLOW_TRIAL_IN_PROGRESS'} or gap['owner_identity_id']==item.owner_test_identity_id for gap in affected) else item
                     for item in technical.resources)})
             expected_owners = {item.owner_slot_id for item in contract.resources}
             expected_effects = {item.effect_id for item in contract.effect_evidence}

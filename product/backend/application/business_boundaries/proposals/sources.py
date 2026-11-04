@@ -208,8 +208,8 @@ def _validate_source_snapshot(snapshot: BoundarySourceSnapshot,
             boundary_validation._raise(ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE, "业务边界提案的候选来源已变化")
 
 
-def _source_fingerprint(understanding: ApplicationUnderstanding) -> str:
-    return understanding.source_fingerprint or boundary_sha256({"source_fingerprint": None})
+def _source_fingerprint(understanding: ApplicationUnderstanding) -> str | None:
+    return understanding.source_fingerprint
 
 
 def _effect(effect_id: str, proposed: ProposedEffectItem) -> BusinessEffectDefinition:

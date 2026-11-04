@@ -81,6 +81,6 @@ export function ChangeRegistration({ projectId, options, initialTargets = [], cl
         </div>
         {preview && <ChangePreview value={preview}/>}
         <footer><span className="jj-small jj-muted">{pending ? '登记结果待确认，保留原请求查询。' : '登记修改不代表问题已经解决。'}</span><div className="jj-inline-actions">{pending && retry && <Button disabled={busy} onClick={() => void act(true)}>使用原请求重试</Button>}<Button kind="primary" busy={busy} disabled={!pending && (!reason.trim() || (options.length > 0 && targets.length === 0))} onClick={() => void act()}>{pending ? '查询登记结果' : preview ? '确认登记修改' : '预览文件变化'}<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
-        {retry && <Notice>尚未找到回执。可稍后查询，或使用相同请求继续登记。</Notice>}
+        {retry && <Notice tone="caution">尚未找到回执。可稍后查询，或使用相同请求继续登记。</Notice>}
     </section>;
 }

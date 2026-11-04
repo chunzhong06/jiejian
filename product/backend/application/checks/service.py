@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from pydantic import Field
 
 from product.backend.domain.checks.plan import ActionCheckPlan, CheckPlanGap
+from product.backend.domain.checks.repair import CurrentRepairReference
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.boundaries.candidate_reviews import BoundaryReviewGap
 from product.backend.application.business_boundaries.candidates.reviews import project_review_gaps
@@ -27,6 +28,11 @@ from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequ
 from product.backend.infrastructure.runtime.jobs.models import SubmitJob
 from product.protocols.checks.check_runtime import check_runtime_fingerprint
 from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, FrozenRequirementScope, FrozenCheckSelection, PermissionReference, canonical_execution_request_bytes, content_hash
+
+
+class ExternalRecheckCommand(WireModel):
+    reference: CurrentRepairReference
+    deployment_statement: str = Field(min_length=1,max_length=256)
 
 
 class CheckPreview(WireModel):
@@ -93,18 +99,18 @@ class CheckService:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND,"本项目检查不存在")
         return self._queue.request_cancellation(RequestCancellation(job_id=job.job_id,now_us=self._clock()))
 
-    def preview(self, project_id: str, *, change_id=None, selected_permissions=None) -> CheckPreview:
+    def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None) -> CheckPreview:
         # 预览只反映本次读取的现场；提交会重新冻结，页面不能直接复用旧请求作为执行授权。
-        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions)
+        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
         return preview
 
-    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None):
+    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None):
         # 本地锁只避免同实例交错；跨进程的请求唯一性和事务前置条件仍由 JobQueue 核对。
         with self._submission_lock:
-            return self._submit(project_id, expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,change_id=change_id, selected_permissions=selected_permissions)
+            return self._submit(project_id, expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
 
-    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None):
-        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions)
+    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None):
+        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
         if not preview.can_execute or request is None or preview.plan_fingerprint != expected_plan_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化",
                 details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint})
@@ -121,7 +127,7 @@ class CheckService:
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
             # 文件准备期间材料仍可能变化；在创建 Run/Job 的同一工作单元内重建计划并比较完整输入。
-            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions)
+            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
             if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
@@ -151,15 +157,15 @@ class CheckService:
                 except (JiejianError, OSError):
                     logging.getLogger(__name__).warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
 
-    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None):
+    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None):
         # 同次读取共享注册快照，防止计划与运行配置取到两代事实；作用域结束后不缓存授权。
         if work is None:
             with self._uow_factory() as current:
-                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions)
+                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
         with self._registry.read_scope(project_id):
-            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions)
+            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
 
-    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None):
+    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None):
         if change_id is not None and selected_permissions is not None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "原题复验须保留原问题与正常对照，不能缩小范围。")
         if work.projects.get(project_id) is None:
@@ -227,6 +233,8 @@ class CheckService:
             from product.protocols.checks.execution_request import ExecutionRequest
             request = ExecutionRequest(**request.model_dump(exclude={"requirement_scope"}),
                 requirement_scope=requirement_scope, selection=selection)
+            if request.environment != bundle.environment:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '执行环境已变化，请重新预览')
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
         if change_id is not None:
@@ -255,6 +263,24 @@ class CheckService:
                         raise JiejianError(ErrorCode.STATE_PRECONDITION,"原权限已变化，修复要求已失效")
                     values["repair_context"] = repair_context(contract).model_dump(mode="json")
                 request = type(request).model_validate_json(json.dumps(values))
+        if external_recheck is not None:
+            from product.protocols.checks.execution_request import ExternalRecheckContext
+            from product.backend.domain.checks.repair import repair_context
+            if change_id is not None or selected_permissions is not None:
+                raise JiejianError(ErrorCode.INPUT_INVALID,'外部原题复验不能混入源码变更或缩小原检查范围')
+            contract, source_environment = self._repairs.external_source(project_id,external_recheck.reference)
+            if contract.original_policy_epoch != plan.policy_epoch:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'原权限已变化，请重新确认问题要求')
+            context=ExternalRecheckContext(source_environment_fingerprint=source_environment.fingerprint,
+                deployment_statement=external_recheck.deployment_statement)
+            preview_fingerprint=content_hash('ExternalRecheckPreview',dict(preview=preview_fingerprint,
+                repair=contract.repair_fingerprint,context=context.model_dump(mode='json')))
+            if request is not None:
+                if (request.source_fingerprint is not None or request.environment is None
+                    or request.environment.environment_id!=source_environment.environment_id
+                    or request.environment.target!=source_environment.target or bundle.runtime.kind!='EXTERNAL_WEB'):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'外部原题复验要求同一环境与目标范围，且没有源码版本核验')
+                request=request.model_copy(update=dict(repair_context=repair_context(contract),external_recheck=context))
         if request is not None:
             validate_check_inputs(request, bundle)
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),

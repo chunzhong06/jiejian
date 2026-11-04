@@ -137,7 +137,8 @@ def _inspect_binding(
         if candidate.decision is CandidateDecision.REJECTED:
             reasons.add("CANDIDATE_REJECTED")
             changed.add(candidate_id)
-        if not candidate.evidence:
+        if not candidate.evidence and not (understanding.source_root is None
+                and candidate.origin.value == 'MANUAL' and candidate.decision is CandidateDecision.CONFIRMED):
             reasons.add("IMPLEMENTATION_EVIDENCE_MISSING")
             changed.add(candidate_id)
         if binding.basis_version == 2:

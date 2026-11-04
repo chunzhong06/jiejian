@@ -37,7 +37,7 @@ export function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 写入开始后，新的读取不得合并到写入前仍在途的旧请求。
     readGeneration += 1; pendingReads.clear()
     return send<T>(path, init).finally(() => {
-      if (typeof window !== 'undefined' && /runs|preparations|recordings|preparation-batches|controlled-runtime/.test(path))
+      if (typeof window !== 'undefined' && /runs|preparations|recordings|preparation-batches|controlled-runtime|flow-trials/.test(path))
         window.dispatchEvent(new Event('jiejian:activity-changed'))
     })
   }

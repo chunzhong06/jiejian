@@ -1,0 +1,5 @@
+.jj-settings-page { display:grid; gap:24px; min-width:0; }
+.jj-settings-layout { display:grid; gap:28px; min-width:0; }
+.jj-settings-content { display:grid; align-content:start; gap:24px; min-width:0; }
+.jj-settings-content > .jj-heading h2 { font-size:var(--text-section); }
+@media(prefers-reduced-motion:no-preference) { .jj-settings-content { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }

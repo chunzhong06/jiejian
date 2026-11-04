@@ -24,7 +24,7 @@ export function Activity({ projectId }: { projectId: string }) {
         window.addEventListener('jiejian:activity-changed', state.reload);
         return () => window.removeEventListener('jiejian:activity-changed', state.reload);
     }, [state.reload]);
-    if (state.error && !state.data) return <aside className="jj-activity"><Button kind="quiet" onClick={state.reload}>重新读取当前任务</Button></aside>;
+    if (state.error && !state.data) return <aside className="jj-activity"><span className="jj-small jj-muted">当前任务未能读取，可使用右上角刷新。</span></aside>;
     if (!state.data?.items.length) return null;
     return <aside className="jj-activity" aria-label="当前应用的任务"><span className="jj-small jj-muted">当前任务</span>{state.data.items.map(item => <Button key={item.id} kind="quiet" data-attention={needsAttention(item.phase)} onClick={() => go(item.destination, projectId)}>{needsAttention(item.phase) ? <ExclamationCircleOutlined aria-hidden="true"/> : item.phase === 'WAITING_FOR_LOGIN' ? <ClockCircleOutlined aria-hidden="true"/> : <LoadingOutlined spin aria-hidden="true"/>}<span className="jj-activity-label"><strong>{item.label}</strong>{phaseLabels[item.phase] && <small>{phaseLabels[item.phase]}</small>}</span><ArrowRightOutlined aria-hidden="true"/></Button>)}</aside>;
 }

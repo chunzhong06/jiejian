@@ -36,6 +36,8 @@ def validate_check_inputs(request: ExecutionRequest, bundle: CheckRuntimeBundle,
     """在任何目标 I/O 前检查全计划关联；不从数据库或当前配置补齐缺少的事实。"""
     try:
         config_hash = check_runtime_fingerprint(bundle)
+        if request.environment != bundle.environment:
+            raise ValueError('request environment association')
         request_hash = hashlib.sha256(canonical_execution_request_bytes(request)).hexdigest()
         if (request.project_id, request.source_fingerprint, request.config_fingerprint, request.budget_fingerprint) != (
             bundle.project_id, bundle.source_fingerprint, config_hash, bundle.budget.fingerprint()
@@ -80,6 +82,12 @@ def validate_check_inputs(request: ExecutionRequest, bundle: CheckRuntimeBundle,
                     runtime_proof = proofs[proof.binding_fingerprint]
                     if (runtime_proof.effect_id, runtime_proof.rule) != (proof.effect_id, proof.rule):
                         raise ValueError("runtime proof association")
+                    if proof.rule == 'HTTP_ENTITY_QUERY':
+                        from product.protocols.checks.execution_request import content_hash
+                        if (proof.reference.flow_id,proof.reference.revision,proof.reference.query_fingerprint) != (
+                            runtime_proof.operation_flow_id,runtime_proof.operation_flow_revision,
+                            content_hash('HttpEntityQuery',runtime_proof.entity_query.model_dump(mode='json'))):
+                            raise ValueError('entity query fingerprint association')
                     if proof.rule == "REGISTERED_EFFECT" and (
                         runtime_proof.observer_id, runtime_proof.descriptor_fingerprint
                     ) != (proof.reference.observer_id, proof.reference.descriptor_fingerprint):

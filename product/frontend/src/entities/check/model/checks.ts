@@ -14,6 +14,7 @@ export function owner(action:ActionResultStory){const identity=action.fact_compa
 export function requirement(action:ActionResultStory){return `${subject(action)}${action.permission.expectation==='ALLOW'?'可以':'不得'}${text(action.display_name)}`}
 export function resultTitle(story:ResultStory){
   const issues=story.actions.filter(item=>judgement(item)==='negative').length
+  if(story.repair_verification?.verification_scope==='EXTERNAL_OBSERVATION')return {VERIFIED:story.verdict==='PASS'?'原问题与正常对照本次均符合要求':'原问题本次符合，其他范围仍需处理',NOT_VERIFIED:'原问题仍然存在',INCONCLUSIVE:'证据不足，原问题尚未验证',STALE:'权限已变化，需重新核对原问题'}[story.repair_verification.status]
   if (story.repair_reviews && story.repair_reviews.length > 1) {
     const count = story.repair_reviews.length, verified = story.repair_reviews.filter(item => item.verification.status === 'VERIFIED').length;
     if (verified === count && story.verdict !== 'PASS') return story.verdict === 'BLOCK' ? `${count} 项原问题已修复，仍有 ${issues} 项违规` : `${count} 项原问题已修复，其他结果尚未确认`;
@@ -29,6 +30,7 @@ export function repairGap(reasons:string[]){
   const messages:Record<string,string>={
     REPAIR_STANDARD_CHANGED:'本次采用的证明要求与原检查不同。请核对参照文件和采集方式，再复验原问题。',
     REPAIR_RUNTIME_NOT_CONFIRMED:'尚未确认本次检查实际运行的代码，暂时无法验收修复。',
+    EXTERNAL_RECHECK_CONTEXT_MISMATCH:'本次环境、范围或原问题引用无法对应，请重新核对。',
     REPAIR_CONTEXT_MISMATCH:'本次检查未对应原问题的修改记录，请从该规则下重新预览复验。',
     REPAIR_CASE_NOT_UNIQUELY_MATCHED:'未能完整对应原检查场景，请核对账号、资源和检查范围。',
     REPAIR_REQUIRED_CASE_NOT_SAFE:'原问题、正常操作或相关功能中，仍有场景未通过检查。',

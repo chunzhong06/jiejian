@@ -25,6 +25,7 @@ class JobRow(Base):
         UniqueConstraint("runtime_load_id", name="uq_jobs_runtime_load_id"),
         UniqueConstraint("preflight_id", name="uq_jobs_preflight_id"),
         UniqueConstraint("reference_capture_id", name="uq_jobs_reference_capture_id"),
+        UniqueConstraint("flow_trial_id", name="uq_jobs_flow_trial_id"),
         UniqueConstraint(
             "project_id",
             "operation_type",
@@ -42,13 +43,15 @@ class JobRow(Base):
             name="operation_type_format",
         ),
         CheckConstraint(
-            "(run_id IS NOT NULL) + (recording_id IS NOT NULL) + (runtime_load_id IS NOT NULL) + (preflight_id IS NOT NULL) + (reference_capture_id IS NOT NULL) + (identity_preparation_id IS NOT NULL) = 1",
+            "(run_id IS NOT NULL) + (recording_id IS NOT NULL) + (runtime_load_id IS NOT NULL) + (preflight_id IS NOT NULL) + (reference_capture_id IS NOT NULL) + (identity_preparation_id IS NOT NULL) + (flow_trial_id IS NOT NULL) = 1",
             name="exactly_one_target",
         ),
         CheckConstraint("runtime_load_id IS NULL OR operation_type = 'RUNTIME_LOAD'", name="runtime_operation_type"),
         CheckConstraint("preflight_id IS NULL OR operation_type = 'PROOF_PREFLIGHT'", name="preflight_operation_type"),
         CheckConstraint("(reference_capture_id IS NOT NULL) = (operation_type = 'REFERENCE_CAPTURE')", name="capture_operation_type"),
         CheckConstraint("reference_capture_id IS NULL OR max_attempts = 1", name="capture_single_attempt"),
+        CheckConstraint("(flow_trial_id IS NOT NULL) = (operation_type = 'FLOW_TRIAL')", name="trial_operation_type"),
+        CheckConstraint("flow_trial_id IS NULL OR max_attempts = 1", name="trial_single_attempt"),
         CheckConstraint("(identity_preparation_id IS NOT NULL) = (operation_type = 'IDENTITY_PREPARATION')", name="identity_operation_type"),
         CheckConstraint("identity_preparation_id IS NULL OR max_attempts = 1", name="identity_single_attempt"),
         CheckConstraint(
@@ -140,6 +143,7 @@ class JobRow(Base):
         ForeignKey("reference_captures.capture_id",ondelete="RESTRICT"),nullable=True,
     )
 
+    flow_trial_id: Mapped[str | None] = mapped_column(ForeignKey('flow_trials.trial_id',ondelete='RESTRICT'),nullable=True)
     identity_preparation_id: Mapped[str | None] = mapped_column(String(37), nullable=True)
 
 class JobEventRow(Base):
@@ -216,6 +220,7 @@ class JobRecord(StorageRecord):
     runtime_load_id: str | None = Field(default=None, pattern=r"^rld_[0-9a-f]{32}$")
     preflight_id: str | None = Field(default=None, pattern=r"^ppf_[0-9a-f]{32}$")
     reference_capture_id:str|None=Field(default=None,pattern=r'^rpc_[0-9a-f]{32}$')
+    flow_trial_id: str | None = Field(default=None,pattern=r'^ftr_[0-9a-f]{32}$')
     identity_preparation_id: str | None = Field(default=None, pattern=r'^prep_[0-9a-f]{32}$')
     operation_type: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
     state: JobState
@@ -236,7 +241,7 @@ class JobRecord(StorageRecord):
 
     @model_validator(mode="after")
     def validate_job_fields(self) -> JobRecord:
-        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id,self.reference_capture_id,self.identity_preparation_id)) != 1:
+        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id,self.reference_capture_id,self.identity_preparation_id,self.flow_trial_id)) != 1:
             raise ValueError("job must reference exactly one execution target")
         if self.runtime_load_id is not None and self.operation_type != "RUNTIME_LOAD":
             raise ValueError("runtime load target requires its own operation")
@@ -246,6 +251,8 @@ class JobRecord(StorageRecord):
             raise ValueError('capture requires its own target and one attempt')
         if (self.identity_preparation_id is not None) != (self.operation_type == 'IDENTITY_PREPARATION') or self.identity_preparation_id is not None and self.max_attempts != 1:
             raise ValueError('identity preparation requires its own target and one attempt')
+        if (self.flow_trial_id is not None)!=(self.operation_type=='FLOW_TRIAL') or self.flow_trial_id is not None and self.max_attempts!=1:
+            raise ValueError('trial job must have one attempt and its own target')
         if self.attempt > self.max_attempts:
             raise ValueError("job attempt exceeds maximum")
         if self.attempt == 0 and (
@@ -327,6 +334,7 @@ class JobRepository:
                 runtime_load_id=record.runtime_load_id,
                 preflight_id=record.preflight_id,
                 reference_capture_id=record.reference_capture_id,
+                flow_trial_id=record.flow_trial_id,
                 identity_preparation_id=record.identity_preparation_id,
                 operation_type=record.operation_type,
                 state=record.state.value,
@@ -360,6 +368,7 @@ class JobRepository:
             runtime_load_id=row.runtime_load_id,
             preflight_id=row.preflight_id,
             reference_capture_id=row.reference_capture_id,
+            flow_trial_id=row.flow_trial_id,
             identity_preparation_id=row.identity_preparation_id,
             operation_type=row.operation_type,
             state=JobState(row.state),
@@ -403,6 +412,10 @@ class JobRepository:
     def get_by_preflight(self, preflight_id: str) -> JobRecord | None:
         job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.preflight_id == preflight_id))
         return self.get(job_id) if job_id is not None else None
+
+    def get_by_flow_trial(self,trial_id):
+        job_id=_scalar(self._session,select(JobRow.job_id).where(JobRow.flow_trial_id==trial_id))
+        return None if job_id is None else self.get(job_id)
 
     def get_by_capture(self,capture_id:str)->JobRecord|None:
         job_id=_scalar(self._session,select(JobRow.job_id).where(JobRow.reference_capture_id==capture_id))
@@ -449,6 +462,7 @@ class JobRepository:
                     and_("RUNTIME_LOAD" in target_types, JobRow.runtime_load_id.is_not(None)),
                     and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None)),
                     and_("REFERENCE_CAPTURE" in target_types,JobRow.reference_capture_id.is_not(None)),
+                    and_("FLOW_TRIAL" in target_types,JobRow.flow_trial_id.is_not(None)),
                     and_("IDENTITY_PREPARATION" in target_types, JobRow.identity_preparation_id.is_not(None))),
             )
             .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
@@ -468,6 +482,7 @@ class JobRepository:
             runtime_load_id=row.runtime_load_id,
             preflight_id=row.preflight_id,
             reference_capture_id=row.reference_capture_id,
+            flow_trial_id=row.flow_trial_id,
             identity_preparation_id=row.identity_preparation_id,
             operation_type=row.operation_type,
             state=JobState(row.state),

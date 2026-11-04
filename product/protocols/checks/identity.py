@@ -13,9 +13,13 @@ class CheckIdentityVerification(WireModel):
     expected_actor_revision: int = Field(ge=1)
     request: HttpRequestTemplate
     subject_json_path: Annotated[str, Field(pattern=r"^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$")]
+    role_json_path: Annotated[str, Field(pattern=r"^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$")] | None = Field(default=None, exclude_if=lambda value:value is None)
+    expected_role: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')] | None = Field(default=None, exclude_if=lambda value:value is None)
 
     @model_validator(mode="after")
     def validate_read_only(self):
+        if (self.role_json_path is None) != (self.expected_role is None):
+            raise ValueError('role verification requires both path and expected role')
         if self.request.method != "GET" or self.request.input_slots or self.request.body.kind is not HttpBodyKind.EMPTY:
             raise ValueError("identity verification must be a fixed readonly request")
         return self

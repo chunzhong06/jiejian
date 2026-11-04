@@ -103,6 +103,10 @@ class ApplicationCore:
         self.job_attempts = JobAttempts(factory, targets=self.job_targets)
         self.job_queue = JobQueue(factory, targets=self.job_targets)
         self.projects = ProjectCatalog(factory)
+        from product.backend.application.application_understanding.environments import ApplicationEnvironments
+        from product.backend.application.application_understanding.sources import ApplicationSources
+        self.application_environments = ApplicationEnvironments(factory, control_origin=control_origin, clock_us=clock_us)
+        self.application_sources = ApplicationSources(factory, clock_us=clock_us)
         self.application_understanding = ApplicationUnderstandingService(
             factory,
             endpoint_discovery=endpoint_discovery,
@@ -153,10 +157,13 @@ class ApplicationCore:
         from product.backend.application.preparation.proofs.capture_service import ReferenceCaptureService
         self.proof_artifacts=ProofArtifactPreparation(self.proof_preparation,self.binding_sources)
         self.reference_captures=ReferenceCaptureService(self.proof_preparation,self.binding_sources)
-        self.preparation.bind_interruption_reader(self.reference_captures.gaps)
         self.check_registry.bind_persistent_reader(self.proof_preparation.runtime_registration)
         from product.backend.application.preparation.operation_flows import OperationFlowService
         self.operation_flows=OperationFlowService(factory,self.business_boundaries,self.test_identities,var_dir=self.var_dir,clock_us=clock_us)
+        from product.backend.application.preparation.flow_trials import FlowTrialService
+        self.flow_trials=FlowTrialService(self.operation_flows,self.check_credentials,self.check_registry,self.job_queue,
+            control_session_id=self.proof_preparation.control_session_id)
+        self.preparation.bind_interruption_reader(lambda project:(*self.reference_captures.gaps(project),*self.flow_trials.gaps(project)))
 
     def _configure_checks_and_workspace(self, factory, clock_us) -> None:
         """连接检查、变化、原题修复与只读工作区，使各入口共享同一事实读取者。"""
@@ -241,9 +248,10 @@ class ApplicationCore:
             self.var_dir, factory, self.job_queue, self.job_attempts,
             targets=self.job_targets, environment_provider=self.environment_for_secret_names,
             clock_us=clock_us,
-            job_authorized=lambda job:self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job),
+            job_authorized=lambda job:self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job) and self.flow_trials.job_authorized(job),
             identity_cleanup=self.identity_preparations.reconcile_exited,
             capture_publisher=self.reference_captures.jobs,
+            trial_publisher=self.flow_trials.jobs,
         )
         self.identity_preparations.bind_worker(self.worker.start)
         from product.backend.application.workspace.progress import ApplicationProgress

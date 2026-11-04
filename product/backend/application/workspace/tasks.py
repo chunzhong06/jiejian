@@ -23,7 +23,7 @@ def boundary_task(
     boundary: BusinessBoundaryView,
     pending,
 ) -> PrimaryTaskView | None:
-    if not understanding.source_analysis_authorized:
+    if understanding.source_root is not None and not understanding.source_analysis_authorized:
         return task_view(
             "AUTHORIZE_SOURCE_ANALYSIS",
             title="授权只读源码分析",
@@ -33,7 +33,7 @@ def boundary_task(
             route="/application",
             facts={"understanding_revision": understanding.revision},
         )
-    if understanding.analysis_completed_at_us is None:
+    if understanding.source_root is not None and understanding.analysis_completed_at_us is None:
         return task_view(
             "RUN_SOURCE_ANALYSIS",
             title="分析当前应用源码",

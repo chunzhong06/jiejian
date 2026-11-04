@@ -46,6 +46,6 @@ export function SavedChecks({projectId,selected,disabled,onChange,name}:{project
       {shownChoice&&<Button kind="quiet" icon={<DeleteOutlined/>} aria-label="移除此检查方案" disabled={disabled||busy} onClick={()=>void remove()}/>}
       <Button kind="quiet" disabled={disabled||busy||!pending.current&&(selected?.length===0||alreadySaved)} busy={busy} onClick={()=>void remember()}>{pending.current?'核对上次保存':alreadySaved?'已记住当前选择':'记住当前选择'}</Button>
     </div>
-    {message&&<Notice>{message}</Notice>}{Boolean(error||saved.error)&&<ErrorNote error={error??saved.error} onRetry={saved.reload}/>}
+    {message&&<Notice tone="caution">{message}</Notice>}{Boolean(error||saved.error)&&<ErrorNote error={error??saved.error}/>}
   </div>
 }

@@ -163,9 +163,10 @@ class ApplicationUnderstandingService:
                 ErrorCode.SELF_TARGET_FORBIDDEN,
                 "当前地址是界鉴自身服务，请填写实际被检查应用地址",
             )
-        source_fingerprint = self.endpoint_discovery.source_fingerprint(
-            before.source_root
-        )
+        if before.environment is not None and normalized_input != before.environment.target.base_url:
+            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, '请核验当前环境声明的目标地址')
+        source_fingerprint = (before.environment.fingerprint if before.environment is not None
+            else self.endpoint_discovery.source_fingerprint(before.source_root))
         normalized, observation = self.endpoint_discovery.probe(normalized_input)
         if not observation.reachable:
             raise JiejianError(
@@ -205,9 +206,8 @@ class ApplicationUnderstandingService:
         if record.confirmed_endpoint is None:
             return "NEEDS_CONFIRMATION"
         try:
-            current_fingerprint = self.endpoint_discovery.source_fingerprint(
-                record.source_root
-            )
+            current_fingerprint = (record.environment.fingerprint if record.environment is not None
+                else self.endpoint_discovery.source_fingerprint(record.source_root))
         except JiejianError:
             return "NEEDS_CONFIRMATION"
         if current_fingerprint != record.endpoint_source_fingerprint:
@@ -271,10 +271,12 @@ class ApplicationUnderstandingService:
             revision=revision,
         )
 
-    def inspect_source_fingerprint(self, project_id: str) -> str:
+    def inspect_source_fingerprint(self, project_id: str) -> str | None:
         """按正式扫描边界只读计算当前源码身份，不保存候选、快照或 revision。"""
 
         current = self.get(project_id)
+        if current.source_root is None and current.environment is not None:
+            return None
         if not current.source_analysis_authorized:
             raise JiejianError(
                 ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED,

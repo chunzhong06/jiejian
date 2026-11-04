@@ -13,6 +13,7 @@ from product.backend.domain.lifecycle import RunLifecycle, RunVerdict
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.application.checks.history import MaintainHistory
 from product.protocols.checks.execution_request import PermissionReference
+from product.backend.application.checks.service import ExternalRecheckCommand
 
 
 async def require_local_history_session(request:Request):
@@ -26,6 +27,7 @@ class RunCreateRequest(ApiModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     change_id: str | None = Field(default=None,pattern=r"^chg_[0-9a-f]{32}$")
     selected_permissions: list[PermissionReference] | None = Field(default=None, min_length=1, max_length=4096)
+    external_recheck: ExternalRecheckCommand | None = None
 
 
 def build_runs_router(context: ApplicationCore) -> APIRouter:
@@ -35,7 +37,7 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
     def create_run(project_id: str, body: RunCreateRequest):
         submitted = context.checks.submit(project_id, expected_plan_fingerprint=body.expected_plan_fingerprint,
             idempotency_key=body.idempotency_key,change_id=body.change_id,
-            selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions))
+            selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions),external_recheck=body.external_recheck)
         status = context.check_results.status(submitted.run.run_id, project_id=project_id)
         return data_response({"run": status.run.model_dump(mode="json"),
             "job": status.job.model_dump(mode="json")}, status_code=202)

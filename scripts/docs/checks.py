@@ -6,9 +6,14 @@ from scripts.docs.markdown import heading_ids,link_targets,without_fences
 def check_documents(root):
     failures=[]
     paths=[root/'README.md',*(root/'docs').rglob('*.md'),root/'docs/llms.txt']
+    contents={}
+    anchors={}
+    def read(path):
+        if path not in contents:contents[path]=path.read_text('utf-8-sig')
+        return contents[path]
     for path in paths:
         if not path.is_file():failures.append(f'缺少文档：{path.relative_to(root)}');continue
-        text=path.read_text('utf-8-sig')
+        text=read(path)
         if 'var/audit' in text.replace(chr(92),'/'):
             failures.append(f'说明正文依赖临时审计目录：{path.relative_to(root)}')
         targets,missing=link_targets(text)
@@ -26,8 +31,9 @@ def check_documents(root):
             target=(path.parent/unquote(parsed.path)).resolve() if parsed.path else path.resolve()
             if not target.is_relative_to(root) or not target.exists():
                 failures.append(f'无效本地链接：{path.relative_to(root)} -> {value}')
-            elif parsed.fragment and target.suffix=='.md' and unquote(parsed.fragment) not in heading_ids(target.read_text('utf-8-sig')):
-                failures.append(f'无效标题锚点：{path.relative_to(root)} -> {value}')
+            elif parsed.fragment and target.suffix=='.md':
+                if target not in anchors:anchors[target]=heading_ids(read(target))
+                if unquote(parsed.fragment) not in anchors[target]:failures.append(f'无效标题锚点：{path.relative_to(root)} -> {value}')
         if path.name=='llms.txt':
             for relative in re.findall(r'docs/[^\s、，]+\.(?:md|txt)',text):
                 if not (root/relative).is_file():failures.append(f'无效任务路由：{relative}')

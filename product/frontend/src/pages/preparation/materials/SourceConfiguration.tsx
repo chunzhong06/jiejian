@@ -1,4 +1,5 @@
-import {useState} from 'react'
+import {editorDraft,rememberEditorDraft,requestCollaboration,useHandoffContext} from '../../../entities/runtime/model/handoff'
+import {useEffect,useState} from 'react'
 import {Choice} from '../../../shared/ui/Choice'
 import {proofSourcesApi as api,type ProofContext,type ProofConfig} from '../../../entities/preparation/api/proofSources'
 import {Dialog} from '../../../shared/ui/Dialog'
@@ -9,7 +10,9 @@ import {projectsApi} from '../../../entities/application/api/projects'
 import {Field} from '../../../shared/ui/layout'
 import {ErrorNote,Empty,Loading} from '../../../shared/ui/feedback'
 
-export function SourceConfiguration({projectId,context,actionId,initial,onClose,onSave}:{projectId:string;context:ProofContext;actionId?:string;initial?:ProofConfig;onClose:()=>void;onSave:(config:ProofConfig)=>Promise<unknown>}) {
+export function SourceConfiguration({projectId,context,actionId,initial,sourceId,onClose,onSave}:{projectId:string;context:ProofContext;actionId?:string;initial?:ProofConfig;sourceId?:string;onClose:()=>void;onSave:(config:ProofConfig)=>Promise<unknown>}) {
+    const draftKey='proof:'+projectId+':'+(sourceId??actionId??'new')
+    const [restored]=useState(()=>editorDraft<{action:string;effect:string;resource:string;database:string;column:string;tenantColumn:string;stateColumn:string;identityTenantPath:string;basis:string}>(draftKey))
     // 候选为空时补读本地运行事实，用于恢复引导；不把“未取得候选”推断为配置不存在。
     const runtime=useRead(context.sqlite?.length?null:'proof-runtime:'+projectId+':'+context.basis_id,()=>projectsApi.runtime(projectId))
     const recover=()=>{
@@ -17,16 +20,17 @@ export function SourceConfiguration({projectId,context,actionId,initial,onClose,
         onClose()
         go('/application?runtime_method=managed&return_to='+encodeURIComponent(route.path+'?'+route.query),projectId)
     }
-    const [action,setAction]=useState(initial?.action_id??actionId??(context.actions.length===1?context.actions[0].action_id:''))
-    const [effect,setEffect]=useState(initial?.effect_id??''), [resource,setResource]=useState(initial?.resource_binding_id??'')
+    const [action,setAction]=useState(restored?.action??initial?.action_id??actionId??(context.actions.length===1?context.actions[0].action_id:''))
+    const [effect,setEffect]=useState(restored?.effect??initial?.effect_id??''), [resource,setResource]=useState(restored?.resource??initial?.resource_binding_id??'')
     const [database,setDatabase]=useState(()=>{
         const index=context.sqlite?.findIndex(item=>item.table===initial?.table&&item.database_path===initial?.database_path)??-1
+        if(restored?.basis===context.basis_id)return restored.database
         return index>=0?String(index):context.sqlite?.length===1?'0':''
     })
-    const [column,setColumn]=useState(initial?.protected_column??'')
-    const [tenantColumn,setTenantColumn]=useState(initial?.mappings.tenant?.[1]??'')
-    const [stateColumn,setStateColumn]=useState(initial?.mappings.condition_state?.[1]??'')
-    const [identityTenantPath,setIdentityTenantPath]=useState(initial?.identity_claims[0]?.tenant_path?.join('.')??'')
+    const [column,setColumn]=useState(restored?.column??initial?.protected_column??'')
+    const [tenantColumn,setTenantColumn]=useState(restored?.tenantColumn??initial?.mappings.tenant?.[1]??'')
+    const [stateColumn,setStateColumn]=useState(restored?.stateColumn??initial?.mappings.condition_state?.[1]??'')
+    const [identityTenantPath,setIdentityTenantPath]=useState(restored?.identityTenantPath??initial?.identity_claims[0]?.tenant_path?.join('.')??'')
     const [busy,setBusy]=useState(false), [error,setError]=useState<unknown>()
     const chosen=context.actions.find(item=>item.action_id===action)
     const effects=chosen?.effects.filter(item=>['STATE_MUTATION','OBJECT_CREATION'].includes(item.kind))??[]
@@ -35,12 +39,14 @@ export function SourceConfiguration({projectId,context,actionId,initial,onClose,
     const selectedResource=resources.find(item=>item.resource_binding_id===resource)??(resources.length===1?resources[0]:undefined)
     const table=database===''?undefined:context.sqlite?.[Number(database)]
     const field=table?.fields.includes(column)?column:table?.fields.length===1?table.fields[0]:''
+    useEffect(()=>{rememberEditorDraft(draftKey,{action,effect,resource,database,column,tenantColumn,stateColumn,identityTenantPath,basis:context.basis_id})})
+    useHandoffContext({projectId,label:(chosen?.label??'当前操作')+' · 结果判断草稿',references:{action_id:action,return_to:'/preparation?proof_sources=1&configure='+ (initial?'edit':'new')+'&action_id='+action+(sourceId?'&source_id='+sourceId:'')},editor:{kind:'PROOF',basis_id:context.basis_id,action_id:action,effect_id:effectId,resource_binding_id:selectedResource?.resource_binding_id??null,table:table?.table??null,protected_column:field||null,tenant_column:tenantColumn||null,state_column:stateColumn||null}})
     const conditions=chosen?.condition_requirements
     const ready=Boolean(chosen&&effectId&&selectedResource&&table&&field
         &&(!conditions?.tenant||(table.fields.includes(tenantColumn)&&identityTenantPath.trim()))
         &&(!conditions?.resource_state||table.fields.includes(stateColumn)))
     const result=effects.find(item=>item.effect_id===effectId)
-    return <Dialog title="设置结果判断依据" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button>{Boolean(context.sqlite?.length)&&<Button kind="primary" busy={busy} disabled={!ready} onClick={async()=>{
+    return <Dialog title="设置结果判断依据" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={()=>requestCollaboration(projectId,'SETUP','请沿用当前结果判断草稿和已声明的数据来源，补齐对应关系并保存候选；不明确的业务字段请向我确认，读取与采用仍由我审阅。')}>请 Agent 补全</Button><Button disabled={busy} onClick={dismiss}>取消</Button>{Boolean(context.sqlite?.length)&&<Button kind="primary" busy={busy} disabled={!ready} onClick={async()=>{
         setBusy(true)
         try{
             const config=await api.sqliteCandidate(projectId,{basis_id:context.basis_id,action_id:action,effect_id:effectId,resource_binding_id:selectedResource!.resource_binding_id,database_path:table!.database_path,table:table!.table,protected_column:field,
@@ -67,7 +73,7 @@ export function SourceConfiguration({projectId,context,actionId,initial,onClose,
                     {conditions.resource_state&&<Field label="资源的当前状态"><Choice value={stateColumn} placeholder="选择状态字段" disabled={!table} onValueChange={setStateColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field>}
                 </div></section>}
                 {table&&<details><summary>查看编号与归属对应</summary><dl className="jj-facts is-stacked"><div><dt>资源编号</dt><dd>{table.resource_column}</dd></div><div><dt>资源所有者</dt><dd>{table.owner_column}</dd></div></dl></details>}
-            </section>:runtime.error?<ErrorNote error={runtime.error} onRetry={runtime.reload}/>:!runtime.data?<Loading>正在读取已有运行设置</Loading>:<Empty title={
+            </section>:runtime.error?<ErrorNote error={runtime.error}/>:!runtime.data?<Loading>正在读取已有运行设置</Loading>:<Empty title={
                 !runtime.data.running?(runtime.data.configuration?.sqlite?.length?'先启动已配置的测试应用':'先准备应用的测试数据库'):
                 !runtime.data.source_matches?'当前运行与源码尚未对应':
                 !context.runtime_available?'先核对应用的运行记录':

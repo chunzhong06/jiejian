@@ -43,33 +43,44 @@ function Invoke-Docs {
     $arguments = @($docsPython, "-B", (Join-Path $script:ProjectRoot "scripts\docs\generate.py"), "--root", $script:ProjectRoot)
     if ($Update) { $arguments += "--update" }
     Invoke-External "docs" $arguments
-    if ($Update) {
-        # 更新后立即用只读模式复核生成区、llms 路由和 Markdown 内部链接。
-        Invoke-External "docs-check" @($docsPython, "-B", (Join-Path $script:ProjectRoot "scripts\docs\generate.py"), "--root", $script:ProjectRoot)
-    }
 }
 
 function Invoke-FrontendTest($Toolchain) {
+    $timing = [Diagnostics.Stopwatch]::StartNew()
+    $phases = [ordered]@{}
+    $executionStarted = $null
     $typesOnly = $CommandArguments.Count -eq 1 -and $CommandArguments[0] -eq "--types-only"
     Remove-LegacyFrontendArtifacts
     $inputs = @(Get-FrontendSourceInputs)
     $dependencyDigest = Get-FrontendDependencyDigest $Toolchain
     Prepare-FrontendWorkspace $Toolchain $inputs $dependencyDigest
     $workspace = Get-FrontendWorkspace
+    $phases["prepare_seconds"] = $timing.Elapsed.TotalSeconds
     Invoke-External "frontend-editor" @($script:Node, (Join-Path $script:ProjectRoot "tests/tooling/editor/verify-workspace.cjs"), $workspace, $script:ProjectRoot, $script:VarDir)
+    $phases["editor_seconds"] = $timing.Elapsed.TotalSeconds - $phases["prepare_seconds"]
     $previousReport = $env:JIEJIAN_TEST_REPORT
     if (-not $previousReport) { $env:JIEJIAN_TEST_REPORT = Join-Path $script:VarDir ("audit\testing\vitest-{0}.json" -f [guid]::NewGuid().ToString("N")) }
+    $previousIdentity = $env:JIEJIAN_TEST_IDENTITY
+    $env:JIEJIAN_TEST_IDENTITY = $env:JIEJIAN_TEST_REPORT + ".inputs.json"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $env:JIEJIAN_TEST_IDENTITY) -Force | Out-Null
     $reporter = Join-Path $script:ProjectRoot "scripts\quality\vitest-reporter.mjs"
     Push-Location -LiteralPath $workspace
     try {
         $env:JIEJIAN_FRONTEND_CACHE_DIR = [IO.Path]::GetFullPath((Join-Path $script:DevelopmentRoot "cache\vite"))
+        Invoke-External "test-identity" @($script:Python, "-B", (Join-Path $script:ProjectRoot "scripts\quality\identity.py"), $env:JIEJIAN_TEST_IDENTITY)
         # Vitest 不负责类型检查，先拒绝失配的组件 props 和 API 夹具。
         Invoke-External "frontend-types" @($script:Node, (Join-Path $workspace "node_modules\typescript\bin\tsc"), "-b", "--pretty", "false")
+        $phases["types_and_identity_seconds"] = $timing.Elapsed.TotalSeconds - $phases["prepare_seconds"] - $phases["editor_seconds"]
+        $executionStarted = $timing.Elapsed.TotalSeconds
         if (-not $typesOnly) { Invoke-External "frontend-test" (@($script:PnpmRunner + @("test", "--reporter=default", "--reporter=$reporter")) + $CommandArguments) }
     } finally {
+        $phases["execution_seconds"] = if ($null -ne $executionStarted) { $timing.Elapsed.TotalSeconds - $executionStarted } else { 0 }
+        $phases["total_seconds"] = $timing.Elapsed.TotalSeconds
+        [IO.File]::WriteAllText(($env:JIEJIAN_TEST_REPORT+".timings.json"), (@{schema_version="1";phases=$phases} | ConvertTo-Json -Compress), $script:Utf8NoBom)
         Pop-Location
         if (-not $typesOnly) { Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT) }
         $env:JIEJIAN_TEST_REPORT = $previousReport
+        $env:JIEJIAN_TEST_IDENTITY = $previousIdentity
     }
 }
 

@@ -76,7 +76,7 @@ class BindingSourceInspector:
                 return ("REGISTERED_OBSERVER_UNAVAILABLE",)
             return ()
         if getattr(binding,'operation_flow_id',None) is not None:
-            from product.backend.application.preparation.operation_flows import load_operation_material
+            from product.backend.application.preparation.operation_sources import load_operation_material
             try:
                 flow=load_operation_material(work,binding)
             except JiejianError:
@@ -85,6 +85,12 @@ class BindingSourceInspector:
                 return ('OPERATION_FLOW_SOURCE_STALE',)
             if isinstance(binding,ActionRecoveryBinding) and binding.request_template!=flow.recovery:
                 return ('OPERATION_RECOVERY_STALE',)
+            from product.backend.application.preparation.operation_sources import source_request_current
+            if flow.environment != understanding.environment or not source_request_current(work,flow):
+                return ('OPERATION_FLOW_SOURCE_STALE',)
+            if isinstance(binding,ActionEvidenceBinding) and binding.kind is ActionEvidenceKind.HTTP_ENTITY_QUERY:
+                if not any(item.effect_id==binding.effect_id and item.query==binding.entity_query for item in flow.entity_evidence):
+                    return ('OPERATION_ENTITY_QUERY_STALE',)
             return ()
         recording = material_fact(work, work.recordings, ("get", binding.source_recording_id), lambda: work.recordings.get(binding.source_recording_id))
         draft_record = material_fact(work, work.flow_drafts, ("latest", binding.source_recording_id), lambda: work.flow_drafts.latest(binding.source_recording_id))

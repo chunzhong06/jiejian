@@ -22,3 +22,12 @@
 .jj-condition-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding-block:16px; }
 .jj-condition-fields > :last-child { grid-column:1/-1; }
 @media(max-width:650px) { .jj-condition-fields { grid-template-columns:minmax(0,1fr); } .jj-rule-conditions > summary > span { display:block; margin:6px 0 0 20px; } }
+
+.jj-rule-directory-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:var(--text-meta); }
+.jj-rule-directory-summary > div { display:flex; gap:8px; flex-wrap:wrap; }
+.jj-rule-directory-summary .jj-button { font-size:var(--text-meta); min-height:32px; padding:5px 10px; }
+.jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--accent-ink); }
+.jj-rule-inspector-links { display:grid; gap:6px; }
+.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:12px 0; background:transparent; font-size:var(--text-meta); white-space:normal; text-align:left; }
+.jj-rule-directory .jj-object-table th:first-child { width:58%; }
+@media(max-width:600px) { .jj-rule-directory .jj-object-table :is(th,td):last-child { display:none; } }

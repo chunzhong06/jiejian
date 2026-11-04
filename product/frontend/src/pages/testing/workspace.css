@@ -1,0 +1,4 @@
+.jj-testing-directory .jj-object-table th:first-child { width:52%; }
+.jj-testing-directory .jj-object-meta > small { display:block; margin-top:5px; }
+.jj-testing-count { padding:20px 12px; color:var(--muted); font-size:var(--text-meta); }
+@media(max-width:600px) { .jj-testing-directory .jj-object-table :is(th,td):nth-child(2) { display:none; } }

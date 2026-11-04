@@ -14,15 +14,52 @@
           "enum": [
             "BROWSER_SESSION",
             "BEARER",
-            "API_LOGIN"
+            "API_LOGIN",
+            "OAUTH2_CLIENT_CREDENTIALS",
+            "OAUTH2_REFRESH"
           ],
           "title": "Method",
           "type": "string"
+        },
+        "oauth_client_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:/-]{1,256}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth Client Id"
+        },
+        "oauth_scope": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:/ -]{1,512}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth Scope"
         },
         "password_field": {
           "default": "password",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
           "title": "Password Field",
+          "type": "string"
+        },
+        "principal_kind": {
+          "default": "USER",
+          "enum": [
+            "USER",
+            "SERVICE"
+          ],
+          "title": "Principal Kind",
           "type": "string"
         },
         "token_path": {
@@ -58,9 +95,16 @@
       "additionalProperties": false,
       "properties": {
         "expected_role": {
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
-          "title": "Expected Role",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected Role"
         },
         "expected_subject": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
@@ -78,7 +122,7 @@
             "type": "string"
           },
           "maxItems": 8,
-          "minItems": 1,
+          "minItems": 0,
           "title": "Role Path",
           "type": "array"
         },

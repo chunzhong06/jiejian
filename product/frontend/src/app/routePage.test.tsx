@@ -1,6 +1,7 @@
 import {act,render,screen} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
-import {routePage} from './routePage'
+import {routePage} from '../shared/lib/routePage'
+import {refreshCurrentPage} from '../shared/lib/pageRefresh'
 
 it('模块完成后立即替换占位，离开后不挂载旧页面',async()=>{
   let resolve!:(value:{default:()=>React.JSX.Element})=>void
@@ -26,4 +27,16 @@ it('悬停预取只加载模块，进入页面前不挂载或读取业务',async
   expect(screen.getByRole('heading',{name:'权限规则'})).toBeVisible()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(read).toHaveBeenCalledTimes(1)
+})
+
+it('页面模块读取失败后由统一刷新恢复，离开后不再重试该模块',async()=>{
+  const read=vi.fn().mockRejectedValueOnce(new Error('模块暂不可用')).mockResolvedValue({default:()=> <h1>已恢复页面</h1>})
+  const Page=routePage(read,'/permissions'),view=render(<Page/>)
+  expect(await screen.findByText('模块暂不可用')).toBeVisible()
+  await act(async()=>{await refreshCurrentPage()})
+  expect(screen.getByRole('heading',{name:'已恢复页面'})).toBeVisible()
+  expect(read).toHaveBeenCalledTimes(2)
+  view.unmount()
+  await refreshCurrentPage()
+  expect(read).toHaveBeenCalledTimes(2)
 })

@@ -6,6 +6,8 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage
 Object.defineProperty(window,'matchMedia',{writable:true,value:(query:string)=>({matches:false,media:query,onchange:null,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){},dispatchEvent(){return false}})})
 class ResizeObserverStub{observe(){}unobserve(){}disconnect(){}}
 Object.defineProperty(globalThis,'ResizeObserver',{writable:true,value:ResizeObserverStub})
+// jsdom 没有布局滚动；滚动位置与连续性由真实浏览器场景核验。
+Object.defineProperty(HTMLElement.prototype,'scrollIntoView',{configurable:true,value:()=>{}})
 Object.defineProperty(window,'scrollTo',{writable:true,value:()=>{}})
 Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.open=true}})
 Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.open=false}})

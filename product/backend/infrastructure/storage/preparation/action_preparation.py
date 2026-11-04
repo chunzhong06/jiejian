@@ -92,6 +92,8 @@ class ActionResourceBindingRow(_BindingColumns, _RecordedColumns, Base):
 class ActionEvidenceBindingRow(_BindingColumns, Base):
     __tablename__ = "action_evidence_bindings"
     __table_args__ = _binding_constraints() + (
+        ForeignKeyConstraint(['operation_flow_id', 'operation_flow_revision'],
+            ['operation_flow_revisions.flow_id', 'operation_flow_revisions.revision'], ondelete='RESTRICT'),
         PrimaryKeyConstraint("business_action_id", "action_revision", "effect_id"),
         CheckConstraint(
             "(kind = 'RECORDED_OBSERVATION' AND source_recording_id IS NOT NULL "
@@ -99,7 +101,10 @@ class ActionEvidenceBindingRow(_BindingColumns, Base):
             "AND step_id IS NOT NULL AND request_template_json IS NOT NULL AND observer_reference_json IS NULL) OR "
             "(kind = 'REGISTERED_OBSERVER' AND source_recording_id IS NULL "
             "AND source_draft_revision IS NULL AND source_draft_sha256 IS NULL "
-            "AND step_id IS NULL AND request_template_json IS NULL AND observer_reference_json IS NOT NULL)",
+            "AND step_id IS NULL AND request_template_json IS NULL AND observer_reference_json IS NOT NULL) OR "
+            "(kind = 'HTTP_ENTITY_QUERY' AND operation_flow_id IS NOT NULL AND operation_flow_revision IS NOT NULL "
+            "AND entity_query_json IS NOT NULL AND source_recording_id IS NULL AND source_draft_revision IS NULL "
+            "AND source_draft_sha256 IS NULL AND step_id IS NULL AND request_template_json IS NULL AND observer_reference_json IS NULL)",
             name="evidence_source_matrix",
         ),
     )
@@ -111,6 +116,9 @@ class ActionEvidenceBindingRow(_BindingColumns, Base):
     step_id: Mapped[str | None] = mapped_column(String(64))
     request_template_json: Mapped[str | None] = mapped_column(Text)
     observer_reference_json: Mapped[str | None] = mapped_column(Text)
+    operation_flow_id: Mapped[str | None] = mapped_column(String(36))
+    operation_flow_revision: Mapped[int | None] = mapped_column(Integer)
+    entity_query_json: Mapped[str | None] = mapped_column(Text)
 
 
 class ActionRecoveryBindingRow(_BindingColumns, _RecordedColumns, Base):
@@ -126,7 +134,7 @@ _ROWS = {
     ActionEvidenceBinding: ActionEvidenceBindingRow,
     ActionRecoveryBinding: ActionRecoveryBindingRow,
 }
-_JSON_FIELDS = frozenset({"resource_injection", "request_template", "observer_reference"})
+_JSON_FIELDS = frozenset({"resource_injection", "request_template", "observer_reference", "entity_query"})
 
 
 class ActionAllowControlBindingRow(Base):

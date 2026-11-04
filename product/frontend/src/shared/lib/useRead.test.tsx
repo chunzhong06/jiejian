@@ -1,6 +1,8 @@
 import {act,renderHook,waitFor} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
 import {useRead} from './useRead'
+import {refreshCurrentPage} from './pageRefresh'
+import {useState} from 'react'
 
 it('较晚返回的旧对象不能覆盖当前对象，离开时取消旧读取',async()=>{
   let resolveOld!:(value:string)=>void
@@ -38,4 +40,38 @@ it('同一轮焦点与可见性恢复只刷新一次，卸载后不再读取',as
   window.dispatchEvent(new Event('focus'))
   await new Promise(resolve=>setTimeout(resolve,10))
   expect(read).toHaveBeenCalledTimes(2)
+})
+
+it('统一刷新由同一读取所有者接收结果，保留草稿、已有内容并合并连续点击',async()=>{
+  let finish!:(value:string)=>void
+  const manual=vi.fn(()=>new Promise<string>(resolve=>{finish=resolve})),read=vi.fn().mockResolvedValue('saved facts')
+  const view=renderHook(()=>{const [draft,setDraft]=useState('未提交内容');return {state:useRead('refresh-item',read,0,manual),draft,setDraft}})
+  await waitFor(()=>expect(view.result.current.state.data).toBe('saved facts'))
+  let first!:Promise<void>,second!:Promise<void>
+  act(()=>{first=refreshCurrentPage();second=refreshCurrentPage()})
+  expect(first).toBe(second)
+  expect(manual).toHaveBeenCalledOnce()
+  expect(view.result.current.state.data).toBe('saved facts')
+  expect(view.result.current.state.loading).toBe(false)
+  await act(async()=>{finish('fresh facts');await first})
+  expect(view.result.current.state.data).toBe('fresh facts')
+  expect(view.result.current.draft).toBe('未提交内容')
+  expect(read).toHaveBeenCalledOnce()
+  view.unmount()
+  await refreshCurrentPage()
+  expect(manual).toHaveBeenCalledOnce()
+})
+
+it('统一刷新恢复读取失败的区域，不中断其他区域或在途请求',async()=>{
+  const failed=vi.fn().mockRejectedValueOnce(new Error('暂不可读')).mockResolvedValue('recovered')
+  let finish!:(value:string)=>void
+  const pending=vi.fn(()=>new Promise<string>(resolve=>{finish=resolve}))
+  const view=renderHook(()=>({failed:useRead('failure',failed),pending:useRead('pending',pending)}))
+  await waitFor(()=>expect(view.result.current.failed.error?.message).toBe('暂不可读'))
+  await act(async()=>{await refreshCurrentPage()})
+  expect(view.result.current.failed.data).toBe('recovered')
+  expect(view.result.current.failed.error).toBeUndefined()
+  expect(pending).toHaveBeenCalledOnce()
+  await act(async()=>finish('original response'))
+  expect(view.result.current.pending.data).toBe('original response')
 })

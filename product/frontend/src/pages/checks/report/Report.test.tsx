@@ -28,6 +28,30 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
 
+it('归档状态归入报告信息，保留只读边界与两个明确返回入口',()=>{
+  render(<Report {...props(story())} readOnly archiveName="展馆历史工作区" basePath="/archive?project_id=app" returnPath="/archive?project_id=app"/> )
+  expect(screen.getByText('已归档')).toBeVisible()
+  expect(screen.getByText('展馆历史工作区')).toBeVisible()
+  expect(screen.getByRole('link',{name:'返回官方示例'})).toHaveAttribute('href','#/environment')
+  expect(screen.queryByRole('button',{name:'处理权限问题'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'全部报告'}))
+  expect(location.hash).toBe('#/archive?project_id=app')
+})
+
+it('展开依据后索引只保留定位信息，关闭后恢复完整摘要',()=>{
+  const value=story(),p=props(value)
+  const view=render(<Report {...p}/>),results=()=>view.container.querySelector('.jj-report-results')!
+  expect(results().querySelector('.jj-result-actual')).toBeInTheDocument()
+  view.rerender(<Report {...p} selectedCaseId="c1"/>)
+  const index=within(results() as HTMLElement).getByRole('button',{name:'查看成员导出资料的依据'})
+  expect(index).toHaveTextContent('成员不得导出资料')
+  expect(index.querySelector('small')).toBeNull()
+  expect(index.querySelector('.jj-case-outcome')).toBeNull()
+  expect(screen.getByRole('complementary',{name:'检查依据'})).toBeVisible()
+  view.rerender(<Report {...p}/>)
+  expect(results().querySelector('.jj-result-actual')).toBeInTheDocument()
+})
+
 it('结果筛选保留对应检查项，空筛选可以返回全部结果',()=>{
   const value=story(),safe=structuredClone(value.actions[0]);safe.case_id='safe';safe.judgement='检查结果符合已批准的权限要求';safe.display_name='正常下载'
   value.actions.push(safe)

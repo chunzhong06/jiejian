@@ -31,7 +31,23 @@ def capture_workflow(page,origin,output,run_id,*,evidence_label='查看依据'):
     capture('preparation-dark','/preparation','preparation')
     capture('report-dark','/reports?run_id='+run_id,'report')
     navigation=page.get_by_role('navigation',name='应用工作区',exact=True)
-    for title in ('权限规则','检查准备','检查记录','应用概览'):
+    for title in ('权限与覆盖','测试','问题','工作台'):
         navigation.get_by_role('link',name=title,exact=True).click()
     expect(page.get_by_role('heading',name='数字展馆协作空间',exact=True)).to_be_visible()
     return captures
+
+
+def navigate(page, origin, path):
+    """先接受 React 已提交的准确路由，再等待该工作面的实际内容。"""
+    from urllib.parse import parse_qsl, urlencode
+    pathname, separator, search = path.partition('?')
+    route = pathname + ('?' + urlencode(parse_qsl(search, keep_blank_values=True)) if separator else '')
+    if page.url.startswith(origin):
+        page.evaluate('(path)=>{location.hash=path}', path)
+    else:
+        page.goto(origin + '/#' + path)
+    expect(page.locator('.jj-page')).to_have_attribute('data-route', route)
+    expect(page.locator('[data-page-pending=true]')).to_have_count(0)
+    expect(page.locator('main .jj-loading')).to_have_count(0)
+    expect(page.locator('main h1')).to_have_count(1)
+    settled(page)

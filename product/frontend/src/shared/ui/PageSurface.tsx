@@ -1,7 +1,7 @@
 import {useEffect,useLayoutEffect,useRef,type ReactNode} from 'react'
 import {pageTransitionActive} from '../lib/pageTransition'
 
-export function PageSurface({view,transitionKey=view,children}:{view:string;transitionKey?:string;children:ReactNode}) {
+export function PageSurface({view,transitionKey=view,route,children}:{view:string;transitionKey?:string;route?:string;children:ReactNode}) {
   const ref=useRef<HTMLDivElement>(null),running=useRef<Animation|null>(null),previous=useRef(transitionKey)
   useLayoutEffect(()=>{
     const node=ref.current,preference=window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -32,5 +32,5 @@ export function PageSurface({view,transitionKey=view,children}:{view:string;tran
     return()=>{observer?.disconnect();running.current?.cancel();preference.removeEventListener('change',cancel)}
   },[transitionKey])
   useEffect(()=>()=>running.current?.cancel(),[])
-  return <div ref={ref} className="jj-page" data-view={view}>{children}</div>
+  return <div ref={ref} className="jj-page" data-view={view} data-route={route}>{children}</div>
 }

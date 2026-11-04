@@ -1,7 +1,7 @@
 # 显式装配当前任务目标，目标协议与处理器不反向导入此装配模块。
 from product.backend.infrastructure.runtime.jobs.targets import (
     JobTargetRegistry, JobTargetType, CheckJobTargetHandler,
-    ProofPreflightTargetHandler, ReferenceCaptureTargetHandler, RuntimeLoadTargetHandler, IdentityPreparationTargetHandler,
+    FlowTrialTargetHandler, ProofPreflightTargetHandler, ReferenceCaptureTargetHandler, RuntimeLoadTargetHandler, IdentityPreparationTargetHandler,
 )
 
 def recording_job_targets() -> JobTargetRegistry:
@@ -17,6 +17,7 @@ def current_check_and_recording_targets() -> JobTargetRegistry:
     from product.backend.infrastructure.runtime.jobs.recording import RecordingJobTargetHandler
 
     registry = JobTargetRegistry()
+    registry.register(JobTargetType.FLOW_TRIAL,FlowTrialTargetHandler())
     registry.register(JobTargetType.RUN, CheckJobTargetHandler())
     registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
     registry.register(JobTargetType.PROOF_PREFLIGHT, ProofPreflightTargetHandler())

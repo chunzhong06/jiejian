@@ -1,4 +1,4 @@
-# 冻结 v3 动作的 Web 执行适配；复用目标防护与身份隔离，不接收旧 Contract/Profile。
+# 正式检查与场景试运行共用冻结HTTP步骤、目标防护及身份隔离；正式证明仍由调用方传入。
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -12,12 +12,13 @@ from product.backend.infrastructure.execution.web.adapter import HttpExecutionAd
 from product.backend.infrastructure.execution.web.identity import HttpIdentityRuntime
 from product.protocols.checks.check_runtime import CheckActionConfig, CheckRuntimeBundle
 from product.protocols.checks.execution_request import ExecutionCase
+from product.protocols.preparation.flow_trial import FlowTrialRuntime, TrialCase
 from product.protocols.web.request import HttpRequestTemplate, ValueSlotSource
 from product.protocols.web.response import ResponseExtractor, ResponseExtractorKind, _read_json_path
 
 
 class CheckWebRuntime:
-    def __init__(self, bundle: CheckRuntimeBundle, *, environ: Mapping[str, str],
+    def __init__(self, bundle: CheckRuntimeBundle | FlowTrialRuntime, *, environ: Mapping[str, str],
                  cancellation_requested: Callable[[], bool], reserved_origins: tuple[str, ...] = (), request_scope=None):
         self.bundle = bundle
         self._environ = environ
@@ -80,11 +81,11 @@ class CheckWebRuntime:
     def _secret(self, reference: str) -> str | None:
         return self._environ.get(reference.removeprefix("env:"))
 
-    def verify_identity(self, identity_id: str, case: ExecutionCase, *, cleanup=False) -> str:
+    def verify_identity(self, identity_id: str, case: ExecutionCase | TrialCase, *, cleanup=False) -> str:
         with self.identity_session(identity_id) as runtime:
             return self._verify_identity(runtime, identity_id, case, cleanup=cleanup)
 
-    def _verify_identity(self, runtime: HttpIdentityRuntime, identity_id: str, case: ExecutionCase, *, cleanup=False) -> str:
+    def _verify_identity(self, runtime: HttpIdentityRuntime, identity_id: str, case: ExecutionCase | TrialCase, *, cleanup=False) -> str:
         # 匿名也读取真实身份端点；SETUP 后若会话已登录，不能继续冒充匿名场景。
         definition = self._identities[case.resource_owner_test_identity_id if identity_id is None else identity_id]
         verification = definition.verification
@@ -100,11 +101,17 @@ class CheckWebRuntime:
             found, subject = _read_json_path(response.data, verification.subject_json_path)
             if not found or not isinstance(subject, str):
                 return "UNKNOWN"
+            if verification.role_json_path is not None:
+                found_role, role = _read_json_path(response.data, verification.role_json_path)
+                if not found_role or not isinstance(role,str):
+                    return 'UNKNOWN'
+                if role != verification.expected_role:
+                    return 'MISMATCH'
             return "MATCH" if subject == verification.expected_application_subject_id else "MISMATCH"
         except JiejianError:
             return "UNKNOWN"
 
-    def request(self, template: HttpRequestTemplate, *, case: ExecutionCase, action_id: str,
+    def request(self, template: HttpRequestTemplate, *, case: ExecutionCase | TrialCase, action_id: str,
                 identity_id: str, cleanup=False, resource_id=None) -> HttpResponse:
         with self.identity_session(identity_id) as runtime:
             _, response = self.adapter.execute_detailed(template, case_id=case.case_id, action_id=action_id,
@@ -113,32 +120,49 @@ class CheckWebRuntime:
 
     def execute_flow(self, action: CheckActionConfig, case: ExecutionCase, *, verify_identity=False,entity_policy=None,before_target=None):
         """每个 Case 的 TARGET 最多发送一次；传输异常后也不清除已执行标记。"""
+        if entity_policy is None and any(proof.effect_kind=='FILE_CONTENT_DELIVERY' for proof in action.proofs):
+            from product.backend.infrastructure.execution.web.file_entity import FileEntityPolicy
+            entity_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes)
+        return self.execute_steps(action.action_id,action.steps,case,verify_identity=verify_identity,
+            entity_policy=entity_policy,before_target=before_target)
+
+    def execute_recovery(self,template,case,action_id):
+        """恢复前在同一身份容器核对资源所有者；只返回请求事实。"""
+        owner=case.resource_owner_test_identity_id
+        with self.identity_session(owner) as runtime:
+            if self._verify_identity(runtime,owner,case,cleanup=True)!='MATCH':
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'恢复账号的真实主体无法确认')
+            return self.adapter.execute_detailed(template,case_id=case.case_id,action_id=action_id,
+                slot_values=self._values(template,case,{}),identity_runtime=runtime,cleanup_request=True)
+
+    def execute_steps(self,action_id,steps,case,*,verify_identity=False,entity_policy=None,before_target=None,on_step=None):
+        """共同HTTP步骤执行；观察回调不得持久化响应正文或动态秘密。"""
         if case.case_id in self._executed:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "TARGET already executed for this case session")
         responses: dict[str, HttpResponse] = {}
         with self.identity_session(case.subject_test_identity_id) as runtime:
-            for step in action.steps:
+            for step in steps:
                 if step.purpose == "TARGET":
                     # SETUP 可能改变会话；实际主体确认必须紧邻 TARGET 且复用同一身份容器。
                     identity_status = self._verify_identity(runtime, case.subject_test_identity_id, case) if verify_identity else None
                     self._actual_identities[case.case_id] = identity_status or "UNKNOWN"
                     if before_target is not None:before_target(identity_status)
                     self._executed.add(case.case_id)
-                target_policy=entity_policy
-                if target_policy is None and any(proof.effect_kind=='FILE_CONTENT_DELIVERY' for proof in action.proofs):
-                    from product.backend.infrastructure.execution.web.file_entity import FileEntityPolicy
-                    target_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes)
                 # 先清除SETUP回执；TARGET在网络前失败时也不能借用前一请求。
                 if step.purpose=='TARGET':
-                    getattr(self.adapter,'request_receipts',{}).pop((case.case_id,action.action_id),None)
+                    getattr(self.adapter,'request_receipts',{}).pop((case.case_id,action_id),None)
                 try:
                     execution, response = self.adapter.execute_detailed(step.request, case_id=case.case_id,
-                        action_id=action.action_id, classifier=step.classifier,
+                        action_id=action_id, classifier=step.classifier,
                         slot_values=self._values(step.request, case, responses),identity_runtime=runtime,
-                        entity_policy=target_policy if step.purpose=='TARGET' else None)
+                        entity_policy=entity_policy if step.purpose=='TARGET' else None)
+                    if on_step is not None:on_step(step,execution,response)
+                except JiejianError as exc:
+                    if on_step is not None:on_step(step,None,None,exc.code)
+                    raise
                 finally:
                     if step.purpose=='TARGET':
-                        self._target_receipts[case.case_id]=getattr(self.adapter,'request_receipts',{}).get((case.case_id,action.action_id))
+                        self._target_receipts[case.case_id]=getattr(self.adapter,'request_receipts',{}).get((case.case_id,action_id))
                 responses[step.step_id] = response
                 if step.purpose == "TARGET":
                     if not hasattr(self, "_target_responses"):
@@ -149,7 +173,7 @@ class CheckWebRuntime:
                     raise JiejianError(ErrorCode.SETUP_STEP_FAILED, "工作流步骤依赖无法满足")
         raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "执行快照格式无效")
 
-    def _values(self, template: HttpRequestTemplate, case: ExecutionCase,
+    def _values(self, template: HttpRequestTemplate, case: ExecutionCase | TrialCase,
                 responses: Mapping[str, HttpResponse], *, resource_id=None) -> dict[str, object]:
         values: dict[str, object] = {}
         for slot in template.input_slots:
@@ -180,7 +204,7 @@ class CheckWebRuntime:
         return values
 
 
-def check_secret_names(bundle: CheckRuntimeBundle) -> tuple[str, ...]:
+def check_secret_names(bundle: CheckRuntimeBundle | FlowTrialRuntime) -> tuple[str, ...]:
     """从严格冻结结构中收集引用名称；不查询秘密或继承无关环境变量。"""
     names: set[str] = set()
     def visit(value, key=None):

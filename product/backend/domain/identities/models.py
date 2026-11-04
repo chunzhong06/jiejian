@@ -41,19 +41,24 @@ IdentityPublicValue = Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{
 class IdentityVerificationConfig(TestIdentityModel):
     path: str = Field(pattern=r'^/[A-Za-z0-9_/-]{0,510}$')
     subject_path: tuple[IdentityField, ...] = Field(min_length=1,max_length=8)
-    role_path: tuple[IdentityField, ...] = Field(min_length=1,max_length=8)
+    role_path: tuple[IdentityField, ...] = Field(min_length=0,max_length=8)
     expected_subject: IdentityPublicValue
-    expected_role: IdentityPublicValue
+    expected_role: IdentityPublicValue | None
 
     @model_validator(mode='after')
     def nonsecret_fields(self):
+        if bool(self.role_path) != (self.expected_role is not None):
+            raise ValueError('role verification fields must be configured together')
         if self.path.startswith('//') or any(part.casefold() in {'password','token','cookie','secret','authorization','api_key'} for part in (*self.subject_path,*self.role_path)):
             raise ValueError('verification requires a local identity path and nonsecret fields')
         return self
 
 
 class AuthenticationProfile(TestIdentityModel):
-    method: Literal['BROWSER_SESSION','BEARER','API_LOGIN'] = 'BROWSER_SESSION'
+    method: Literal['BROWSER_SESSION','BEARER','API_LOGIN','OAUTH2_CLIENT_CREDENTIALS','OAUTH2_REFRESH'] = 'BROWSER_SESSION'
+    principal_kind: Literal['USER','SERVICE'] = Field(default='USER',exclude_if=lambda value:value=='USER')
+    oauth_client_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_.:/-]{1,256}$',exclude_if=lambda value:value is None)
+    oauth_scope: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_.:/ -]{1,512}$',exclude_if=lambda value:value is None)
     login_path: str = Field(default='/',pattern=r'^/[A-Za-z0-9_/-]{0,510}$')
     username_field: IdentityField = 'username'
     password_field: IdentityField = 'password'
@@ -62,12 +67,19 @@ class AuthenticationProfile(TestIdentityModel):
 
     @model_validator(mode='after')
     def local_login(self):
+        if self.principal_kind == 'USER' and self.verification.expected_role is None:
+            raise ValueError('user authentication requires explicit role verification')
+        if self.method == 'OAUTH2_CLIENT_CREDENTIALS' and (self.principal_kind != 'SERVICE' or self.oauth_client_id is None):
+            raise ValueError('client credentials requires a service principal and client identifier')
+        if self.method not in {'OAUTH2_CLIENT_CREDENTIALS','OAUTH2_REFRESH'} and (self.oauth_client_id is not None or self.oauth_scope is not None):
+            raise ValueError('OAuth settings require an OAuth authentication method')
         if self.login_path.startswith('//') or self.username_field == self.password_field:
             raise ValueError('login path and credential field names are invalid')
         return self
 
 
 class IdentityVerificationSnapshot(TestIdentityModel):
+    environment_fingerprint: str | None = Field(default=None,pattern=r'^[0-9a-f]{64}$',exclude_if=lambda value:value is None)
     status: Literal['VERIFIED','AUTH_EXPIRED','SUBJECT_MISMATCH','ROLE_MISMATCH','FIELD_MISSING','UNAVAILABLE']
     checked_at_us: int = Field(ge=0)
     origin: str = Field(min_length=1,max_length=2048)

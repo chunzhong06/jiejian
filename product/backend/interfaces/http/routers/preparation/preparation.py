@@ -21,6 +21,8 @@ class AllowControlSelectionRequest(ApiModel):
 
 def build_preparation_router(context) -> APIRouter:
     router = APIRouter()
+    from product.backend.interfaces.http.routers.preparation.flow_trials import build_flow_trials_router
+    router.include_router(build_flow_trials_router(context))
     from product.backend.interfaces.http.routers.preparation.proof_sources import build_proof_sources_router
     router.include_router(build_proof_sources_router(context))
 
@@ -46,6 +48,10 @@ def build_preparation_router(context) -> APIRouter:
     @router.get('/api/projects/{project_id}/operation-flows',response_model=ApiResponse)
     def operation_flows(project_id:str):
         return data_response(context.operation_flows.context(project_id))
+
+    @router.get('/api/projects/{project_id}/operation-flows/{flow_id}/{revision}',response_model=ApiResponse)
+    def operation_flow_revision(project_id:str,flow_id:str,revision:int):
+        return data_response(context.operation_flows.read(project_id,flow_id,revision).model_dump(mode='json'))
 
     @router.put('/api/projects/{project_id}/operation-flows',response_model=ApiResponse)
     async def save_operation_flow(project_id:str,request:Request):

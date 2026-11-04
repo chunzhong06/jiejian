@@ -1,16 +1,16 @@
-.jj-changes-workspace, .jj-repair-scope { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); min-width: 0; overflow: hidden; }
-.jj-repair-scope > header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 24px 28px; border-bottom: 1px solid var(--line); }
+.jj-changes-workspace, .jj-repair-scope { background: var(--surface); border-block:1px solid var(--line); min-width: 0; overflow: hidden; }
+.jj-repair-scope > header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding:20px 22px; border-bottom: 1px solid var(--line); }
 .jj-repair-scope > header > .jj-button { margin-left: auto; }
 .jj-repair-scope > div { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.jj-repair-scope > div > section { padding: 24px 28px; }
+.jj-repair-scope > div > section { padding:20px 22px; }
 .jj-repair-scope > div > section + section { border-left: 1px solid var(--line); }
 .jj-repair-scope p { margin-top: 8px; color: var(--muted); font-size: var(--text-meta); max-width: 65ch; }
-.jj-changes-workspace > header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; border-bottom: 1px solid var(--line); background: var(--surface-heading); }
+.jj-changes-workspace > header { display: flex; align-items: center; gap: 16px; padding:20px 22px; border-bottom: 1px solid var(--line); background: var(--surface-heading); }
 .jj-changes-workspace > header > span { color: var(--muted); font-size: var(--text-meta); }
 .jj-change-entry { border-bottom: 1px solid var(--line); }
 .jj-change-entry:last-child { border: 0; }
-.jj-change-select { display: grid; grid-template-columns: 130px minmax(0,1fr) auto 14px; align-items: center; gap: 22px; width: 100%; border: 0; padding: 24px 28px; background: transparent; color: var(--ink); text-align: left; }
-.jj-change-select[aria-expanded=true] { background: var(--inset); }
+.jj-change-select { display: grid; grid-template-columns: 130px minmax(0,1fr) auto 14px; align-items: center; gap: 22px; width: 100%; border: 0; padding:20px 22px; background: transparent; color: var(--ink); text-align: left; }
+.jj-change-select[aria-expanded=true] { background:var(--selected); }
 .jj-change-select > .anticon { color: var(--muted); font-size: var(--text-meta); }
 .jj-change-select[aria-expanded=true] > .anticon { transform: rotate(180deg); }
 .jj-change-time { display: grid; gap: 6px; font-size: var(--text-meta); }

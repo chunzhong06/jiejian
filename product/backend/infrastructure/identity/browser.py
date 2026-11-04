@@ -203,13 +203,41 @@ class IdentityPreparationBrowserAdapter:
     @staticmethod
     def _credential_form(page,method):
         # 输入只存在于独立浏览器内存；控制面、进程协议及日志不接收秘密值。
-        title='输入访问令牌' if method=='BEARER' else '登录应用'
-        inputs='<label>访问令牌<input id="token" type="password" autocomplete="off"></label>' if method=='BEARER' else '<label>账号<input id="username" autocomplete="off"></label><label>密码<input id="password" type="password" autocomplete="off"></label>'
+        title='更新 OAuth2 访问令牌' if method.startswith('OAUTH2_') else '输入访问令牌' if method=='BEARER' else '登录应用'
+        if method.startswith('OAUTH2_'):
+            inputs=('<label>刷新令牌<input id="token" type="password" autocomplete="off"></label>' if method=='OAUTH2_REFRESH' else '')+'<label>客户端密钥<input id="password" type="password" autocomplete="off"></label>'
+        else:
+            inputs='<label>访问令牌<input id="token" type="password" autocomplete="off"></label>' if method=='BEARER' else '<label>账号<input id="username" autocomplete="off"></label><label>密码<input id="password" type="password" autocomplete="off"></label>'
         page.set_content('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+title+'</title><style>body{font:16px system-ui;background:#eef2f7;color:#202a3b;margin:0;display:grid;place-items:center;min-height:100vh}main{background:white;border:1px solid #d7dfea;border-radius:20px;padding:40px;width:min(420px,75vw)}h1{font-size:24px}label{display:grid;gap:8px;margin:24px 0}input{font:inherit;border:1px solid #8798b1;border-radius:8px;padding:12px}p{color:#56677f;line-height:1.6}</style><main><h1>'+title+'</h1>'+inputs+'<p>填写后返回界鉴，选择“我已完成登录”。秘密只用于本次登录。</p></main></html>')
 
     @staticmethod
     def _submit_credentials(request,page,context,tokens):
         profile=request.authentication
+        if profile.method.startswith('OAUTH2_'):
+            credentials={'grant_type':'client_credentials' if profile.method=='OAUTH2_CLIENT_CREDENTIALS' else 'refresh_token'}
+            secret=page.locator('#password').input_value()
+            page.locator('#password').fill('')
+            if len(secret.encode())>_CREDENTIAL_SECRET_MAX_BYTES:
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'客户端密钥超出预算')
+            if secret:credentials['client_secret']=secret
+            if profile.oauth_client_id:credentials['client_id']=profile.oauth_client_id
+            if profile.oauth_scope:credentials['scope']=profile.oauth_scope
+            if profile.method=='OAUTH2_REFRESH':
+                refresh=page.locator('#token').input_value()
+                page.locator('#token').fill('')
+                if not refresh or len(refresh.encode())>_CREDENTIAL_SECRET_MAX_BYTES:
+                    raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'刷新令牌为空或超出预算')
+                credentials['refresh_token']=refresh
+            response=page.evaluate('''async ({url,credentials})=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(credentials).toString(),redirect:'error'});return {status:r.status,body:await r.json().catch(()=>null)}}''',dict(url=request.target_scope.allowed_origins[0]+profile.login_path,credentials=credentials))
+            credentials.clear()
+            token=response['body']
+            for key in profile.token_path:token=token.get(key) if isinstance(token,dict) else None
+            if not 200<=response['status']<300 or not isinstance(token,str) or not token or len(token.encode())>_CREDENTIAL_SECRET_MAX_BYTES or any(ord(char)<33 or ord(char)==127 for char in token):
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'令牌接口未返回可用的访问令牌，请核对配置与授权')
+            context.clear_cookies()
+            tokens.clear()
+            tokens.add(token)
+            return
         if profile.method=='BEARER':
             token=page.locator('#token').input_value()
             page.locator('#token').fill('')
@@ -250,12 +278,12 @@ class IdentityPreparationBrowserAdapter:
                 for key in path:
                     value=value.get(key) if isinstance(value,dict) else None
                 return value
-            actual_subject,actual_role=field(config.subject_path),field(config.role_path)
-            if actual_subject is None or actual_role is None:
+            actual_subject,actual_role=field(config.subject_path),field(config.role_path) if config.role_path else None
+            if actual_subject is None or (config.role_path and actual_role is None):
                 status='FIELD_MISSING'
             elif actual_subject!=config.expected_subject:
                 status='SUBJECT_MISMATCH'
-            elif actual_role!=config.expected_role:
+            elif config.expected_role is not None and actual_role!=config.expected_role:
                 status='ROLE_MISMATCH'
             else:
                 status='VERIFIED'

@@ -33,9 +33,9 @@ export function RuntimeActivation({ projectId, details, onError, onChanged, onRe
         }
         finally { lock.current = false; setBusy(false); }
     };
-    return <section className="jj-runtime-activation"><header><h3>运行这批代码</h3><Badge tone={matched ? 'positive' : 'neutral'}>{matched ? '运行版本已对应' : current?.status === 'PENDING' ? '正在载入' : '待核对运行版本'}</Badge></header><p className="jj-small jj-muted">载入后重新核对受影响的材料，再按原要求复验。</p>{task.error && <ErrorNote error={task.error} onRetry={task.reload}/>}{status.error && <ErrorNote error={status.error} onRetry={status.reload}/>}
+    return <section className="jj-runtime-activation"><header><h3>运行这批代码</h3><Badge tone={matched ? 'positive' : 'neutral'}>{matched ? '运行版本已对应' : current?.status === 'PENDING' ? '正在载入' : '待核对运行版本'}</Badge></header><p className="jj-small jj-muted">载入后重新核对受影响的材料，再按原要求复验。</p>{task.error && <ErrorNote error={task.error}/>}{status.error && <ErrorNote error={status.error}/>}
         <div className="jj-inline-actions">{matched ? (onReady ? <span className="jj-small jj-muted">当前运行已使用这次修改。</span> : <Button onClick={() => go('/preparation?change_id=' + encodeURIComponent(details.delivery.change_id))}>核对这次修改的材料</Button>) : !latest ? <span className="jj-small jj-muted">仅最新登记可以载入运行。历史检查保留原有代码对应。</span> : pending && current?.status !== 'FAILED' ? <><Button busy={busy} onClick={() => { status.reload(); task.reload(); }}>查询载入结果</Button>{!current && <Button busy={busy} onClick={() => void load()}>恢复原载入请求</Button>}</> : <Button kind="primary" busy={busy} disabled={!task.data} onClick={() => { if (pending) { savePending(key, undefined); setPending(undefined); } else void load(); }}>{pending ? '重新核对后载入' : '载入这批代码'}</Button>}</div>
         {!matched && !onReady && <Button kind="quiet" onClick={() => go('/application')}>查看应用运行配置</Button>}
-        {current?.status === 'FAILED' && <Notice>这次载入未完成，请核对应用地址及受控运行配置。</Notice>}
+        {current?.status === 'FAILED' && <Notice tone="caution">这次载入未完成，请核对应用地址及受控运行配置。</Notice>}
     </section>;
 }

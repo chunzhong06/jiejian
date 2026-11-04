@@ -21,6 +21,7 @@ from product.backend.domain.errors import JiejianError
 from product.backend.interfaces.http.errors import jiejian_error_handler, validation_error_handler
 from product.backend.interfaces.http.routers.applications.onboarding import build_onboarding_router
 from product.backend.interfaces.http.routers.applications.projects import build_projects_router
+from product.backend.interfaces.http.routers.applications.workbench import build_workbench_router
 from product.backend.interfaces.http.routers.system.system import build_system_router
 from product.backend.interfaces.http.routers.preparation.test_identities import build_test_identities_router
 from product.backend.interfaces.http.routers.boundaries.business_boundaries import build_business_boundaries_router
@@ -154,6 +155,7 @@ def create_app(
 
     app.include_router(build_system_router(context, shutdown_callback=shutdown_callback))
     app.include_router(build_projects_router(context))
+    app.include_router(build_workbench_router(context))
     app.include_router(build_business_boundaries_router(context))
     app.include_router(build_workspace_router(context))
     app.include_router(build_experience_router(context))

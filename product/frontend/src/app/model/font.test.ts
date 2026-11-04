@@ -13,7 +13,7 @@ it('字体迟到时保持本次文档后备字型，不在菜单出现时再替�
   vi.useFakeTimers()
   let finish!:(faces:object[])=>void
   Object.defineProperty(document,'fonts',{configurable:true,value:{load:()=>new Promise(resolve=>{finish=resolve})}})
-  const selected=selectDocumentFont()
+  const selected=selectDocumentFont(80)
   await vi.advanceTimersByTimeAsync(100)
   await selected
   expect(document.documentElement.dataset.uiFont).toBe('system')

@@ -11,16 +11,23 @@ from scripts.quality.catalog import AREAS
 
 def render(root):
     output={}
-    index=['# 模块索引','','本页从当前源码静态提取文件、行数和顶层公开声明，用于定位所有者。列表不表示完整调用关系或运行验收。','','[架构说明](../工程/架构.md)']
-    section=None
-    for name,lines,names in modules(root):
-        parts=Path(name).parts
-        group='/'.join(parts[:3] if parts[1] in {'backend','frontend'} else parts[:2])
-        if group!=section:
-            section=group
-            index+=['',f'## {group}','','| 文件 | 行数 | 公开声明 |','| --- | ---: | --- |']
-        symbols='、'.join(names[:8])+('等' if len(names)>8 else '')
-        index.append(f'| [{name}](../../{name}) | {lines} | {symbols or "包、内部机制或样式"} |')
+    index=['# 模块索引','','本页按源码职责路由至生成分册。分册静态提取文件、行数和公开声明，用于定位所有者，不表示完整调用关系或运行验收。','','[架构说明](../工程/架构.md)','','| 源码范围 | 文件数 | 分册 |','| --- | ---: | --- |']
+    groups={}
+    for row in modules(root):
+        parts=Path(row[0]).parts
+        group='/'.join(parts[:min(4,len(parts)-1)] if parts[:3]==('product','frontend','src') else parts[:min(3,len(parts)-1)] if parts[:2] in {('product','backend'),('product','frontend')} else parts[:1] if parts[0]=='scripts' else parts[:2])
+        groups.setdefault(group,[]).append(row)
+    for group,rows in groups.items():
+        if group in {'product/backend','product/frontend/src'}:
+            index.append(f'| `{group}` | {len(rows)} | '+ '、'.join(f'[{Path(row[0]).name}](../../{row[0]})' for row in rows)+' |')
+            continue
+        name=group.replace('/','-')
+        index.append(f'| `{group}` | {len(rows)} | [查看声明](模块/{name}.md) |')
+        page=[f'# {group} 模块','','<!-- generated:modules -->','','[返回总索引](../模块索引.md)','','| 文件 | 行数 | 公开声明 |','| --- | ---: | --- |']
+        for file,lines,names in rows:
+            symbols='、'.join(names[:8])+('等' if len(names)>8 else '')
+            page.append(f'| [{file}](../../../{file}) | {lines} | {symbols or "包、内部机制或样式"} |')
+        output[f'docs/参考/模块/{name}.md']='\n'.join(page)+'\n'
     output['docs/参考/模块索引.md']='\n'.join(index)+'\n'
     contract=['# 接口与协议','','本页静态提取 HTTP 声明和 Schema 注册。调用条件见[本地接口](本地接口.md)，迁移另见[数据库修订](数据库修订.md)。HTTP 表不代替鉴权、前置条件和 OpenAPI；声明是否实际装配需沿接口组合入口核对。','','## HTTP 接口','','| 方法 | 路径 | 声明位置 |','| --- | --- | --- |']
     for method,path,owner,name in routes(root):
@@ -61,7 +68,16 @@ def generate(root,update=False):
             temporary=path.with_suffix('.tmp')
             temporary.write_text(text,encoding='utf-8',newline='\n')
             os.replace(temporary,path)
-    failures=check_documents(root)
+    # 更新后的落盘内容也必须接受；复用已渲染预期，不启动第二轮全量生成。
+    failures=[]
+    if update:
+        failures.extend('静态参考写入后不一致：'+name for name,text in documents.items()
+            if (root/name).read_text('utf-8') != text)
+        for path in (root/'docs/参考/模块').glob('*.md'):
+            if path.relative_to(root).as_posix() not in documents and '<!-- generated:modules -->' in path.read_text('utf-8'):
+                if path.is_symlink() or not path.resolve().is_relative_to(root/'docs/参考'):raise ValueError('生成路径越界')
+                path.unlink()
+    failures.extend(check_documents(root))
     if changed and not update:failures.extend('静态参考需要更新：'+name for name in changed)
     if failures:raise ValueError('\n'.join(failures))
     return changed

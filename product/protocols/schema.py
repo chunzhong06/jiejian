@@ -24,6 +24,9 @@ class SchemaEntry:
 
 
 SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
+    SchemaEntry('applications/api-import.schema.json','product.protocols.preparation.api_source:ApiImportDocument'),
+    SchemaEntry('applications/api-source.schema.json','product.protocols.preparation.api_source:ApiSourceDocument'),
+    SchemaEntry('applications/environment.schema.json','product.protocols.web.environment:EnvironmentDocument'),
     SchemaEntry("boundaries/rule-candidate-decision.schema.json", "product.backend.domain.boundaries.candidate_scenarios:RuleCandidateDecision"),
     SchemaEntry("boundaries/rule-candidate-revision.schema.json", "product.backend.domain.boundaries.rule_candidates:rule_candidate_revision_schema", "function"),
     SchemaEntry("contracts/differential-experiment-plan.schema.json", "product.backend.domain.verification.differential:DifferentialExperimentPlan"),
@@ -49,6 +52,10 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("observer/observer-outcome.schema.json", "product.protocols.observer.result:ObserverOutcome"),
     SchemaEntry("observer/observer-spec.schema.json", "product.protocols.observer.config:ObserverSpec"),
     SchemaEntry("preparation/batch-plan.schema.json", "product.backend.application.preparation.batches:PreparationBatchPlan"),
+    SchemaEntry('preparation/flow-trial-plan.schema.json','product.protocols.preparation.flow_trial:FlowTrialPlan'),
+    SchemaEntry('preparation/flow-trial-report.schema.json','product.protocols.preparation.flow_trial:FlowTrialReport'),
+    SchemaEntry('preparation/flow-trial-request.schema.json','product.protocols.preparation.flow_trial:FlowTrialRequest'),
+    SchemaEntry('preparation/flow-trial-runner-input.schema.json','product.protocols.preparation.flow_trial:FlowTrialRunnerInput'),
     SchemaEntry('preparation/operation-flow.schema.json','product.protocols.preparation.operation_flow:OperationFlow'),
     SchemaEntry("preparation/proof-artifact-input.schema.json", "product.protocols.preparation.proof_artifacts:ProofArtifactInput"),
     SchemaEntry("preparation/proof-preflight-input.schema.json", "product.protocols.preparation.proof_sources:ProofPreflightInput"),

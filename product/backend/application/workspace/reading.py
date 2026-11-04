@@ -84,7 +84,8 @@ class WorkspaceReader:
                 continue
             if package is None:
                 continue
-            if package.request.source_fingerprint == understanding.source_fingerprint:
+            if (package.request.source_fingerprint == understanding.source_fingerprint
+                    and package.request.environment == understanding.environment):
                 latest_result = WorkspaceLatestResult(run_id=entry.run.run_id,verdict=entry.run.verdict.value,
                     policy_epoch=entry.run.policy_epoch,created_at_us=entry.run.created_at_us,
                     summary=JUDGEMENTS[entry.run.verdict.value])

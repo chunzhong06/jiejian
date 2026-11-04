@@ -20,7 +20,7 @@ export type WorkspaceProjectDto = {
 
 export type WorkspaceConnectionDto = {
   endpoint_status: 'NEEDS_CONFIRMATION' | 'CONFIRMED' | 'UNAVAILABLE'
-  source_analysis_status: 'NOT_AUTHORIZED' | 'PENDING' | 'COMPLETED'
+  source_analysis_status: 'NOT_AUTHORIZED' | 'PENDING' | 'COMPLETED' | 'NOT_PROVIDED'
 }
 
 export type ActorWorkspaceDto = Pick<BusinessActorRevisionDto,

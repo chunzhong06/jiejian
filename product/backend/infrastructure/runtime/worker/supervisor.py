@@ -54,6 +54,7 @@ class LocalWorkerSupervisor:
         targets: JobTargetRegistry | None = None,
         job_authorized=None,
         capture_publisher=None,
+        trial_publisher=None,
         identity_cleanup=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
@@ -71,8 +72,9 @@ class LocalWorkerSupervisor:
         self._lease_owner: str | None = None
         self._next_recovery_scan_us = 0
         self._recovered_jobs = 0
-        self._job_authorized = job_authorized or (lambda job: job.preflight_id is None and job.reference_capture_id is None)
+        self._job_authorized = job_authorized or (lambda job: job.preflight_id is None and job.reference_capture_id is None and job.flow_trial_id is None)
         self._capture_publisher=capture_publisher
+        self._trial_publisher=trial_publisher
         self._identity_cleanup = identity_cleanup
         self._parallel_worker = None
         self.on_progress = lambda: None
@@ -281,6 +283,11 @@ class LocalWorkerSupervisor:
                 if request is None:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "预检查输入不存在")
                 secret_names = check_secret_names(request)
+            elif job.flow_trial_id is not None:
+                with self._uow_factory() as work:
+                    request=work.flow_trials.get(job.project_id,job.flow_trial_id)
+                if request is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'试运行输入不存在')
+                secret_names=check_secret_names(request)
             elif job.reference_capture_id is not None:
                 with self._uow_factory() as work:
                     request=work.proof_artifacts.capture(job.project_id,job.reference_capture_id)
@@ -470,6 +477,22 @@ class LocalWorkerSupervisor:
         )
 
     def _reconcile_check(self, job) -> bool:
+        if job.flow_trial_id is not None:
+            if self._trial_publisher is None:return False
+            from product.backend.infrastructure.artifacts.checks.check_packages import read_check_bytes,reject_check_links
+            from product.protocols.preparation.flow_trial import FlowTrialReport
+            from product.backend.infrastructure.runtime.paths import RuntimePaths
+            directory=RuntimePaths(self.var_dir).jobs/job.job_id/'attempts'/f'{job.attempt}-{job.fencing_token}'
+            path=directory/'trial-report.json'
+            if not path.exists():return False
+            try:
+                reject_check_links(self.var_dir,path)
+                report=FlowTrialReport.model_validate_json(read_check_bytes(path),strict=True)
+                if (report.job_id,report.trial_id,report.attempt,report.fencing_token,report.lease_owner)!=(job.job_id,job.flow_trial_id,job.attempt,job.fencing_token,job.lease_owner):return False
+                self._trial_publisher.publish(report,require_active_lease=False)
+            except (JiejianError,ValueError):return False
+            self._recovered_jobs+=1
+            return True
         if job.reference_capture_id is not None:
             publisher=self._capture_publisher
             if publisher is None:return False

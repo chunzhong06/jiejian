@@ -925,6 +925,7 @@
         "reference": {
           "discriminator": {
             "mapping": {
+              "OPERATION_HTTP_ENTITY": "#/$defs/OperationProofReference",
               "RECORDED_OBSERVATION": "#/$defs/RecordedProofReference",
               "REGISTERED_OBSERVER": "#/$defs/ObserverProofReference"
             },
@@ -936,6 +937,9 @@
             },
             {
               "$ref": "#/$defs/ObserverProofReference"
+            },
+            {
+              "$ref": "#/$defs/OperationProofReference"
             }
           ],
           "title": "Reference"
@@ -950,7 +954,8 @@
           "enum": [
             "HTTP_RESOURCE_PRESENCE",
             "REGISTERED_EFFECT",
-            "RECORDED_SUPPORT"
+            "RECORDED_SUPPORT",
+            "HTTP_ENTITY_QUERY"
           ],
           "title": "Rule",
           "type": "string"
@@ -1084,9 +1089,16 @@
           "type": "array"
         },
         "source_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Source Fingerprint",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Fingerprint"
         },
         "subject_actor_id": {
           "pattern": "^bar_[0-9a-f]{32}$",
@@ -1889,6 +1901,39 @@
         "observer_id"
       ],
       "title": "ObserverProofReference",
+      "type": "object"
+    },
+    "OperationProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "flow_id": {
+          "pattern": "^ofl_[0-9a-f]{32}$",
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OPERATION_HTTP_ENTITY",
+          "default": "OPERATION_HTTP_ENTITY",
+          "title": "Kind",
+          "type": "string"
+        },
+        "query_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Query Fingerprint",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "flow_id",
+        "revision",
+        "query_fingerprint"
+      ],
+      "title": "OperationProofReference",
       "type": "object"
     },
     "PermissionConditions": {

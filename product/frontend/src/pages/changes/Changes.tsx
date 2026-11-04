@@ -12,7 +12,7 @@ import { developmentApi } from '../../entities/source-change/api/development';
 import { repairsApi, repairReference } from '../../entities/check/api/repairs';
 import type { WorkspaceViewDto } from '../../entities/workspace/api/workspace';
 import { Button } from "../../shared/ui/actions";
-import { Badge, Empty, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
+import {PageError,  Badge, Empty, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
 import { Heading } from "../../shared/ui/layout";
 import { assertProject, type PageProps } from '../../shared/model/page';
 import { date, text } from '../../shared/lib/format';
@@ -42,13 +42,13 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
     if (state.loading)
         return <PageSkeleton view="/changes"/>;
     if (state.error)
-        return <ErrorNote error={state.error} onRetry={state.reload}/>;
+        return <PageError title="源码修改" error={state.error}/>;
     return <>
-    <Heading title="源码修改" actions={!register && <Button kind="primary" onClick={() => setRegister(true)}>登记本地修改</Button>}/>
+    <Heading title="源码修改" actions={!register && Boolean(changes?.length) && <Button kind="primary" onClick={() => setRegister(true)}>登记本地修改</Button>}/>
     {selected && <div className="jj-back-link"><Button kind="quiet" onClick={() => { setFocused(undefined); go('/changes'); }}>全部修改记录</Button></div>}
     {contract && <section className="jj-repair-scope"><header><Badge tone="accent">原题修复</Badge><h2>本次修复范围</h2><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(contract.source_run_id) + '&case_id=' + encodeURIComponent(contract.source_case_id))}>阅读原问题依据<ArrowRightOutlined aria-hidden="true"/></Button></header><div><section><h3>消除原权限问题</h3><p>使用原问题的账号、资源和检查要求，验证禁止的业务结果不再发生。</p></section><section><h3>保留正常功能</h3><p>正常允许的操作及其他相关业务继续接受回归检查。</p></section></div></section>}
-    {reference && !contract && <Notice>没有找到与这个修复引用对应的原问题，请从报告重新打开。</Notice>}
-    {register && (ruleState.loading ? <Loading>正在读取可关联的权限</Loading> : ruleState.error ? <ErrorNote error={ruleState.error} onRetry={ruleState.reload}/> : reference && (!contract || !repairRule) ? <Notice>原题不在当前有效规则中，请从权限规则重新选择修改范围。</Notice> : <ChangeRegistration projectId={projectId} options={changeTargetOptions(ruleState.data?.rules ?? [])} initialTargets={contract ? [{permission: repairRule!.permission, repair: repairReference(contract)}] : []} onClose={() => setRegister(false)} onError={onError} onSaved={id => { setRegister(false); state.reload(); refresh(); go('/changes?change_id=' + encodeURIComponent(id)); }}/>) }
+    {reference && !contract && <Notice tone="caution">没有找到与这个修复引用对应的原问题，请从报告重新打开。</Notice>}
+    {register && (ruleState.loading ? <Loading>正在读取可关联的权限</Loading> : ruleState.error ? <ErrorNote error={ruleState.error}/> : reference && (!contract || !repairRule) ? <Notice tone="caution">原题不在当前有效规则中，请从权限规则重新选择修改范围。</Notice> : <ChangeRegistration projectId={projectId} options={changeTargetOptions(ruleState.data?.rules ?? [])} initialTargets={contract ? [{permission: repairRule!.permission, repair: repairReference(contract)}] : []} onClose={() => setRegister(false)} onError={onError} onSaved={id => { setRegister(false); state.reload(); refresh(); go('/changes?change_id=' + encodeURIComponent(id)); }}/>) }
     {changes?.length ? <section className="jj-changes-workspace"><header><h2>修改记录</h2><span>{changes.length} 次登记</span></header>
       {changes.map(item => {
                 const id = item.manifest.change_id, open = expanded === id, verification = open ? detail.data?.verification : undefined;
@@ -61,12 +61,12 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
         {open && <div className="jj-change-detail" id={'change-' + id}>
           {detail.data && <RuntimeActivation projectId={projectId} details={detail.data} onError={onError} onChanged={() => { detail.reload(); refresh(); }}/>}<div className="jj-change-evidence"><section><h3>变化范围</h3><div className="jj-change-files">{([['added_paths', '新增'], ['modified_paths', '修改'], ['removed_paths', '删除']] as const).map(([key, label]) => item.change_set[key].length > 0 && <details key={key}><summary>{label} {item.change_set[key].length} 个文件</summary>{item.change_set[key].map(path => <p className="jj-path" key={path}>{path}</p>)}</details>)}</div>{item.change_set.status === 'NO_BASELINE' && <p className="jj-small jj-muted">缺少可比较的源码起点。</p>}
             {item.assessment.payload.action_impacts.length > 0 && <details className="jj-change-impacts"><summary>相关业务操作</summary>{item.assessment.payload.action_impacts.map(impact => <div key={impact.action_id}><strong>{text(workspace?.actions.find(action => action.action_id === impact.action_id && action.action_revision === impact.action_revision)?.display_name ?? '本次业务操作')}</strong><span>{impact.classification === 'DIRECTLY_AFFECTED' ? '直接受影响' : impact.classification === 'MAPPING_REVIEW_REQUIRED' ? '需核对实现对应' : '未发现直接影响证据'}</span></div>)}</details>}
-          </section><section className="jj-change-verification"><h3>关联检查</h3>{detail.loading ? <Loading>正在读取关联记录</Loading> : detail.error ? <ErrorNote error={detail.error} onRetry={detail.reload}/> : verification?.run_id ? <><Badge tone={verification.verdict === 'PASS' ? 'positive' : verification.verdict === 'BLOCK' ? 'negative' : verification.verdict === 'INCONCLUSIVE' ? 'caution' : 'neutral'}>{verification.repair_status === 'VERIFIED' ? '已通过原题验证' : verification.verdict === 'PASS' ? '本次范围符合规则' : verification.verdict === 'BLOCK' ? '存在不符合规则的结果' : verification.verdict === 'INCONCLUSIVE' ? '部分结果尚未确认' : '尚未形成结论'}</Badge><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(verification.run_id!))}>阅读本批报告<ArrowRightOutlined aria-hidden="true"/></Button></> : verification?.same_source_run_id ? <><p>同版源码有检查记录，尚未关联本批。</p><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(verification.same_source_run_id!))}>查看同版源码报告<ArrowRightOutlined aria-hidden="true"/></Button></> : <p className="jj-small jj-muted">本批尚未关联检查。</p>}</section></div>
+          </section><section className="jj-change-verification"><h3>关联检查</h3>{detail.loading ? <Loading>正在读取关联记录</Loading> : detail.error ? <ErrorNote error={detail.error}/> : verification?.run_id ? <><Badge tone={verification.verdict === 'PASS' ? 'positive' : verification.verdict === 'BLOCK' ? 'negative' : verification.verdict === 'INCONCLUSIVE' ? 'caution' : 'neutral'}>{verification.repair_status === 'VERIFIED' ? '已通过原题验证' : verification.verdict === 'PASS' ? '本次范围符合规则' : verification.verdict === 'BLOCK' ? '存在不符合规则的结果' : verification.verdict === 'INCONCLUSIVE' ? '部分结果尚未确认' : '尚未形成结论'}</Badge><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(verification.run_id!))}>阅读本批报告<ArrowRightOutlined aria-hidden="true"/></Button></> : verification?.same_source_run_id ? <><p>同版源码有检查记录，尚未关联本批。</p><Button kind="quiet" onClick={() => go('/reports?run_id=' + encodeURIComponent(verification.same_source_run_id!))}>查看同版源码报告<ArrowRightOutlined aria-hidden="true"/></Button></> : <p className="jj-small jj-muted">本批尚未关联检查。</p>}</section></div>
           <footer><span className="jj-small jj-muted">检查前会重新核对当前代码、规则和材料。</span><div className="jj-inline-actions">{item.revalidation.preparation_gaps.length > 0 && <Button onClick={() => go('/preparation?change_id=' + encodeURIComponent(id))}>核对准备材料</Button>}<Button kind="primary" onClick={() => go('/reports?view=plan&change_id=' + encodeURIComponent(id))}>{item.manifest.repair_reference ? '预览原题复验' : '预览修改后检查'}<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
         </div>}
       </article>;
             })}
-    </section> : <Empty title="尚未登记源码修改" action={!register && <Button onClick={() => setRegister(true)} icon={<CodeOutlined aria-hidden="true"/>}>登记本地修改</Button>}>在开发工具完成修改后，再将实际变化登记到这里。</Empty>}
+    </section> : !register && <Empty title="尚未登记源码修改" action={!register && <Button onClick={() => setRegister(true)} icon={<CodeOutlined aria-hidden="true"/>}>登记本地修改</Button>}>在开发工具完成修改后，再将实际变化登记到这里。</Empty>}
   </>;
 }
 function changeTitle(reason: string, official: boolean) {

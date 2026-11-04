@@ -1,0 +1,26 @@
+.jj-issue-workspace { display:grid; grid-template-columns:250px minmax(0,1fr); gap:30px; border-top:1px solid var(--line); }
+.jj-issue-index { display:grid; align-content:start; padding-top:8px; }
+.jj-issue-index > button { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 12px; }
+.jj-issue-index > button > :is(strong,span) { grid-column:1; }
+.jj-issue-index > button > small { grid-column:2; grid-row:1/3; align-self:center; max-width:5em; }
+.jj-issue-index > button > span, .jj-issue-index small { font-size:var(--text-meta); color:var(--muted); }
+.jj-issue-reading { min-width:0; padding:24px 0 0 28px; border-left:1px solid var(--line); }
+.jj-issue-reading > header { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.jj-issue-reading h2 { font-size:var(--text-section); }
+.jj-issue-comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:26px; background:var(--inset); border-radius:var(--radius-surface); }
+.jj-issue-comparison > section { padding:22px; }
+.jj-issue-comparison > section + section { border-left:1px solid var(--line); }
+.jj-issue-comparison h3 { font-size:var(--text-meta); color:var(--muted); margin-bottom:12px; }
+.jj-issue-comparison p { line-height:1.8; }
+.jj-issue-comparison small { display:block; color:var(--muted); margin-top:8px; }
+.jj-issue-comparison .jj-button { padding-inline:0; margin-top:12px; }
+.jj-issue-verification { margin-top:28px; }
+.jj-issue-verification h3 { margin-bottom:16px; }
+.jj-issue-verification th:first-child { width:54%; }
+.jj-issue-verification td > strong, .jj-issue-verification td > small { display:block; }
+.jj-issue-verification td > small { margin-top:5px; color:var(--muted); font-size:var(--text-meta); line-height:1.7; }
+.jj-issue-reading > footer { display:grid; gap:14px; margin-top:24px; }
+.jj-issue-reading > footer > p { font-size:var(--text-meta); color:var(--muted); }
+.jj-issue-reading > footer > div { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+@media(max-width:1000px) { .jj-issue-workspace { grid-template-columns:210px minmax(0,1fr); gap:20px; } .jj-issue-reading { padding-left:20px; } .jj-issue-comparison { grid-template-columns:minmax(0,1fr); } .jj-issue-comparison > section + section { border-left:0; border-top:1px solid var(--line); } }
+@media(max-width:700px) { .jj-issue-workspace { grid-template-columns:minmax(0,1fr); } .jj-issue-index { display:flex; overflow:auto; } .jj-issue-index > button { min-width:210px; flex:1; } .jj-issue-reading { padding:20px 0 0; border-left:0; border-top:1px solid var(--line); } }

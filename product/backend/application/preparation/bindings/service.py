@@ -64,6 +64,9 @@ class PreparationBindingService:
                                   reason_codes=("EVIDENCE_SNAPSHOT_CHANGED",))
                 elif binding is not None:
                     fields.update(source_kind=binding.kind.value, source_label="已保存的观察材料")
+                    if binding.kind is ActionEvidenceKind.HTTP_ENTITY_QUERY:
+                        fields.update(source_label='所有者独立查询与响应字段比较',closure_supported=True,
+                            resource_correlation_supported=True)
                     if binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
                         reference = binding.observer_reference
                         available = None if self._registered_observers is None else self._registered_observers.contains(

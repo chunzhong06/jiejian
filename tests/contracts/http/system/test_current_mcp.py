@@ -10,8 +10,52 @@ from mcp.client.streamable_http import streamable_http_client
 from product.backend.application.agent_access.service import MCPAccessLevel
 from tests.support.secrets import MemorySecrets
 from tests.support.builders.checks.check_service import ready_check_harness
-from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN
+from tests.support.builders.control_plane import create_app, TEST_CONTROL_ORIGIN, TEST_CONTROL_SESSION_TOKEN
+from product.backend.interfaces.http.local_control import LocalControlGuard
 from tests.contracts.http.system._support_current_mcp import TOOLS, start_task
+
+
+def test_source_import_is_shared_by_http_and_mcp_without_raw_flow_in_task_history(tmp_path):
+    import json
+    from uuid import uuid4
+    app=create_app(tmp_path/'instance',start_worker=False,secret_store=MemorySecrets())
+    core,access=app.state.context,app.state.mcp_access
+    project=core.application_environments.create_application(operation_id=uuid4().hex,name='接口协作').project_id
+    token=access.pair().access_token
+    access.set_level(project,MCPAccessLevel.PREPARE)
+    secret='private-import-canary'
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),base_url=TEST_CONTROL_ORIGIN,
+                    headers={'Authorization':'Bearer '+token,'Origin':TEST_CONTROL_ORIGIN},
+                    cookies={LocalControlGuard.cookie_name:TEST_CONTROL_SESSION_TOKEN}) as http:
+                # 原始资料只到净化边界；协作历史只接受净化候选引用。
+                raw=json.dumps({'log':{'entries':[{'request':{'method':'GET','url':'http://127.0.0.1/orders?token='+secret}}]}})
+                response=await http.post(f'/api/projects/{project}/api-sources/preview',json={'kind':'HAR','raw':raw})
+                assert response.status_code==200 and secret not in response.text
+                preview=response.json()['data']
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN+'/mcp',http_client=http,terminate_on_close=False)) as client:
+                    created=await client.call_tool('jiejian_collaboration_create',dict(project_id=project,
+                        operation_id=uuid4().hex,goal='整理订单接口',purpose='UNDERSTAND'))
+                    task=created.structured_content['task_id']
+                    source='src_'+uuid4().hex
+                    result=await client.call_tool('jiejian_collaboration_action',dict(project_id=project,task_id=task,
+                        operation_id=uuid4().hex,capability='sources.accept',arguments=dict(candidate_id=preview['candidate_id'],
+                            source_id=source,name='订单请求',expected_revision=0,expected_fingerprint=preview['fingerprint'])))
+                    assert result.structured_content['state']=='SUCCEEDED'
+                    read=await client.call_tool('jiejian_collaboration_read',dict(project_id=project,task_id=task,capability='sources.read',arguments={}))
+                    assert read.structured_content['result']['sources'][0]['source_id']==source
+                    gui=await http.get(f'/api/projects/{project}/api-sources')
+                    assert gui.json()['data']['sources'][0]['source_id']==source
+                    access.set_level(project,MCPAccessLevel.READ)
+                    with pytest.raises(MCPError):
+                        await client.call_tool('jiejian_collaboration_action',dict(project_id=project,task_id=task,
+                            operation_id=uuid4().hex,capability='sources.annotate',arguments=dict(source_id=source,
+                                item_id=preview['requests'][0]['item_id'],label='未经授权的修改',action_id=None,expected_revision=0)))
+                    assert secret not in json.dumps(core.collaboration.show(project,task))
+                    assert core.application_sources.context(project)['annotations']==()
+    anyio.run(scenario)
 
 
 def test_collaboration_queues_execution_without_machine_approval(tmp_path):
@@ -405,3 +449,35 @@ def test_lightweight_http_registration_contract_and_local_guard(tmp_path):
         assert client.post(base + "/register", json={**body, "operation_id": uuid4().hex}).status_code == 403
 
 pytestmark = [pytest.mark.level4]
+
+
+def test_structured_editor_handoff_is_shared_by_gui_and_mcp(tmp_path):
+    from uuid import uuid4
+    app=create_app(tmp_path/'instance',start_worker=False,secret_store=MemorySecrets())
+    core,access=app.state.context,app.state.mcp_access
+    project=core.application_environments.create_application(operation_id=uuid4().hex,name='草稿交接').project_id
+    token=access.pair().access_token
+    access.set_level(project,MCPAccessLevel.PREPARE)
+    editor=dict(kind='FLOW',flow_id='ofl_'+uuid4().hex,revision=1,action_id='action',action_revision=1,
+        target_step_id='read',steps=[dict(id='read',method='GET',path='/orders/{case_resource_id}',parameters=[])])
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),base_url=TEST_CONTROL_ORIGIN,
+                    headers={'Authorization':'Bearer '+token,'Origin':TEST_CONTROL_ORIGIN},
+                    cookies={LocalControlGuard.cookie_name:TEST_CONTROL_SESSION_TOKEN}) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN+'/mcp',http_client=http,terminate_on_close=False)) as client:
+                    result=await client.call_tool('jiejian_collaboration_create',dict(project_id=project,operation_id=uuid4().hex,
+                        goal='接续接口流程草稿',purpose='SETUP',references={'return_to':'/testing?action_id=action'},editor=editor))
+                    assert not result.is_error
+                    task=result.structured_content['task_id']
+                    shown=await http.get(f'/api/projects/{project}/collaboration/{task}')
+                    assert shown.status_code==200
+                    assert shown.json()['data']['editor']['flow_id']==editor['flow_id']
+                    assert shown.json()['data']['purpose']=='SETUP'
+                    capability=await client.call_tool('jiejian_collaboration_capability',dict(project_id=project,key='flows.read'))
+                    assert capability.structured_content['arguments']['required']==['flow_id','revision']
+                    forbidden={**editor,'steps':[{**editor['steps'][0],'body':'credential-canary'}]}
+                    response=await http.post(f'/api/projects/{project}/collaboration',json=dict(operation_id=uuid4().hex,
+                        goal='拒绝原始参数',purpose='SETUP',editor=forbidden))
+                    assert response.status_code==422 and 'credential-canary' not in response.text
+    anyio.run(scenario)

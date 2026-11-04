@@ -36,6 +36,8 @@ class CodeObservationService:
         return value
 
     def attach_run(self, work, run):
+        if run.source_fingerprint is None:
+            return
         value = self.capture(run.project_id, run.source_fingerprint)
         work.code_observations.add_link(value, kind="run", target_id=run.run_id,
             project_id=run.project_id, source_fingerprint=run.source_fingerprint)

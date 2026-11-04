@@ -21,6 +21,7 @@ class BusinessRuleDetails:
             if action is None or subject is None or owner is None:
                 raise JiejianError(ErrorCode.STORAGE_STATE,'权限规则的业务引用无法核对')
             runs = work.runs.page_for_project(project_id,limit=25)
+            understanding = work.application_understanding.get(project_id)
             has_more = bool(runs) and work.runs.has_after_for_project(project_id,runs[-1].created_at_us,runs[-1].run_id)
             candidate_mappings = work.rule_candidates.approval_mappings(intent_id=intent_id,revision=rule.revision)
             for mapping in candidate_mappings:
@@ -58,7 +59,9 @@ class BusinessRuleDetails:
             ids = {case.case_id for case in cases}
             latest = dict(run_id=run.run_id,created_at_us=run.created_at_us,
                 applies_to_current_implementation=source is not None and source==package.bundle.source_fingerprint
-                    and runtime is not None and runtime==getattr(package.bundle,'runtime_reference',None),
+                    and runtime is not None and runtime==getattr(package.bundle.runtime,'reference',None),
+                applies_to_current_environment=understanding is not None and understanding.environment is not None
+                    and understanding.environment==package.bundle.environment,
                 cases=[dict(case_id=item.case_id,verdict=item.verdict.value,reason_codes=item.reason_codes)
                     for item in package.result.case_results if item.case_id in ids])
             break

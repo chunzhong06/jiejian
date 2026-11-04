@@ -53,3 +53,5 @@
 .jj-storage-workspace>header { justify-content:flex-start; }
 
 .jj-storage-selection > label > input { align-self:start; margin-top:max(0px,calc((1lh - 18px)/2)); }
+
+.jj-storage-result > .jj-notice { margin-top:20px; }

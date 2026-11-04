@@ -22,12 +22,16 @@ _ASSIGNMENT = re.compile(
 )
 
 
+def is_sensitive_key(name: str) -> bool:
+    return _SENSITIVE_KEY.search(name) is not None
+
+
 def redact(value: Any) -> Any:
     """递归脱敏常见秘密字段和字符串表示。"""
 
     if isinstance(value, Mapping):
         return {
-            key: REDACTED if _SENSITIVE_KEY.search(str(key)) else redact(item)
+            key: REDACTED if is_sensitive_key(str(key)) else redact(item)
             for key, item in value.items()
         }
     if isinstance(value, list):

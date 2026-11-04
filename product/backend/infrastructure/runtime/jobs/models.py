@@ -96,7 +96,7 @@ class SubmitJob(WorkerControlModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     request_hash: str = Field(pattern=SHA256_PATTERN)
     plan_fingerprint: str = Field(pattern=SHA256_PATTERN)
-    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    source_fingerprint: str | None = Field(pattern=SHA256_PATTERN)
     policy_epoch: int = Field(ge=0)
     engine_version: str = Field(min_length=1, max_length=64)
     max_attempts: int = Field(default=3, ge=1, le=1_000)
@@ -211,7 +211,7 @@ class ClaimedJob(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> ClaimedJob:
-        if sum(value is not None for value in (self.run,self.recording,self.job.runtime_load_id,self.job.preflight_id,self.job.reference_capture_id,self.job.identity_preparation_id))!=1:
+        if sum(value is not None for value in (self.run,self.recording,self.job.runtime_load_id,self.job.preflight_id,self.job.reference_capture_id,self.job.identity_preparation_id,self.job.flow_trial_id))!=1:
             raise ValueError("claimed job must expose exactly one target")
         return self
 
@@ -223,7 +223,7 @@ class JobMutationResult(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> JobMutationResult:
-        if sum(value is not None for value in (self.run,self.recording,self.job.runtime_load_id,self.job.preflight_id,self.job.reference_capture_id,self.job.identity_preparation_id))!=1:
+        if sum(value is not None for value in (self.run,self.recording,self.job.runtime_load_id,self.job.preflight_id,self.job.reference_capture_id,self.job.identity_preparation_id,self.job.flow_trial_id))!=1:
             raise ValueError("job mutation must expose exactly one target")
         return self
 
@@ -240,6 +240,7 @@ class RecoveryCandidate(WorkerControlModel):
     runtime_load_id: str | None = Field(default=None, pattern=r"^rld_[0-9a-f]{32}$")
     preflight_id: str | None = Field(default=None, pattern=r"^ppf_[0-9a-f]{32}$")
     reference_capture_id:str|None=Field(default=None,pattern=r'^rpc_[0-9a-f]{32}$')
+    flow_trial_id: str | None = Field(default=None,pattern=r'^ftr_[0-9a-f]{32}$')
     identity_preparation_id: str | None = Field(default=None, pattern=r'^prep_[0-9a-f]{32}$')
     attempt: int = Field(ge=1)
     max_attempts: int = Field(ge=1)
@@ -249,7 +250,7 @@ class RecoveryCandidate(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> RecoveryCandidate:
-        if sum(value is not None for value in (self.run_id,self.recording_id,self.runtime_load_id,self.preflight_id,self.reference_capture_id,self.identity_preparation_id))!=1:
+        if sum(value is not None for value in (self.run_id,self.recording_id,self.runtime_load_id,self.preflight_id,self.reference_capture_id,self.identity_preparation_id,self.flow_trial_id))!=1:
             raise ValueError("recovery candidate must reference exactly one target")
         return self
 

@@ -1,14 +1,22 @@
 // 只记录验证状态、文件和耗时，参数与异常正文留在本地控制台。
-import {mkdirSync,writeFileSync,renameSync} from 'node:fs'
+import {mkdirSync,writeFileSync,renameSync,readFileSync} from 'node:fs'
 import {dirname,relative} from 'node:path'
 
 export default class QualityReporter{
-  onInit(context){this.context=context;this.started=Date.now();this.write({status:'RUNNING'})}
+  onInit(context){
+    this.context=context;this.started=Date.now()
+    if(process.env.JIEJIAN_TEST_IDENTITY){
+      const document=JSON.parse(readFileSync(process.env.JIEJIAN_TEST_IDENTITY,'utf8'))
+      if(document.schema_version!=='1')throw new Error('测试输入身份版本无法读取')
+      this.inputs=document.inputs
+    }
+    this.write({status:'RUNNING'})
+  }
   write(value){
     const destination=process.env.JIEJIAN_TEST_REPORT
     if(!destination)return
     mkdirSync(dirname(destination),{recursive:true})
-    writeFileSync(destination+'.tmp',JSON.stringify({schema_version:'1',engine:'vitest',...value},null,2))
+    writeFileSync(destination+'.tmp',JSON.stringify({schema_version:'1',engine:'vitest',inputs:this.inputs,...value},null,2))
     renameSync(destination+'.tmp',destination)
   }
   onFinished(files=[],errors=[]){
