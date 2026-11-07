@@ -7,12 +7,12 @@ def preset_operation(experience_id, stage):
     return hashlib.sha256(f"preset:{experience_id}:{stage}".encode()).hexdigest()[:32]
 
 
-def prepare_preset_task(service, current):
+def prepare_preset_task(service, reader, current):
     if service is None:
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "开发任务服务尚未就绪")
     key = preset_operation(current.runtime.experience_id, "task")
-    created = service.receipt(current.project_id, "CREATE", key)
-    active = service.active(current.project_id)
+    created = reader.receipt(current.project_id, "CREATE", key)
+    active = reader.active(current.project_id)
     if active is not None and (created is None or created.task_id != active.task_id):
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "已有其它开发任务，请先结束它或由真实 Agent 继续，不覆盖当前目标")
     if created is None:
@@ -23,9 +23,9 @@ def prepare_preset_task(service, current):
     return created
 
 
-def register_preset_delivery(service, current, version, reference, understanding, created):
+def register_preset_delivery(service, reader, current, version, reference, understanding, created):
     key = preset_operation(current.runtime.experience_id, version.value)
-    saved = service.receipt(current.project_id, "DELIVER", key)
+    saved = reader.receipt(current.project_id, "DELIVER", key)
     if saved is not None:
         return saved
     if version.value == "FIXED" and reference is None:
@@ -33,7 +33,7 @@ def register_preset_delivery(service, current, version, reference, understanding
     manifest = current.runtime.launch_manifest
     if manifest is None or understanding.inspect_source_fingerprint(current.project_id) != manifest.source_fingerprint:
         raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前源码已不同于已加载的预设代码，不能冒充预设交付")
-    previous = service.receipt(current.project_id, "DELIVER", preset_operation(current.runtime.experience_id, "VULNERABLE")) if version.value == "FIXED" else None
+    previous = reader.receipt(current.project_id, "DELIVER", preset_operation(current.runtime.experience_id, "VULNERABLE")) if version.value == "FIXED" else None
     context = previous or created
     return service.deliver(current.project_id, context.task_id, operation_id=key, expected_version=context.task_version,
         context_id=context.context_id, reason="预设开发变更：先授权再派发，保留异步导出" if version.value == "FIXED" else "预设开发变更：将同步导出改为后台队列处理",

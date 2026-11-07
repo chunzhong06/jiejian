@@ -14,7 +14,7 @@ from product.backend.domain.boundaries.rule_candidates import scoped_content, re
 from product.backend.domain.boundaries.candidate_reviews import ReviewContext, review_fingerprint
 from product.backend.application.business_boundaries.candidates.corrections import carry_assistance
 from product.backend.domain.boundaries.candidate_scope import scope_items, scope_issues, only_auxiliary_scope
-from product.backend.application.business_boundaries.candidates.scope import decide_scope, decide_scope_batch, merge_content, protect_scope, issue_tasks
+from product.backend.application.business_boundaries.candidates.scope import decide_scope_content, decide_scope_batch_content, merge_content, protect_scope, issue_tasks
 from product.backend.application.business_boundaries.candidates.coverage import coverage_items
 from product.backend.domain.boundaries.candidate_reviews import BoundaryReviewCommand, BoundaryReviewRecord, boundary_review_items
 from product.backend.application.business_boundaries.candidates.reviews import protect_review_sources, project_review_gaps
@@ -50,8 +50,10 @@ class RuleCandidateService:
                 "actors": draft.actors, "actions": draft.actions, "permissions": draft.permissions,
                 "supported_relations": ["OWNS", "SAME_ROLE_OTHER_ACCOUNT", "OTHER_ROLE"],
                 "supported_expectations": ["ALLOW", "DENY"],
+                "supported_relationship_conditions": ["ORGANIZATION", "ROLE_INHERITANCE", "SHARING", "DELEGATION"],
                 "limitations": ["不支持任意时间、金额、唯一性或并发约束", "保存候选不批准权限，不表示能够执行检查"],
                 "modeling_guidance": [
+                    "组织、角色继承、共享和有限委托写入conditions.relationships，与relation的主体/所有者关系组合。kind为ORGANIZATION、ROLE_INHERITANCE、SHARING或DELEGATION，state为ACTIVE/ABSENT；共享和委托另支持EXPIRED/REVOKED。组织可限定同组织或祖先方向；继承须指明inherited_role。max_depth为有限层级，委托仅支持单跳、不可再委托。必须配置独立来源的relationship_mapping并采集真实记录；候选关系不是事实证明。",
                     "权限条件用conditions明确表达：principal可为AUTHENTICATED或ANONYMOUS，tenant可为SAME、DIFFERENT或null，resource_states为有限公开状态值。匿名不建立账号；同一资源的同租户与跨租户主体独立分配。状态样本经materials.select_data选择，来源映射tenant、condition_state及identity_claims.tenant_path只读取已声明字段。缺少实际条件不产生通过。",
                     "可一次保存权限候选与requirement_sources清单，不强制先提交空权限。区分USER原话、SOURCE源码线索、AGENT推断，由用户确认含义和本轮范围后审阅最终提案。发现接口不等于必须新增权限。",
                     "按可独立决定的业务目标组织来源，不按每个角色定义、接口或证据重复拆项。补充源码线索优先写入对应要求的解释；已保存的重复或辅助来源由用户在核对清单关联为补充依据，不静默删除。USER/SOURCE/AGENT只是来源标记，不等于已获用户确认。",
@@ -63,6 +65,7 @@ class RuleCandidateService:
                     "维护已有规则时先读取当前actors/actions/permissions，沿用item_id、稳定ID与expected_current_revision。新增、修改和停用均可提交候选；停用设effective_state=RETIRED，不通过漏传规则删除，其他规则与历史保留，仍需人批准。",
                     "正式业务边界为空时仍可保存首次CREATE候选；候选完成后由人审阅提案并批准，不需要先手工建立同一套边界。",
                     "DATA_DISCLOSURE必须列出真实披露的protected_projection；其他效果类型不填写字段投影。",
+                    "字段写入使用STATE_MUTATION.field_mutation：path为准确业务字段，operation为CHANGE/ASSIGN/ADD/REMOVE。ASSIGN/ADD填写有类型的expected_value，CHANGE/REMOVE留null；不与expected_state混用。缺失字段与JSON null不同，完整提交历史用于证明曾发生写入。",
                     "授予、开放或撤回资源访问范围属于STATE_MUTATION，相应动作state_changing为true；读取实际凭据才属于CREDENTIAL_ACCESS。",
                     "曾经开放后又撤回的要求不能降为只检查最终状态。当前检查窗口内、主体和资源正确关联且来源完整的独立提交可证明状态变化；任意历史范围不能据此视为支持。",
                     "文件交付、数据披露和访问范围变化应分别列为效果。同一动作可产生多个效果，保持原始允许或禁止要求，不为保存成功删减受保护结果。",
@@ -242,13 +245,46 @@ class RuleCandidateService:
         return pending
 
     def decide_scope(self, project_id, candidate_id, command):
-        return decide_scope(self, project_id, candidate_id, command)
+        return self._decide_scope(project_id, candidate_id, command, kind='SCOPE_DECISION')
 
     def decide_scope_batch(self, project_id, candidate_id, command):
-        return decide_scope_batch(self, project_id, candidate_id, command)
+        return self._decide_scope(project_id, candidate_id, command, kind='SCOPE_BATCH')
 
     def link_coverage(self, project_id, candidate_id, command):
-        return decide_scope(self, project_id, candidate_id, command, coverage=True)
+        return self._decide_scope(project_id, candidate_id, command, kind='COVERAGE_LINK')
+
+    def _decide_scope(self, project_id, candidate_id, command, *, kind):
+        """单一事务拥有回执、版本和写入；纯内容转换不能绕过这些检查。"""
+        fingerprint = boundary_sha256({'kind': kind, 'candidate_id': candidate_id, 'command': command.model_dump(mode='json')})
+        batch = kind == 'SCOPE_BATCH'
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            receipt = work.rule_candidates.receipt(project_id, 'DECIDE', command.operation_id)
+            if receipt:
+                self._same_request(receipt, fingerprint)
+                return self._view(work, self._required(work, project_id, receipt[1], receipt[2]))
+            current = self._required(work, project_id, candidate_id)
+            draft = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
+            self._current_basis(command.expected_basis_id, draft)
+            if current.revision != command.expected_revision or current.basis_id != command.expected_basis_id:
+                message = '内容已变化，整批决定尚未保存，请读取最新修订' if batch else '内容已变化，请读取最新修订'
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, message, details={'reason': 'CONFLICT'})
+            archived = work.rule_candidates.visibility(candidate_id)['archived']
+            proposed = work.rule_candidates.proposal_id(candidate_id, current.revision)
+            if batch and (archived or proposed):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先恢复候选，或返回修改已有提案')
+            if archived:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先恢复候选')
+            if proposed:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '本修订已有提案，请返回修改形成新修订')
+            now = self._clock_us()
+            value = (decide_scope_batch_content(current, command, now=now) if batch else
+                decide_scope_content(current, command, now=now, coverage=kind == 'COVERAGE_LINK'))
+            work.rule_candidates.append(value, expected_revision=current.revision)
+            work.rule_candidates.add_receipt(project_id, 'DECIDE', command.operation_id, fingerprint, value)
+            result = self._view(work, value)
+            work.commit()
+            return result
 
     def set_visibility(self, project_id: str, candidate_id: str, *, archived: bool, revision: int, expected_version: int):
         """GUI显式归档或恢复；展示状态与业务修订分离，未决提案不能隐藏。"""

@@ -15,6 +15,7 @@ from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequ
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
 from product.protocols.checks.execution_request import WireModel
+from product.protocols.checks.scenario_execution import ScenarioNodeProgress
 from product.backend.application.reading import accepted_once, projection_read
 
 
@@ -61,6 +62,7 @@ class CheckRunStatus(WireModel):
     job: CheckJobView | None
     progress: CheckProgressView | None
     result_integrity: Literal["VALID", "INVALID", "NOT_PUBLISHED"]
+    scenario_execution:tuple[ScenarioNodeProgress,...]=Field(default=(),exclude_if=lambda value:not value)
 
 
 class CheckHistoryCursor(WireModel):
@@ -243,7 +245,23 @@ class CheckResultReader:
             progress=self._progress(run, job) if package is None else CheckProgressView(phase="FINALIZING",
                 completed_cases=len(package.result.case_results),
                 planned_cases=sum(len(action.cases) for action in package.request.actions)),
-            result_integrity=integrity), package
+            result_integrity=integrity,scenario_execution=self._scenario_progress(run,job)), package
+
+    def _scenario_progress(self,run,job):
+        if job is None or job.operation_type!='CHECK' or job.attempt<1:
+            return ()
+        root=RuntimePaths(self._var_dir).jobs
+        path=root/job.job_id/'attempts'/f'{job.attempt}-{job.fencing_token}'/'scenario-execution.json'
+        try:
+            reject_check_links(root,path)
+            if not path.is_file():return ()
+            from product.backend.infrastructure.artifacts.checks.scenario_progress import read_scenario_journal
+            request=CheckRequestStore(self._var_dir).load(job.job_id,expected_hash=run.request_hash)
+            document=read_scenario_journal(path,request,job)
+            return () if document is None else document.nodes
+        except (OSError,ValueError,JiejianError):
+            # 进展记录不参与 Verdict；损坏时不虚构已完成，也不影响有效发布包的读取。
+            return ()
 
     def _progress(self, run, job):
         if job is None or job.operation_type != "CHECK" or job.state is not JobState.RUNNING:
@@ -277,7 +295,18 @@ class CheckResultReader:
                 return None
             cases = [(action, case) for action in request.actions for case in action.cases]
             # 必须跟随 infra/execution/check_executor.py::execute 的串行顺序，不能按请求数组位置猜当前题。
-            cases.sort(key=lambda pair: (pair[1].permission.expectation == "DENY", pair[0].action_id, pair[1].case_id))
+            dynamic=set()
+            if request.scenario is None:
+                cases.sort(key=lambda pair: (pair[1].permission.expectation == "DENY", pair[0].action_id, pair[1].case_id))
+            else:
+                by_case={case.case_id:(action,case) for action,case in cases}
+                groups={(item.experiment_id,item.invocation_id):item.case_ids for item in request.scenario.invocations}
+                cases=[]
+                for experiment in sorted(request.scenario.document.experiments,key=lambda item:(item.kind!='NORMAL',item.id)):
+                    for node in experiment.invocations:
+                        ids=groups[experiment.id,node.id]
+                        cases.extend(by_case[key] for key in ids)
+                        dynamic.update(key for key,item in zip(ids,node.items,strict=True) if item.resource_from is not None)
             if progress.planned_cases != len(cases):
                 return None
             action, case = cases[progress.completed_cases]
@@ -293,7 +322,7 @@ class CheckResultReader:
             labels = tuple(dict.fromkeys(proofs[item.binding_fingerprint].business_label for item in case.proof_requirements))
             return CheckProgressCaseView(case_id=case.case_id, action_label=configured.display_name,
                 expectation=case.permission.expectation, planned_subject_label='未登录访客' if subject is None else subject.label,
-                planned_resource_owner_label=owner.label, resource_id='由本次创建后独立识别' if getattr(configured,'created_resource',None) is not None else case.resource_id, effect_labels=labels)
+                planned_resource_owner_label=owner.label, resource_id='由本次创建后独立识别' if getattr(configured,'created_resource',None) is not None or case.case_id in dynamic else case.resource_id, effect_labels=labels)
         except (ValueError, OSError, JiejianError):
             # 冻结资产不可读或关联失效只降级本说明；原有效阶段/计数继续保留，编程错误不宽泛吞掉。
             return None

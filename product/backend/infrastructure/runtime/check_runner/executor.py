@@ -66,7 +66,7 @@ def execute_check_attempt(input_path: Path, staging: Path, *, environ) -> int:
                 os.replace(temporary, destination)
             except (OSError, JiejianError, ValueError):
                 # 展示进度写入失败不能导致重放目标，也不能覆盖既有业务事实。
-                logging.getLogger(__name__).warning("CHECK_PROGRESS_UNAVAILABLE")
+                logging.getLogger("jiejian.infrastructure.runtime.check_runner.executor").warning("CHECK_PROGRESS_UNAVAILABLE")
         output = CheckExecutor(request, bundle, runner_input, environ=environ, attempt_dir=attempt,
             cancellation_requested=lambda: (attempt / "cancel.requested").exists(),
             progress=progress,

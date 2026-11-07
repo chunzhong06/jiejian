@@ -31,6 +31,13 @@ export function routeReferences(route:string){
 }
 
 // 原始表单只保留于本次文档内存；导航接续不会将参数值写入数据库或浏览器存储。
-const drafts=new Map<string,unknown>()
-export function editorDraft<T>(key:string){return drafts.get(key) as T|undefined}
-export function rememberEditorDraft<T>(key:string,value:T){drafts.set(key,value)}
+const drafts=new Map<string,{project:string;value:unknown}>()
+export function editorDraft<T>(key:string,project:string){const entry=drafts.get(key);return entry?.project===project?entry.value as T:undefined}
+export function rememberEditorDraft<T>(key:string,value:T,project?:string){
+  if(value===undefined){drafts.delete(key);return}
+  if(!project)throw new Error('编辑草稿必须声明所属应用')
+  drafts.set(key,{project,value})
+}
+export function discardProjectEditorDrafts(project:string){
+  for(const [key,entry] of drafts)if(entry.project===project)drafts.delete(key)
+}

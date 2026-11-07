@@ -178,6 +178,90 @@
       "title": "ArtifactManifestReference",
       "type": "object"
     },
+    "AsyncTaskFact": {
+      "additionalProperties": false,
+      "properties": {
+        "correlated": {
+          "title": "Correlated",
+          "type": "boolean"
+        },
+        "dispatch_request_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Dispatch Request Digest",
+          "type": "string"
+        },
+        "kind": {
+          "const": "ASYNC_TASK",
+          "default": "ASYNC_TASK",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mapping_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Mapping Fingerprint",
+          "type": "string"
+        },
+        "owner_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Owner Identity Id",
+          "type": "string"
+        },
+        "polls_used": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Polls Used",
+          "type": "integer"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "QUEUED",
+            "RUNNING",
+            "SUCCESS",
+            "FAILED",
+            "TIMED_OUT",
+            "CANCELLED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "subject_identity_id": {
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Identity Id"
+        },
+        "task_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Task Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_fingerprint",
+        "mapping_fingerprint",
+        "dispatch_request_digest",
+        "state",
+        "subject_identity_id",
+        "owner_identity_id",
+        "resource_id",
+        "correlated",
+        "polls_used"
+      ],
+      "title": "AsyncTaskFact",
+      "type": "object"
+    },
     "BusinessFact": {
       "additionalProperties": false,
       "properties": {
@@ -191,7 +275,8 @@
             "CONTROLLED_RECORDS",
             "IDENTITY_READER",
             "HTTP_ENTITY",
-            "REFERENCE_STORE"
+            "REFERENCE_STORE",
+            "ASYNC_STATUS"
           ],
           "title": "Collector Kind",
           "type": "string"
@@ -210,6 +295,7 @@
           "discriminator": {
             "mapping": {
               "ANONYMOUS_CHECK": "#/$defs/AnonymousCheckFact",
+              "ASYNC_TASK": "#/$defs/AsyncTaskFact",
               "COMMITTED_STATE": "#/$defs/CommittedStateFact",
               "FIELD_DISCLOSURE": "#/$defs/FieldDisclosureFact",
               "FILE_RECEIPT": "#/$defs/FileReceiptFact",
@@ -237,6 +323,9 @@
             },
             {
               "$ref": "#/$defs/FileReceiptFact"
+            },
+            {
+              "$ref": "#/$defs/AsyncTaskFact"
             },
             {
               "$ref": "#/$defs/ObjectCreationFact"
@@ -521,6 +610,11 @@
           ],
           "title": "After"
         },
+        "after_present": {
+          "default": true,
+          "title": "After Present",
+          "type": "boolean"
+        },
         "before": {
           "anyOf": [
             {
@@ -543,6 +637,11 @@
             }
           ],
           "title": "Before"
+        },
+        "before_present": {
+          "default": true,
+          "title": "Before Present",
+          "type": "boolean"
         },
         "path": {
           "items": {
@@ -1003,6 +1102,22 @@
     "ExecutionCase": {
       "additionalProperties": false,
       "properties": {
+        "batch_effect_expectation": {
+          "anyOf": [
+            {
+              "enum": [
+                "PRESENT",
+                "ABSENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Effect Expectation"
+        },
         "case_id": {
           "pattern": "^case_[0-9a-f]{32}$",
           "title": "Case Id",
@@ -1015,6 +1130,35 @@
         },
         "execution": {
           "$ref": "#/$defs/ExecutionAssetReference"
+        },
+        "invocation_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "BATCH_ATOMIC",
+                "BATCH_PER_ITEM"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Invocation Kind"
+        },
+        "occurrence_id": {
+          "anyOf": [
+            {
+              "pattern": "^occ_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurrence Id"
         },
         "owner_identity_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
@@ -1362,6 +1506,11 @@
     "FileObservationWindow": {
       "additionalProperties": false,
       "properties": {
+        "async_required": {
+          "default": false,
+          "title": "Async Required",
+          "type": "boolean"
+        },
         "expected": {
           "$ref": "#/$defs/ArtifactManifestReference"
         },
@@ -1386,6 +1535,19 @@
           ],
           "title": "Scope State",
           "type": "string"
+        },
+        "task_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task Fingerprint"
         }
       },
       "required": [
@@ -1808,6 +1970,15 @@
           "title": "Proof Fingerprint",
           "type": "string"
         },
+        "relationships": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservedRelationship"
+          },
+          "maxItems": 4,
+          "title": "Relationships",
+          "type": "array"
+        },
         "resource_state": {
           "anyOf": [
             {
@@ -1868,6 +2039,70 @@
         "principal"
       ],
       "title": "ObservedPermissionConditions",
+      "type": "object"
+    },
+    "ObservedRelationship": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "ORGANIZATION",
+            "ROLE_INHERITANCE",
+            "SHARING",
+            "DELEGATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at_us": {
+          "minimum": 0,
+          "title": "Observed At Us",
+          "type": "integer"
+        },
+        "path": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 9,
+          "title": "Path",
+          "type": "array"
+        },
+        "reason": {
+          "enum": [
+            "RELATIONSHIP_MATCHED",
+            "RELATIONSHIP_NOT_MATCHED",
+            "RELATIONSHIP_TIME_UNCERTAIN",
+            "RELATIONSHIP_SCOPE_INCOMPLETE",
+            "RELATIONSHIP_DEPTH_EXCEEDED"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "requirement_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requirement Fingerprint",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_fingerprint",
+        "kind",
+        "status",
+        "observed_at_us",
+        "reason"
+      ],
+      "title": "ObservedRelationship",
       "type": "object"
     },
     "ObserverProofReference": {
@@ -1948,6 +2183,15 @@
           "title": "Principal",
           "type": "string"
         },
+        "relationships": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RelationshipRequirement"
+          },
+          "maxItems": 4,
+          "title": "Relationships",
+          "type": "array"
+        },
         "resource_states": {
           "default": [],
           "items": {
@@ -1995,6 +2239,11 @@
           "default": null,
           "title": "After Operation"
         },
+        "after_present": {
+          "default": true,
+          "title": "After Present",
+          "type": "boolean"
+        },
         "after_value": {
           "anyOf": [
             {
@@ -2035,6 +2284,11 @@
           ],
           "default": null,
           "title": "Before Operation"
+        },
+        "before_present": {
+          "default": true,
+          "title": "Before Present",
+          "type": "boolean"
         },
         "before_value": {
           "anyOf": [
@@ -2084,6 +2338,17 @@
           "minimum": 0,
           "title": "Operation Count",
           "type": "integer"
+        },
+        "operation_ordinals": {
+          "default": [],
+          "items": {
+            "maximum": 31,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Operation Ordinals",
+          "type": "array"
         },
         "request_matched": {
           "title": "Request Matched",
@@ -2290,6 +2555,67 @@
       "title": "ReferenceArtifactFact",
       "type": "object"
     },
+    "RelationshipRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "inherited_role": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited Role"
+        },
+        "kind": {
+          "enum": [
+            "ORGANIZATION",
+            "ROLE_INHERITANCE",
+            "SHARING",
+            "DELEGATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_depth": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "organization_scope": {
+          "default": "SAME",
+          "enum": [
+            "SAME",
+            "SUBJECT_ANCESTOR",
+            "RESOURCE_ANCESTOR"
+          ],
+          "title": "Organization Scope",
+          "type": "string"
+        },
+        "state": {
+          "default": "ACTIVE",
+          "enum": [
+            "ACTIVE",
+            "ABSENT",
+            "EXPIRED",
+            "REVOKED"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "RelationshipRequirement",
+      "type": "object"
+    },
     "RequestActivity": {
       "additionalProperties": false,
       "description": "一次真实请求内的有界诊断记录；complete 仅表示已启用探针的收集闭合。",
@@ -2354,6 +2680,28 @@
         "events"
       ],
       "title": "RequestActivity",
+      "type": "object"
+    },
+    "ScenarioResourceBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "producer_case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Producer Case Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "producer_case_id",
+        "resource_id"
+      ],
+      "title": "ScenarioResourceBinding",
       "type": "object"
     },
     "TraceAuthorityScope": {
@@ -2720,6 +3068,17 @@
       "pattern": "^[0-9a-f]{64}$",
       "title": "Request Hash",
       "type": "string"
+    },
+    "resource_binding": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScenarioResourceBinding"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "run_id": {
       "pattern": "^run_[0-9a-f]{32}$",

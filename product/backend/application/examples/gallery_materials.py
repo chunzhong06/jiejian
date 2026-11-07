@@ -14,33 +14,9 @@ from product.backend.application.examples.materials import _event
 from product.backend.application.examples.gallery_recipe import ACTION_ROUTES
 
 
-def gallery_identities(service,project):
-    boundary=service.boundaries.view(project)
-    actors={item.display_name:item for item in boundary.actors}
-    actions={item.display_name:item for item in boundary.actions}
-    if set(actors)!={'项目负责人','评审'} or set(actions)!=set(ACTION_ROUTES):
-        raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先审阅数字展馆的权限提案，再准备示例材料')
-    if any(item.status!='CURRENT' for item in (*boundary.actor_bindings,*boundary.action_bindings)):
-        raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先核对当前代码与原业务动作的对应')
-    identities=[];existing=service.identities.list(project)
-    state=service.runtime.state(project);origin=f"http://127.0.0.1:{state['configuration']['port']}"
-    with service._uow() as work:
-        load=work.runtime_loads.latest(project)
-    for name,label in [('项目负责人','curator · 项目负责人'),('评审','judge · 评审')]:
-        actor=actors[name];found=[item for item in existing if item.actor_id==actor.actor_id and item.actor_revision==actor.revision]
-        if len(found)>1:raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色有多个账号，请在普通准备界面选择实际测试账号')
-        if found and found[0].label != label:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色使用自定义账号，请在账号页完成登录后准备材料')
-        identity=found[0] if found else service.identities.create(project,actor_id=actor.actor_id,actor_revision=actor.revision,label=label)
-        # 示例登录会话属于目标进程；通用代码加载也会换进程，不能复用其启动前的登录。
-        if load and identity.prepared_at_us is not None and identity.prepared_at_us < load.created_at_us:
-            identity=service.identities.reset(identity.identity_id)
-        identities.append(identity)
-    return identities
-
 
 def prepare_gallery_materials(service,project):
-    identities=gallery_identities(service,project)
+    identities=service.gallery_identities(project)
     state=service.runtime.state(project);origin=f"http://127.0.0.1:{state['configuration']['port']}"
     for identity,account in zip(identities,('curator','judge'),strict=True):
         service.identity_preparations.prepare_official(identity.identity_id,account=account,origin=origin)

@@ -381,7 +381,10 @@ class TransactionRecordStore:
                 if scope is not None:
                     operations = tuple(self.operation(row[0]) for row in db.execute(
                         'SELECT operation_id FROM scope_operations WHERE scope_id=? ORDER BY ordinal', (scope.scope_id,)))
-            return RecordProofView(snapshot=snapshot, operation=operation, scope=scope, operations=operations)
+            selected=tuple(item for item in operations if (item.collection,item.resource_id)==(collection,resource_id))
+            # 批量观察不向当前资源的 reader 传递其它对象正文；保留原始请求序号，不伪造连续提交。
+            projection=dict(schema_version='3',operation_projection='RESOURCE') if len(selected)!=len(operations) else {}
+            return RecordProofView(snapshot=snapshot, operation=operation, scope=scope, operations=selected,**projection)
 
     def transact(self, command: RecordTransaction) -> RecordOperation:
         """执行有限同步赋值；同键同文回读，异文或版本竞争拒绝，不调用应用回调或外部服务。"""

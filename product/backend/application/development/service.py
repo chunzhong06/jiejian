@@ -1,4 +1,4 @@
-# 拥有开发任务、变化交付与回执事务；稳定读取入口委托唯一 reader，不拆分一次命令的提交。
+# 拥有开发任务、变化交付与回执事务；稳定读取由独立 reader 拥有，不拆分一次命令的提交。
 from __future__ import annotations
 import time
 from uuid import uuid4
@@ -6,30 +6,11 @@ from product.backend.domain.development import DevelopmentAcceptance, Developmen
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.changes.service import permission_refs
 from product.backend.application.development.operations import operation_fingerprint, require_active_task_version
-from product.backend.application.development.reading import DevelopmentReader
-
 
 class DevelopmentService:
-    def __init__(self, *, uow_factory, understanding, boundaries, changes, clock_us=None, results=None, repairs=None, reading=None):
+    def __init__(self, *, uow_factory, understanding, boundaries, changes, clock_us=None):
         self._uow, self._understanding, self._boundaries, self._changes = uow_factory, understanding, boundaries, changes
         self._clock = clock_us or (lambda: time.time_ns() // 1000)
-        self._reader = reading or DevelopmentReader(uow_factory, results=results, repairs=repairs)
-
-    def bind_runtime_reader(self, reader):
-        """组合根连接运行读取者；读取仍由同一个 DevelopmentReader 负责。"""
-        self._reader.bind_runtime_reader(reader)
-
-    def validate_connections(self):
-        self._reader.validate_connections()
-
-    def history(self, project_id, *, before_task_id=None, limit=20):
-        return self._reader.history(project_id, before_task_id=before_task_id, limit=limit)
-
-    def delivery_page(self, project_id, task_id, *, before_ordinal=None, limit=20):
-        return self._reader.delivery_page(project_id, task_id, before_ordinal=before_ordinal, limit=limit)
-
-    def delivery_details(self, project_id, change_id):
-        return self._reader.delivery_details(project_id, change_id)
 
     def attach_check_run(self, work, run, change_id):
         """和 Run/Job 同事务建立精确索引；不按时间或相同源码猜测交付归属。"""
@@ -43,33 +24,12 @@ class DevelopmentService:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "检查源码与交付记录不一致")
         work.development.add_check_run(delivery.delivery_id, run.run_id, run.created_at_us)
 
-    def delivery_verification(self, project_id, delivery_id):
-        return self._reader.delivery_verification(project_id, delivery_id)
-
     @staticmethod
     def _replay(work, project_id, kind, operation_id, fingerprint):
         receipt = work.development.receipt(project_id, kind, operation_id)
         if receipt is not None and receipt.request_fingerprint != fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "同一操作标识已用于不同内容，请核对原回执")
         return receipt
-
-    def receipt(self, project_id, kind, operation_id):
-        return self._reader.receipt(project_id, kind, operation_id)
-
-    def task(self, project_id, task_id):
-        return self._reader.task(project_id, task_id)
-
-    def list(self, project_id, *, limit=50):
-        return self._reader.list(project_id, limit=limit)
-
-    def context(self, project_id, context_id):
-        return self._reader.context(project_id, context_id)
-
-    def active(self, project_id):
-        return self._reader.active(project_id)
-
-    def view(self, project_id, task_id):
-        return self._reader.view(project_id, task_id)
 
     def _context_for(self, work, project_id, task_id, revision, title, goal):
         understanding = work.application_understanding.get(project_id)

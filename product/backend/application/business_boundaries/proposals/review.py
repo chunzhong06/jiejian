@@ -17,7 +17,7 @@ def _business_value(item, *, action: bool = False) -> BoundaryReviewValue:
                       effects=tuple(BoundaryReviewEffect(
                           business_label=e.business_label, effect_kind=e.effect_kind.value,
                           resource_concept=e.resource_concept, description=e.description,
-                          expected_state=e.expected_state, protected_projection=e.protected_projection,
+                          expected_state=e.expected_state, protected_projection=e.protected_projection, field_mutation=e.field_mutation,
                       ) for e in item.effect_catalog))
     return BoundaryReviewValue(**fields)
 
@@ -33,7 +33,7 @@ def _permission_value(item, subject, owner, action, effects) -> BoundaryReviewVa
         conditions=item.conditions,
         effects=tuple(BoundaryReviewEffect(business_label=e.business_label, effect_kind=e.effect_kind.value,
             resource_concept=e.resource_concept, description=e.description,
-            expected_state=e.expected_state, protected_projection=e.protected_projection) for e in effects),
+            expected_state=e.expected_state, protected_projection=e.protected_projection, field_mutation=e.field_mutation) for e in effects),
     )
 
 

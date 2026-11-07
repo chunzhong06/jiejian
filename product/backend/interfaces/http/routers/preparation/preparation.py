@@ -1,6 +1,9 @@
+from product.backend.interfaces.http.routers.preparation.projections import OperationContextProjection
 # 投影动作准备只读真源并接受有限 ALLOW 技术选择，不修改权限或运行检查。
 
 from fastapi import APIRouter,Request
+from starlette.concurrency import run_in_threadpool
+from product.backend.interfaces.http.body import read_bounded_body
 from product.protocols.preparation.operation_flow import OperationFlow
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.interfaces.http.envelope import ApiResponse, data_response
@@ -21,6 +24,8 @@ class AllowControlSelectionRequest(ApiModel):
 
 def build_preparation_router(context) -> APIRouter:
     router = APIRouter()
+    from product.backend.interfaces.http.routers.preparation.business_scenarios import build_business_scenarios_router
+    router.include_router(build_business_scenarios_router(context))
     from product.backend.interfaces.http.routers.preparation.flow_trials import build_flow_trials_router
     router.include_router(build_flow_trials_router(context))
     from product.backend.interfaces.http.routers.preparation.proof_sources import build_proof_sources_router
@@ -39,15 +44,19 @@ def build_preparation_router(context) -> APIRouter:
     async def operation_candidate(project_id:str,request:Request):
         from product.protocols.preparation.operation_flow import OperationFlowDraft
         from pydantic import ValidationError
-        raw=await request.body()
-        if len(raw)>262144:raise JiejianError(ErrorCode.INPUT_INVALID,'流程超出大小限制')
+        raw=await read_bounded_body(request,limit=262144,message='流程超出大小限制')
         try:draft=OperationFlowDraft.model_validate_json(raw,strict=True)
         except ValidationError:raise JiejianError(ErrorCode.INPUT_INVALID,'请核对步骤、动态值和恢复位置') from None
-        return data_response(context.operation_flows.candidate(project_id,draft).model_dump(mode='json'))
+        result=await run_in_threadpool(context.operation_flows.candidate,project_id,draft)
+        return data_response(result.model_dump(mode='json'))
 
-    @router.get('/api/projects/{project_id}/operation-flows',response_model=ApiResponse)
+    @router.get('/api/projects/{project_id}/operation-flows',response_model=ApiResponse[OperationContextProjection])
     def operation_flows(project_id:str):
-        return data_response(context.operation_flows.context(project_id))
+        return data_response(context.operation_flows.context(project_id),projection=OperationContextProjection)
+
+    @router.get('/api/projects/{project_id}/operation-flows/summary',response_model=ApiResponse)
+    def operation_flow_summary(project_id:str):
+        return data_response(context.operation_flows.context(project_id,summary=True))
 
     @router.get('/api/projects/{project_id}/operation-flows/{flow_id}/{revision}',response_model=ApiResponse)
     def operation_flow_revision(project_id:str,flow_id:str,revision:int):
@@ -55,13 +64,12 @@ def build_preparation_router(context) -> APIRouter:
 
     @router.put('/api/projects/{project_id}/operation-flows',response_model=ApiResponse)
     async def save_operation_flow(project_id:str,request:Request):
-        from product.backend.interfaces.http.routers.preparation.proof_sources import json_command
         from pydantic import ValidationError
-        raw=await request.body()
-        if len(raw)>262144:raise JiejianError(ErrorCode.INPUT_INVALID,'操作流程超出大小限制')
+        raw=await read_bounded_body(request,limit=262144,message='操作流程超出大小限制')
         try:document=OperationFlow.model_validate_json(raw,strict=True)
         except ValidationError:raise JiejianError(ErrorCode.INPUT_INVALID,'请核对操作步骤、资源位置与动态值来源') from None
-        return data_response(context.operation_flows.save(project_id,document).model_dump(mode='json'))
+        result=await run_in_threadpool(context.operation_flows.save,project_id,document)
+        return data_response(result.model_dump(mode='json'))
 
     @router.post('/api/projects/{project_id}/operation-flows/{flow_id}/{revision}/adopt',response_model=ApiResponse)
     def adopt_operation_flow(project_id:str,flow_id:str,revision:int):
@@ -74,12 +82,11 @@ def build_preparation_router(context) -> APIRouter:
     @router.post('/api/projects/{project_id}/operation-flows/openapi',response_model=ApiResponse)
     async def import_openapi(project_id:str,request:Request):
         import json
-        context.operation_flows.context(project_id)
-        raw=await request.body()
-        if len(raw)>1048576:raise JiejianError(ErrorCode.INPUT_INVALID,'接口文档超出大小限制')
+        await run_in_threadpool(context.operation_flows.context,project_id)
+        raw=await read_bounded_body(request,limit=1048576,message='接口文档超出大小限制')
         try:document=json.loads(raw)
         except (ValueError,UnicodeError):raise JiejianError(ErrorCode.INPUT_INVALID,'请选择 JSON 格式的接口文档') from None
-        return data_response(context.operation_flows.openapi_candidates(document))
+        return data_response(await run_in_threadpool(context.operation_flows.openapi_candidates,document))
 
     @router.get("/api/projects/{project_id}/preparation/materials/{action_id}/{kind}", response_model=ApiResponse)
     def material_details(project_id: str, action_id: str, kind: Literal["execution", "resource", "evidence", "recovery"], action_revision: int, member_id: str | None = None):

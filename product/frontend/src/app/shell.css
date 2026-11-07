@@ -1,9 +1,10 @@
 .jj-app { display: grid; grid-template-columns: 224px minmax(0,1fr); min-height: 100dvh; }
-.jj-sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; padding: 30px 18px 20px; background: var(--rail); border-right: 1px solid var(--line); }
+.jj-sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; padding: 30px 18px 20px; }
+.jj-sidebar::after { content:''; position:absolute; right:0; top:88px; bottom:26px; width:1px; background:color-mix(in srgb,var(--line) 65%,transparent); pointer-events:none; }
 .jj-brand { display: flex; gap: 12px; align-items: center; width: fit-content; padding: 0 12px; border: 0; background: none; color: var(--ink); text-decoration: none; }
 .jj-brand:hover { text-decoration: none; }
 .jj-brand strong { font-size: var(--text-section); font-weight: 650; letter-spacing: 2px; }
-.jj-brand-symbol { width: 24px; height: 24px; display: block; color: var(--accent); background: currentColor; mask: url('../assets/brand/jiejian.svg') center / contain no-repeat; }
+.jj-brand-symbol { width: 24px; height: 24px; display: block; color: var(--selection-mark); background: currentColor; mask: url('../assets/brand/jiejian.svg') center / contain no-repeat; }
 .jj-project-select { display: grid; gap: 9px; margin: 34px 0 24px; padding: 0 10px; }
 .jj-project-label { color: var(--muted); font-size: var(--text-meta); }
 .jj-application-switcher { width: 100%; justify-content: space-between; font-size: var(--text-body); background: transparent; border-color: transparent; box-shadow: none; }
@@ -19,10 +20,12 @@
 .jj-nav-label { width:6em; flex:none; text-align:center; }
 /* 补偿字距的末尾留白，让两个字的可见中心保持在文字列中心。 */
 .jj-nav-label[data-short=true] { letter-spacing:.16em; text-indent:.16em; }
-.jj-nav-item[aria-current=page] { background: var(--selected); color: var(--accent-ink); box-shadow: inset 3px 0 var(--accent); font-weight: 600; }
+.jj-nav-item[aria-current=page] { background: var(--selected); color:var(--selected-ink); box-shadow: inset 3px 0 var(--selection-mark); font-weight: 600; }
 .jj-nav-groups .jj-nav-context { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
-.jj-main { min-width: 0; background: radial-gradient(ellipse 85% 320px at 70% 0%,var(--canvas-light),transparent),var(--bg); }
-.jj-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 68px; padding: 0 38px; background: color-mix(in srgb,var(--bg) 92%,transparent); border-bottom: 1px solid var(--border-subtle); backdrop-filter: blur(16px); }
+.jj-main { min-width:0; }
+.jj-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 68px; padding: 0 38px; }
+/* 固定栏遮住滚动内容，但与画布使用同一视口坐标，不能各自重新起一段渐变。 */
+.jj-app,.jj-sidebar,.jj-topbar { background-color:var(--bg); background-image:var(--window-background); background-attachment:fixed; background-size:100vw 100dvh; background-repeat:no-repeat; }
 .jj-breadcrumb { min-width: 0; font-size: var(--text-meta); }
 .jj-breadcrumb ol { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; min-width: 0; }
 .jj-breadcrumb li { display: flex; align-items: center; min-width: 0; }
@@ -37,19 +40,19 @@
 .jj-toolbar > .jj-button { width: 36px; min-height: 36px; padding: 0; font-size: 16px; position: relative; }
 .jj-sidebar-settings { margin-top:auto; padding-top:20px; }
 .jj-sidebar-settings .jj-settings-entry.jj-button { width:100%; min-height:44px; justify-content:flex-start; padding:11px 14px; font-size:var(--text-body); }
-.jj-sidebar-settings .jj-settings-entry[aria-current=page] { background:var(--selected); color:var(--accent-ink); }
+.jj-sidebar-settings .jj-settings-entry[aria-current=page] { background:var(--selected); color:var(--selected-ink); }
 .jj-toolbar .jj-button .anticon { font-size:16px; }
 .jj-sidebar-collaboration { margin-top:4px; }
 .jj-sidebar-collaboration .jj-collaboration-entry.jj-button { width:100%; min-height:44px; padding:11px 14px; justify-content:flex-start; gap:12px; border:1px solid transparent; background:transparent; color:var(--muted); font-size:var(--text-body); font-weight:500; }
-.jj-sidebar-collaboration .jj-collaboration-entry[aria-current=page] { background:var(--selected); color:var(--accent-ink); box-shadow:inset 3px 0 var(--accent); font-weight:600; }
+.jj-sidebar-collaboration .jj-collaboration-entry[aria-current=page] { background:var(--selected); color:var(--selected-ink); box-shadow:inset 3px 0 var(--selection-mark); font-weight:600; }
 .jj-collaboration-entry-copy { display:grid; gap:3px; width:6em; text-align:center; }
 .jj-collaboration-entry-label { font-weight:inherit; }
 .jj-collaboration-entry-status { font-size:var(--text-meta); font-weight:400; color:var(--muted); }
 .jj-collaboration-entry[aria-current=page] .jj-collaboration-entry-status { color:inherit; }
 .jj-collaboration-starting-points { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:20px 0; }
 .jj-collaboration-starting-points > .jj-button { font-size:var(--text-meta); }
-.jj-collaboration-starting-points > [aria-pressed=true] { background:var(--selected); color:var(--accent-ink); }
-.jj-content { padding: 34px 38px 64px; }
+.jj-collaboration-starting-points > [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
+.jj-content { padding:34px 38px 64px; min-height:calc(100dvh - 68px); }
 .jj-content:focus { outline: 0; }
 .jj-page { width: 100%; max-width: 1280px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .jj-page:has(> .jj-loading) { min-height: calc(100dvh - 180px); }
@@ -74,28 +77,10 @@
 .jj-welcome-main p, .jj-welcome-example p:not(.jj-eyebrow) { color: var(--muted); margin: 14px 0 24px; }
 .jj-line-symbol { display: block; font-size: var(--text-title); color: var(--accent); margin-bottom: 22px; }
 .jj-welcome-example .jj-eyebrow { margin-bottom: 12px; }
-.jj-home-workspace { display: grid; gap: 18px; }
-.jj-home-focus { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 30px 32px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); }
-.jj-home-focus .jj-eyebrow { margin-bottom: 10px; color: var(--accent-ink); }
-.jj-home-focus h2 { max-width: 40ch; }
-.jj-home-focus .jj-small { margin-top: 10px; }
-.jj-home-cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); background: color-mix(in srgb,var(--surface) 55%,transparent); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.jj-home-cards > button { display: flex; align-items: center; gap: 12px; border: 0; border-right: 1px solid var(--line); padding: 18px 22px; text-align: left; color: var(--ink); background: transparent; }
-.jj-home-cards > button:last-child { border-right: 0; }
-.jj-home-cards > button > .anticon { flex: none; width: 22px; color: var(--muted); font-size: var(--text-section); }
-.jj-home-cards strong, .jj-home-cards small { font-size: var(--text-meta); color: var(--muted); font-weight: 400; }
-.jj-home-card-copy { display: grid; align-content: start; align-self: stretch; gap: 5px; min-width: 0; }
-.jj-home-card-copy > span { font-weight: 600; }
-.jj-home-history { margin-top: 8px; }
-.jj-recent-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); overflow: hidden; }
-.jj-recent-list > button { width: 100%; display: grid; grid-template-columns: 170px minmax(0,1fr) 94px; gap: 24px; padding: 20px 24px; align-items: center; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; text-align: left; }
-.jj-recent-list > button:last-child { border-bottom: 0; }
-.jj-recent-list strong { font-weight: 500; }
-.jj-recent-meta { display: grid; justify-items: start; gap: 8px; font-size: var(--text-meta); color: var(--muted); }
 @media(min-width:1700px) { .jj-content { padding-top: 44px; } }
-@media(max-width:1100px) { .jj-app { grid-template-columns: 196px minmax(0,1fr); } .jj-sidebar { padding-inline: 14px; } .jj-topbar { padding-inline: 26px; } .jj-content { padding: 30px 26px 48px; } .jj-home-cards > button { padding: 16px; } }
-@media(max-width:800px) { .jj-app { grid-template-columns: minmax(0,1fr); } .jj-sidebar { display: none; } .jj-mobile-toggle { display: inline-flex; padding: 0; width: 30px; min-height: 30px; } .jj-topbar { height: 60px; padding-inline: 18px; gap: 10px; } .jj-breadcrumb { margin-right: auto; } .jj-content { padding: 28px 22px 40px; } .jj-skip { left: 16px; } .jj-page { gap: 22px; } }
-@media(max-width:600px) { .jj-toolbar { gap: 8px; } .jj-breadcrumb li:not(:last-child), .jj-breadcrumb li:last-child .jj-breadcrumb-separator { display: none; } .jj-home-focus { flex-direction: column; align-items: flex-start; padding: 24px; gap: 22px; } .jj-home-focus > .jj-button { align-self: flex-end; } .jj-home-cards { grid-template-columns: minmax(0,1fr); } .jj-home-cards > button { border-right: 0; border-bottom: 1px solid var(--line); gap: 12px; } .jj-home-cards > button:last-child { border-bottom: 0; } .jj-recent-list > button { grid-template-columns: minmax(0,1fr) auto; gap: 10px; padding: 18px 20px; } .jj-recent-meta { display: flex; flex-wrap: wrap; gap: 12px; grid-column: 1/-1; align-items: center; } .jj-welcome-grid { grid-template-columns: minmax(0,1fr); } .jj-welcome-main, .jj-welcome-example { padding: 28px; } .jj-welcome-main { border-right: 0; border-bottom: 1px solid var(--line); } }
+@media(max-width:1100px) { .jj-app { grid-template-columns: 196px minmax(0,1fr); } .jj-sidebar { padding-inline: 14px; } .jj-topbar { padding-inline: 26px; } .jj-content { padding:30px 26px 48px; } }
+@media(max-width:800px) { .jj-app { grid-template-columns: minmax(0,1fr); } .jj-sidebar { display: none; } .jj-mobile-toggle { display: inline-flex; padding: 0; width: 30px; min-height: 30px; } .jj-topbar { height: 60px; padding-inline: 18px; gap: 10px; } .jj-breadcrumb { margin-right: auto; } .jj-content { padding:28px 22px 40px; min-height:calc(100dvh - 60px); } .jj-skip { left: 16px; } .jj-page { gap: 22px; } }
+@media(max-width:600px) { .jj-toolbar { gap: 8px; } .jj-breadcrumb li:not(:last-child), .jj-breadcrumb li:last-child .jj-breadcrumb-separator { display: none; } .jj-welcome-grid { grid-template-columns: minmax(0,1fr); } .jj-welcome-main, .jj-welcome-example { padding: 28px; } .jj-welcome-main { border-right: 0; border-bottom: 1px solid var(--line); } }
 
 @media(max-width:650px) { .jj-toolbar > .jj-button { width:40px; min-height:40px; } }
 @media(max-width:600px) { .jj-breadcrumb [aria-current] { overflow:hidden; text-overflow:ellipsis; } }

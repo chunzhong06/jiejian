@@ -13,6 +13,14 @@ class ApplicationSources:
     def __init__(self, uow_factory, *, clock_us=None):
         self._uow, self._clock = uow_factory, clock_us or (lambda: time.time_ns() // 1000)
 
+    def summary(self, project_id):
+        """概览只返回数量；来源仍由严格 reader 接受，不计算无消费者的逐请求引用。"""
+        with self._uow() as work:
+            self._project(work, project_id)
+            sources = work.api_sources.latest(project_id)
+            return dict(project_id=project_id, source_count=len(sources),
+                request_count=sum(len(source.requests) for source in sources))
+
     def context(self, project_id, source_id=None):
         with self._uow() as work:
             self._project(work, project_id)

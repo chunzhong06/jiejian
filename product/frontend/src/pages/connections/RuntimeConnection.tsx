@@ -34,7 +34,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
     const lock = useRef(false);
     const state = useRead(canStart ? 'controlled-runtime:' + projectId : null, () => api.runtime(projectId),()=>pending?1000:0);
     const capabilities=useRead(canStart?'runtime-capabilities:'+projectId:null,()=>api.runtimeCapabilities(projectId));
-    const configuration:RuntimeSettings=settings??{build_script:state.data?.configuration?.package?.build_script??null,allow_install_scripts:state.data?.configuration?.package?.allow_install_scripts??false,sqlite:state.data?.configuration?.sqlite??[]};
+    const configuration:RuntimeSettings=settings??{build_script:state.data?.configuration?.package?.build_script??null,allow_install_scripts:state.data?.configuration?.package?.allow_install_scripts??false,sqlite:state.data?.configuration?.sqlite??[],databases:state.data?.configuration?.databases??[]};
     const operation = useRead(pending ? 'start-runtime:' + pending.operation : null,
         () => pending ? api.runtimeOperation(projectId, pending.operation) : Promise.resolve(null),
         value => value && ['PENDING', 'RUNNING', 'RETRY_WAIT'].includes(value.state) ? 1000 : 0);
@@ -81,7 +81,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
             await api.runtimeStart(projectId, {
                 entry: request.preview.entry, port: request.preview.port, revision: request.preview.revision,
                 preview_fingerprint: request.preview.preview_fingerprint, operation_id: request.operation, consent_execute: true,
-                build_script:request.preview.package?.build_script??null,allow_install_scripts:request.preview.package?.allow_install_scripts??false,sqlite:request.preview.sqlite??[],
+                build_script:request.preview.package?.build_script??null,allow_install_scripts:request.preview.package?.allow_install_scripts??false,sqlite:request.preview.sqlite??[],databases:request.preview.databases??[],
             });
         } catch (error) {
             if (error instanceof ApiError && ['STATE_PRECONDITION', 'INPUT_INVALID'].includes(error.code)) {
@@ -111,12 +111,12 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                     <footer>{usingRuntime ? <Badge tone="positive">已用于检查</Badge> : <div className="jj-small jj-muted">{confirmedEndpoint ? <>当前检查地址：<span className="jj-path">{confirmedEndpoint}</span></> : '尚未设置检查地址'}</div>}<div className="jj-inline-actions"><Button kind="quiet" busy={busy} onClick={() => void act(async () => { await api.runtimeStop(projectId, state.data!.operation!.instance_id); setMethod('managed'); state.reload(); onChanged(); })}>停止应用</Button>{!usingRuntime && <Button kind="primary" busy={busy} onClick={() => void act(() => confirmAddress(runtimeAddress!))}>使用此应用</Button>}</div></footer>
                 </div> : !pending && !preview && <>
                     <div className="jj-runtime-setup"><Field label="启动文件"><input value={entry ?? state.data?.configuration?.entry ?? capabilities.data?.entries[0]??''} placeholder="例如 app.mjs 或 server.cjs" disabled={busy} onChange={event => { setEntry(event.target.value); setPreview(undefined); }}/></Field><Field label="本地端口"><input type="number" min={1024} max={65535} value={port ?? state.data?.configuration?.port ?? 3000} disabled={busy} onChange={event => { setPort(event.target.value); setPreview(undefined); }}/></Field><Button disabled={busy || !(entry ?? state.data?.configuration?.entry??capabilities.data?.entries[0])} onClick={() => void act(async () => { setAck(false); setOutcome(undefined); setPreview(await api.runtimePreview(projectId, { entry: entry ?? state.data?.configuration?.entry??capabilities.data!.entries[0], port: Number(port ?? state.data?.configuration?.port ?? 3000), revision,...configuration })); })}>核对启动设置</Button></div>
-                    <RuntimeOptions capabilities={capabilities.data??undefined} value={configuration} disabled={busy} onChange={next=>{setSettings(next);setPreview(undefined)}}/>
+                    <RuntimeOptions projectId={projectId} capabilities={capabilities.data??undefined} value={configuration} disabled={busy} onChange={next=>{setSettings(next);setPreview(undefined)}}/>
                     {!preview && <p className="jj-small jj-muted">选择启动文件和端口，下一步核对运行范围。</p>}
                 </>}
                 {preview && !pending && !state.data?.running && <section className="jj-runtime-review">
                     <header><Badge tone="accent">等待启动确认</Badge><h3>将启动这份源码的测试实例</h3></header>
-                    <dl className="jj-facts"><div><dt>启动文件</dt><dd>{preview.entry}</dd></div><div><dt>访问地址</dt><dd>http://127.0.0.1:{preview.port}</dd></div><div><dt>依赖准备</dt><dd>{preview.package?'按项目锁文件安装依赖':'无需安装 npm 依赖'}</dd></div><div><dt>测试数据库</dt><dd>{preview.sqlite?.length?preview.sqlite.length+' 个数据库使用独立副本':'未设置数据库副本'}</dd></div></dl>
+                    <dl className="jj-facts"><div><dt>启动文件</dt><dd>{preview.entry}</dd></div><div><dt>访问地址</dt><dd>http://127.0.0.1:{preview.port}</dd></div><div><dt>依赖准备</dt><dd>{preview.package?'按项目锁文件安装依赖':'无需安装 npm 依赖'}</dd></div><div><dt>测试数据库</dt><dd>{preview.sqlite?.length?preview.sqlite.length+' 个数据库使用独立副本':'未设置 SQLite 副本'}</dd></div>{Boolean(preview.databases?.length)&&<div><dt>服务数据库</dt><dd>{preview.databases!.map(item=>(item.engine==='POSTGRESQL'?'PostgreSQL':'MySQL')+' · '+item.database+' / '+item.table).join('；')}；连接已声明的本机测试库，审计安装需单独确认</dd></div>}</dl>
                     <details><summary>查看允许执行的文件（{preview.files.length} 个）</summary><ul>{preview.files.map(file=><li key={file.relative_path}>{file.relative_path}</li>)}</ul></details>
                     <label className="jj-checkbox"><input type="checkbox" checked={ack} onChange={event => setAck(event.target.checked)}/><span>允许按上述设置安装依赖、建立测试副本并启动应用</span></label>
                     <footer><Button disabled={busy} onClick={()=>{setPreview(undefined);setAck(false)}}>返回修改</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(start)}>启动测试实例</Button></footer>

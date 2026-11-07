@@ -1,4 +1,28 @@
 .jj-testing-directory .jj-object-table th:first-child { width:52%; }
 .jj-testing-directory .jj-object-meta > small { display:block; margin-top:5px; }
 .jj-testing-count { padding:20px 12px; color:var(--muted); font-size:var(--text-meta); }
+.jj-scenario-editor { border:0; margin:0; padding:0; min-width:0; }
+.jj-scenario-toolbar { display:flex; align-items:end; gap:24px; margin-top:28px; flex-wrap:wrap; }
+.jj-scenario-toolbar>.jj-tabs { flex:1; min-width:0; }
+.jj-scenario-toolbar>div:last-child { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
+.jj-scenario-layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:32px; margin-top:28px; }
+.jj-scenario-layout>aside { min-width:0; }
+.jj-scenario-layout[data-empty=true] { grid-template-columns:minmax(0,1fr); }
+.jj-scenario-layout[data-empty=true]>.jj-scenario-reading { padding-left:0; border-left:0; }
+.jj-scenario-reading { min-width:0; padding-left:28px; border-left:1px solid var(--line); display:grid; align-content:start; gap:24px; }
+.jj-scenario-reading>header { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.jj-scenario-reading>header>div { display:flex; gap:8px; }
+.jj-scenario-resources { display:grid; gap:20px; }
+.jj-scenario-resources>.jj-section-header { margin-bottom:0; }
+.jj-scenario-resource-detail { display:grid; gap:24px; min-width:0; }
+.jj-scenario-resource-table { min-width:580px; }
+.jj-scenario-resource-table th:first-child { width:28%; }
+.jj-scenario-resource-table .jj-object-select { padding:8px 0; overflow-wrap:anywhere; }
+.jj-scenario-local-actions { display:flex; justify-content:flex-end; }
+.jj-scenario-debug { display:grid; gap:16px; padding-top:24px; }
+.jj-scenario-debug footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
+.jj-scenario-debug p { max-width:72ch; }
+.jj-scenario-reading>footer,.jj-scenario-actions { display:flex; justify-content:flex-end; gap:12px; }
+.jj-scenario-actions { margin-top:28px; padding-top:20px; }
+@media(max-width:900px) { .jj-scenario-layout { grid-template-columns:1fr;gap:24px; } .jj-scenario-reading { border-left:0; padding-left:0; } }
 @media(max-width:600px) { .jj-testing-directory .jj-object-table :is(th,td):nth-child(2) { display:none; } }

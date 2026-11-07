@@ -38,6 +38,7 @@ from product.backend.interfaces.http.mcp.views import (
 from product.backend.interfaces.http.mcp.transport import (
     MCPBearerGuard, MCPPathAdapter,
 )
+from product.backend.interfaces.http.body import MCP_JSON_LIMIT
 
 _REQUEST_CLIENT: ContextVar[str | None] = ContextVar("jiejian_mcp_request_client", default=None)
 
@@ -276,16 +277,16 @@ def build_mcp_control(
     def task_list(ctx: Context, project_id: str, limit: int = 50) -> dict[str, Any]:
         """读取应用内已有任务；结束状态不表示安全结论。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        return {"tasks": _json(_invoke(lambda: context.development.list(project_id, limit=limit)))}
+        return {"tasks": _json(_invoke(lambda: context.development_reader.list(project_id, limit=limit)))}
 
     @server.tool(name="jiejian_task_show", structured_output=True)
     def task_show(ctx: Context, project_id: str, task_id: str | None = None) -> dict[str, Any]:
         """读取精确任务；未指定时返回当前未结束任务。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        task = _invoke(lambda: context.development.active(project_id) if task_id is None else context.development.task(project_id, task_id))
+        task = _invoke(lambda: context.development_reader.active(project_id) if task_id is None else context.development_reader.task(project_id, task_id))
         if task is None:
             return {"task": None, "deliveries": [], "latest_verification": None}
-        view = _invoke(lambda: context.development.view(project_id, task.task_id))
+        view = _invoke(lambda: context.development_reader.view(project_id, task.task_id))
         verification = view["latest_verification"]
         return {"task": _json(task), "acceptance": view["acceptance"], "deliveries": [{key: item[key] for key in ("delivery_id", "context_id", "ordinal", "change_id", "created_at_us")} for item in view["deliveries"]],
             "has_more": view["has_more"], "latest_verification": None if verification is None else {key: verification[key] for key in ("run_id", "lifecycle", "verdict", "runtime_status", "repair_status")}}
@@ -294,7 +295,7 @@ def build_mcp_control(
     def task_context(ctx: Context, project_id: str, context_id: str) -> dict[str, Any]:
         """读取不可变开工上下文；权限正文按 intent_id/revision 从既有权限工具回读。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        value = _invoke(lambda: context.development.context(project_id, context_id))
+        value = _invoke(lambda: context.development_reader.context(project_id, context_id))
         payload = value.model_dump(mode="json", exclude={"source_fingerprint", "start_snapshot_id"})
         payload["boundary"] = "仅列已批准权限引用；目标文本及客户端自测不构成界鉴权限结论。"
         return payload
@@ -320,7 +321,7 @@ def build_mcp_control(
     def receipt_show(ctx: Context, project_id: str, kind: OperationKind, operation_id: OperationId) -> dict[str, Any]:
         """响应不明确时按原操作键查询；无成功回执不能证明从未开始，勿生成新键重试。"""
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
-        return {"receipt": _json(_invoke(lambda: context.development.receipt(project_id, kind, operation_id)))}
+        return {"receipt": _json(_invoke(lambda: context.development_reader.receipt(project_id, kind, operation_id)))}
 
     @server.tool(name='jiejian_check_preview',structured_output=True)
     def check_preview(ctx:Context, project_id:str, change_id:str|None=None)->dict[str,Any]:
@@ -343,6 +344,8 @@ def build_mcp_control(
 
     sdk_app = server.streamable_http_app(
         streamable_http_path="/",
+        # SDK已在解析前按实际字节限量，显式固定预算，不再叠加另一套缓冲或改写GET流。
+        max_request_body_size=MCP_JSON_LIMIT,
         json_response=True,
         # 保留标准initialize会话，供仍使用会话协议的真实客户端准确携带来源身份。
         # Bearer及项目授权依旧逐请求核对，持有会话ID不获得授权。

@@ -29,9 +29,9 @@ export function CheckScopePicker({materials, selected, disabled, onChange}: {
         </label>;
     };
     return <section className="jj-panel jj-check-scope-picker" aria-label="选择检查范围">
-        <header><h2>要检查的规则</h2><Segmented label="检查方式" value={selected===null?'all':'selected'} disabled={disabled} items={[{value:'all',label:'全部规则'},{value:'selected',label:'选定规则'}]} onValueChange={value=>{if(value==='all')onChange(null);else if(selected===null)onChange([])}}/></header>
+        <header><h2 className="jj-title-group">要检查的规则</h2><Segmented label="检查方式" value={selected===null?'all':'selected'} disabled={disabled} items={[{value:'all',label:'全部规则'},{value:'selected',label:'选定规则'}]} onValueChange={value=>{if(value==='all')onChange(null);else if(selected===null)onChange([])}}/></header>
         {selected === null ? <p className="jj-scope-all-summary">检查全部 {rules.length} 条已批准规则。</p> : <div className="jj-scope-rule-options">{rules.filter(({rule}) => !controls.some(item => item.rule.intent_id === rule.intent_id)).map(item => option(item))}</div>}
-        {selected !== null && controls.length > 0 && <section className="jj-scope-controls"><h3>必要正常对照</h3><p>同时确认原来允许的操作仍能完成。</p>{controls.map(item => option(item, true))}</section>}
+        {selected !== null && controls.length > 0 && <section className="jj-scope-controls"><h3 className="jj-title-caption">必要正常对照</h3><p>同时确认原来允许的操作仍能完成。</p>{controls.map(item => option(item, true))}</section>}
         <details className="jj-scope-saved"><summary>保存与沿用检查范围</summary><SavedChecks key={materials.project_id} projectId={materials.project_id} selected={selected} disabled={disabled} onChange={onChange} name={materials.actions.filter(action=>action.permissions?.some(rule=>rule.intent_id&&direct.has(rule.intent_id))).map(action=>text(action.display_name)).join('、').slice(0,72)}/></details>
     </section>;
 }

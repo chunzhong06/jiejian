@@ -25,11 +25,11 @@
 | [scripts/development/prepare.ps1](../../../scripts/development/prepare.ps1) | 153 | 包、内部机制或样式 |
 | [scripts/development/python.ps1](../../../scripts/development/python.ps1) | 252 | 包、内部机制或样式 |
 | [scripts/development/session.ps1](../../../scripts/development/session.ps1) | 49 | 包、内部机制或样式 |
-| [scripts/development/startup/context.ps1](../../../scripts/development/startup/context.ps1) | 78 | 包、内部机制或样式 |
-| [scripts/development/startup/panel.ps1](../../../scripts/development/startup/panel.ps1) | 151 | 包、内部机制或样式 |
-| [scripts/development/startup/presentation.ps1](../../../scripts/development/startup/presentation.ps1) | 391 | 包、内部机制或样式 |
+| [scripts/development/startup/context.ps1](../../../scripts/development/startup/context.ps1) | 79 | 包、内部机制或样式 |
+| [scripts/development/startup/panel.ps1](../../../scripts/development/startup/panel.ps1) | 152 | 包、内部机制或样式 |
+| [scripts/development/startup/presentation.ps1](../../../scripts/development/startup/presentation.ps1) | 380 | 包、内部机制或样式 |
 | [scripts/development/startup/product.ps1](../../../scripts/development/startup/product.ps1) | 78 | 包、内部机制或样式 |
-| [scripts/development/startup/runtime.ps1](../../../scripts/development/startup/runtime.ps1) | 202 | 包、内部机制或样式 |
+| [scripts/development/startup/runtime.ps1](../../../scripts/development/startup/runtime.ps1) | 211 | 包、内部机制或样式 |
 | [scripts/development/startup/source.ps1](../../../scripts/development/startup/source.ps1) | 134 | 包、内部机制或样式 |
 | [scripts/docs/checks.py](../../../scripts/docs/checks.py) | 40 | check_documents |
 | [scripts/docs/generate.py](../../../scripts/docs/generate.py) | 97 | render、generate、main |
@@ -42,4 +42,4 @@
 | [scripts/quality/run.py](../../../scripts/quality/run.py) | 42 | main |
 | [scripts/quality/syntax.py](../../../scripts/quality/syntax.py) | 31 | check、main |
 | [scripts/quality/vitest-reporter.mjs](../../../scripts/quality/vitest-reporter.mjs) | 32 | QualityReporter |
-| [scripts/start.ps1](../../../scripts/start.ps1) | 123 | 包、内部机制或样式 |
+| [scripts/start.ps1](../../../scripts/start.ps1) | 113 | 包、内部机制或样式 |

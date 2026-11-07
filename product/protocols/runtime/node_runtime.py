@@ -9,6 +9,7 @@ import re
 from pydantic import Field, field_validator, model_validator
 
 from product.protocols.runtime.runtime_identity import Digest, InstanceId, MAX_ARTIFACT_BYTES, RuntimeFile, RuntimeModel, runtime_source_fingerprint
+from product.protocols.runtime.database_capture import DatabaseCapture
 ProjectId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
 
 SqliteIdentifier = Annotated[str, Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')]
@@ -67,6 +68,7 @@ class NodeRuntimeManifest(RuntimeModel):
     package: NodePackagePlan | None = Field(default=None, exclude_if=lambda value: value is None)
     sqlite: tuple[SqliteDatabaseCapture, ...] = Field(default=(), max_length=4, exclude_if=lambda value: not value)
     sqlite_source_root: str | None = Field(default=None, max_length=32768, exclude_if=lambda value: value is None)
+    databases: tuple[DatabaseCapture,...]=Field(default=(),max_length=4,exclude_if=lambda value:not value)
 
     @field_validator("entry")
     @classmethod
@@ -78,6 +80,10 @@ class NodeRuntimeManifest(RuntimeModel):
 
     @model_validator(mode="after")
     def validate_manifest(self):
+        if self.databases and self.module_loader!='NODE_STANDARD':
+            raise ValueError('server database capture requires standard Node modules')
+        if len({item.connection_id for item in self.databases})!=len(self.databases):
+            raise ValueError('duplicate database connection identity')
         paths = tuple(item.relative_path for item in self.files)
         if paths != tuple(sorted(paths, key=lambda path: (path.casefold(), path))) or len({path.casefold() for path in paths}) != len(paths):
             raise ValueError("Node artifact paths must be sorted and unique")

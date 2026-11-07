@@ -16,7 +16,15 @@ def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
         action,case = cases[source_case_id]
         if package.result.verdict is not RunVerdict.BLOCK or results[source_case_id].verdict is not CaseVerdict.VULNERABLE:
             raise ValueError("source case is not a confirmed block")
-        twin = next(item for item in action.twins if item.deny_case_id == source_case_id)
+        twin = next((item for item in action.twins if item.deny_case_id == source_case_id),None)
+        control_pair=None if twin is None else cases[twin.allow_case_id]
+        if control_pair is None and case.occurrence_id is not None and case.expects_absence:
+            from product.protocols.checks.scenarios import scenario_control_cases
+            candidates=[cases[key] for key in scenario_control_cases(package.request.scenario,case.case_id)
+                if cases[key][0].action_id==action.action_id and cases[key][1].resource_id==case.resource_id
+                and not cases[key][1].expects_absence]
+            control_pair=next(iter(candidates),None)
+        if control_pair is None:raise ValueError('original normal control missing')
         def requirement(pair):
             parent,current = pair
             return RepairCaseRequirement(source_case_id=current.case_id,identity=repair_case_identity(parent,current,package.bundle),
@@ -28,7 +36,7 @@ def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
         values = dict(project_id=package.request.project_id,source_run_id=package.result.run_id,
             source_case_id=source_case_id,original_policy_epoch=package.request.policy_epoch,
             original_intents=current_request_permissions(package.request),deny=requirement((action,case)),
-            selected_control=requirement(cases[twin.allow_case_id]),regressions=regressions,breakpoint=breakpoint)
+            selected_control=requirement(control_pair),regressions=regressions,breakpoint=breakpoint)
         payload = {name: value.model_dump(mode="json") if hasattr(value,"model_dump") else
             [item.model_dump(mode="json") for item in value] if isinstance(value,tuple) else value
             for name,value in values.items()}
@@ -38,6 +46,11 @@ def build_current_repair_contract(package, source_case_id, *, breakpoint=None):
 
 
 class CurrentRepairService:
+    def source_request(self,project_id,reference):
+        """只从已验证原发布包恢复实验结构与选中范围，不能用当前草稿替换原题。"""
+        self.resolve(project_id,reference)
+        source=self._reader.package(reference.source_run_id,project_id=project_id)
+        return source.request
     def __init__(self, *, reader, change_context_reader, breakpoint_reader=None, breakpoints_reader=None, rule_targets_reader=None):
         self._reader = reader
         self._change_context_reader = change_context_reader

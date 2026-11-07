@@ -73,3 +73,38 @@ def readonly_official_review():
         scenario=OfficialScenario(server.client)
         scenario.start()
         yield server,scenario,receipt
+
+
+@pytest.fixture(scope='module')
+def readonly_collaboration_review():
+    """只为只读组件巡检准备同一协作任务；消费者各自拥有浏览器，不可提交业务命令。"""
+    import json
+    from pathlib import Path
+    from time import perf_counter
+    from uuid import uuid4
+    from tests.support.runtime_server import launch
+    from tests.support.builders.preparation.action_preparation import build_preparation_harness
+    root=Path(__file__).resolve().parents[1]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/audit/readonly-collaboration'/uuid4().hex
+    seed=output/'seed';seed.mkdir(parents=True)
+    started=perf_counter()
+    harness=build_preparation_harness(seed)
+    project,action,workspace=harness.project_id,harness.action,harness.var_dir
+    try:
+        with harness.core.uow_factory() as work:
+            record=work.projects.get(project)
+            work.projects.replace(record.model_copy(update={'name':'文档协作系统'}))
+            work.commit()
+    finally:harness.close()
+    with launch(output/'runtime',Path(receipt['frontend']['dist']),workspace=workspace) as server:
+        response=server.client.post(f'/api/projects/{project}/collaboration',json=dict(operation_id=uuid4().hex,
+            goal='补齐更新文档的接口流程，整理执行步骤、结果核对与恢复安排。',purpose='SETUP',references={}))
+        assert response.status_code==200,response.text
+        task=response.json()['data']['task_id']
+        response=server.client.post(f'/api/projects/{project}/collaboration/{task}/questions',json=dict(question_id=uuid4().hex,
+            question='文档归档后还允许成员修改吗？',options=['仅负责人可以','所有成员可以']))
+        assert response.status_code==200,response.text
+        (output/'preparation.json').write_text(json.dumps(dict(seconds=perf_counter()-started,server_count=1,
+            task_count=1,write_requests=2),indent=2),encoding='utf-8')
+        yield server,project,action,task,receipt

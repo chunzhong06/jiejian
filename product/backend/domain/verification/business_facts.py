@@ -1,6 +1,7 @@
 # 将封存的有限提交事实归约为观察；执行与发布读取共用，不访问目标、不裁决Verdict。
 from product.protocols.checks.business_facts import CommittedStateFact,IdentityCheckFact,FieldDisclosureFact,ReferenceArtifactFact,FileReceiptFact
 from product.protocols.checks.business_facts import AnonymousCheckFact
+from product.protocols.checks.field_mutation import mutation_happened, same_scalar
 
 
 def verified_principals(case, facts, identities):
@@ -39,10 +40,14 @@ def reduce_creation_facts(reference,facts,*,case):
     return 'UNKNOWN','OPEN',False
 
 
-def reduce_record_facts(reference,facts,*,case,expected_state):
+def reduce_record_facts(reference,facts,*,case,expected_state,field_mutation=None):
     """只有完整关联事实能证明发生；未发生另需完整请求窗及连续版本。"""
     window=reference.record_window
     if not reference.complete or window is None or not window.request_matched:
+        return 'UNKNOWN','OPEN',False
+    if field_mutation is not None and field_mutation.path != window.field_path:
+        return 'UNKNOWN','OPEN',False
+    if field_mutation is None and not (window.before_present and window.after_present):
         return 'UNKNOWN','OPEN',False
     records=[fact for fact in facts if fact.fact_id in reference.fact_ids]
     if len(records)!=len(reference.fact_ids):return 'UNKNOWN','OPEN',False
@@ -52,24 +57,30 @@ def reduce_record_facts(reference,facts,*,case,expected_state):
         return 'UNKNOWN','OPEN',False
     if reference.method=='STATE_SNAPSHOT':
         if not window.source_complete:return 'UNKNOWN','OPEN',False
-        return ('CONFIRMED' if window.after_value==expected_state else 'ABSENT'),'CLOSED',True
+        return ('CONFIRMED' if field_mutation is not None or same_scalar(window.after_value,expected_state) else 'ABSENT'),'CLOSED',True
     commits=sorted((fact for fact in records if isinstance(fact.data,CommittedStateFact)),key=lambda fact:fact.data.scope_ordinal)
     value,version,happened=window.before_value,window.before_version,False
+    present=window.before_present
+    ordinals=window.operation_ordinals or tuple(range(window.operation_count))
     for ordinal,fact in enumerate(commits):
         data=fact.data
         changes=[item for item in data.changes if item.proof_fingerprint==reference.proof_fingerprint and item.path==window.field_path]
-        if (not fact.complete or len(changes)!=1 or data.scope_ordinal!=ordinal
+        if (not fact.complete or len(changes)!=1 or ordinal>=len(ordinals) or data.scope_ordinal!=ordinals[ordinal]
             or data.generation!=window.generation or data.before_version!=version
             or (data.subject_identity_id,data.owner_identity_id,data.resource_id)!=(case.subject_test_identity_id,
-                case.resource_owner_test_identity_id,case.resource_id) or changes[0].before!=value):
+                case.resource_owner_test_identity_id,case.resource_id) or changes[0].before_present!=present
+            or not same_scalar(changes[0].before,value)):
             return 'UNKNOWN','OPEN',False
         after=changes[0].after
-        happened=happened or (value!=after and (expected_state is None or after==expected_state))
+        happened=happened or mutation_happened(field_mutation,value,after,
+            before_present=present,after_present=changes[0].after_present,expected_state=expected_state)
+        present=changes[0].after_present
         value,version=after,data.after_version
     if happened:return 'CONFIRMED','CLOSED',True
     last=commits[-1].data.operation_id if commits else window.before_operation
     if (not window.source_complete or window.scope_state!='COMPLETE' or len(commits)!=window.operation_count
-        or value!=window.after_value or version!=window.after_version or last!=window.after_operation):
+        or present!=window.after_present or not same_scalar(value,window.after_value)
+        or version!=window.after_version or last!=window.after_operation):
         return 'UNKNOWN','OPEN',False
     return 'ABSENT','CLOSED',True
 
@@ -101,7 +112,7 @@ def reduce_disclosure_facts(reference,facts,*,case):
             if field.path in fields and fields[field.path]!=field:return 'UNKNOWN','OPEN',False
             fields[field.path]=field
     matches=[fields[path].matched for path in window.protected_paths if path in fields]
-    confirmed=any(matches) if case.permission.expectation=='DENY' else len(matches)==len(window.protected_paths) and all(matches)
+    confirmed=any(matches) if case.expects_absence else len(matches)==len(window.protected_paths) and all(matches)
     return ('CONFIRMED','CLOSED',True) if confirmed else ('UNKNOWN','OPEN',False)
 
 
@@ -123,6 +134,15 @@ def reduce_file_facts(reference,facts,*,case):
     if (receipt.subject_identity_id,receipt.owner_identity_id,receipt.resource_id,receipt.expected)!=(
         case.subject_test_identity_id,case.resource_owner_test_identity_id,case.resource_id,window.expected):
         return 'UNKNOWN','OPEN',False
+    if window.async_required:
+        from product.protocols.checks.business_facts import AsyncTaskFact
+        tasks=[fact.data for fact in selected if isinstance(fact.data,AsyncTaskFact) and fact.complete]
+        if len(tasks)!=1:return 'UNKNOWN','OPEN',False
+        task=tasks[0]
+        if (not task.correlated or task.state!='SUCCESS' or task.task_fingerprint!=window.task_fingerprint
+                or (task.subject_identity_id,task.owner_identity_id,task.resource_id)!=(
+                    case.subject_test_identity_id,case.resource_owner_test_identity_id,case.resource_id)):
+            return 'UNKNOWN','OPEN',False
     if receipt.complete and receipt.comparison=='MATCH':return 'CONFIRMED','CLOSED',True
     if receipt.complete and window.refused and window.scope_state=='COMPLETE':return 'ABSENT','CLOSED',True
     return 'UNKNOWN','OPEN',False

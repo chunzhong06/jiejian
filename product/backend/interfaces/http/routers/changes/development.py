@@ -40,27 +40,28 @@ class RuntimeLoadRequest(ApiModel):
 def build_development_router(context):
     router = APIRouter()
     service = context.development
+    reader = context.development_reader
 
     @router.get("/api/projects/{project_id}/development/history", response_model=ApiResponse)
     def task_history(project_id: str, before_task_id: str | None = None, limit: int = Query(default=20, ge=1, le=50)):
-        return data_response(service.history(project_id, before_task_id=before_task_id, limit=limit))
+        return data_response(reader.history(project_id, before_task_id=before_task_id, limit=limit))
 
     @router.get("/api/projects/{project_id}/development/tasks/{task_id}/deliveries", response_model=ApiResponse)
     def task_deliveries(project_id: str, task_id: str, before_ordinal: int | None = Query(default=None, ge=1), limit: int = Query(default=20, ge=1, le=50)):
-        return data_response(service.delivery_page(project_id, task_id, before_ordinal=before_ordinal, limit=limit))
+        return data_response(reader.delivery_page(project_id, task_id, before_ordinal=before_ordinal, limit=limit))
 
     @router.get("/api/projects/{project_id}/development/changes/{change_id}", response_model=ApiResponse)
     def delivery_details(project_id: str, change_id: str):
-        return data_response(service.delivery_details(project_id, change_id))
+        return data_response(reader.delivery_details(project_id, change_id))
 
     @router.get("/api/projects/{project_id}/development/tasks", response_model=ApiResponse)
     def task_list(project_id: str, limit: int = Query(default=50, ge=1, le=100)):
-        return data_response([item.model_dump(mode="json") for item in service.list(project_id, limit=limit)])
+        return data_response([item.model_dump(mode="json") for item in reader.list(project_id, limit=limit)])
 
     @router.get("/api/projects/{project_id}/development/current", response_model=ApiResponse)
     def current_task(project_id: str):
-        value = service.active(project_id)
-        return data_response(None if value is None else service.view(project_id, value.task_id))
+        value = reader.active(project_id)
+        return data_response(None if value is None else reader.view(project_id, value.task_id))
 
     @router.post("/api/projects/{project_id}/development/tasks", response_model=ApiResponse, status_code=201)
     def task_create(project_id: str, body: TaskCreateRequest):
@@ -69,7 +70,7 @@ def build_development_router(context):
 
     @router.get("/api/projects/{project_id}/development/tasks/{task_id}", response_model=ApiResponse)
     def task_show(project_id: str, task_id: str):
-        return data_response(service.view(project_id, task_id))
+        return data_response(reader.view(project_id, task_id))
 
     @router.post("/api/projects/{project_id}/development/tasks/{task_id}/revisions", response_model=ApiResponse)
     def task_revise(project_id: str, task_id: str, body: TaskReviseRequest):
@@ -84,7 +85,7 @@ def build_development_router(context):
 
     @router.get("/api/projects/{project_id}/development/receipts/{kind}/{operation_id}", response_model=ApiResponse)
     def receipt_show(project_id: str, kind: OperationKind, operation_id: OperationId):
-        receipt = service.receipt(project_id, kind, operation_id)
+        receipt = reader.receipt(project_id, kind, operation_id)
         return data_response(None if receipt is None else receipt.model_dump(mode="json"))
 
     @router.post("/api/projects/{project_id}/development/deliveries/{delivery_id}/runtime", response_model=ApiResponse)
@@ -94,7 +95,7 @@ def build_development_router(context):
 
     @router.get("/api/projects/{project_id}/development/deliveries/{delivery_id}", response_model=ApiResponse)
     def delivery_show(project_id: str, delivery_id: str):
-        return data_response(service.delivery_verification(project_id, delivery_id))
+        return data_response(reader.delivery_verification(project_id, delivery_id))
 
     @router.get("/api/projects/{project_id}/development/runtime-operations/{operation_id}", response_model=ApiResponse)
     def runtime_receipt(project_id: str, operation_id: OperationId):

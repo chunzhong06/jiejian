@@ -116,7 +116,7 @@ def evaluate_check_case(facts: CheckDecisionInput) -> CheckDecision:
         if item is not None and item.state == "CONFIRMED"
         and item.authoritative and item.complete and item.reliable and item.correlated
     })) if attributed else ()
-    deny = facts.case.permission.expectation == "DENY"
+    deny = facts.case.expects_absence
     # 已确认的禁止效果优先于后续恢复、执行错误和辅助 trace 缺失。
     if deny and confirmed:
         return CheckDecision(verdict=CaseVerdict.VULNERABLE,
@@ -141,7 +141,7 @@ def evaluate_check_case(facts: CheckDecisionInput) -> CheckDecision:
     if any(item is None or item.closure != "CLOSED" for item in required):
         reasons.add("TEMPORAL_CLOSURE_INCOMPLETE")
     if deny:
-        if facts.execution == "ACCEPTED":
+        if facts.execution == "ACCEPTED" and facts.case.invocation_kind is None:
             reasons.add("UNAUTHORIZED_EXECUTION_ACCEPTED")
         if facts.allow_control_verdict is not CaseVerdict.SAFE:
             reasons.add("ALLOW_CONTROL_INVALID")
@@ -170,3 +170,12 @@ def aggregate_check_verdict(
     ):
         return RunVerdict.INCONCLUSIVE
     return RunVerdict.PASS
+
+
+def resolved_control_verdict(request,action,case,results):
+    """场景的完整正常实验与原单动作对照都有效时，才接受缺席证明。"""
+    from product.protocols.checks.scenarios import scenario_control_cases
+    control=next((item.allow_case_id for item in action.twins if item.deny_case_id==case.case_id),None)
+    keys=(*((control,) if control is not None else ()),
+        *(scenario_control_cases(request.scenario,case.case_id) if request.scenario is not None else ()))
+    return CaseVerdict.SAFE if keys and all(key in results and results[key].verdict is CaseVerdict.SAFE for key in keys) else None

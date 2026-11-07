@@ -39,6 +39,7 @@ from product.backend.infrastructure.storage.execution.runs import RunRepository
 from product.backend.infrastructure.storage.boundaries.permission_intents import PermissionIntentRepository
 from product.backend.infrastructure.storage.preparation.test_identities import TestIdentityRepository
 from product.backend.infrastructure.storage.preparation.operation_flows import OperationFlowRepository
+from product.backend.infrastructure.storage.preparation.business_scenarios import BusinessScenarioRepository
 from product.backend.infrastructure.storage.preparation.flow_trials import FlowTrialRepository
 from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRepository
 from product.backend.infrastructure.storage.execution.check_routines import CheckRoutineRepository
@@ -114,6 +115,7 @@ class StorageUnitOfWork:
         self.proof_artifacts = ProofArtifactRepository(session,self._known_secrets)
         self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
         self.operation_flows = OperationFlowRepository(session,self._known_secrets)
+        self.business_scenarios = BusinessScenarioRepository(session,self._known_secrets)
         self.flow_trials = FlowTrialRepository(session,self._known_secrets)
         self.runs = RunRepository(session, self._known_secrets)
         self.recordings = RecordingRepository(session, self._known_secrets)
@@ -164,14 +166,8 @@ class StorageUnitOfWork:
 
     def acquire_write_lock(self) -> None:
         """在读取乐观并发基线前取得 SQLite 写事务，避免 legacy SELECT 不开启事务的窗口。"""
-        session = self._require_session()
-        try:
-            connection = session.connection()
-            if not connection.connection.driver_connection.in_transaction:
-                connection.exec_driver_sql("BEGIN IMMEDIATE")
-        except SQLAlchemyError:
-            session.rollback()
-            raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前有其他写操作，请先核对状态") from None
+        from product.backend.infrastructure.storage.base import acquire_write_lock
+        acquire_write_lock(self._require_session())
 
     def begin_read_snapshot(self) -> None:
         """将关联的多次只读查询固定在同一快照；SQLite legacy SELECT 本身不会开启事务。"""

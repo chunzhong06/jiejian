@@ -19,6 +19,7 @@ from product.protocols.runtime.runtime_identity import MAX_MANIFEST_BYTES
 
 EXECUTOR = Path(__file__).with_name("node_target.mjs")
 SQLITE_ADAPTER = Path(__file__).with_name('sqlite_capture.mjs')
+DATABASE_ADAPTER = Path(__file__).with_name('database_capture.mjs')
 
 
 def node_artifact_store(var_dir: Path) -> Path:
@@ -48,7 +49,7 @@ def _digest(path: Path) -> str:
 def node_execution_identity(node_executable: Path, *, module_loader='NODE_STANDARD') -> dict[str, str]:
     """按解释器、固定执行器顺序核验身份；路径与摘要算法由运行基础设施拥有。"""
     return {"interpreter_fingerprint": _digest(node_executable),
-        "executor_fingerprint": hashlib.sha256(EXECUTOR.read_bytes() + (SQLITE_ADAPTER.read_bytes() if module_loader == 'NODE_STANDARD' else b'')).hexdigest()}
+        "executor_fingerprint": hashlib.sha256(EXECUTOR.read_bytes() + (SQLITE_ADAPTER.read_bytes()+DATABASE_ADAPTER.read_bytes() if module_loader == 'NODE_STANDARD' else b'')).hexdigest()}
 
 
 def node_reference_matches(var_dir: Path, request: NodeRuntimeLoadRequest, reference: NodeRuntimeReference,
@@ -133,11 +134,15 @@ def start_owned_node(var_dir: Path, request: NodeRuntimeLoadRequest, node_execut
     if manifest.sqlite:
         prepare_sqlite_copies(Path(manifest.sqlite_source_root).resolve(), data, manifest)
     environment = {key.upper(): value for key, value in environ.items() if key.upper() in {"SYSTEMROOT", "WINDIR"}}
+    for declaration in manifest.databases:
+        if not environ.get(declaration.password_env):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'数据库凭据尚未配置')
+        environment[declaration.password_env]=environ[declaration.password_env]
     raw_hash = hashlib.sha256(_read_bounded(root / "launch.json", MAX_MANIFEST_BYTES)).hexdigest()
     from product.backend.infrastructure.runtime.process.controlled.npm import execution_fingerprint
     actual_execution=execution_fingerprint(root,manifest)
     argv = [str(node_executable), "--experimental-vm-modules", "--permission",
-        f"--allow-fs-read={root}", f"--allow-fs-read={EXECUTOR}", f"--allow-fs-read={SQLITE_ADAPTER}", f"--allow-fs-read={data}",
+        f"--allow-fs-read={root}", f"--allow-fs-read={EXECUTOR}", f"--allow-fs-read={SQLITE_ADAPTER}", f"--allow-fs-read={DATABASE_ADAPTER}", f"--allow-fs-read={data}",
         f"--allow-fs-write={data}", str(EXECUTOR), str(root / "launch.json"), raw_hash, str(data)]
     if actual_execution is not None:
         argv.append(actual_execution)

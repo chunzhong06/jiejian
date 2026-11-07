@@ -2,6 +2,7 @@
 from __future__ import annotations
 from product.protocols.web.environment import FrozenEnvironment
 from product.protocols.preparation.http_entity import HttpEntityQuery
+from product.protocols.checks.field_mutation import FieldMutationRequirement
 
 import hashlib
 import json
@@ -13,7 +14,7 @@ from product.protocols.codec import encode_json, decode_document
 from product.protocols.preparation.proof_sources import FrozenProofSource, proof_fingerprint
 from product.protocols.web.response import ResponseExtractor
 
-from product.protocols.checks.execution_request import ActorId, EffectId, Hash, IdentityId, LogicalId, WireModel, content_hash
+from product.protocols.checks.execution_request import ActorId, EffectId, ExecutionCase, Hash, IdentityId, LogicalId, WireModel, content_hash
 from product.protocols.observer.config import ObserverSpec
 from product.protocols.checks.identity import CheckIdentity, CheckIdentityVerification
 from product.protocols.web.identity import BearerIdentityBinding, PreparedCookieSessionIdentityBinding
@@ -80,6 +81,7 @@ class CheckProofConfig(WireModel):
     resource_concept: SafeLabel
     effect_kind: Literal["STATE_MUTATION", "DATA_DISCLOSURE", "OBJECT_CREATION", "EXTERNAL_DISPATCH", "RESTRICTED_FUNCTION_INVOCATION", "CREDENTIAL_ACCESS", "FILE_CONTENT_DELIVERY"]
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
+    field_mutation: FieldMutationRequirement | None = Field(default=None, exclude_if=lambda value: value is None)
     protected_projection: tuple[Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")], ...] = Field(default=(), max_length=64)
     binding_fingerprint: Hash
     rule: Literal["HTTP_RESOURCE_PRESENCE", "REGISTERED_EFFECT", "RECORDED_SUPPORT", "HTTP_ENTITY_QUERY"]
@@ -98,6 +100,8 @@ class CheckProofConfig(WireModel):
 
     @model_validator(mode="after")
     def validate_source(self):
+        if self.field_mutation is not None and (self.effect_kind != 'STATE_MUTATION' or self.expected_state is not None):
+            raise ValueError('field mutation requires STATE_MUTATION without legacy expected_state')
         source_ids = [source.observer_id for source in self.auxiliary_sources]
         if len(set(source_ids)) != len(source_ids) or self.observer_id in source_ids:
             raise ValueError("duplicate proof source")
@@ -139,8 +143,13 @@ class CheckProofConfig(WireModel):
 class CheckRecoveryConfig(WireModel):
     binding_fingerprint: Hash
     source_subject_identity_id: IdentityId
+    subject_binding: Literal['SOURCE','RESOURCE_OWNER'] = Field(default='SOURCE',exclude_if=lambda value:value=='SOURCE')
     request: HttpRequestTemplate
     projection_fields: tuple[Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")], ...] = Field(default=(), max_length=64)
+
+    def identity_for(self,case: ExecutionCase) -> IdentityId:
+        # 只有录制时使用资源所有者的恢复才随 Case 换人；专用恢复账号保持冻结引用。
+        return case.resource_owner_test_identity_id if self.subject_binding=='RESOURCE_OWNER' else self.source_subject_identity_id
 
     @model_validator(mode="after")
     def validate_resource_binding(self):
@@ -226,12 +235,17 @@ class CheckActionConfig(WireModel):
 
 
 def async_completion_candidates(action: CheckActionConfig, observers: dict[str, ObserverSpec],
-                                verified_identity_ids: set[str]) -> dict[str, CheckAuxiliarySource]:
+                                verified_identity_ids: set[str],proof_sources=()) -> dict[str, CheckAuxiliarySource|CheckProofConfig]:
     """只收集同动作正式 proof 的终态辅助来源，重复来源必须具有同一身份和描述引用。"""
     candidates, seen = {}, {}
     for proof in action.proofs:
         if proof.rule != "REGISTERED_EFFECT":
             continue
+        adopted=next((item for item in proof_sources if 'json_'+item.source_id[4:]==proof.observer_id
+            and item.config.action_id==action.action_id and item.config.effect_id==proof.effect_id
+            and item.source_fingerprint==proof.descriptor_fingerprint and getattr(item.config,'async_export',None) is not None),None)
+        if adopted is not None and proof.observation_identity_id in verified_identity_ids:
+            candidates[proof.observer_id]=proof
         for source in proof.auxiliary_sources:
             spec = observers.get(source.observer_id)
             if spec is None or spec.observer_type != "ASYNC_TASK_STATUS" or "EVENTUAL" not in spec.phases:
@@ -268,6 +282,44 @@ class CheckRuntimeCorrespondence(WireModel):
     after: Literal["MATCHED", "UNCONFIRMED"]
 
 
+def validate_runtime_references(config, *, proof_sources=()):
+    """共享身份、动作和预算校验；嵌套取样配置不承担检查根的版本与环境契约。"""
+    identities = {item.identity_id for item in config.identities}
+    observers = {item.observer_id for item in config.observers}
+    observer_specs = {item.observer_id: item for item in config.observers}
+    trace_namespaces = {}
+    if len(identities) != len(config.identities) or len(observers) != len(config.observers):
+        raise ValueError("duplicate runtime identity or observer")
+    if len({action.action_id for action in config.actions}) != len(config.actions):
+        raise ValueError("duplicate runtime action")
+    if config.target.max_requests > config.budget.max_requests or config.target.max_response_bytes > config.budget.max_response_bytes:
+        raise ValueError("target budget exceeds the frozen check budget")
+    if config.target.timeout_seconds * 1_000_000 > config.budget.request_timeout_us:
+        raise ValueError("target timeout exceeds the frozen check budget")
+    for action in config.actions:
+        completion_bindings = tuple(step.classifier.completion_binding for step in action.steps
+                                    if step.classifier.completion_binding is not None)
+        if completion_bindings:
+            candidates = async_completion_candidates(action, observer_specs,
+                {item.identity_id for item in config.identities if item.verification is not None},proof_sources)
+            if any(binding not in candidates for binding in completion_bindings):
+                raise ValueError("ASYNC_COMPLETION_BINDING_INVALID")
+        if action.recovery is not None and action.recovery.source_subject_identity_id not in identities:
+            raise ValueError("recovery identity missing")
+        for proof in action.proofs:
+            if proof.observation_identity_id not in identities or (proof.observer_id is not None and proof.observer_id not in observers):
+                raise ValueError("proof identity or observer missing")
+            for source in proof.auxiliary_sources:
+                if source.observation_identity_id not in identities or source.observer_id not in observers:
+                    raise ValueError("auxiliary identity or observer missing")
+                if source.trace_namespace is not None:
+                    if observer_specs[source.observer_id].observer_type != "STRUCTURED_AUDIT_LOG":
+                        raise ValueError("trace requires a structured audit source")
+                    if trace_namespaces.setdefault(source.observer_id, source.trace_namespace) != source.trace_namespace:
+                        raise ValueError("one trace source cannot claim multiple namespaces")
+    return config
+
+
 class CheckRuntimeBundle(WireModel):
     document_type: Literal["jiejian.check-runtime"] = "jiejian.check-runtime"
     runtime: RuntimeSpec = Field(default_factory=ExternalWebRuntime)
@@ -293,40 +345,7 @@ class CheckRuntimeBundle(WireModel):
             raise ValueError('runtime target must match the frozen environment')
         if self.environment is None and any(proof.rule=='HTTP_ENTITY_QUERY' for action in self.actions for proof in action.proofs):
             raise ValueError('HTTP entity proof requires a frozen environment')
-        identities = {item.identity_id for item in self.identities}
-        observers = {item.observer_id for item in self.observers}
-        observer_specs = {item.observer_id: item for item in self.observers}
-        trace_namespaces = {}
-        if len(identities) != len(self.identities) or len(observers) != len(self.observers):
-            raise ValueError("duplicate runtime identity or observer")
-        if len({action.action_id for action in self.actions}) != len(self.actions):
-            raise ValueError("duplicate runtime action")
-        if self.target.max_requests > self.budget.max_requests or self.target.max_response_bytes > self.budget.max_response_bytes:
-            raise ValueError("target budget exceeds the frozen check budget")
-        if self.target.timeout_seconds * 1_000_000 > self.budget.request_timeout_us:
-            raise ValueError("target timeout exceeds the frozen check budget")
-        for action in self.actions:
-            completion_bindings = tuple(step.classifier.completion_binding for step in action.steps
-                                        if step.classifier.completion_binding is not None)
-            if completion_bindings:
-                candidates = async_completion_candidates(action, observer_specs,
-                    {item.identity_id for item in self.identities if item.verification is not None})
-                if any(binding not in candidates for binding in completion_bindings):
-                    raise ValueError("ASYNC_COMPLETION_BINDING_INVALID")
-            if action.recovery is not None and action.recovery.source_subject_identity_id not in identities:
-                raise ValueError("recovery identity missing")
-            for proof in action.proofs:
-                if proof.observation_identity_id not in identities or (proof.observer_id is not None and proof.observer_id not in observers):
-                    raise ValueError("proof identity or observer missing")
-                for source in proof.auxiliary_sources:
-                    if source.observation_identity_id not in identities or source.observer_id not in observers:
-                        raise ValueError("auxiliary identity or observer missing")
-                    if source.trace_namespace is not None:
-                        if observer_specs[source.observer_id].observer_type != "STRUCTURED_AUDIT_LOG":
-                            raise ValueError("trace requires a structured audit source")
-                        if trace_namespaces.setdefault(source.observer_id, source.trace_namespace) != source.trace_namespace:
-                            raise ValueError("one trace source cannot claim multiple namespaces")
-        return self
+        return validate_runtime_references(self, proof_sources=self.proof_sources)
 
 
     @model_validator(mode='after')

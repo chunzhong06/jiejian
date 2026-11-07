@@ -83,4 +83,27 @@ def test_cancelled_runtime_attempt_cannot_publish_success(worker_services):
         service.publish(job_id=job.job_id,attempt=1,lease_owner='runtime-worker',fencing_token=claim.job.fencing_token,receipt=_receipt(request))
     assert service.operation(request.project_id,request.operation_id)['receipt'] is None
 
+
+def test_runtime_status_keeps_one_snapshot_when_publication_commits_between_reads(worker_services,monkeypatch):
+    from product.backend.infrastructure.storage.execution.jobs import JobRepository
+    _,service,attempts,_=_services(worker_services)
+    request=_request();job=service.submit(request)['job']
+    claim=attempts.claim(ClaimJob(job_id=job.job_id,lease_owner='runtime-worker',now_us=NOW+10,lease_duration_us=1000))
+    receipt=_receipt(request)
+    read=JobRepository.get_by_runtime_load
+    published=False
+    def interleaved(repository,load_id):
+        nonlocal published
+        value=read(repository,load_id)
+        if not published:
+            published=True
+            # 在任务查询与回执查询之间提交真实另一事务，不靠随机计时撞到窗口。
+            service.publish(job_id=job.job_id,attempt=1,lease_owner='runtime-worker',fencing_token=claim.job.fencing_token,receipt=receipt)
+        return value
+    monkeypatch.setattr(JobRepository,'get_by_runtime_load',interleaved)
+    before=service.operation(request.project_id,request.operation_id)
+    assert before['job'].state is JobState.RUNNING and before['receipt'] is None
+    after=service.operation(request.project_id,request.operation_id)
+    assert after['job'].state is JobState.SUCCEEDED and after['receipt']==receipt
+
 pytestmark = [pytest.mark.level4]

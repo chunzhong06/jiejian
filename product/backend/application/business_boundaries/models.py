@@ -11,6 +11,7 @@ from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTER
 from product.backend.domain.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision
 from product.backend.domain.boundaries.semantics import PermissionExpectation
 from product.protocols.checks.conditions import PermissionConditions
+from product.protocols.checks.field_mutation import FieldMutationRequirement
 from product.backend.application.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,
@@ -206,6 +207,7 @@ class BoundaryReviewEffect(BoundaryWorkflowModel):
     description: str = Field(default="", max_length=1024)
     expected_state: str | None = None
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
+    field_mutation: FieldMutationRequirement | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 # 前后两侧只携带业务语义；审批记录、来源快照与运行信息不混入对照值。

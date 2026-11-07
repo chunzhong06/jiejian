@@ -14,6 +14,13 @@ from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.application.checks.history import MaintainHistory
 from product.protocols.checks.execution_request import PermissionReference
 from product.backend.application.checks.service import ExternalRecheckCommand
+from product.protocols.checks.scenarios import ScenarioReference
+from product.backend.application.checks.reading.results import CheckRunStatus, CheckRunView, CheckJobView, CheckHistoryPage
+
+
+class RunSubmissionProjection(ApiModel):
+    run: CheckRunView
+    job: CheckJobView
 
 
 async def require_local_history_session(request:Request):
@@ -28,19 +35,21 @@ class RunCreateRequest(ApiModel):
     change_id: str | None = Field(default=None,pattern=r"^chg_[0-9a-f]{32}$")
     selected_permissions: list[PermissionReference] | None = Field(default=None, min_length=1, max_length=4096)
     external_recheck: ExternalRecheckCommand | None = None
+    scenario: ScenarioReference | None = None
 
 
 def build_runs_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/api/projects/{project_id}/runs", response_model=ApiResponse, status_code=202)
+    @router.post("/api/projects/{project_id}/runs", response_model=ApiResponse[RunSubmissionProjection], status_code=202)
     def create_run(project_id: str, body: RunCreateRequest):
         submitted = context.checks.submit(project_id, expected_plan_fingerprint=body.expected_plan_fingerprint,
             idempotency_key=body.idempotency_key,change_id=body.change_id,
-            selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions),external_recheck=body.external_recheck)
+            selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions),external_recheck=body.external_recheck,
+            scenario_reference=body.scenario)
         status = context.check_results.status(submitted.run.run_id, project_id=project_id)
-        return data_response({"run": status.run.model_dump(mode="json"),
-            "job": status.job.model_dump(mode="json")}, status_code=202)
+        return data_response(RunSubmissionProjection(run=status.run, job=status.job),
+            projection=RunSubmissionProjection, status_code=202)
 
     @router.get("/api/projects/{project_id}/runs", response_model=ApiResponse)
     def list_runs(project_id: str, active_only: bool = False):
@@ -56,7 +65,7 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
             job = work.jobs.get_by_idempotency(project_id, 'CHECK', operation_id)
         return data_response(None if job is None else context.check_results.status(job.run_id, project_id=project_id).model_dump(mode='json'))
 
-    @router.get("/api/projects/{project_id}/check-history", response_model=ApiResponse)
+    @router.get("/api/projects/{project_id}/check-history", response_model=ApiResponse[CheckHistoryPage])
     def check_history(project_id: str, limit: int = Query(25, ge=1, le=50),
                       before_created_at_us: int | None = Query(None, ge=0),
                       before_run_id: str | None = Query(None, pattern=RUN_ID_PATTERN),
@@ -67,7 +76,7 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
         if any(item is not None for item in parts) and not all(item is not None for item in parts):raise JiejianError(ErrorCode.INPUT_INVALID,'规则筛选需要准确的标识、修订和摘要')
         return data_response(context.check_results.history(project_id, limit=limit,
             before_created_at_us=before_created_at_us, before_run_id=before_run_id,
-            query=query, verdict=verdict, lifecycle=lifecycle,rule_reference=parts if intent_id is not None else None).model_dump(mode="json"))
+            query=query, verdict=verdict, lifecycle=lifecycle,rule_reference=parts if intent_id is not None else None), projection=CheckHistoryPage)
 
     @router.get('/api/projects/{project_id}/check-history/rules',response_model=ApiResponse)
     def history_rules(project_id:str,limit:int=Query(25,ge=1,le=50),after:str|None=Query(None,max_length=64),include_archived:bool=False):
@@ -82,8 +91,8 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
     @router.get('/api/projects/{project_id}/check-history/index-maintenance/{operation_id}',response_model=ApiResponse)
     def history_index_receipt(project_id:str,operation_id:str):return data_response(context.check_history.receipt(project_id,operation_id))
 
-    @router.get("/api/runs/{run_id}", response_model=ApiResponse)
+    @router.get("/api/runs/{run_id}", response_model=ApiResponse[CheckRunStatus])
     def get_run(run_id: str):
-        return data_response(context.check_results.status(run_id).model_dump(mode="json"))
+        return data_response(context.check_results.status(run_id), projection=CheckRunStatus)
 
     return router

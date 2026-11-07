@@ -6,6 +6,7 @@ import {currentChecksApi} from '../../entities/check/api/currentChecks'
 import {assertProject} from '../../shared/model/page'
 import {go,type Route} from '../../shared/lib/navigation'
 import {useRead} from '../../shared/lib/useRead'
+import {discardProjectEditorDrafts} from '../../entities/runtime/model/handoff'
 
 export function useApplication(current:string,route:Route){
   const [selected,setSelected]=useState(()=>localStorage.getItem('jiejian.studio.project')??'')
@@ -21,6 +22,7 @@ export function useApplication(current:string,route:Route){
   const needsEnvironment=current==='/environment'||current==='/workspace'&&Boolean(project?.official_sample)
   const environment=useRead(needsEnvironment?'environment':null,signal=>experienceApi.status(undefined,true,signal),current==='/environment'?3000:0)
   useEffect(()=>{
+    if(project?.status==='ARCHIVED')discardProjectEditorDrafts(project.project_id)
     if(project?.status==='ARCHIVED'&&current!=='/archive'&&runId){const query=new URLSearchParams(route.query);query.set('project_id',project.project_id);go('/archive?'+query)}
     else if(legacy.data&&!route.query.has('project_id')){const query=new URLSearchParams(route.query);query.set('project_id',legacy.data.run.project_id);go(route.path+'?'+query)}
   },[project?.project_id,project?.status,legacy.data,runId,current])

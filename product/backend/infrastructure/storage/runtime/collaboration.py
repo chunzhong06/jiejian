@@ -5,7 +5,57 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from product.backend.infrastructure.storage.base import Base, _flush, ensure_storage_payload_safe
 from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.identifiers import PROJECT_ID_PATTERN
 from product.protocols.codec import decode_json
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from typing import Literal, Any
+
+
+class _StoredOperation(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True,hide_input_in_errors=True)
+    operation_id:str=Field(pattern=r'^[0-9a-f]{32}$')
+    capability:str
+    title:str
+    fingerprint:str=Field(pattern=r'^[0-9a-f]{64}$')
+    arguments:dict
+    summary:list
+    state:Literal['WAITING_USER','RUNNING','UNKNOWN','SUCCEEDED','FAILED','DECLINED','CANCELLED']
+    result:Any
+    error_code:str|None=None
+
+
+class _StoredQuestion(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True,hide_input_in_errors=True)
+    question_id:str=Field(pattern=r'^[0-9a-f]{32}$')
+    question:str
+    options:list[str]
+    answer:str|None
+
+
+class _StoredTask(BaseModel):
+    """只接受持久边界；保留旧任务的数量，不在读取时裁剪历史或增加默认事实。"""
+    model_config=ConfigDict(extra='forbid',strict=True,hide_input_in_errors=True)
+    schema_version:Literal['1']
+    task_id:str=Field(pattern=r'^ctk_[0-9a-f]{32}$')
+    project_id:str=Field(pattern=PROJECT_ID_PATTERN)
+    state:Literal['WAITING_AGENT','WAITING_USER','RUNNING','BLOCKED','PAUSED','CANCELLED','COMPLETED']
+    revision:int=Field(ge=1)
+    created_at_us:int=Field(ge=0)
+    updated_at_us:int=Field(ge=0)
+    request_fingerprint:str=Field(pattern=r'^[0-9a-f]{64}$')
+    goal:str
+    purpose:Literal['CHECK','CHECK_AND_REPAIR','REPAIR','SETUP','RULES','UNDERSTAND','MAINTENANCE']
+    references:dict[str,str]
+    operations:list[_StoredOperation]
+    questions:list[_StoredQuestion]
+    events:list[dict]
+    execution:dict|None
+    editor:dict|None=None
+    followups:list[dict]=Field(default_factory=list)
+    goal_operation_baseline:int|None=None
+    read_reports:list[str]=Field(default_factory=list)
+    application_read:bool=False
+    outcome:dict|None=None
 
 
 class CollaborationRow(Base):
@@ -43,16 +93,28 @@ class CollaborationRepository:
             .order_by(CollaborationRow.updated_at_us.desc()).limit(1)).first()
         return None if row is None else self._read(row)
 
+    def has_unsettled_write(self,project):
+        """逐条严格接受并在首次命中时停止，避免写锁内同时持有所有任务正文。
+
+        操作仍由原根文档拥有；不建立第二份状态索引，也不以宽松 JSON 路径
+        解释代替重复键、根身份及嵌套状态的严格接受。
+        """
+        rows=self.session.scalars(select(CollaborationRow).where(CollaborationRow.project_id==project)
+            .execution_options(yield_per=1))
+        return any(item['state'] in ('RUNNING','UNKNOWN')
+            for row in rows for item in self._read(row)['operations'])
+
     @staticmethod
     def _read(row):
         # 持久根只有这一处 reader；未知格式不能由当前环境补成一个可继续执行的任务。
         try:
             value = decode_json(row.payload)
+            _StoredTask.model_validate(value)
             if value['schema_version'] != '1' or any(value[key] != getattr(row, key)
                 for key in ('task_id', 'project_id', 'state', 'revision', 'updated_at_us')):
                 raise ValueError('task root identity mismatch')
             return value
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, ValidationError):
             raise JiejianError(ErrorCode.STORAGE_STATE, '协作任务的持久格式或关联不一致') from None
 
     def save(self, value):

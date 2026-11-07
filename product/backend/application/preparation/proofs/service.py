@@ -1,5 +1,6 @@
 # 管理来源候选、GUI读取授权与独立预检查；所有状态由当前事实投影，查询不访问目标。
 import time
+import json
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from product.backend.infrastructure.observers.records.source_contracts import au
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 from product.protocols.runtime.node_runtime import NodeRuntimeReference
 from product.protocols.preparation.proof_sources import ProofSourceRevision,SourceReadScope,ProofPreflightInput,proof_fingerprint,AtomicProofSourceConfig,FileProofSourceConfig,CreationProofSourceConfig,source_read_paths,SqliteProofSourceConfig,SqliteCreationProofSourceConfig,ManagedIdentityClaim,sqlite_read_selections
+from product.protocols.preparation.proof_sources import DatabaseProofSourceConfig
 from product.protocols.checks.check_runtime import CheckIdentity, CheckIdentityVerification
 from product.protocols.web.target import WebTargetScope
 from product.protocols.web.request import HttpRequestTemplate
@@ -114,7 +116,7 @@ class ProofPreparationService:
         return [dict(database_path=database.relative_path,entry_file=manifest.entry,**table.model_dump(mode='json')) for database in manifest.sqlite for table in database.tables]
 
     def sqlite_candidate(self,project_id,*,basis_id,action_id,effect_id,resource_binding_id,database_path,table,protected_column,
-                         tenant_column=None,condition_state_column=None,identity_tenant_path=None):
+                         tenant_column=None,condition_state_column=None,identity_tenant_path=None,relationship_mapping=None):
         from types import SimpleNamespace
         with self._uow() as work:
             facts=self._current(work,project_id,SimpleNamespace(basis_id=basis_id))
@@ -125,14 +127,7 @@ class ProofPreparationService:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先确认操作、资源和 SQLite 测试运行')
             if any(value is not None and value not in choice['fields'] for value in (tenant_column,condition_state_column)):
                 raise JiejianError(ErrorCode.INPUT_INVALID,'条件字段必须来自已声明的测试数据库')
-            actors={item.subject_actor_id for item in facts.boundary.permission_intents if item.business_action_id==action_id}|{item.resource_owner_actor_id for item in facts.boundary.permission_intents if item.business_action_id==action_id}
-            identities=[item for item in facts.identities if item.actor_id in actors and item.prepared_at_us is not None]
-            if not identities or any(item.authentication is None for item in identities):
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先为本次账号配置实际身份接口')
-            claims=tuple(ManagedIdentityClaim(identity_id=item.identity_id,application_subject_id=item.authentication.verification.expected_subject,
-                request_path=item.authentication.verification.path,subject_path=item.authentication.verification.subject_path,
-                role_path=item.authentication.verification.role_path,application_role=item.authentication.verification.expected_role,
-                tenant_path=None if identity_tenant_path is None else tuple(identity_tenant_path.split('.'))) for item in identities)
+            claims=self._source_identity_claims(facts,action_id,identity_tenant_path)
             effect=next((item for item in action.effect_catalog if item.effect_id==effect_id),None)
             creation=effect is not None and effect.effect_kind.value=='OBJECT_CREATION'
             model=SqliteCreationProofSourceConfig if creation else SqliteProofSourceConfig
@@ -144,24 +139,113 @@ class ProofPreparationService:
                 observation_identity_id=resource.resource_owner_test_identity_id,resource_binding_id=resource_binding_id,
                 relative_path_template=f'/collections/{table}/{{resource_id}}',collection=table,
                 mappings=mappings,
+                state_field_optional=bool(effect is not None and effect.field_mutation is not None and effect.field_mutation.operation in {'ADD','REMOVE'}),
+                **({'relationship_mapping':relationship_mapping} if relationship_mapping is not None else {}),
                 identity_claims=claims,source_files=(choice['entry_file'],),database_path=database_path,table=table,
                 resource_column=choice['resource_column'],owner_column=choice['owner_column'],protected_column=protected_column,observed_columns=tuple(choice['fields']))
             self._selection(work,project_id,config,facts)
             return config
 
+    @staticmethod
+    def _source_identity_claims(facts,action_id,tenant_path=None):
+        actors={item.subject_actor_id for item in facts.boundary.permission_intents if item.business_action_id==action_id}|{item.resource_owner_actor_id for item in facts.boundary.permission_intents if item.business_action_id==action_id}
+        identities=[item for item in facts.identities if item.actor_id in actors and item.prepared_at_us is not None]
+        if not identities or any(item.authentication is None for item in identities):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先为本次账号配置实际身份接口')
+        return tuple(ManagedIdentityClaim(identity_id=item.identity_id,application_subject_id=item.authentication.verification.expected_subject,
+            request_path=item.authentication.verification.path,subject_path=item.authentication.verification.subject_path,
+            role_path=item.authentication.verification.role_path,application_role=item.authentication.verification.expected_role,
+            tenant_path=None if tenant_path is None else tuple(tenant_path.split('.'))) for item in identities)
+
+    def file_candidate(self,project_id,*,basis_id,action_id,effect_id,resource_binding_id,collection,async_export=None):
+        from types import SimpleNamespace
+        with self._uow() as work:
+            facts=self._current(work,project_id,SimpleNamespace(basis_id=basis_id))
+            action=next((item for item in facts.boundary.actions if item.action_id==action_id),None)
+            resource=next((item for item in facts.resources if self._resource_id(item)==resource_binding_id),None)
+            if action is None or resource is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先确认业务操作和测试资源')
+            config=FileProofSourceConfig(action_id=action_id,action_revision=action.revision,effect_id=effect_id,
+                resource_binding_id=resource_binding_id,observation_identity_id=resource.resource_owner_test_identity_id,
+                relative_path_template=f'/collections/{collection}/{{resource_id}}',collection=collection,
+                mappings={'resource_id':('resource_id',),'owner_id':('owner_id',)},
+                identity_claims=self._source_identity_claims(facts,action_id),reference_resource_id=resource.actual_resource_id,
+                reference_owner_identity_id=resource.resource_owner_test_identity_id,async_export=async_export)
+            self._selection(work,project_id,config,facts)
+            return config
+
+    def database_choices(self,runtime):
+        if runtime is None:return []
+        from product.backend.infrastructure.runtime.process.controlled.node_owned import node_artifact_store
+        from product.protocols.runtime.node_runtime import NodeRuntimeManifest
+        manifest=NodeRuntimeManifest.model_validate_json((node_artifact_store(self.var_dir)/runtime.instance_id/'launch.json').read_bytes())
+        return [item.model_dump(mode='json') for item in manifest.databases]
+
+    def database_candidate(self,project_id,*,basis_id,action_id,effect_id,resource_binding_id,connection_id,protected_column,
+            tenant_column=None,condition_state_column=None,identity_tenant_path=None,relationship_mapping=None):
+        from types import SimpleNamespace
+        from product.protocols.runtime.database_capture import DatabaseCapture
+        with self._uow() as work:
+            facts=self._current(work,project_id,SimpleNamespace(basis_id=basis_id))
+            declared=next((item for item in self.database_choices(facts.runtime) if item['connection_id']==connection_id),None)
+            action=next((item for item in facts.boundary.actions if item.action_id==action_id),None)
+            if declared is None or action is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先确认数据库运行声明和业务操作')
+            capture=DatabaseCapture.model_validate_json(json.dumps(declared))
+            effect=next((item for item in action.effect_catalog if item.effect_id==effect_id),None)
+            resource=next((item for item in facts.resources if self._resource_id(item)==resource_binding_id),None)
+            if effect is None or effect.effect_kind.value!='STATE_MUTATION' or resource is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请选择状态修改效果及其资源')
+            from product.protocols.runtime.node_runtime import NodeRuntimeManifest
+            from product.backend.infrastructure.runtime.process.controlled.node_owned import node_artifact_store
+            launch=NodeRuntimeManifest.model_validate_json((node_artifact_store(self.var_dir)/facts.runtime.instance_id/'launch.json').read_bytes())
+            config=DatabaseProofSourceConfig(action_id=action_id,action_revision=action.revision,effect_id=effect_id,
+                observation_identity_id=resource.resource_owner_test_identity_id,resource_binding_id=resource_binding_id,
+                relative_path_template=f'/collections/{capture.table}/{{resource_id}}',collection=capture.table,
+                mappings={'resource_id':('resource_id',),'owner_id':('owner_id',),'state':('data',protected_column),
+                    **({} if tenant_column is None else {'tenant':('data',tenant_column)}),
+                    **({} if condition_state_column is None else {'condition_state':('data',condition_state_column)})},
+                **({} if relationship_mapping is None else {'relationship_mapping':relationship_mapping}),
+                identity_claims=self._source_identity_claims(facts,action_id,identity_tenant_path),source_files=(launch.entry,),
+                database_capture=capture,protected_column=protected_column)
+            self._selection(work,project_id,config,facts)
+            return config
+
+    def _maintenance_fingerprint(self,project_id,config,command):
+        from product.backend.infrastructure.observers.records.database_capture import preview_database_maintenance
+        if not isinstance(config,DatabaseProofSourceConfig) or command.confirmed is not True:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'数据库维护需要明确确认')
+        fingerprint=preview_database_maintenance(self.var_dir,project_id,config.database_capture,command.purpose)['fingerprint']
+        if fingerprint!=command.maintenance_plan_fingerprint:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'数据库维护对象或配置已经变化')
+        return fingerprint
+
+    def maintenance_preview(self,project_id,source_id,revision,purpose):
+        from product.backend.infrastructure.observers.records.database_capture import preview_database_maintenance
+        with self._uow() as work:
+            source=work.proof_sources.source(project_id,source_id)
+            if source is None or source.revision!=revision or not isinstance(source.config,DatabaseProofSourceConfig):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'数据库来源修订已经变化')
+            return preview_database_maintenance(self.var_dir,project_id,source.config.database_capture,purpose)
+
     def context(self, project_id):
         with self._uow() as work:
             facts = self._facts(work, project_id)
+            # 本次目录共用已经过 reader 核对的授权集合；新请求和执行入口仍重新读取。
+            scopes = work.proof_sources.scopes(project_id)
             boundary, identities, resources = facts.boundary, facts.identities, facts.resources + facts.case_resources
             runtime, basis = facts.runtime, facts.basis_id
             return dict(project_id=project_id, basis_id=basis, runtime_available=runtime is not None,
                 runtime_origin=None if runtime is None else f'http://127.0.0.1:{runtime.port}',
-                sqlite=self.sqlite_choices(runtime),
+                sqlite=self.sqlite_choices(runtime),databases=self.database_choices(runtime),
                 actions=[dict(action_id=item.action_id, revision=item.revision, label=item.display_name,
                     condition_requirements=dict(tenant=any(rule.conditions is not None and rule.conditions.tenant is not None
                         for rule in boundary.permission_intents if rule.business_action_id==item.action_id),
                         resource_state=any(rule.conditions is not None and rule.conditions.resource_states
-                        for rule in boundary.permission_intents if rule.business_action_id==item.action_id)),
+                        for rule in boundary.permission_intents if rule.business_action_id==item.action_id),
+                        relationships=[relation.model_dump(mode='json') for relation in {
+                            relation.fingerprint():relation for rule in boundary.permission_intents
+                            if rule.business_action_id==item.action_id and rule.conditions is not None
+                            for relation in rule.conditions.relationships}.values()]),
                     **self._capture_identity_refs(work,item),
                     effects=[dict(effect_id=effect.effect_id, label=effect.business_label, kind=effect.effect_kind.value)
                         for effect in item.effect_catalog]) for item in boundary.actions],
@@ -171,9 +255,9 @@ class ProofPreparationService:
                     action_revision=item.action_revision, resource_id=item.actual_resource_id,
                     binding_fingerprint=item.binding_fingerprint, case_specific=item in facts.case_resources,
                     owner_identity_id=item.resource_owner_test_identity_id) for item in resources],
-                sources=[self._source_view(work, item, facts) for item in work.proof_sources.list(project_id)],
-                read_scopes=[item.model_dump(mode='json') for item in work.proof_sources.scopes(project_id)],
-                supported_source_kinds=['MANAGED_TRANSACTION_RECORDS','REFERENCE_FILE','CREATED_OBJECT_RECORDS','SQLITE_AUDIT','SQLITE_OBJECTS'],max_response_bytes=262144,max_path_depth=8,
+                sources=[self._source_view(work, item, facts, scopes=scopes) for item in work.proof_sources.list(project_id)],
+                read_scopes=[item.model_dump(mode='json') for item in scopes],
+                supported_source_kinds=['MANAGED_TRANSACTION_RECORDS','REFERENCE_FILE','CREATED_OBJECT_RECORDS','SQLITE_AUDIT','SQLITE_OBJECTS','DATABASE_AUDIT'],max_response_bytes=262144,max_path_depth=8,
                 source_contracts=['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1'],
                 reference_inputs=[item.model_dump(mode='json') for item in work.proof_artifacts.inputs(project_id)],
                 reference_recovery_gaps=self._capture_gaps(work,project_id),
@@ -202,7 +286,7 @@ class ProofPreparationService:
         return dict(execution_identity_id=None if execution is None else execution.subject_test_identity_id,
             recovery_identity_id=None if recovery is None else recovery.subject_test_identity_id)
 
-    def _source_view(self, work, source, facts):
+    def _source_view(self, work, source, facts, *, scopes):
         basis, runtime = facts.basis_id, facts.runtime
         loaded = None
         attempts = work.proof_sources.preflights(source.project_id, source.source_id, source.revision, limit=1)
@@ -214,13 +298,21 @@ class ProofPreparationService:
                 current_basis=request.basis_id == basis, report=None if report is None else report.model_dump(mode='json'))
         adoption = work.proof_sources.adoption(source.project_id, source.source_id)
         supported = isinstance(source.config,AtomicProofSourceConfig)
-        scope = next((item for item in work.proof_sources.scopes(source.project_id)
+        scope = next((item for item in scopes
                       if supported and runtime is not None and self._scope_matches(item, source.config, runtime, facts.case_resources)), None)
+        installation=None
+        if isinstance(source.config,DatabaseProofSourceConfig):
+            from product.backend.infrastructure.observers.records.database_capture import read_database_receipt
+            installed=read_database_receipt(self.var_dir,source.project_id,source.config.database_capture)
+            installation=dict(installed=installed is not None and installed.state=='INSTALLED',
+                state='NOT_INSTALLED' if installed is None else installed.state,
+                generation=None if installed is None else installed.generation)
         return dict(source_id=source.source_id, revision=source.revision, config=source.config.model_dump(mode='json'),
             submitted_via=source.submitted_via, client_name=source.client_name,
             adopted=supported and adoption is not None and adoption.revision == source.revision,
-            usable=self._active_source(work, source, facts, loaded=loaded) is not None,
+            usable=self._active_source(work, source, facts, adoption=adoption, loaded=loaded) is not None,
             supported=supported, requires_migration=not supported,
+            **({} if installation is None else {'database_installation':installation}),
             read_scope_confirmed=scope is not None, matching_read_scope_id=None if scope is None else scope.scope_id,
             preflight=attempt)
 
@@ -231,7 +323,7 @@ class ProofPreparationService:
             if source is None:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, '证明来源不存在')
             return dict(project_id=project_id, basis_id=facts.basis_id,
-                **self._source_view(work, source, facts))
+                **self._source_view(work, source, facts, scopes=work.proof_sources.scopes(project_id)))
 
     def _operation(self, project_id, kind, command, execute):
         # 回执与实际修改共用事务；响应丢失后复用原标识，同标识的另一份输入必须拒绝。
@@ -266,6 +358,8 @@ class ProofPreparationService:
     def _selection(self, work, project_id, config, facts):
         if not isinstance(config,AtomicProofSourceConfig):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'旧来源核验方式已停止使用，请通过通用记录组件重新准备来源',details={'reason':'PROOF_SOURCE_REQUIRES_MIGRATION'})
+        if isinstance(config,DatabaseProofSourceConfig) and config.database_capture.model_dump(mode='json') not in self.database_choices(facts.runtime):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'数据库投影不属于当前已声明的受控运行')
         boundary, identities, resources = facts.boundary, facts.identities, facts.resources
         action = next((item for item in boundary.actions if (item.action_id,item.revision) == (config.action_id,config.action_revision)), None)
         effect = None if action is None else next((item for item in action.effect_catalog if item.effect_id == config.effect_id), None)
@@ -278,6 +372,10 @@ class ProofPreparationService:
         expected_kind='OBJECT_CREATION' if isinstance(config,CreationProofSourceConfig) else 'FILE_CONTENT_DELIVERY' if isinstance(config,FileProofSourceConfig) else 'STATE_MUTATION' if config.source_contract_id=='TRANSACTION_HISTORY_V2' else 'DATA_DISCLOSURE'
         if effect.effect_kind.value != expected_kind or set(config.protected_projection) != set(effect.protected_projection):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'来源类型或受保护字段与已确认的业务要求不一致')
+        if effect.field_mutation is not None and tuple(config.mappings.get('state', ()))[1:] != effect.field_mutation.path:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'写入证明必须读取权限要求中的准确业务字段')
+        if config.state_field_optional and (effect.field_mutation is None or effect.field_mutation.operation not in {'ADD','REMOVE'}):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'只有明确的字段新增或移除要求可以采用字段缺失证明')
         if isinstance(config,FileProofSourceConfig) and (config.reference_resource_id,config.reference_owner_identity_id)!=(resource.actual_resource_id,resource.resource_owner_test_identity_id):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'文件来源与已确认资源或所有者不一致')
         if isinstance(config,FileProofSourceConfig) and config.reference_artifact is not None:
@@ -326,6 +424,7 @@ class ProofPreparationService:
             and config.read_scope_id in (None,scope.scope_id)
             and set(source_read_paths(config)) <= set(scope.path_templates)
             and all(item in scope.sqlite for item in sqlite_read_selections(config))
+            and (not isinstance(config,DatabaseProofSourceConfig) or config.database_capture in scope.databases)
             and {item.identity_id for item in config.identity_claims} <= set(scope.identity_ids)
             and config.resource_binding_id in scope.resource_binding_ids
             and {'res_'+item.binding_fingerprint[:32] for item in case_resources if item.business_action_id == config.action_id} <= set(scope.resource_binding_ids)
@@ -353,7 +452,8 @@ class ProofPreparationService:
                 resource_binding_ids=tuple(sorted({config.resource_binding_id, *(self._resource_id(item) for item in facts.case_resources
                     if item.business_action_id == config.action_id)})), max_response_bytes=config.max_response_bytes,
                 timeout_us=config.timeout_us, created_at_us=self._clock())
-            scope=scope.model_copy(update={'sqlite':sqlite_read_selections(config)})
+            scope=scope.model_copy(update={'sqlite':sqlite_read_selections(config),
+                **({'databases':(config.database_capture,)} if isinstance(config,DatabaseProofSourceConfig) else {})})
             work.proof_sources.add_scope(scope)
             return dict(scope_id=scope.scope_id, state='GRANTED')
         return self._operation(project_id, 'GRANT_SCOPE', command, execute)
@@ -386,7 +486,9 @@ class ProofPreparationService:
                     max_requests=len(identities)+1, max_response_bytes=config.max_response_bytes,
                     timeout_seconds=config.timeout_us/1_000_000), identities=identities, identity_roles=roles,
                 resource_id=resource.actual_resource_id, owner_subject_id=claims[resource.resource_owner_test_identity_id],
-                runtime_reference=runtime, contract=contract, created_at_us=self._clock())
+                runtime_reference=runtime, contract=contract, created_at_us=self._clock(),
+                **({} if not hasattr(command,'purpose') else dict(purpose=command.purpose,
+                    maintenance_plan_fingerprint=self._maintenance_fingerprint(project_id,config,command))))
             job = self.jobs.submit(work, request, operation_id=command.operation_id)
             return dict(preflight_id=request.preflight_id, job_id=job.job_id, state=job.state.value)
         return self._operation(project_id, 'START_PREFLIGHT', command, execute)
@@ -424,7 +526,7 @@ class ProofPreparationService:
     def _adoptable(self, work, project_id, source, preflight_id, facts, *, require_current_basis=True, loaded=None):
         # 新采用要核对完整预览；运行复用只核来源实际依赖，实际主体由每个 Case 独立核验。
         request, job, report = loaded if loaded is not None else self.jobs.read(work,project_id,preflight_id)
-        if (request.schema_version != '1' or (report is not None and report.schema_version != '1')
+        if (request.purpose!='READ' or request.schema_version != '1' or (report is not None and report.schema_version != '1')
                 or request.source_id != source.source_id or request.source_revision != source.revision
                 or request.source_fingerprint != source.fingerprint or (require_current_basis and request.basis_id != facts.basis_id)
                 or report is None or report.assessment != 'USABLE' or request.contract is None
@@ -452,6 +554,7 @@ class ProofPreparationService:
                 source_path=source.config.relative_path_template,read_paths=source_read_paths(source.config),resource_id=resource.actual_resource_id,
                 collection=source.config.collection,mappings={key:'.'.join(path) for key,path in source.config.mappings.items()},
                 expected_state=effect.expected_state,protected_projection=source.config.protected_projection,
+                field_mutation=effect.field_mutation,
                 retained=['权限规则','操作材料','测试账号','恢复材料'],recheck=['结果证明','恢复后的结果核对'],
                 gui_url=f'#/tests?materials=1&proof_sources=1&project_id={project_id}&source={source_id}&action_id={action.action_id}')
 
@@ -484,14 +587,14 @@ class ProofPreparationService:
         with self._uow() as work:
             facts = self._facts(work,project_id)
             for source in work.proof_sources.list(project_id,limit=256):
-                active = self._active_source(work, source, facts)
+                active = self._active_source(work, source, facts,
+                    adoption=work.proof_sources.adoption(project_id, source.source_id))
                 if active is not None:
                     result.append(active)
         return tuple(result)
 
-    def _active_source(self, work, source, facts, *, loaded=None):
+    def _active_source(self, work, source, facts, *, adoption, loaded=None):
         project_id = source.project_id
-        adoption = work.proof_sources.adoption(project_id, source.source_id)
         if adoption is None or adoption.revision != source.revision:
             return None
         binding = work.action_preparation.evidence(source.config.action_id, source.config.action_revision, source.config.effect_id)
@@ -518,6 +621,22 @@ class ProofPreparationService:
             source_fingerprint=source.fingerprint,config=source.config,contract=request.contract,
             owner_subject_id=request.owner_subject_id,identity_roles=request.identity_roles,adoption_preflight_id=request.preflight_id)
             for source,request,*_ in self.active_sources(project_id))
+
+    def sources_authorized(self,project_id,sources):
+        """核对场景冻结来源仍有原采用、读取范围和主体授权，不连接目标或重做预检。"""
+        with self._uow() as work:
+            work.begin_read_snapshot()
+            for frozen in sources:
+                source=work.proof_sources.source(project_id,frozen.source_id)
+                adoption=work.proof_sources.adoption(project_id,frozen.source_id)
+                if source is None or (source.revision,source.fingerprint)!=(frozen.revision,frozen.source_fingerprint):return False
+                if adoption is None or adoption.preflight_id!=frozen.adoption_preflight_id:return False
+                request=work.proof_sources.preflight(project_id,adoption.preflight_id)
+                binding=work.action_preparation.evidence(source.config.action_id,source.config.action_revision,source.config.effect_id)
+                if (request is None or binding is None or binding.binding_fingerprint!=adoption.binding_fingerprint
+                        or work.proof_sources.scope(project_id,request.scope.scope_id)!=request.scope
+                        or not self.authority_active(project_id,request.authority_id)):return False
+        return True
 
     def job_authorized(self, job):
         if job.preflight_id is None:

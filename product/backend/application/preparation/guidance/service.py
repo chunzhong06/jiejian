@@ -113,10 +113,18 @@ def _source_advice(context, source):
         return advice('WAIT_PREFLIGHT', '查看正在进行的预检查',
             '已有预检查正在处理，查询原任务即可，不需要再次提交。',
             'SYSTEM', 'jiejian_proof_preflight_status', 'READ', 'WAITING')
+    if config.get('source_kind')=='DATABASE_AUDIT' and not source.get('database_installation',{}).get('installed'):
+        partial=source.get('database_installation',{}).get('state') in {'INCOMPLETE','REMOVING'}
+        return advice('REVIEW_DATABASE_CLEANUP' if partial else 'REVIEW_DATABASE_INSTALLATION',
+            '核对未完成的审计组件' if partial else '审阅并安装数据库审计组件',
+            '先核对原操作和已确认对象，不能重放结构变更。' if partial else '此操作会修改已声明测试库的结构；对象和准确安装计划须由你在界面确认。')
     if source.get('usable'):
         return ProofSourceAdvice(source_id=source['source_id'], revision=source['revision'], state='USABLE', next_action=None)
     if attempt and attempt['state'] == 'SUCCEEDED' and attempt['current_basis'] and attempt['report']:
         report = attempt['report']
+        if report['assessment']=='COMPLETED':
+            return advice('RUN_PREFLIGHT','核对安装后的证明来源','组件维护已结束；仍需读取实际账号、资源和提交记录，维护完成不代表来源可用。',
+                'EITHER','jiejian_proof_preflight_start','EXECUTE')
         if report['assessment'] == 'USABLE':
             if source['adopted']:
                 return ProofSourceAdvice(source_id=source['source_id'], revision=source['revision'],

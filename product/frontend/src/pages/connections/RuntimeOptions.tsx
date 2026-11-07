@@ -3,9 +3,10 @@ import {Choice} from '../../shared/ui/Choice'
 import type {RuntimeCapabilities,RuntimeSettings,SqliteCapture} from '../../entities/application/api/projects'
 import {Button} from '../../shared/ui/actions'
 import {Badge} from '../../shared/ui/feedback'
-import {Field} from '../../shared/ui/layout'
+import {Field,FormColumns,SectionHeading} from '../../shared/ui/layout'
+import {ServiceDatabaseOptions} from './ServiceDatabaseOptions'
 
-export function RuntimeOptions({capabilities,value,onChange,disabled}:{capabilities?:RuntimeCapabilities;value:RuntimeSettings;onChange:(next:RuntimeSettings)=>void;disabled:boolean}) {
+export function RuntimeOptions({projectId,capabilities,value,onChange,disabled}:{projectId?:string;capabilities?:RuntimeCapabilities;value:RuntimeSettings;onChange:(next:RuntimeSettings)=>void;disabled:boolean}) {
     const databases=value.sqlite??[]
     const suggestions=capabilities?.sqlite_setup
     const availablePaths=suggestions?.paths.filter(path=>!databases.some(database=>database.relative_path===path))??[]
@@ -43,11 +44,12 @@ export function RuntimeOptions({capabilities,value,onChange,disabled}:{capabilit
                                 changeTable({...table,owner_column:owner,fields:retained.length?retained:available.length===1?available:[]})
                             }}>{schema.columns.filter(column=>column!==table.resource_column).map(column=><option key={column}>{column}</option>)}</Choice></Field>
                         </div><fieldset className="jj-runtime-observed-fields" disabled={disabled}><legend>需要核对的业务数据</legend>{[...new Set([...schema.columns,...table.fields])].filter(column=>column!==table.resource_column&&column!==table.owner_column).map(column=><label className="jj-checkbox" key={column}><input type="checkbox" checked={table.fields.includes(column)} onChange={event=>changeTable({...table,fields:event.target.checked?[...table.fields,column]:table.fields.filter(item=>item!==column)})}/><span>{column}</span></label>)}</fieldset><p className="jj-small jj-muted">结构来自源码，启动后仍会核对数据库中的实际字段。</p></>:<p className="jj-small jj-muted">选择业务数据表后，直接对应编号、所有者与业务字段。</p>}
-                    </>:<div className="jj-runtime-table-fields">{textField('数据表','table')}{textField('资源编号字段','resource_column')}{textField('所有者字段','owner_column')}{textField('需观察的业务字段','fields')}</div>}</div>
+                    </>:<FormColumns><section className="jj-field-stack"><SectionHeading title="定位业务记录" level={3} appearance="group"/>{textField('数据表','table')}{textField('资源编号字段','resource_column')}{textField('所有者字段','owner_column')}</section><section className="jj-field-stack"><SectionHeading title="核对业务结果" level={3} appearance="group"/>{textField('需观察的业务字段','fields')}<p className="jj-small jj-muted">只填写本次结果需要核对的字段，以逗号分隔。</p></section></FormColumns>}</div>
                 })}
                 <Button kind="quiet" disabled={disabled} onClick={()=>setManual(manual===index?undefined:index)}>{manual===index?'返回配置摘要':'调整数据对应'}</Button>
             </div>)}
             </section>
+            <ServiceDatabaseOptions projectId={projectId} value={value.databases??[]} onChange={databases=>onChange({...value,databases})} disabled={disabled}/>
         </div>
     </details>
 }

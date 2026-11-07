@@ -3,6 +3,7 @@
 # 观察器只解释关联、状态机、预算和完整性，不决定安全结论。
 
 from __future__ import annotations
+from product.backend.domain.verification.async_progress import task_transition
 from product.backend.infrastructure.observers.artifacts import write_atomic as _write_atomic
 
 import hashlib
@@ -230,7 +231,6 @@ def _run_child(invocation: AsyncTaskObserverInvocation, *, utc_now_us: Callable[
     states: list[AsyncTaskStatus] = []
     task_id: str | None = None
     final_result: dict[str, Any] | None = None
-    previous_order = -1
     terminal: AsyncTaskStatus | None = None
     last_response: dict[str, Any] | None = None
     reason: str | None = None
@@ -261,19 +261,14 @@ def _run_child(invocation: AsyncTaskObserverInvocation, *, utc_now_us: Callable[
             current = AsyncTaskStatus(response["state"])
             current_task = response["task_id"]
             # 整次轮询必须跟随同一任务且状态不倒退；终态后变化保留冲突，不能只采用最后一次响应。
-            if task_id is not None and current_task != task_id:
+            try:
+                task_transition(states[-1] if states else None,task_id,current,current_task)
+            except ValueError:
                 reason = ASYNC_TASK_STATE_CONFLICT
                 break
             if current_task is not None:
                 task_id = current_task
             order = _STATE_ORDER[current]
-            if terminal is not None and current is not terminal:
-                reason = ASYNC_TASK_STATE_CONFLICT
-                break
-            if terminal is None and order < previous_order:
-                reason = ASYNC_TASK_STATE_CONFLICT
-                break
-            previous_order = order
             if terminal is None and order == 3:
                 terminal = current
                 final_result = response["final_result"]

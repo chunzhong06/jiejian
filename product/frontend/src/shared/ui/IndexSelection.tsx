@@ -7,5 +7,10 @@ export function IndexSelection({children,identity,className='',as='div',label}:{
   const root=useRef<HTMLElement|null>(null)
   const indicator=useSelectionIndicator(root,'.jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true])',identity,'surface')
   const Root=as,Marker=as==='ol'?'li':'span'
-  return <Root ref={(node:HTMLElement|null)=>{root.current=node}} className={'jj-index-selection '+className} aria-label={label}>{indicator&&<Marker className="jj-index-surface" aria-hidden="true" style={indicator}/>} {children}</Root>
+  return <Root ref={(node:HTMLElement|null)=>{root.current=node}} className={'jj-index-selection '+className} aria-label={label}>{indicator&&<Marker data-selection-indicator className="jj-index-surface" aria-hidden="true" style={indicator}/>} {children}</Root>
+}
+
+/** 追加操作与已有条目分组，保持图标列对齐，不参与索引选中面。 */
+export function IndexActions({children}:{children:ReactNode}) {
+  return <div className="jj-index-actions">{children}</div>
 }

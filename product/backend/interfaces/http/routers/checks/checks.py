@@ -7,10 +7,12 @@ from product.backend.bootstrap import ApplicationCore
 from product.protocols.checks.execution_request import PermissionReference
 from product.backend.application.checks.routines import SaveCheckRoutine
 from product.backend.application.checks.service import ExternalRecheckCommand
+from product.protocols.checks.scenarios import ScenarioReference
 
 
 class CheckScopeRequest(ApiModel):
-    selected_permissions: list[PermissionReference] = Field(min_length=1, max_length=4096)
+    selected_permissions: list[PermissionReference] | None = Field(default=None,min_length=1,max_length=4096)
+    scenario: ScenarioReference | None = None
 
 
 def build_checks_router(context: ApplicationCore) -> APIRouter:
@@ -39,6 +41,10 @@ def build_checks_router(context: ApplicationCore) -> APIRouter:
 
     @router.post("/api/projects/{project_id}/check-preview", response_model=ApiResponse)
     def selected_preview(project_id: str, body: CheckScopeRequest):
-        return data_response(context.checks.preview(project_id, selected_permissions=tuple(body.selected_permissions)).model_dump(mode="json"))
+        if body.selected_permissions is None and body.scenario is None:
+            from product.backend.domain.errors import ErrorCode,JiejianError
+            raise JiejianError(ErrorCode.INPUT_INVALID,'请选择规则范围或业务场景')
+        return data_response(context.checks.preview(project_id,selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions),
+            scenario_reference=body.scenario).model_dump(mode="json"))
 
     return router

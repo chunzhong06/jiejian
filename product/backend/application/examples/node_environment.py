@@ -11,17 +11,18 @@ from product.backend.infrastructure.runtime.process.tree import kernel_tree_has_
 from product.backend.application.examples.environment import OfficialExperienceView,OfficialScenarioVersion
 from product.backend.application.examples.journey import OfficialDevelopmentJourney
 from product.backend.application.preparation.supplemental.contract import request_uuid
-from product.backend.application.examples.gallery_recipe import gallery_recipe,BASELINE,VULNERABLE,EXPOSE_REVOKE,PREVIEW_CHANGED
+from product.backend.application.examples.gallery_recipe import ACTION_ROUTES,gallery_recipe,BASELINE,VULNERABLE,EXPOSE_REVOKE,PREVIEW_CHANGED
 
 
 class NodeOfficialSampleExperience:
     def __init__(self,manager,*,runtime,understanding,boundaries,identities,identity_preparations,preparation,proofs,artifacts,installer,changes,reader,repairs,
-                 uow_factory,archive_project,cancel_check,clock_us=None):
+                 uow_factory,archive_project,cancel_check,clock_us=None,development_reader=None):
         self.manager,self.runtime,self.understanding,self.boundaries=manager,runtime,understanding,boundaries
         self.identities,self.preparation,self.proofs,self.installer=identities,preparation,proofs,installer
         self.identity_preparations=identity_preparations
         self.artifacts=artifacts
         self.changes,self.reader,self.repairs=changes,reader,repairs
+        self.development_reader=development_reader
         self._uow,self.archive,self.cancel_check=uow_factory,archive_project,cancel_check
         self.clock=clock_us or (lambda:time.time_ns()//1000)
         self._lock=RLock();self._operation=None;self._operation_thread=None
@@ -80,7 +81,7 @@ class NodeOfficialSampleExperience:
     def _change_id(self,project,stages):
         workspace=self._workspace()
         for stage in stages:
-            value=self.changes.receipt(project,'DELIVER',self._key(workspace['workspace_id'],stage))
+            value=self.development_reader.receipt(project,'DELIVER',self._key(workspace['workspace_id'],stage))
             if value is not None:return value.change_id
         return None
 
@@ -173,6 +174,31 @@ class NodeOfficialSampleExperience:
         command=gallery_recipe(exhibition_download,self.understanding.get(current.project_id))
         return self.boundaries.create_initial_proposal(current.project_id,command)
 
+    def gallery_identities(self,project):
+        boundary=self.boundaries.view(project)
+        actors={item.display_name:item for item in boundary.actors}
+        actions={item.display_name:item for item in boundary.actions}
+        if set(actors)!={'项目负责人','评审'} or set(actions)!=set(ACTION_ROUTES):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先审阅数字展馆的权限提案，再准备示例材料')
+        if any(item.status!='CURRENT' for item in (*boundary.actor_bindings,*boundary.action_bindings)):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先核对当前代码与原业务动作的对应')
+        identities=[];existing=self.identities.list(project)
+        self.runtime.state(project)
+        with self._uow() as work:
+            load=work.runtime_loads.latest(project)
+        for name,label in [('项目负责人','curator · 项目负责人'),('评审','judge · 评审')]:
+            actor=actors[name];found=[item for item in existing if item.actor_id==actor.actor_id and item.actor_revision==actor.revision]
+            if len(found)>1:raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色有多个账号，请在普通准备界面选择实际测试账号')
+            if found and found[0].label != label:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色使用自定义账号，请在账号页完成登录后准备材料')
+            identity=found[0] if found else self.identities.create(project,actor_id=actor.actor_id,actor_revision=actor.revision,label=label)
+            # 示例登录会话属于目标进程；通用代码加载也会换进程，不能复用其启动前的登录。
+            if load and identity.prepared_at_us is not None and identity.prepared_at_us < load.created_at_us:
+                identity=self.identities.reset(identity.identity_id)
+            identities.append(identity)
+        return identities
+
+
     def prepare(self):
         with self._lock:
             current=self._active();self._idle(current.project_id)
@@ -208,7 +234,7 @@ class NodeOfficialSampleExperience:
             current=self._active(lightweight=True);workspace=self._workspace();self._idle(current.project_id)
             version=OfficialScenarioVersion(version)
             if version is OfficialScenarioVersion.EVIDENCE_LIMITED:return self.set_observation(available=False)
-            saved=self.changes.receipt(current.project_id,'DELIVER',self._key(workspace['workspace_id'],version.value))
+            saved=self.development_reader.receipt(current.project_id,'DELIVER',self._key(workspace['workspace_id'],version.value))
             if saved is not None:return self.status()
             journey=self.development_journey()
             if journey.implementation=='CUSTOM':raise JiejianError(ErrorCode.STATE_PRECONDITION,'源码已由外部修改，不能覆盖为预设实现')

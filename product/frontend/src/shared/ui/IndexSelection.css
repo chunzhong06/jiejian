@@ -1,12 +1,26 @@
 .jj-index-selection { position:relative; isolation:isolate; min-width:0; background:transparent; }
-.jj-index-surface { position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; list-style:none; background:var(--selected); pointer-events:none; transition:transform var(--motion-indicator) var(--ease-layout),width var(--motion-indicator) var(--ease-layout),height var(--motion-indicator) var(--ease-layout); }
-.jj-index-surface::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent); }
-.jj-index-selection .jj-index-item { position:relative; z-index:1; width:100%; min-height:50px; padding:11px 20px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ink); text-align:left; font-size:var(--text-body); font-weight:550; cursor:pointer; --state-fill:var(--hover); }
+.jj-index-surface { position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; list-style:none; background:var(--selected); pointer-events:none; transition:none; }
+.jj-index-surface::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--selection-mark); }
+.jj-index-selection .jj-index-item { position:relative; z-index:1; width:100%; min-height:56px; padding:14px 20px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ink); text-align:left; font-size:var(--text-body); font-weight:550; cursor:pointer; --state-fill:var(--hover); }
 .jj-index-item :is(small,time,code) { font-weight:400; }
 .jj-index-item > .anticon:first-child { display:inline-flex; align-items:center; justify-content:center; flex:none; width:28px; height:28px; }
 .jj-index-selection .jj-index-item > .jj-result-symbol { width:28px; height:28px; align-self:center; margin:0; }
-.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) { background:transparent; color:var(--accent-ink); box-shadow:none; --state-fill:transparent; }
+.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) { background:transparent; color:var(--selected-ink); box-shadow:none; --state-fill:var(--selected-hover); }
+/* 悬停面在移动选择标记上方，需同时保留标记所在的左边缘。 */
+.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true])::before { box-shadow:inset 3px 0 var(--selection-mark); }
 /* 选中蓝底上的短状态文字沿用选中前景，避免语义色直接叠在另一种底色上。 */
 .jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) :is(small,time,[data-tone]) { color:inherit; }
+.jj-index-selection .jj-index-item:is([aria-current=true],[aria-current=page],[aria-current=step],[aria-pressed=true]) :is(small,time):not([data-tone]) { color:var(--selected-muted); }
 .jj-index-selection .jj-index-item.jj-button:active { transform:none; }
 .jj-index-selection .jj-index-item:disabled { cursor:default; }
+
+.jj-step-select { display:grid; grid-template-columns:28px minmax(0,1fr) 14px; gap:14px; align-items:center; }
+.jj-step-select strong { font-weight: 500; font-size: var(--text-meta); }
+.jj-step-select:hover { color: var(--ink); }
+.jj-step-select > .anticon { opacity: 0; font-size: var(--text-meta); }
+.jj-step-select[aria-current=step] > .anticon { opacity: 1; }
+.jj-trace-order { width: 26px; height: 26px; display: grid; place-items: center; font-size: var(--text-meta); color: var(--muted); background: var(--soft); border-radius: 50%; }
+.jj-step-select[aria-current=step] .jj-trace-order { color:var(--selected-ink); background: var(--surface); }
+.jj-index-actions { display:grid; gap:12px; margin-top:24px; padding-inline:8px; }
+.jj-index-actions > .jj-button { width:100%; max-width:100%; min-height:44px; justify-content:flex-start; gap:14px; padding:12px; text-align:left; }
+.jj-index-actions > .jj-button > .anticon { display:inline-flex; justify-content:center; width:28px; flex:none; }

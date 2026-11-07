@@ -1,4 +1,4 @@
-from sqlalchemy import String,Integer,Text,BigInteger,ForeignKey,select
+from sqlalchemy import String,Integer,Text,BigInteger,ForeignKey,select,func,and_
 from sqlalchemy.orm import Mapped,mapped_column
 from product.backend.infrastructure.storage.base import Base,_flush,ensure_storage_payload_safe
 from product.protocols.preparation.operation_flow import OperationFlow
@@ -23,14 +23,19 @@ class OperationFlowRepository:
         return None if row is None else OperationFlow.model_validate_json(row.payload_json,strict=True)
 
     def latest(self,project_id):
-        rows=self._session.scalars(select(OperationFlowRow).where(OperationFlowRow.project_id==project_id).order_by(OperationFlowRow.created_at_us.desc(),OperationFlowRow.revision.desc())).all()
-        seen=set()
-        result=[]
-        for row in rows:
-            if row.flow_id in seen:continue
-            seen.add(row.flow_id)
-            result.append(dict(document=OperationFlow.model_validate_json(row.payload_json,strict=True),adopted=row.adopted_at_us is not None))
-        return result
+        revisions=select(OperationFlowRow.flow_id,func.max(OperationFlowRow.revision).label('revision')).where(
+            OperationFlowRow.project_id==project_id).group_by(OperationFlowRow.flow_id).subquery()
+        rows=self._session.scalars(select(OperationFlowRow).join(revisions,and_(
+            OperationFlowRow.flow_id==revisions.c.flow_id,OperationFlowRow.revision==revisions.c.revision))
+            .where(OperationFlowRow.project_id==project_id)
+            .order_by(OperationFlowRow.created_at_us.desc(),OperationFlowRow.flow_id))
+        return [dict(document=OperationFlow.model_validate_json(row.payload_json,strict=True),
+            adopted=row.adopted_at_us is not None) for row in rows]
+
+    def latest_revision(self,project_id,flow_id):
+        row=self._session.scalars(select(OperationFlowRow).where(OperationFlowRow.project_id==project_id,
+            OperationFlowRow.flow_id==flow_id).order_by(OperationFlowRow.revision.desc()).limit(1)).first()
+        return None if row is None else OperationFlow.model_validate_json(row.payload_json,strict=True)
 
     def add(self,document,now):
         ensure_storage_payload_safe(document.model_dump(mode='json'),self._secrets)

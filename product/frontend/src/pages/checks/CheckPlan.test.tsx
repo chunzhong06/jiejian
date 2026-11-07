@@ -14,6 +14,24 @@ beforeEach(()=>{
   vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:['下载','预览'].map((display_name,index)=>({action_id:'action'+index,display_name,identity_requirements:{slots:[]},effect_evidence:[]}))} as never)
   vi.spyOn(currentChecksApi,'preview').mockResolvedValue({project_id:'app',can_execute:false,plan_fingerprint:'basis',action_count:2,case_count:0,actions:[],gaps:[0,0,1].map(index=>({action_id:'action'+index,reason:'TEST_IDENTITY_REQUIRED'}))} as never)
 })
+it('恢复选定范围只构造该范围预览，空选区不隐式检查全部',async()=>{
+  const ref={intent_id:'chosen',revision:1,intent_hash:'hash'}
+  sessionStorage.setItem('jiejian.studio.scope:app:selection',JSON.stringify({refs:[ref]}))
+  const value=props();value.route.query.set('scope_id','selection')
+  render(<Plan {...value}/>)
+  await screen.findByRole('heading',{name:'准备检查材料'})
+  expect(currentChecksApi.preview).toHaveBeenCalledTimes(1)
+  expect(currentChecksApi.preview).toHaveBeenCalledWith('app',null,[ref],undefined)
+})
+
+it('空选区保持选择状态且不构造预览',async()=>{
+  sessionStorage.setItem('jiejian.studio.scope:app:empty',JSON.stringify({refs:[]}))
+  const value=props();value.route.query.set('scope_id','empty')
+  render(<Plan {...value}/>)
+  await screen.findByText('选中左侧规则，即可查看将执行的场景。')
+  expect(currentChecksApi.preview).not.toHaveBeenCalled()
+})
+
 it('同类缺口保留所属操作，处理入口携带返回检查的上下文',async()=>{
   render(<Plan {...props()}/>);
   const action=(await screen.findByRole('heading',{name:'下载'})).closest('article')!

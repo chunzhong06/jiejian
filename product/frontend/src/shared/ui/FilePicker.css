@@ -1,0 +1,16 @@
+.jj-file-picker-wrap { min-width:0; container-type:inline-size; }
+.jj-file-picker { display:flex; align-items:center; gap:16px; min-width:0; min-height:80px; padding:16px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); transition:border-color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond); }
+.jj-file-picker[data-dragging=true] { border-color:var(--accent); background:var(--selected); }
+.jj-file-picker[data-disabled=true] { color:var(--muted); }
+.jj-file-symbol { flex:none; font-size:24px; color:var(--muted); line-height:1; }
+.jj-file-information { display:grid; gap:6px; min-width:0; flex:1; }
+.jj-file-name { color:var(--ink); font-weight:600; overflow-wrap:anywhere; }
+.jj-file-information > small { color:var(--muted); font-size:var(--text-meta); line-height:1.5; overflow-wrap:anywhere; }
+.jj-file-actions { display:flex; flex:none; gap:8px; align-items:center; }
+.jj-file-actions > .jj-button:has(> .anticon:only-child) { width:32px; min-height:32px; padding:0; }
+.jj-file-error { display:block; margin-top:8px; color:var(--bad); font-size:var(--text-meta); }
+@container (max-width:380px) {
+  .jj-file-picker { flex-wrap:wrap; }
+  .jj-file-information { flex-basis:calc(100% - 40px); }
+  .jj-file-actions { margin-left:auto; }
+}

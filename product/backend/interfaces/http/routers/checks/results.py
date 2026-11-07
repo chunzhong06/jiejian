@@ -4,6 +4,7 @@ from typing import Annotated
 
 from product.backend.interfaces.http.envelope import ApiResponse, data_response
 from product.backend.bootstrap import ApplicationCore
+from product.backend.application.checks.reading.story import ResultStory
 
 
 def build_results_router(context: ApplicationCore) -> APIRouter:
@@ -13,9 +14,9 @@ def build_results_router(context: ApplicationCore) -> APIRouter:
     def repair_contracts(run_id: str):
         return data_response([item.model_dump(mode="json") for item in context.check_repairs.contracts(run_id)])
 
-    @router.get("/api/runs/{run_id}/result-story", response_model=ApiResponse)
+    @router.get("/api/runs/{run_id}/result-story", response_model=ApiResponse[ResultStory])
     def get_result_story(run_id: str):
-        return data_response(context.check_story.build(run_id).model_dump(mode="json"))
+        return data_response(context.check_story.build(run_id), projection=ResultStory)
 
     @router.get("/api/runs/{run_id}/evidence", response_model=ApiResponse)
     def list_evidence(run_id: str):

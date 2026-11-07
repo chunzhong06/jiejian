@@ -20,6 +20,7 @@ from product.backend.infrastructure.runtime.jobs.models import RequestCancellati
 from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
 from product.protocols.runtime.node_runtime import NodeRuntimeManifest, NodeRuntimeLoadRequest, NodePackagePlan, SqliteDatabaseCapture, ProjectId, node_document_fingerprint
 from product.protocols.runtime.runtime_identity import RuntimeFile, RuntimeModel, runtime_source_fingerprint, Digest
+from product.protocols.runtime.database_capture import DatabaseCapture,database_secret_name
 
 
 class NodeStartPreview(RuntimeModel):
@@ -34,11 +35,12 @@ class NodeStartPreview(RuntimeModel):
     preview_fingerprint: Digest
     package: NodePackagePlan | None = None
     sqlite: tuple[SqliteDatabaseCapture, ...] = ()
+    databases:tuple[DatabaseCapture,...]=()
 
 
 class NodeRuntimeSetup:
     def __init__(self, var_dir, uow_factory, understanding, supervisor, *, node_executable_provider,
-            control_origin=None, clock_us=None):
+            control_origin=None, clock_us=None, secret_store=None):
         self.var_dir=Path(var_dir).resolve()
         self._uow=uow_factory
         self.understanding=understanding
@@ -47,6 +49,15 @@ class NodeRuntimeSetup:
         self._node=node_executable_provider
         self._control_port=urlsplit(control_origin).port if control_origin else None
         self._clock=clock_us or (lambda:time.time_ns()//1000)
+        self._secrets=secret_store
+
+    def configure_database_credential(self,project_id,connection_id,password):
+        self._eligible(project_id)
+        if self._secrets is None:
+            raise JiejianError(ErrorCode.SECRET_STORE_UNAVAILABLE,'当前秘密存储不可用')
+        from product.backend.infrastructure.secrets.refs import credential_ref
+        self._secrets.write(credential_ref('database',project_id,connection_id),password)
+        return dict(connection_id=connection_id,password_env=database_secret_name(project_id,connection_id),configured=True)
 
     def capabilities(self, project_id):
         current = self._eligible(project_id)
@@ -76,9 +87,11 @@ class NodeRuntimeSetup:
             supported_database_driver='better-sqlite3 13.0.3',node='24.19.0')
 
     def preview(self, project_id, *, entry, port, revision, consent_source_read=False,
-            build_script=None, allow_install_scripts=False, sqlite=()):
+            build_script=None, allow_install_scripts=False, sqlite=(),databases=()):
         """预览只读代码，授权后可先于地址确认；不安装依赖或执行目标。"""
         before=self._eligible(project_id)
+        if any(item.password_env!=database_secret_name(project_id,item.connection_id) for item in databases):
+            raise JiejianError(ErrorCode.INPUT_INVALID,'数据库秘密引用与应用和连接身份不一致')
         if before.revision != revision:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'应用设置已变化，请重新读取')
         if not before.source_analysis_authorized:
@@ -100,7 +113,7 @@ class NodeRuntimeSetup:
             manifest=NodeRuntimeManifest(instance_id='rti_'+'0'*32,project_id=project_id,entry=entry,port=port,
                 files=files,source_fingerprint=runtime_source_fingerprint(files),
                 **node_execution_identity(self._node()),module_loader='NODE_STANDARD',package=package,sqlite=tuple(sqlite),
-                sqlite_source_root=before.source_root if sqlite else None)
+                sqlite_source_root=before.source_root if sqlite else None,databases=tuple(databases))
             if manifest.source_fingerprint != analysis.source_fingerprint:
                 raise ValueError('source identity mismatch')
         except (OSError,ValueError):
@@ -118,12 +131,13 @@ class NodeRuntimeSetup:
         payload=dict(project_id=project_id,revision=before.revision,entry=entry,port=port,
             source_fingerprint=manifest.source_fingerprint,interpreter_fingerprint=manifest.interpreter_fingerprint,
             executor_fingerprint=manifest.executor_fingerprint,files=[item.model_dump(mode='json') for item in files],
-            package=None if package is None else package.model_dump(mode='json'),sqlite=[item.model_dump(mode='json') for item in sqlite])
+            package=None if package is None else package.model_dump(mode='json'),sqlite=[item.model_dump(mode='json') for item in sqlite],
+            **({'databases':[item.model_dump(mode='json') for item in databases]} if databases else {}))
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-        return NodeStartPreview(**(payload|{'files':files,'package':package,'sqlite':tuple(sqlite),'preview_fingerprint':digest}))
+        return NodeStartPreview(**(payload|{'files':files,'package':package,'sqlite':tuple(sqlite),'databases':tuple(databases),'preview_fingerprint':digest}))
 
     def start(self, project_id, *, entry, port, revision, preview_fingerprint, operation_id, consent_execute, work=None,
-            build_script=None, allow_install_scripts=False, sqlite=()):
+            build_script=None, allow_install_scripts=False, sqlite=(),databases=()):
         """同操作键先查原记录；只有新操作才冻结已预览代码并排队。"""
         if not consent_execute:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'启动当前应用需要明确确认')
@@ -134,7 +148,7 @@ class NodeRuntimeSetup:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'该操作已用于另一份启动预览')
             return self._public(previous)
         preview=self.preview(project_id,entry=entry,port=port,revision=revision,build_script=build_script,
-            allow_install_scripts=allow_install_scripts,sqlite=sqlite)
+            allow_install_scripts=allow_install_scripts,sqlite=sqlite,databases=databases)
         if preview.preview_fingerprint != preview_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'源码或运行设置已变化，请重新预览')
         before=self.understanding.get(project_id)
@@ -142,7 +156,7 @@ class NodeRuntimeSetup:
             files=preview.files,source_fingerprint=preview.source_fingerprint,
             interpreter_fingerprint=preview.interpreter_fingerprint,executor_fingerprint=preview.executor_fingerprint,
             module_loader='NODE_STANDARD',package=preview.package,sqlite=preview.sqlite,
-            sqlite_source_root=before.source_root if preview.sqlite else None)
+            sqlite_source_root=before.source_root if preview.sqlite else None,databases=preview.databases)
         request=NodeRuntimeLoadRequest(load_id='rld_'+uuid4().hex,project_id=project_id,operation_id=operation_id,
             control_session_id=self.supervisor.control_session_id,preview_fingerprint=preview_fingerprint,
             instance_id=manifest.instance_id,manifest_fingerprint=node_document_fingerprint(manifest),
@@ -172,7 +186,8 @@ class NodeRuntimeSetup:
             _,manifest=read_node_manifest(self.var_dir,request,verify_files=verify_artifacts)
             configuration={'entry':manifest.entry,'port':manifest.port,'file_count':len(manifest.files),
                 'package':None if manifest.package is None else manifest.package.model_dump(mode='json'),
-                'sqlite':[item.model_dump(mode='json') for item in manifest.sqlite]}
+                'sqlite':[item.model_dump(mode='json') for item in manifest.sqlite],
+                'databases':[item.model_dump(mode='json') for item in manifest.databases]}
         except (OSError,ValueError,JiejianError):
             pass
         running=False

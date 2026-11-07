@@ -1,9 +1,9 @@
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a) {
+:is(.jj-button, .jj-nav-item, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a) {
   position: relative;
   isolation: isolate;
   --state-fill: var(--hover);
 }
-:is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a)::before {
+:is(.jj-button, .jj-nav-item, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -15,12 +15,15 @@
   transition: opacity var(--motion-hover-out) var(--ease-respond);
 }
 .jj-button.is-primary { --state-fill: var(--accent-hover); }
-.jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 16%,var(--surface)); }
-.jj-nav-item[aria-current=page] { --state-fill: color-mix(in srgb,var(--hover) 55%,var(--selected)); }
+.jj-button:not(.is-primary,.is-quiet,.is-danger) { --state-fill:var(--secondary-hover); }
+.jj-button.is-primary:not(:disabled):active { --state-fill:var(--accent-pressed); }
+.jj-button:not(.is-primary,.is-quiet,.is-danger):not(:disabled):active { --state-fill:var(--secondary-pressed); }
+.jj-button.is-danger { --state-fill: color-mix(in srgb,var(--bad) 4%,var(--bad-soft)); }
+.jj-nav-item[aria-current=page] { --state-fill:var(--selected-hover); }
 /* 持久选择的蓝色底不被中性悬停遮罩覆盖，焦点仍由轮廓单独呈现。 */
-:is(.jj-toggle-group > button[aria-pressed=true], .jj-index-item[aria-pressed=true], .jj-source-index > button[aria-current=page], :where(.jj-action-tabs) > button:is([aria-current=page],[aria-selected=true]), .jj-step-select[aria-current=step], .jj-scope-rule-option[data-selected=true], .jj-registration-targets label[data-selected=true], .jj-button[aria-pressed=true], .jj-flow-trial-records > button[aria-pressed=true], .jj-recording-list > label:has(input:checked)) { --state-fill:var(--selected); }
+:is(.jj-toggle-group > button[aria-pressed=true], .jj-index-item[aria-pressed=true], .jj-source-index > button[aria-current=page], :where(.jj-action-tabs) > button:is([aria-current=page],[aria-selected=true]), .jj-step-select[aria-current=step], .jj-scope-rule-option[data-selected=true], .jj-registration-targets label[data-selected=true], .jj-button:is([aria-pressed=true],[aria-current=page]), .jj-flow-trial-records > button[aria-pressed=true], .jj-change-select[aria-expanded=true], .jj-recording-list > label:has(input:checked)) { --state-fill:var(--selected-hover); }
 @media(hover:hover) and (pointer:fine) {
-  :is(.jj-button, .jj-nav-item, .jj-home-cards > button, .jj-recent-list > button, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a):not(:disabled):hover::before {
+  :is(.jj-button, .jj-nav-item, :where(.jj-action-tabs) > button, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-record-link, .jj-step-select, .jj-permission-cell, .jj-change-select, .jj-toggle-group > button, .jj-rule-history > button, .jj-recording-list > label, .jj-registration-targets > label, .jj-scope-rule-option, .jj-candidate-list > button, .jj-breadcrumb a):not(:disabled):hover::before {
     opacity: 1;
     transition-duration: var(--motion-hover-in);
   }
@@ -28,7 +31,8 @@
 .jj-button { transition: transform var(--motion-press) var(--ease-spring), box-shadow var(--motion-press) var(--ease-respond); }
 .jj-button:not(:disabled):active { transform: translateY(1px) scale(.975); transition-duration: 0ms; }
 .jj-nav-item.jj-button:active { transform: none; }
-:is(.jj-button, .jj-home-cards > button, .jj-index-item, .jj-case-select, .jj-step-select):not(:disabled):active::before { opacity: 1; transition-duration: 0ms; }
+/* 按实际按钮与链接分开匹配，保留旧组合选择器的按压优先级。 */
+button:is(.jj-button, .jj-index-item, .jj-case-select, .jj-step-select):not(:disabled):active::before, a.jj-button:not(:disabled):active::before { opacity: 1; transition-duration: 0ms; }
 input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border-color var(--motion-hover-in) var(--ease-respond), box-shadow var(--motion-hover-in) var(--ease-respond); }
 .jj-app input:is([type=checkbox],[type=radio]) { transition: background-color var(--motion-hover-in) var(--ease-respond), border-color var(--motion-hover-in) var(--ease-respond), transform var(--motion-press) var(--ease-respond); }
 .jj-app input:is([type=checkbox],[type=radio])::before { transition: opacity var(--motion-press) var(--ease-respond), transform var(--motion-press) var(--ease-respond); }
@@ -47,11 +51,11 @@ input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border
 .jj-choice-menu.ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-selected) { background: transparent; }
 .jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:is(:hover,.ant-dropdown-menu-item-active)::before,
 .jj-choice-menu.ant-select-dropdown .ant-select-item-option-active::before { opacity: 1; transition-duration: var(--motion-hover-in); }
-.jj-choice-menu.ant-select-dropdown .ant-select-item-option-selected::before { background:var(--selected); }
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-selected::before { background:var(--selected-hover); }
 .jj-example-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-disabled::before,
 .jj-choice-menu.ant-select-dropdown .ant-select-item-option-disabled::before { display: none; }
 .jj-recording-list > label:has(input:disabled)::before { display: none; }
-.jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--surface); }
+.jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--control-hover); }
 /* 定位器会测量浮层本体；本体只淡入淡出，缩放会改变它读到的边界。 */
 body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown) { opacity: 1; transform: none; animation: none; transition: opacity var(--motion-popup) var(--ease-enter); }
 body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown):is([class*='-enter'],[class*='-appear']):not([class*='-active']):not([class*='-done']) { opacity: 0; }
@@ -59,16 +63,17 @@ body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choic
 .jj-hint.ant-tooltip:is([class*='-enter'],[class*='-appear']) { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
 .jj-hint.ant-tooltip[class*='-leave'] { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
 [role=menuitem]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.jj-dialog { width: min(480px,calc(100% - 32px)); animation: jj-dialog-enter var(--motion-dialog) var(--ease-enter) both; }
+.jj-dialog { animation: jj-dialog-enter var(--motion-dialog) var(--ease-enter) both; }
 .jj-dialog::backdrop { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
 .jj-dialog[data-closing=true] { animation: jj-dialog-exit var(--motion-exit) var(--ease-exit) both; pointer-events: none; }
 .jj-dialog[data-closing=true]::backdrop { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
-:is(.jj-application-content, .jj-material-detail, .jj-proof-detail, .jj-proof-view-section, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-change-registration, .jj-rule-authoring-panel, .jj-rule-detail-panel, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+:is(.jj-application-content, .jj-material-detail, .jj-proof-detail, .jj-proof-view-section, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-rule-condition-editor, .jj-change-registration, .jj-rule-authoring-panel, .jj-rule-detail-panel, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
 .jj-inspector-content .jj-step-reading, .jj-material-detail, .jj-application-content { animation-name:jj-reader-enter; }
 .jj-notice:not([role=alert]) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; }
 .jj-report-layout { transition: grid-template-columns var(--motion-panel) var(--ease-layout), gap var(--motion-panel) var(--ease-layout); }
 .jj-inspector-slot { transition: opacity var(--motion-content) var(--ease-enter), transform var(--motion-panel) var(--ease-enter); }
 .jj-working-dot { animation: jj-working 1000ms ease-in-out infinite alternate; }
+.jj-collaboration-state[data-active=true]::before { animation: jj-working 1000ms ease-in-out infinite alternate; }
 progress::-webkit-progress-value { transition: width var(--motion-content) var(--ease-layout); }
 ::view-transition { pointer-events: none; }
 @supports(interpolate-size:allow-keywords) {
@@ -80,7 +85,7 @@ progress::-webkit-progress-value { transition: width var(--motion-content) var(-
 @keyframes jj-dialog-exit { to { opacity: 0; transform: translateY(6px) scale(.99); } }
 @keyframes jj-content-enter { from { opacity: .4; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes jj-reader-enter { from { opacity:.5; transform:translateX(12px); } to { opacity:1; transform:none; } }
-@keyframes jj-working { to { opacity: .45; } }
+@keyframes jj-working { from { opacity:.55; transform:scale(.84); } to { opacity:1; transform:scale(1); } }
 .jj-button > .anticon-arrow-right { transition: transform var(--motion-disclosure) var(--ease-spring); }
 @media(hover:hover) { .jj-button:not(:disabled):hover > .anticon-arrow-right { transform: translateX(3px); } }
 .jj-nav-item, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-toggle-group > button { transition: background-color var(--motion-indicator) var(--ease-layout), color var(--motion-hover-in) var(--ease-respond); }
@@ -106,4 +111,4 @@ body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choic
 @keyframes jj-workspace-in { from { opacity:.35; transform:translateY(var(--page-offset)); } to { opacity:1; transform:none; } }
 @keyframes jj-workspace-out { to { opacity:0; transform:translateY(calc(var(--page-offset) * -.4)); } }
 
-.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-selected::before { background:var(--selected); }
+.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-selected::before { background:var(--selected-hover); }

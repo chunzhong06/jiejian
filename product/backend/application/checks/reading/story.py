@@ -131,7 +131,20 @@ class StoryProofCoverage(WireModel):
     limitations: tuple[str, ...]
 
 
+class StoryScenarioContext(WireModel):
+    scenario_label:str
+    experiment_label:str
+    experiment_kind:str
+    invocation_label:str
+    item_index:int=Field(ge=1,le=32)
+    item_count:int=Field(ge=1,le=32)
+    same_resource_occurrences:int=Field(ge=1,le=32)
+    batch_strategy:Literal['ATOMIC','PER_ITEM']|None
+    expected_effect:Literal['PRESENT','ABSENT']
+
+
 class ActionResultStory(WireModel):
+    scenario_context:StoryScenarioContext|None=Field(default=None,exclude_if=lambda value:value is None)
     action_id: str
     action_revision: int = Field(ge=1)
     display_name: str
@@ -209,6 +222,17 @@ class CheckStoryBuilder:
         configs = {item.action_id: item for item in package.bundle.actions}
         identities = {item.identity_id: item for item in package.bundle.identities}
         source_types = {item.observer_id: item.observer_type.value for item in package.bundle.observers}
+        scenario_context={}
+        scenario=package.request.scenario
+        if scenario is not None:
+            nodes={(experiment.id,node.id):(experiment,node) for experiment in scenario.document.experiments for node in experiment.invocations}
+            for frozen in scenario.invocations:
+                experiment,node=nodes[frozen.experiment_id,frozen.invocation_id]
+                for index,key in enumerate(frozen.case_ids):
+                    scenario_context[key]=dict(scenario_label=scenario.document.label,experiment_label=experiment.label,
+                        experiment_kind=experiment.kind,invocation_label=node.label,item_index=index+1,item_count=len(frozen.case_ids),
+                        same_resource_occurrences=sum(item.resource_id==node.items[index].resource_id for item in node.items),
+                        batch_strategy=None if node.batch is None else node.batch.strategy)
         stories = []
         for action in package.request.actions:
             config = configs[action.action_id]
@@ -218,6 +242,9 @@ class CheckStoryBuilder:
             for case in action.cases:
                 result = results[case.case_id]
                 documents = tuple(evidence[ref] for ref in result.evidence_ids)
+                # 包读取已核对本轮产生者；解释和证明索引使用同一实际编号派生的 Case。
+                if documents:
+                    case=documents[0].effective_case
                 observations = tuple(item for document in documents for item in document.observations)
                 facts = project_check_effect_facts(case, observations)
                 identity = identities.get(case.subject_test_identity_id)
@@ -292,6 +319,8 @@ class CheckStoryBuilder:
                             if any(item.proof_fingerprint == fact.proof_fingerprint for item in document.observations))))
                 judgement = JUDGEMENTS[{CaseVerdict.SAFE: "PASS", CaseVerdict.VULNERABLE: "BLOCK"}.get(result.verdict, "INCONCLUSIVE")]
                 stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
+                    scenario_context=None if case.case_id not in scenario_context else StoryScenarioContext(
+                        **scenario_context[case.case_id],expected_effect='ABSENT' if case.expects_absence else 'PRESENT'),
                     display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement, reason_codes=result.reason_codes,
                     fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
                         planned_resource_owner=planned_owner, resource_id=(

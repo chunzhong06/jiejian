@@ -6,6 +6,8 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Request
+from starlette.concurrency import run_in_threadpool
+from product.backend.interfaces.http.body import read_bounded_body
 from pydantic import Field, ValidationError
 from product.backend.domain.identities.models import AuthenticationProfile
 from product.backend.domain.errors import ErrorCode, JiejianError
@@ -46,15 +48,14 @@ def build_test_identities_router(context: ApplicationCore) -> APIRouter:
 
     @router.put('/api/test-identities/{identity_id}/authentication',response_model=ApiResponse)
     async def configure_authentication(identity_id:str,request:Request):
-        raw=await request.body()
-        if len(raw)>16384:
-            raise JiejianError(ErrorCode.INPUT_INVALID,'认证配置过大')
+        raw=await read_bounded_body(request,limit=16384,message='认证配置过大')
         try:
             command=AuthenticationRequest.model_validate_json(raw)
         except ValidationError:
             raise JiejianError(ErrorCode.INPUT_INVALID,'认证配置格式不正确') from None
-        return data_response(context.test_identities.configure_authentication(identity_id,command.profile,
-            expected_updated_at_us=command.expected_updated_at_us).model_dump(mode='json'))
+        result=await run_in_threadpool(context.test_identities.configure_authentication,identity_id,command.profile,
+            expected_updated_at_us=command.expected_updated_at_us)
+        return data_response(result.model_dump(mode='json'))
 
     @router.get('/api/projects/{project_id}/identity-preparations', response_model=ApiResponse)
     def preparations(project_id: str):

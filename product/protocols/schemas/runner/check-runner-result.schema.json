@@ -378,6 +378,15 @@
           "title": "Proof Fingerprint",
           "type": "string"
         },
+        "relationships": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservedRelationship"
+          },
+          "maxItems": 4,
+          "title": "Relationships",
+          "type": "array"
+        },
         "resource_state": {
           "anyOf": [
             {
@@ -438,6 +447,70 @@
         "principal"
       ],
       "title": "ObservedPermissionConditions",
+      "type": "object"
+    },
+    "ObservedRelationship": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "ORGANIZATION",
+            "ROLE_INHERITANCE",
+            "SHARING",
+            "DELEGATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at_us": {
+          "minimum": 0,
+          "title": "Observed At Us",
+          "type": "integer"
+        },
+        "path": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 9,
+          "title": "Path",
+          "type": "array"
+        },
+        "reason": {
+          "enum": [
+            "RELATIONSHIP_MATCHED",
+            "RELATIONSHIP_NOT_MATCHED",
+            "RELATIONSHIP_TIME_UNCERTAIN",
+            "RELATIONSHIP_SCOPE_INCOMPLETE",
+            "RELATIONSHIP_DEPTH_EXCEEDED"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "requirement_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requirement Fingerprint",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_fingerprint",
+        "kind",
+        "status",
+        "observed_at_us",
+        "reason"
+      ],
+      "title": "ObservedRelationship",
       "type": "object"
     },
     "PythonRuntime": {

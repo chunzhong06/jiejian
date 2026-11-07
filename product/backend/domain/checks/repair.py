@@ -18,6 +18,9 @@ class CurrentRepairReference(WireModel):
 
 
 class RepairCaseIdentity(WireModel):
+    occurrence_id:str|None=Field(default=None,pattern=r'^occ_[0-9a-f]{32}$',exclude_if=lambda value:value is None)
+    invocation_kind:Literal['BATCH_ATOMIC','BATCH_PER_ITEM']|None=Field(default=None,exclude_if=lambda value:value is None)
+    batch_effect_expectation:Literal['PRESENT','ABSENT']|None=Field(default=None,exclude_if=lambda value:value is None)
     action_id: LogicalId
     action_revision: int = Field(ge=1)
     action_semantic_fingerprint: Hash
@@ -96,12 +99,16 @@ def repair_evidence_standards(action, case, bundle) -> tuple[str, ...]:
             if source.config.source_kind=='CREATED_OBJECT_RECORDS':
                 payload.update(resource_id='runtime-created-object',resource_mode='OUTPUT',
                     created_resource=configured.created_resource.model_dump(mode='json'))
+            if proof.field_mutation is not None:
+                payload['field_mutation']=proof.field_mutation.model_dump(mode='json')
             standards.append(content_hash('CurrentProofRepairStandard',payload))
             continue
         payload = {name:getattr(proof,name) for name in (
             "effect_id", "effect_kind", "expected_state", "protected_projection", "rule",
             "observation_identity_id", "exclusive_resource_window", "descriptor_fingerprint")}
         payload["identity_verification"] = verification.model_dump(mode="json")
+        if proof.field_mutation is not None:
+            payload['field_mutation']=proof.field_mutation.model_dump(mode='json')
         payload["request"] = None if proof.request is None else proof.request.model_dump(mode="json")
         if proof.rule == 'HTTP_ENTITY_QUERY':
             payload['entity_query'] = proof.entity_query.model_dump(mode='json')
@@ -142,9 +149,11 @@ class CurrentRepairContract(WireModel):
 
     @model_validator(mode="after")
     def validate_contract(self):
-        if self.source_case_id != self.deny.source_case_id or self.deny.identity.permission.expectation != "DENY":
+        batch_denial=(self.deny.identity.invocation_kind=='BATCH_ATOMIC' and self.deny.identity.batch_effect_expectation=='ABSENT'
+            and self.deny.identity.occurrence_id is not None)
+        if self.source_case_id != self.deny.source_case_id or (self.deny.identity.permission.expectation != "DENY" and not batch_denial):
             raise ValueError("repair source must be the frozen deny case")
-        if self.selected_control.identity.permission.expectation != "ALLOW":
+        if self.selected_control.identity.permission.expectation != "ALLOW" or self.selected_control.identity.batch_effect_expectation=='ABSENT':
             raise ValueError("repair requires selected allow control")
         keys = tuple(item.identity.fingerprint() for item in self.regressions)
         if keys != tuple(sorted(set(keys))) or any(item.identity.permission.expectation != "ALLOW" for item in self.regressions):
@@ -243,7 +252,8 @@ def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer
             outcome = case_result.outcome
             observations = tuple(observation for ref in case_result.evidence_ids if ref in documents
                 for observation in documents[ref].observations)
-            facts = project_check_effect_facts(case,observations)
+            effective=next((documents[ref].effective_case for ref in case_result.evidence_ids if ref in documents),case)
+            facts = project_check_effect_facts(effective,observations)
             if (outcome.actual_identity_status == "MATCH" and outcome.run_correlated and outcome.resource_correlated
                 and any(fact.state == "CONFIRMED" and fact.complete and fact.reliable and fact.correlated and fact.authoritative for fact in facts)):
                 return answer("NOT_VERIFIED","REPAIR_FORBIDDEN_EFFECT_REMAINS")

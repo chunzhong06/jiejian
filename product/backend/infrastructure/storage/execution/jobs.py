@@ -204,13 +204,31 @@ import time
 from collections.abc import Mapping, Sequence
 
 from pydantic import Field, field_validator, model_validator
-from sqlalchemy import and_, or_, func, select
+from sqlalchemy import and_, or_, func, select, case
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from product.backend.domain.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.lifecycle import JobState
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _flush, _scalar, _scalars, ensure_storage_payload_safe
+from product.backend.infrastructure.storage.base import acquire_write_lock
+
+# 这是本地交互任务的排队预算，不是实测吞吐或执行并发；已接受任务不被淘汰。
+QUEUE_GLOBAL_LIMIT = 128
+QUEUE_PROJECT_LIMIT = 32
+QUEUE_OPERATION_LIMITS = {'CHECK':8, 'BROWSER_RECORDING':2, 'RUNTIME_LOAD':2,
+    'PROOF_PREFLIGHT':16, 'REFERENCE_CAPTURE':4, 'FLOW_TRIAL':8, 'IDENTITY_PREPARATION':2}
+
+
+class QueueCapacity(StorageRecord):
+    queued: int = Field(ge=0)
+    project_queued: int = Field(ge=0)
+    operation_queued: int = Field(ge=0)
+    global_limit: int = Field(ge=1)
+    project_limit: int = Field(ge=1)
+    operation_limit: int = Field(ge=1)
+    can_submit: bool
 
 class JobRecord(StorageRecord):
     job_id: str = Field(pattern=JOB_ID_PATTERN)
@@ -325,6 +343,15 @@ class JobRepository:
         ensure_storage_payload_safe(
             record.model_dump(mode="json"), self._known_secrets
         )
+        # 七种目标共用一个提交点；与目标记录在同一写事务内计数，不能超卖容量。
+        acquire_write_lock(self._session)
+        if self.get_by_idempotency(record.project_id, record.operation_type, record.idempotency_key) is None:
+            capacity = self.capacity(record.project_id, record.operation_type)
+            if not capacity.can_submit:
+                raise JiejianError(ErrorCode.JOB_QUEUE_FULL,
+                    f'排队任务已达预算：全部 {capacity.queued}/{capacity.global_limit}，'
+                    f'本应用 {capacity.project_queued}/{capacity.project_limit}，'
+                    f'此类 {capacity.operation_queued}/{capacity.operation_limit}；请查询已有任务，等待或取消后再决定是否提交')
         self._session.add(
             JobRow(
                 job_id=record.job_id,
@@ -352,6 +379,22 @@ class JobRepository:
             )
         )
         _flush(self._session)
+
+    def capacity(self, project_id: str, operation_type: str) -> QueueCapacity:
+        """只统计等待态；运行并发仍由 Worker 的独占和并发策略管理。"""
+        try:
+            total, project, operation = self._session.execute(select(func.count(),
+                func.sum(case((JobRow.project_id == project_id, 1), else_=0)),
+                func.sum(case((and_(JobRow.project_id == project_id, JobRow.operation_type == operation_type), 1), else_=0)))
+                .where(JobRow.state.in_((JobState.PENDING.value, JobState.RETRY_WAIT.value)))).one()
+        except SQLAlchemyError:
+            self._session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, '暂时无法读取任务容量') from None
+        project, operation = project or 0, operation or 0
+        limit = QUEUE_OPERATION_LIMITS.get(operation_type, 4)
+        return QueueCapacity(queued=total, project_queued=project, operation_queued=operation,
+            global_limit=QUEUE_GLOBAL_LIMIT, project_limit=QUEUE_PROJECT_LIMIT, operation_limit=limit,
+            can_submit=total < QUEUE_GLOBAL_LIMIT and project < QUEUE_PROJECT_LIMIT and operation < limit)
 
     def get(self, job_id: str) -> JobRecord | None:
         row = _scalar(

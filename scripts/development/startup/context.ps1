@@ -41,7 +41,8 @@ function Initialize-StartupContext([string]$Root, [string]$RuntimeRoot, [string]
     $script:DisplayInteractive = $false
     $script:DisplayUnicode = $false
     $script:DisplayTrueColor = $false
-    $script:WaitIndicatorProcess = $null
+    $script:WaitIndicatorWorker = $null
+    $script:WaitIndicatorInvocation = $null
     $script:WaitIndicatorStopEvent = $null
     $script:WaitIndicatorFallbackActive = $false
     $script:PrepareStatusOrder = @("toolchain", "python", "browser", "frontend-dependencies", "frontend-build", "database")

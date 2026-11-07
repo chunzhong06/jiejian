@@ -65,7 +65,6 @@
 
 .jj-system-columns { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr); gap:24px; align-items:start; }
 .jj-system-workspace > header { background:transparent; border:0; padding:24px; }
-.jj-system-workspace > header h2 { font-size:var(--text-section); }
 .jj-system-feedback { padding:0 24px 16px; }
 .jj-system-diagnostics { container:system-status / inline-size; }
 .jj-system-components > div { padding:16px 24px; gap:8px; }

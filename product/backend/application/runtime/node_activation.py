@@ -34,7 +34,7 @@ class NodeRuntimeActivation:
             _,manifest=read_node_manifest(self.runtime.var_dir,previous_load)
             understanding=work.application_understanding.get(project_id)
             options=dict(build_script=manifest.package.build_script if manifest.package else None,
-                allow_install_scripts=bool(manifest.package and manifest.package.allow_install_scripts),sqlite=manifest.sqlite)
+                allow_install_scripts=bool(manifest.package and manifest.package.allow_install_scripts),sqlite=manifest.sqlite,databases=manifest.databases)
             preview=self.runtime.preview(project_id,entry=manifest.entry,port=manifest.port,revision=understanding.revision,**options)
             if preview.source_fingerprint!=snapshot.source_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'本地源码与这批交付不一致，请先登记当前修改')

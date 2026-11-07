@@ -17,7 +17,7 @@ export function Capabilities({projectId, revision}: {projectId:string;revision:n
     const state=useRead('readiness:'+projectId+':'+revision,async signal=>{const value=await projectsApi.readiness(projectId,signal);assertProject(value.project_id,projectId);return value;});
     const connected=state.data?.items.find(item=>item.key==='endpoint')?.state==='READY';
     return <aside className="jj-application-capabilities" aria-label="接入进度">
-      <header><h2>接入进度</h2></header>
+      <header><h2 className="jj-title-group">接入进度</h2></header>
       {state.error&&<ErrorNote error={state.error}/>}
       {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入状态</p>:<ol>{state.data?.items.map((item,index)=>{
         const available=['READY','AVAILABLE','CONFIGURED'].includes(item.state),task=tasks[item.key];

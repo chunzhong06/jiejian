@@ -8,9 +8,11 @@ export type SourceRequest = {item_id:string;method:string;path:string;label:stri
 export type ApiSource = {source_id:string;revision:number;kind:'OPENAPI'|'HAR'|'POSTMAN';name:string;requests:SourceRequest[];warnings:string[];created_at_us:number}
 export type SourceAnnotation = {source_id:string;item_id:string;label:string;action_id:string|null;revision:number}
 export type SourcesContext = {project_id:string;sources:ApiSource[];annotations:SourceAnnotation[];request_references:import('../../preparation/api/operationFlows').ApiSourceReference[]}
+export type SourcesSummary = {project_id:string;source_count:number;request_count:number}
 export type ImportPreview = {candidate_id:string;requests:SourceRequest[];warnings:string[];fingerprint:string;previous_revision:number;added:string[];removed:string[];changed:string[]}
 const root = (project:string) => `/api/projects/${encodeURIComponent(project)}`
 export const workbenchApi = {
+  sourceSummary:(project:string,signal?:AbortSignal)=>request<SourcesSummary>(root(project)+'/api-sources/summary',{signal}),
   create:(operation_id:string,name:string)=>request<ProjectDto>('/api/applications',{method:'POST',body:JSON.stringify({operation_id,name})}),
   environments:(project:string,signal?:AbortSignal)=>request<EnvironmentContext>(root(project)+'/environments',{signal}),
   attachSource:(project:string,source_root:string,expected_revision:number)=>request<ApplicationUnderstandingDto>(root(project)+'/source-directory',{method:'PUT',body:JSON.stringify({source_root,expected_revision})}),

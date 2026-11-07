@@ -25,6 +25,12 @@ class GrantProofScope(StartProofPreflight):
     confirmed: Literal[True]
 
 
+class MaintainDatabaseSource(StartProofPreflight):
+    purpose:Literal['INSTALL_DATABASE','REMOVE_DATABASE']
+    maintenance_plan_fingerprint:str=Field(pattern=r'^[0-9a-f]{64}$')
+    confirmed:Literal[True]
+
+
 class AdoptProofSource(StartProofPreflight):
     preflight_id: PreflightId
     confirmed: Literal[True]

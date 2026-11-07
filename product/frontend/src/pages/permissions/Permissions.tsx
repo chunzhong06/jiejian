@@ -1,3 +1,4 @@
+import {SearchField} from '../../shared/ui/SearchField'
 import {usePageRefresh} from '../../shared/lib/pageRefresh'
 import {Segmented} from '../../shared/ui/Segmented'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
@@ -10,9 +11,10 @@ import CheckOutlined from '@ant-design/icons/CheckOutlined';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import CloseOutlined from '@ant-design/icons/CloseOutlined';
-import { businessBoundariesApi as api, type BusinessBoundaryViewDto, type BoundaryProposalViewDto, type BoundaryReviewValueDto } from '../../entities/permission/api/businessBoundaries';
+import { businessBoundariesApi as api, type BusinessBoundaryViewDto, type BoundaryProposalViewDto } from '../../entities/permission/api/businessBoundaries';
 import { ruleCandidatesApi, type RuleCandidateView } from '../../entities/permission/api/ruleCandidates';
 import { RuleEditor } from './RuleEditor';
+import {ProposalReview} from './ProposalReview';
 import { BusinessIssue } from './BusinessIssue';
 import { RuleWorkbench } from './RuleWorkbench';
 import { experienceApi } from '../../entities/application/api/experience';
@@ -85,44 +87,18 @@ export function Permissions({ projectId, official, refresh, onError, route }: Pa
     if (editor.error || !boundary)
         return <PageError title="权限规则" error={editor.error}/>;
     if (proposal) {
-        const review = proposal.review, permissions = review?.items.filter(item => item.entity_kind === 'PERMISSION') ?? [], definitions = review?.items.filter(item => item.entity_kind !== 'PERMISSION') ?? [];
+        const review = proposal.review;
         const blocked = Boolean(!review || review.basis_state !== 'COMPLETE' || review.current_state_changed || proposal.proposal.unresolved_questions?.length);
-        const ruleGroups = new Map<string, typeof permissions>();
-        for (const item of permissions) {
-            const name = text(item.after.action ?? item.before?.action ?? '访问规则');
-            ruleGroups.set(name, [...(ruleGroups.get(name) ?? []), item]);
-        }
         const accepted = proposal.decision?.decision === 'APPROVED';
-        return <>
-      <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => { setProposal(undefined); go('/permissions'); }}>全部权限规则</Button></div>
-      <Heading eyebrow={proposal.decision ? '权限变更记录' : '权限审阅'} title={proposal.decision ? '查看这次权限变更' : '核对规则将如何改变'} actions={<Badge tone={proposal.decision ? accepted ? 'positive' : 'neutral' : 'accent'}>{proposal.decision ? accepted ? '已批准' : '已放弃' : '尚未生效'}</Badge>}/>
-      <div className="jj-review-overview"><span><strong>{permissions.length}</strong> 条访问规则</span><span><strong>{ruleGroups.size}</strong> 项业务操作</span><span>批准覆盖整份提案及沿用定义</span></div>
-      <div className="jj-permission-review-layout">
-        <div className="jj-review-content">
-          {[...ruleGroups].map(([name, items]) => <section className="jj-review-action" key={name}>
-            <header><h2>{name}</h2><span>{items.length} 条规则</span></header>
-            {items.map(item => <article className="jj-review-rule" key={item.item_id}>
-              {item.change_kind !== 'CREATE' && item.change_kind !== 'REFERENCE' ? <div className="jj-rule-compare">
-                <section><p className="jj-eyebrow">现在</p>{item.basis_available && item.before ? <RuleMeaning value={item.before}/> : <Notice tone="caution">原版本不可用，无法核对变化。</Notice>}</section>
-                <section><p className="jj-eyebrow">批准后</p><RuleMeaning value={item.after} changeKind={item.change_kind}/></section>
-              </div> : <RuleMeaning value={item.after} changeKind={item.change_kind}/>}
-            </article>)}
-          </section>)}
-          {!permissions.length && <section className="jj-review-action"><h2>访问规则</h2><p className="jj-muted">这份提案没有调整访问规则。</p></section>}
-          <div className="jj-review-appendix">
-            {definitions.length > 0 && <details className="jj-review-definitions"><summary>角色、业务动作与结果定义（{definitions.length} 项）</summary>{definitions.map(item => <article className="jj-review-rule" key={item.item_id}><h3>{text(item.after.display_name)}</h3>{item.before && <><p className="jj-eyebrow">现在</p><RuleMeaning value={item.before}/></>}<p className="jj-eyebrow">{item.change_kind === 'REFERENCE' ? '沿用' : '批准后'}</p><RuleMeaning value={item.after} changeKind={item.change_kind}/></article>)}</details>}
-            <details><summary>提案来源</summary><p className="jj-small">{text(proposal.proposal.provenance)}</p></details>
-          </div>
-        </div>
+        return <ProposalReview key={proposal.proposal.proposal_id} value={proposal} onBack={() => { setProposal(undefined); go('/permissions'); }}>
         <footer className="jj-approval-footer">
           {blocked && !proposal.decision && <Notice tone="caution">{review?.current_state_changed ? '当前业务已变化，请重新整理提案。' : proposal.proposal.unresolved_questions?.length ? proposal.proposal.unresolved_questions.map(text).join('；') : '原始依据不完整，暂时无法批准。'}</Notice>}
           {proposal.decision ? <div className="jj-approval-decision"><p>{accepted ? '这份规则已生效，检查将使用批准后的访问要求。' : '这份提案未被采用，现有权限保持原样。'}</p><Button kind="primary" onClick={() => go(accepted ? '/preparation' : '/permissions')}>{accepted ? '准备检查材料' : '查看当前规则'}</Button></div> : <>
-            <div className="jj-approval-choice"><h3>确认这份权限要求</h3><label className="jj-checkbox"><input type="checkbox" checked={ack} disabled={busy || uncertain} onChange={event => setAck(event.target.checked)}/><span>我已核对整份权限要求</span></label></div>
+            <div className="jj-approval-choice"><h3>确认整份提案</h3><label className="jj-checkbox"><input type="checkbox" checked={ack} disabled={busy || uncertain} onChange={event => setAck(event.target.checked)}/><span>我已核对全部访问规则及业务定义</span></label></div>
             <div className="jj-review-buttons jj-confirmation-actions"><Button disabled={busy || uncertain} onClick={() => void act(async () => { await api.reject(projectId, proposal.proposal, '用户放弃本次权限提案'); setProposal(undefined); editor.reload(); go('/permissions'); })}>放弃提案</Button>{uncertain ? <><Notice tone="caution">批准结果尚未确认。</Notice><Button busy={busy} onClick={readDecision}>查询这次批准</Button></> : <Button kind="primary" busy={busy} disabled={!ack || blocked} onClick={() => void approved()}>批准权限规则</Button>}</div>
           </>}
         </footer>
-      </div>
-    </>;
+    </ProposalReview>;
     }
     if (maintenance)
         return <RuleEditor projectId={projectId} onBack={() => setMaintenance(false)} onProposal={openProposal} onError={onError}/>;
@@ -133,7 +109,7 @@ export function Permissions({ projectId, official, refresh, onError, route }: Pa
         return <RuleWorkbench projectId={projectId} boundary={boundary} official={official} route={route} refresh={refresh} onError={onError} onManage={() => setMaintenance(true)} reviewActions={<>{editor.data?.pending_proposals.length ? <Notice tone="accent">{editor.data.pending_proposals.length} 份权限变更待审阅。{editor.data.pending_proposals.map(item => <Button kind="quiet" key={item.proposal_id} onClick={() => void act(() => openProposal(item.proposal_id))}>审阅权限变更</Button>)}</Notice> : null}{candidates.data?.candidates.filter(item => !item.decision && !item.visibility?.archived).map(item => <Button key={item.candidate_id} onClick={() => void act(async () => setCandidate(await ruleCandidatesApi.show(projectId, item.candidate_id, item.revision)))}>整理业务要求</Button>)}</>}/>;
     return <><Heading eyebrow={`权限版本 ${boundary.policy_epoch}`} title="权限规则"/>{notice && <Notice tone="positive">{notice}<Button kind="quiet" onClick={() => go('/preparation')}>准备检查</Button></Notice>}
     {editor.data!.pending_proposals.length > 0 && <section className="jj-pending-rules"><div><Badge tone="accent">待审阅</Badge><h3>{editor.data!.pending_proposals.length} 份权限提案</h3></div>{editor.data!.pending_proposals.map((item, index) => <Button key={item.proposal_id} busy={busy} onClick={() => void act(() => openProposal(item.proposal_id))}>审阅{editor.data!.pending_proposals.length > 1 ? `第 ${index + 1} 份` : ''}变更</Button>)}</section>}
-    {roles.length > 0 ? <><div className="jj-rule-toolbar"><input aria-label="查找业务操作" placeholder="查找业务操作" value={query} onChange={event => setQuery(event.target.value)}/><Segmented label="筛选规则" value={filter} items={[{value:'ALL',label:'全部'},{value:'ALLOW',label:'允许'},{value:'DENY',label:'禁止'}]} onValueChange={setFilter}/></div><div className="jj-rule-workspace"><div className="jj-scroll-table jj-permission-table"><table><thead><tr><th>业务操作</th>{roles.map(role => <th key={role.actor_id}>{text(role.display_name)}</th>)}</tr></thead><tbody>{actions.map(action => { const rules = boundary.permission_intents.filter(rule => boundary.actors.some(owner => owner.actor_id === rule.resource_owner_actor_id && owner.revision === rule.resource_owner_actor_revision && owner.effective_state === 'ACTIVE') && rule.effective_state === 'ACTIVE' && rule.business_action_id === action.action_id && rule.action_revision === action.revision); if (filter !== 'ALL' && !rules.some(rule => rule.expectation === filter))
+    {roles.length > 0 ? <><div className="jj-rule-toolbar"><SearchField label="查找业务操作" placeholder="查找业务操作" value={query} onValueChange={setQuery}/><Segmented label="筛选规则" value={filter} items={[{value:'ALL',label:'全部'},{value:'ALLOW',label:'允许'},{value:'DENY',label:'禁止'}]} onValueChange={setFilter}/></div><div className="jj-rule-workspace"><div className="jj-scroll-table jj-permission-table"><table><thead><tr><th>业务操作</th>{roles.map(role => <th key={role.actor_id}>{text(role.display_name)}</th>)}</tr></thead><tbody>{actions.map(action => { const rules = boundary.permission_intents.filter(rule => boundary.actors.some(owner => owner.actor_id === rule.resource_owner_actor_id && owner.revision === rule.resource_owner_actor_revision && owner.effective_state === 'ACTIVE') && rule.effective_state === 'ACTIVE' && rule.business_action_id === action.action_id && rule.action_revision === action.revision); if (filter !== 'ALL' && !rules.some(rule => rule.expectation === filter))
         return null; const status = boundary.permission_statuses.find(item => item.action_id === action.action_id && item.action_revision === action.revision); return <tr key={action.action_id}><th scope="row"><strong>{text(action.display_name)}</strong><small>{text(action.primary_resource_concept)}</small>{!status?.permission_semantics_confirmed && <small className="jj-warning-text">需要重新确认权限</small>}{status?.permission_semantics_confirmed && !status.allow_control_available && <small className="jj-warning-text">缺少正常操作对照</small>}</th>{roles.map(role => { const matching = rules.filter(rule => rule.subject_actor_id === role.actor_id && rule.subject_actor_revision === role.revision && (filter === 'ALL' || rule.expectation === filter)); return <td key={role.actor_id}>{matching.length ? matching.map((rule, index) => <button className="jj-permission-cell" key={rule.intent_id ?? index} onClick={() => setSelection(rule)}><span data-allowed={rule.expectation === 'ALLOW'}>{rule.expectation === 'ALLOW' ? <CheckOutlined aria-hidden="true"/> : <MinusOutlined aria-hidden="true"/>}{rule.expectation === 'ALLOW' ? '允许' : '禁止'}</span><small>{owner(rule, names)}</small>{conditionLabels(rule.conditions).map(label => <small key={label}>{label}</small>)}{matching.length > 1 && <small>{rule.protected_effect_ids.map(id => action.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '未识别的结果').map(text).join('、')}</small>}</button>) : <span className="jj-small jj-muted">未设定</span>}</td>; })}</tr>; })}</tbody></table>{!actions.length && <Empty title="没有找到这项业务操作"/>}</div>{selection && <aside className="jj-rule-inspector jj-panel" key={selection.intent_id + ":" + selection.revision}><header><h3>这条规则保护什么</h3><Button kind="quiet" icon={<CloseOutlined aria-hidden="true"/>} aria-label="关闭规则详情" onClick={() => setSelection(undefined)}/></header><Badge>{selection.expectation === 'ALLOW' ? '允许访问' : '禁止访问'}</Badge><p>{names.get(selection.subject_actor_id)}{selection.expectation === 'ALLOW' ? '可以' : '不得'}{text(boundary.actions.find(item => item.action_id === selection.business_action_id)?.display_name ?? '执行该操作')}。</p><dl className="jj-facts"><div><dt>资源范围</dt><dd>{owner(selection, names)}</dd></div><div><dt>业务结果</dt><dd>{selection.protected_effect_ids.map(id => boundary.actions.find(item => item.action_id === selection.business_action_id)?.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '未识别的结果').map(text).join('、')}</dd></div><div><dt>适用条件</dt><dd>{conditionLabels(selection.conditions).join("，") || "不限定"}</dd></div><div><dt>规则版本</dt><dd>{selection.revision}</dd></div></dl></aside>}</div></> : official ? <section className="jj-panel jj-official-rules"><p className="jj-eyebrow">数字展馆</p><h2>先确认评审的访问范围</h2><div className="jj-business-agreement"><div><Badge>负责人</Badge><p>可以下载自己管理的内部资料与公开展示版。</p></div><div><Badge>评审</Badge><p>可以阅读公开介绍，不得取得内部完整包，也不得在处理过程中被临时授予内部包访问权。</p></div></div><fieldset className="jj-choice-field"><legend>评审可以下载公开展示版吗？</legend><label><input type="radio" name="exhibition" checked={choice === true} onChange={() => setChoice(true)}/><span><strong>可以下载</strong><small>公开内容可离线阅读</small></span></label><label><input type="radio" name="exhibition" checked={choice === false} onChange={() => setChoice(false)}/><span><strong>只在线阅读</strong><small>保留预览，不提供展示版下载</small></span></label></fieldset><Button kind="primary" disabled={typeof choice !== 'boolean' || uncertain} busy={busy} onClick={() => void act(async () => { try {
         const result = await experienceApi.boundaryProposal(choice);
         assertProject(result.proposal.project_id, projectId);
@@ -146,19 +122,6 @@ export function Permissions({ projectId, official, refresh, onError, route }: Pa
     } })}>生成待审权限</Button>{uncertain && <Notice tone="caution">生成结果未确认。请读取待审变更，找到本次提案后继续。</Notice>}</section> : <Empty title="先写清楚访问要求" action={<><Button kind="primary" onClick={() => setMaintenance(true)}>编写权限要求</Button><Button onClick={() => go('/tools', projectId)}>连接开发工具</Button></>}>直接填写角色、操作和业务结果，或通过开发工具整理候选。所有规则均需审阅后生效。</Empty>}
     <section className="jj-business-requirements"><div className="jj-section-header jj-near-heading"><h2>待整理的业务要求</h2></div>{candidates.loading ? <Loading /> : candidates.data?.candidates.filter(item => !item.decision && !item.visibility?.archived).length ? <div className="jj-candidate-list">{candidates.data.candidates.filter(item => !item.decision && !item.visibility?.archived).map(item => <button key={item.candidate_id} onClick={() => void act(async () => setCandidate(await ruleCandidatesApi.show(projectId, item.candidate_id, item.revision)))}><span>{text(item.original_text)}</span><Badge tone="accent">查看要求</Badge></button>)}</div> : <p className="jj-small jj-muted">没有尚未处理的业务要求。</p>}</section>
   </>;
-}
-function RuleMeaning({ value, changeKind }: {
-    value: BoundaryReviewValueDto;
-    changeKind?: 'CREATE' | 'UPDATE' | 'RETIRE' | 'REFERENCE';
-}) {
-    return <div className="jj-rule-meaning">{value.expectation ? <>
-    <div className="jj-rule-definition">
-      <div className="jj-rule-title"><span className="jj-rule-direction" data-allowed={value.expectation === 'ALLOW'} aria-hidden="true">{value.expectation === 'ALLOW' ? <CheckOutlined /> : <CloseOutlined />}</span><h3>{text(value.subject ?? '操作人')}{value.expectation === 'ALLOW' ? '可以' : '不得'}{text(value.action ?? '执行此操作')}</h3>{changeKind && <span className="jj-rule-change">{({ CREATE: '新增', UPDATE: '调整', RETIRE: '停用', REFERENCE: '沿用' })[changeKind]}</span>}</div>
-      <p>{value.relation === 'OWNS' ? '自己的资源' : value.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `其他${text(value.resource_owner ?? '同角色')}账号的资源` : `${text(value.resource_owner ?? '其他角色')}的资源`}</p>
-      {conditionLabels(value.conditions).length > 0 && <p className="jj-small jj-muted">{conditionLabels(value.conditions).join("，")}</p>}
-    </div>
-    <div className="jj-rule-effects"><span>{value.expectation === 'ALLOW' ? '允许的业务结果' : '禁止的业务结果'}</span><ul>{value.protected_effects.map((effect, index) => <li key={index}>{text(effect)}</li>)}</ul></div>
-  </> : <div className="jj-rule-definition">{value.description&&<p>{text(value.description)}</p>}{value.resource_concept && <p className="jj-small jj-muted">资源：{text(value.resource_concept)}</p>}{value.effects.map((effect, index) => <div className="jj-definition-effect" key={index}><strong>{text(effect.business_label)}</strong>{effect.description&&<p>{text(effect.description)}</p>}</div>)}</div>}{value.effective_state === 'RETIRED' && <Badge tone="caution">将停用</Badge>}</div>;
 }
 function CandidateReview({ value, projectId, busy, onChange, onRun, onBack, onProposal }: {
     value: RuleCandidateView;

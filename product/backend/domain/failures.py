@@ -1,0 +1,37 @@
+"""稳定失败语义由各入口共同消费；类别不授权重试目标或未知写入。"""
+from enum import StrEnum
+from product.backend.domain.errors import ErrorCode
+
+class ErrorKind(StrEnum):
+    NOT_FOUND = "NOT_FOUND"
+    CONFLICT = "CONFLICT"
+    UNAVAILABLE = "UNAVAILABLE"
+    TOO_LARGE = "TOO_LARGE"
+    EXHAUSTED = "EXHAUSTED"
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+    FORBIDDEN = "FORBIDDEN"
+    INTERNAL = "INTERNAL"
+    INVALID = "INVALID"
+
+_KINDS = {
+    ErrorKind.TOO_LARGE: frozenset({ErrorCode.REQUEST_TOO_LARGE, ErrorCode.ONBOARDING_READ_BUDGET, ErrorCode.APPLICATION_ANALYSIS_BUDGET}),
+    ErrorKind.EXHAUSTED: frozenset({ErrorCode.JOB_QUEUE_FULL}),
+    ErrorKind.NOT_FOUND: frozenset({ErrorCode.PROJECT_NOT_FOUND, ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND, ErrorCode.APPLICATION_CANDIDATE_NOT_FOUND, ErrorCode.CONTRACT_NOT_FOUND, ErrorCode.RECORD_NOT_FOUND, ErrorCode.JOB_NOT_FOUND, ErrorCode.REPORT_NOT_FOUND, ErrorCode.ARTIFACT_NOT_PUBLISHED, ErrorCode.EXECUTION_PROFILE_NOT_FOUND, ErrorCode.RESULT_FINALIZATION_NOT_FOUND, ErrorCode.BOUNDARY_PROPOSAL_NOT_FOUND}),
+    ErrorKind.CONFLICT: frozenset({ErrorCode.STATE_PRECONDITION, ErrorCode.JOB_IDEMPOTENCY_CONFLICT, ErrorCode.PROJECT_SOURCE_DRIFT, ErrorCode.PROJECT_NOT_REVALIDATED, ErrorCode.PROJECT_ARCHIVE_CONFLICT, ErrorCode.APPLICATION_REVISION_CONFLICT, ErrorCode.APPLICATION_CANDIDATE_CONFLICT, ErrorCode.CONTRACT_NOT_ACTIVE, ErrorCode.JOB_CANCEL_CONFLICT, ErrorCode.JOB_TERMINAL_CONFLICT, ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, ErrorCode.RESULT_FINALIZATION_NOT_READY, ErrorCode.RESULT_FINALIZATION_FAILED, ErrorCode.RESULT_FINALIZATION_CONFLICT, ErrorCode.RESULT_FINALIZATION_BLOCKED, ErrorCode.BOUNDARY_PROPOSAL_ALREADY_DECIDED, ErrorCode.BOUNDARY_PROPOSAL_FINGERPRINT_MISMATCH, ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE, ErrorCode.BOUNDARY_REVISION_CONFLICT, ErrorCode.BOUNDARY_MAINTENANCE_REQUIRED, ErrorCode.BOUNDARY_EFFECT_MAPPING_REQUIRED, ErrorCode.BOUNDARY_PROPOSAL_PENDING, ErrorCode.MCP_DISABLED, ErrorCode.STORAGE_CONSTRAINT}),
+    ErrorKind.UNAVAILABLE: frozenset({ErrorCode.API_NOT_READY, ErrorCode.API_BINDING_REJECTED, ErrorCode.SERVE_FAILED, ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE, ErrorCode.EXECUTION_PROFILE_STORAGE_FAILED, ErrorCode.LOCAL_MAINTENANCE_FAILED, ErrorCode.RUNTIME_REPAIR_FAILED, ErrorCode.SECRET_STORE_UNAVAILABLE}),
+    ErrorKind.UNAUTHENTICATED: frozenset({ErrorCode.MCP_AUTH_REQUIRED}),
+    ErrorKind.FORBIDDEN: frozenset({ErrorCode.API_CONTROL_REJECTED, ErrorCode.MCP_PERMISSION_REQUIRED}),
+    ErrorKind.INTERNAL: frozenset({ErrorCode.STORAGE_FAILURE, ErrorCode.STORAGE_STATE, ErrorCode.STORAGE_MIGRATION, ErrorCode.JOB_PERSISTENCE, ErrorCode.JOB_REQUEST_CORRUPT, ErrorCode.RUNNER_START_FAILED, ErrorCode.RUNNER_PROTOCOL_INVALID, ErrorCode.ARTIFACT_RECONCILE, ErrorCode.PROCESS_TREE_FAILED, ErrorCode.RUNTIME_ENVIRONMENT_INVALID}),
+}
+
+def failure_kind(code: str) -> ErrorKind:
+    return next((kind for kind, codes in _KINDS.items() if code in codes), ErrorKind.INVALID)
+
+def failure_recovery(code: str) -> str | None:
+    """只建议恢复动作；是否已提交仍以原操作回执为准。"""
+    return {
+        ErrorKind.EXHAUSTED: "任务排队已达预算，请查询已有任务和容量；可等待或取消，不要更换请求标识重复提交未知操作。",
+        ErrorKind.INTERNAL: "界鉴内部处理失败，请保留业务要求与材料，先查询原操作回执并核对诊断编号；不要生成新请求重复写入。",
+        ErrorKind.UNAVAILABLE: "当前依赖不可用，请核对本机服务状态；已有写入先查询原回执，未知结果不得自动重放。",
+        ErrorKind.CONFLICT: "当前状态与请求不一致，请读取最新状态或原操作回执，再决定是否重新预览；不要自动扩大执行范围。",
+    }.get(failure_kind(code))

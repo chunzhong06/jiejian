@@ -44,6 +44,31 @@ def test_run_idempotency_cancel_and_unmounted_events(current_run_api):
     assert client.get(f'/api/jobs/{job_id}/events').status_code == 404
 
 
+def test_queue_rejection_can_be_queried_without_blocking_original_receipt(current_run_api, monkeypatch):
+    from product.backend.infrastructure.storage.execution import jobs as owner
+    core, harness, client = current_run_api
+    monkeypatch.setitem(owner.QUEUE_OPERATION_LIMITS, 'CHECK', 1)
+    accepted, body = _submit(client, harness.project_id, 'capacity-first')
+    capacity = client.get(f'/api/projects/{harness.project_id}/job-capacity').json()['data']
+    assert capacity['operation_queued'] == 1 and capacity['can_submit'] is False
+    rejected = client.post(f'/api/projects/{harness.project_id}/runs', json=body | dict(idempotency_key='capacity-next'))
+    assert rejected.status_code == 429 and rejected.json()['error']['code'] == 'JOB_QUEUE_FULL'
+    repeated = client.post(f'/api/projects/{harness.project_id}/runs', json=body)
+    assert repeated.status_code == 202 and repeated.json()['data']['job']['job_id'] == accepted['job']['job_id']
+    assert client.get('/api/projects/missing/job-capacity').status_code == 404
+
+
+def test_status_projection_keeps_wire_bytes_and_rejects_invalid_internal_output(current_run_api, monkeypatch):
+    core, harness, client = current_run_api
+    accepted, _ = _submit(client, harness.project_id, 'projection')
+    run = accepted['run']['run_id']
+    expected = core.check_results.status(run).model_dump(mode='json')
+    assert client.get(f'/api/runs/{run}').json()['data'] == expected
+    monkeypatch.setattr(core.check_results, 'status', lambda *args, **kwargs: {'invalid':'private-invalid-output'})
+    failed = client.get(f'/api/runs/{run}')
+    assert failed.status_code == 500 and 'private-invalid-output' not in failed.text
+
+
 def test_failed_check_separates_lifecycle_from_verdict_and_persists_failure_details(current_run_api):
     core, harness, client = current_run_api
     accepted, _ = _submit(client, harness.project_id, 'api-failure-test')
@@ -93,3 +118,17 @@ def test_check_receipt_is_readable_after_plan_changes(current_run_api, monkeypat
     found = client.get(f'/api/projects/{harness.project_id}/check-requests/recover-original').json()['data']
     assert found['run']['run_id'] == accepted['run']['run_id']
     assert client.get('/api/projects/foreign/check-requests/recover-original').json()['data'] is None
+
+
+def test_repeated_check_returns_original_after_materials_change_without_freezing_again(current_run_api,monkeypatch):
+    core,harness,client=current_run_api
+    first,body=_submit(client,harness.project_id,'lost-response')
+    monkeypatch.setattr(core.checks,'_freeze',lambda *_args,**_kwargs:pytest.fail('旧请求不能重读当前材料'))
+    repeated=client.post(f'/api/projects/{harness.project_id}/runs',json=body)
+    assert repeated.status_code==202
+    assert repeated.json()['data']['run']['run_id']==first['run']['run_id']
+    altered=client.post(f'/api/projects/{harness.project_id}/runs',json={**body,'expected_plan_fingerprint':'0'*64})
+    assert altered.status_code==409
+    assert altered.json()['error']['code']=='JOB_IDEMPOTENCY_CONFLICT'
+    with core.uow_factory() as work:
+        assert len(work.runs.list_for_project(harness.project_id))==1

@@ -148,6 +148,7 @@ class CheckRuntimeBuilder:
                 proof = dict(effect_id=effect_id, effect_kind=effect.effect_kind.value,
                     business_label=effect.business_label, resource_concept=effect.resource_concept,
                     expected_state=effect.expected_state, protected_projection=effect.protected_projection,
+                    **({} if effect.field_mutation is None else {'field_mutation': effect.field_mutation.model_dump(mode='json')}),
                     binding_fingerprint=binding.binding_fingerprint, observation_identity_id=binding.subject_test_identity_id,
                     source_label=effect.business_label, source_location=f"recordings/{binding.source_recording_id}/{binding.step_id}")
                 if binding.kind is ActionEvidenceKind.HTTP_ENTITY_QUERY:
@@ -181,6 +182,7 @@ class CheckRuntimeBuilder:
                 self._check_binding(work, recovery, action, understanding)
                 config["recovery"] = dict(binding_fingerprint=recovery.binding_fingerprint,
                     source_subject_identity_id=recovery.subject_test_identity_id,
+                    subject_binding='RESOURCE_OWNER' if recovery.subject_test_identity_id==recovery.resource_owner_test_identity_id else 'SOURCE',
                     request=recorded_request_template(recovery.request_template).model_dump(mode="json"))
                 identity_ids.add(recovery.subject_test_identity_id)
             # 只冻结 A1 当前槽位实际选择的身份，不能把同项目所有账号凭据一并注入。
@@ -217,8 +219,11 @@ class CheckRuntimeBuilder:
             from product.backend.application.test_identities.freezing import freeze_check_identity
             identities.append(freeze_check_identity(record,binding,actor_label,verification.get(identity_id),
                 environment=understanding.environment))
+        sources = () if self._json_sources_reader is None else self._json_sources_reader(project_id)
+        used_proofs = {(config['action_id'], proof['effect_id']) for config in configs for proof in config['proofs']}
+        sources = tuple(item for item in sources if (item.config.action_id, item.config.effect_id) in used_proofs)
         for config in configs:
-            config["steps"] = derive_target_classifiers(config, specs, identities)
+            config["steps"] = derive_target_classifiers(config, specs, identities,sources)
         payload=dict(project_id=project_id,
             source_fingerprint=understanding.source_fingerprint, target=target.model_dump(mode="json"),
             budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))
@@ -235,9 +240,6 @@ class CheckRuntimeBuilder:
         runtime = dict(kind="EXTERNAL_WEB") if reference is None else dict(
             kind="MANAGED_NODE" if isinstance(reference, NodeRuntimeReference) else "MANAGED_PYTHON",
             reference=reference.model_dump(mode="json"))
-        sources = () if self._json_sources_reader is None else self._json_sources_reader(project_id)
-        used_proofs = {(config['action_id'], proof['effect_id']) for config in configs for proof in config['proofs']}
-        sources = tuple(item for item in sources if (item.config.action_id, item.config.effect_id) in used_proofs)
         from product.protocols.preparation.proof_sources import AtomicProofSourceConfig
         for action_id, current, prepared in condition_inputs:
             slots = {item.requirement.slot_id:item.test_identity_id for item in prepared.identity_requirements.slots}
@@ -252,6 +254,9 @@ class CheckRuntimeBuilder:
                     and source.config.effect_id in rule.protected_effect_ids and isinstance(source.config, AtomicProofSourceConfig)
                     and (not required or source.config.source_kind not in {'CREATED_OBJECT_RECORDS', 'SQLITE_OBJECTS'})
                     and required <= set(source.config.mappings)
+                    and (not rule.conditions.relationships or (source.config.relationship_mapping is not None
+                        and source.config.source_kind not in {'CREATED_OBJECT_RECORDS', 'SQLITE_OBJECTS'}
+                        and all(source.config.relationship_mapping.supports(item) for item in rule.conditions.relationships)))
                     and (rule.conditions.tenant is None or participants <= {
                         claim.identity_id for claim in source.config.identity_claims if claim.tenant_path is not None})]
                 if not candidates:
@@ -286,18 +291,16 @@ class CheckRuntimeBuilder:
         return result
 
 
-def derive_target_classifiers(config, specs, identities):
+def derive_target_classifiers(config, specs, identities,proof_sources=()):
     """只派生新检查快照的 TARGET 分类；历史录制 Flow 与 SETUP 原样保留。"""
-    from product.protocols.checks.check_runtime import CheckActionConfig, CheckActionConfig
-    model=CheckActionConfig if config.get('created_resource') is not None else CheckActionConfig
-    action=model.model_validate_json(json.dumps(config),strict=True)
+    action=CheckActionConfig.model_validate_json(json.dumps(config),strict=True)
     try:
         parsed_specs = {key: ObserverSpec.model_validate_json(json.dumps(value), strict=True) for key, value in specs.items()}
     except ValueError:
         raise _incomplete("ASYNC_COMPLETION_BINDING_INVALID") from None
     try:
         candidates = async_completion_candidates(action, parsed_specs,
-            {item["identity_id"] for item in identities if item.get("verification") is not None})
+            {item["identity_id"] for item in identities if item.get("verification") is not None},proof_sources)
     except ValueError:
         raise _incomplete("ASYNC_COMPLETION_CONFLICT") from None
     steps = []

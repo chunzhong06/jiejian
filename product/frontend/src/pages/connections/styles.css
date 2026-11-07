@@ -58,10 +58,10 @@
 .jj-runtime-method > input { margin-top:max(0px,calc((1lh - 18px)/2)); }
 .jj-runtime-method strong { display:block; font-weight:550; }
 .jj-runtime-method small { display:block; margin-top:4px; color:var(--muted); font-size:var(--text-meta); }
-.jj-runtime-method:has(input:checked) { background:var(--selected); border-color:var(--accent); }
-.jj-runtime-method:has(input:checked) strong { color:var(--accent-ink); }
+.jj-runtime-method:has(input:checked) { --ink:var(--selected-ink); --muted:var(--selected-ink); color:var(--selected-ink); background:var(--selected); border-color:var(--accent); }
+.jj-runtime-method:has(input:checked) strong { color:var(--selected-ink); }
 .jj-runtime-method:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
-.jj-runtime-method:has(input:disabled) { cursor:default; opacity:.55; }
+.jj-runtime-method:has(input:disabled) { cursor:default; color:var(--disabled-ink); background:var(--disabled-bg); }
 .jj-runtime-method::before { content:''; position:absolute; inset:0; border-radius:inherit; z-index:-1; background:var(--hover); opacity:0; pointer-events:none; transition:opacity var(--motion-hover-out) var(--ease-respond); }
 @media(hover:hover) and (pointer:fine) { .jj-runtime-method:not(:has(input:disabled)):hover::before { opacity:1; transition-duration:var(--motion-hover-in); } }
 .jj-runtime-panel { min-width:0; animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
@@ -90,9 +90,9 @@
 .jj-runtime-dependencies > .jj-field { flex:1; min-width:180px; max-width:320px; }
 .jj-runtime-dependencies > .jj-checkbox { margin-left:auto; }
 .jj-runtime-databases > header { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:18px; }
-.jj-runtime-databases h4 { margin:0 0 6px; font-size:inherit; }
+.jj-runtime-databases h4 { margin:0 0 6px;  }
 .jj-runtime-databases p { margin:0; }
-.jj-runtime-database { padding:20px; border:1px solid var(--line); border-radius:var(--radius-control,10px); background:var(--inset); }
+.jj-runtime-database { display:grid; gap:20px; padding:20px; border:1px solid var(--line); border-radius:var(--radius-control,10px); background:var(--inset); }
 .jj-runtime-database + .jj-runtime-database { margin-top:14px; }
 .jj-runtime-table-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-top:18px; }
 .jj-runtime-database > footer { display:flex; justify-content:flex-end; margin-top:14px; }
@@ -109,8 +109,6 @@
   .jj-runtime-review > div,.jj-runtime-review > .jj-button { grid-column:1; }
   .jj-runtime-instance dl { grid-template-columns:minmax(0,1fr); gap:14px; }
 }
-
-.jj-application-capabilities h2,.jj-application-capabilities h3 { font-size:var(--text-body); }
 @media(max-width:700px) { .jj-connect-new { grid-template-columns:minmax(0,1fr); } .jj-connect-new > header { padding:22px 20px; border-right:0; border-bottom:1px solid var(--line); } }
 
 .jj-application-workspace > .jj-workspace-header { padding:0 0 24px; background:transparent; }
@@ -132,7 +130,6 @@
 .jj-example-workflow > .jj-button + .jj-button { border-left:1px solid var(--line); }
 .jj-example-archives { border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--surface); overflow:hidden; }
 .jj-example-archives > header { display:flex; align-items:center; gap:16px; padding:20px 24px; background:var(--inset); border-bottom:1px solid var(--line); }
-.jj-example-archives > header h2 { font-size:var(--text-body); }
 .jj-example-archives > article { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:24px; padding:20px 24px; }
 .jj-example-archives > article + article { border-top:1px solid var(--line); }
 .jj-example-archives article > div { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; }

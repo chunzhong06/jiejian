@@ -1,7 +1,6 @@
 .jj-tools-layout { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:32px; align-items:stretch; container:tools-workspace / inline-size; }
 .jj-tools-connection,.jj-tools-access { min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-surface); padding-inline:24px; }
 .jj-tools-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:24px 0 0; }
-.jj-tools-heading h2,.jj-tools-access h2 { font-size:var(--text-section); }
 .jj-tools-heading > .jj-button { flex:none; width:36px; min-height:36px; padding:0; }
 .jj-tools-body { display:grid; gap:24px; padding:24px 0; }
 .jj-tool-selector { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:20px; }

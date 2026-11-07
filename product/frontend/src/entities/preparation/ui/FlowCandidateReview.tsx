@@ -1,11 +1,11 @@
+import type {FlowEditorDraft} from './flowDraft'
 import {useState} from 'react'
-import type {OperationFlow,ApiSourceReference,EntityEvidence} from '../api/operationFlows'
+import type {OperationFlow} from '../api/operationFlows'
 import type {EditableStep} from './flowInputs'
 import {decodeSteps} from './flowInputs'
 import {Dialog} from '../../../shared/ui/Dialog'
 import {Button} from '../../../shared/ui/actions'
 
-export type FlowEditorDraft={phase:number;origin:'existing'|'recording'|'openapi'|'manual';sourceRequest?:ApiSourceReference;entityEvidence:EntityEvidence[];flowId:string;revision:number;steps:EditableStep[];selected:number;target:string;createdPath:string;subject:string;owner:string;resource:string;recovery:string;restoreMethod:string;restoreBody:string;provenance:OperationFlow['provenance'];recordingId:string;saved?:OperationFlow}
 export const flowDraftKey=(project:string,action:string)=>'flow:'+project+':'+action
 
 export function FlowCandidateReview({candidate,previous,accounts,onApply,onKeep}:{candidate:OperationFlow;previous?:FlowEditorDraft;accounts:{identity_id:string;label:string}[];onApply:(preserveValues:boolean)=>void;onKeep:()=>void}){

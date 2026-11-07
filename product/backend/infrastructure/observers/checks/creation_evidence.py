@@ -56,7 +56,9 @@ def observe_creation(owner, *, source, case, action_id, requirement, proof, phas
     current={item.resource_id:item for item in view.members}
     scope_ids={event.member.resource_id for event in fresh}
     unchanged=all(current.get(key)==member for key,member in old.items()) and not (set(current)-set(old)-scope_ids)
-    complete=matched and not view.foreign_mutations and unchanged
+    # 恢复只证明集合回到原投影；已删除新对象上的历史修改不否定这一事实。
+    # AFTER/EVENTUAL 仍严格拒绝混杂写入，不据此证明创建效果缺席。
+    complete=matched and (phase=='RECOVERY' or not view.foreign_mutations) and unchanged
     if phase in {'AFTER','EVENTUAL'}:
         # 全局水位覆盖范围比所选集合更大：并发创建会明确留下缺口，不凭时间接近归因。
         complete=complete and view.watermark-before.watermark==len(view.events) and view.scope.state=='COMPLETE'

@@ -1,5 +1,6 @@
 """单次场景试运行的提交、fence发布和恢复缺口，不拥有正式检查结果。"""
 import time
+from dataclasses import dataclass
 from uuid import uuid4
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.domain.lifecycle import JobState
@@ -7,24 +8,42 @@ from product.backend.infrastructure.storage import JobRecord
 from product.backend.infrastructure.runtime.jobs.models import JobEventType
 from product.backend.infrastructure.runtime.jobs.events import append_job_event
 from product.protocols.preparation.proof_sources import proof_fingerprint
+from product.protocols.preparation.flow_trial import FlowTrialRequest, FlowTrialReport
 
 
-def trial_recovery_gaps(work,project_id):
-    requests=work.flow_trials.list(project_id)
-    restored=set()
-    for request in requests:
-        report=work.flow_trials.report(project_id,request.trial_id)
-        if request.plan.mode=='RESTORE' and report is not None and report.recovery=='REQUEST_ACCEPTED':
-            restored.add(request.plan.origin_trial_id)
-    gaps=[]
-    for request in requests:
-        if request.plan.mode!='TRIAL' or not request.plan.state_changing or request.trial_id in restored:continue
+@dataclass(frozen=True)
+class TrialReading:
+    request: FlowTrialRequest
+    job: JobRecord
+    report: FlowTrialReport | None
+
+
+def read_trial_facts(work,project_id):
+    """仅在本次工作单元中复用；写入后重新读取，不跨请求缓存生命周期。"""
+    readings=[]
+    for request in work.flow_trials.list(project_id):
         job=work.jobs.get_by_flow_trial(request.trial_id)
-        report=work.flow_trials.report(project_id,request.trial_id)
-        if job is None or job.attempt==0:continue
+        if job is None or job.project_id!=project_id:
+            raise JiejianError(ErrorCode.STORAGE_STATE,'试运行缺少所属执行任务，请保留原记录并核对诊断')
+        readings.append(TrialReading(request,job,work.flow_trials.report(project_id,request.trial_id)))
+    return tuple(readings)
+
+
+def recovery_gaps_from_facts(readings):
+    restored={item.request.plan.origin_trial_id for item in readings
+        if item.request.plan.mode=='RESTORE' and item.report is not None and item.report.recovery=='REQUEST_ACCEPTED'}
+    gaps=[]
+    for item in readings:
+        request,job,report=item.request,item.job,item.report
+        if request.plan.mode!='TRIAL' or not request.plan.state_changing or request.trial_id in restored:continue
+        if job.attempt==0:continue
         if report is not None and (not report.flow_attempted or report.recovery=='REQUEST_ACCEPTED'):continue
         gaps.append(request)
     return tuple(gaps)
+
+
+def trial_recovery_gaps(work,project_id):
+    return recovery_gaps_from_facts(read_trial_facts(work,project_id))
 
 
 class FlowTrialJobs:

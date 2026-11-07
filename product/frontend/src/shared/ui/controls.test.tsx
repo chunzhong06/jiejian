@@ -5,9 +5,124 @@ import {Button} from './actions'
 import {Choice} from './Choice'
 import {Dialog} from './Dialog'
 import {Tabs,LinkTabs} from './Tabs'
-import {Field} from './layout'
+import {Field,SectionHeading} from './layout'
 import {IndexSelection} from './IndexSelection'
 import {Notice} from './feedback'
+import {motionMilliseconds} from '../lib/motionTiming'
+import {SearchField} from './SearchField'
+import {FilePicker} from './FilePicker'
+import {CommandMenu} from './CommandMenu'
+
+it('命令菜单统一键盘展开、取消和焦点返回，取消不触发业务动作',async()=>{
+  const action=vi.fn()
+  render(<CommandMenu menu={{items:[{key:'work',label:'接续任务'}],onClick:action}}><Button>任务操作</Button></CommandMenu>)
+  const trigger=screen.getByRole('button',{name:'任务操作'})
+  trigger.focus();fireEvent.keyDown(trigger,{key:'ArrowDown'})
+  fireEvent.keyDown(trigger,{key:'Escape'})
+  expect(trigger).toHaveAttribute('aria-expanded','false')
+  expect(trigger).toHaveFocus();expect(action).not.toHaveBeenCalled()
+  fireEvent.keyDown(trigger,{key:'ArrowDown'})
+  const item=await screen.findByRole('menuitem',{name:'接续任务'})
+  expect(trigger).toHaveAttribute('aria-expanded','true')
+  fireEvent.keyDown(item,{key:'Escape'})
+  await waitFor(()=>expect(trigger).toHaveAttribute('aria-expanded','false'))
+  expect(trigger).toHaveFocus();expect(action).not.toHaveBeenCalled()
+})
+
+it('菜单动作先归还焦点再打开后续任务，禁用后关闭原菜单',async()=>{
+  const action=vi.fn()
+  function Scene({disabled=false}:{disabled?:boolean}){const [dialog,setDialog]=useState(false);return <><CommandMenu menu={{items:[{key:'work',label:'接续任务'}],onClick:()=>{action();setDialog(true)}}}><Button disabled={disabled}>任务操作</Button></CommandMenu>{dialog&&<Dialog title="接续准备" onClose={()=>setDialog(false)}>核对资料</Dialog>}</>}
+  const view=render(<Scene/>),trigger=screen.getByRole('button',{name:'任务操作'})
+  trigger.focus();fireEvent.click(trigger);fireEvent.click(await screen.findByRole('menuitem',{name:'接续任务'}))
+  expect(action).toHaveBeenCalledOnce()
+  expect(within(screen.getByRole('dialog')).getByRole('heading',{name:'接续准备'})).toHaveFocus()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'关闭'}))
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(trigger).toHaveFocus()
+  fireEvent.click(trigger);await screen.findByRole('menuitem',{name:'接续任务'})
+  view.rerender(<Scene disabled/>);expect(trigger).toHaveAttribute('aria-expanded','false')
+  expect(trigger).toBeDisabled();expect(action).toHaveBeenCalledOnce()
+})
+
+it('文件选择沿用系统窗口，取消不清空，选择或拖放同一文件不提交表单',async()=>{
+  const changed=vi.fn(),submit=vi.fn()
+  const view=render(<form onSubmit={submit}><Field label="接口资料"><FilePicker label="接口资料" maxBytes={4194304} formats="JSON" accept=".json" onFileChange={changed}/></Field></form>)
+  const input=view.container.querySelector('input[type=file]')!,picker=screen.getByRole('group',{name:'接口资料'})
+  const native=vi.spyOn(input as HTMLInputElement,'click')
+  fireEvent.click(screen.getByRole('button',{name:'选择接口资料'}));expect(native).toHaveBeenCalledOnce()
+  fireEvent.change(input,{target:{files:[]}});expect(changed).not.toHaveBeenCalled()
+  const file=new File(['{}'],'orders.json',{type:'application/json'})
+  fireEvent.change(input,{target:{files:[file]}})
+  await waitFor(()=>expect(screen.getByRole('button',{name:'选择接口资料'})).toBeEnabled())
+  fireEvent.drop(picker.firstElementChild!,{dataTransfer:{files:[file],types:['Files']}})
+  await waitFor(()=>expect(changed).toHaveBeenCalledTimes(2))
+  expect(changed.mock.calls).toEqual([[file],[file]]);expect(submit).not.toHaveBeenCalled()
+})
+
+it('无效替换保留原文件，拖放离开即撤销反馈，移除后回到选择入口',async()=>{
+  const original=new File(['original'],'original.json'),changed=vi.fn()
+  function Scene(){const [file,setFile]=useState<File|undefined>(original);return <FilePicker label="接口资料" file={file} maxBytes={8} formats="JSON" accept=".json" onFileChange={value=>{changed(value);setFile(value)}}/>}
+  const view=render(<Scene/>),zone=view.container.querySelector('.jj-file-picker')!
+  const transfer=(files:File[])=>({dataTransfer:{files,types:['Files']}})
+  fireEvent.dragEnter(zone,transfer([]));expect(zone).toHaveAttribute('data-dragging','true')
+  fireEvent.dragLeave(zone);expect(zone).not.toHaveAttribute('data-dragging')
+  for(const files of [[new File(['012345678'],'too-big.json')],[new File(['text'],'wrong.txt')],[new File([''],'empty.json')],[original,original]]){
+    fireEvent.drop(zone,transfer(files));expect(screen.getByRole('alert')).toBeVisible()
+    expect(screen.getByText('original.json')).toBeVisible();expect(changed).not.toHaveBeenCalled()
+  }
+  fireEvent.click(screen.getByRole('button',{name:'移除接口资料'}))
+  await waitFor(()=>expect(screen.getByRole('button',{name:'选择接口资料'})).toHaveFocus())
+  expect(changed).toHaveBeenCalledExactlyOnceWith(undefined)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('读取期间阻止重复选择和拖放，外部禁用后同样不处理文件',async()=>{
+  let finish!:()=>void
+  const changed=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve}))
+  const view=render(<FilePicker label="接口资料" maxBytes={100} onFileChange={changed}/>),input=view.container.querySelector('input[type=file]')!,zone=view.container.querySelector('.jj-file-picker')!
+  const file=new File(['{}'],'orders.json'),drop={dataTransfer:{files:[file],types:['Files']}}
+  fireEvent.change(input,{target:{files:[file]}});fireEvent.drop(zone,drop)
+  expect(changed).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'选择接口资料'})).toBeDisabled()
+  finish();await waitFor(()=>expect(screen.getByRole('button',{name:'选择接口资料'})).toBeEnabled())
+  view.rerender(<FilePicker label="接口资料" maxBytes={100} onFileChange={changed} disabled/>)
+  fireEvent.drop(zone,drop);fireEvent.change(input,{target:{files:[file]}})
+  expect(changed).toHaveBeenCalledOnce()
+})
+
+it('搜索清除只调整所属输入并返回焦点，提交查询仍由表单发起',()=>{
+  const submit=vi.fn()
+  function Scene(){const [query,setQuery]=useState('订单');return <form aria-label="检查记录查询" onSubmit={event=>{event.preventDefault();submit(query)}}><SearchField label="查找检查记录" placeholder="查找业务操作或检查编号" value={query} onValueChange={setQuery}/><Button type="submit">查找</Button></form>}
+  render(<Scene/>)
+  const input=screen.getByRole('searchbox',{name:'查找检查记录'})
+  fireEvent.click(screen.getByRole('button',{name:'清除查找检查记录'}))
+  expect(input).toHaveValue('');expect(input).toHaveFocus()
+  expect(submit).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button',{name:'清除查找检查记录'})).not.toBeInTheDocument()
+  fireEvent.change(input,{target:{value:'更新资料'}})
+  expect(submit).not.toHaveBeenCalled()
+  fireEvent.submit(screen.getByRole('form',{name:'检查记录查询'}))
+  expect(submit).toHaveBeenCalledExactlyOnceWith('更新资料')
+})
+
+it('生产压缩后的秒与源码毫秒保持相同节奏，无效值沿用调用方回退',()=>{
+  expect(motionMilliseconds('200ms')).toBe(200)
+  expect(motionMilliseconds(' .2s ')).toBe(200)
+  expect(motionMilliseconds('.22s')).toBe(220)
+  expect(motionMilliseconds('')).toBe(0)
+  expect(motionMilliseconds('invalid',100)).toBe(100)
+})
+
+it('集合标题保留语义从属关系，各自的创建操作仍归属对应集合',()=>{
+  const addAction=vi.fn(),addResult=vi.fn()
+  render(<><SectionHeading title="业务操作" actions={<button onClick={addAction}>添加操作</button>}/><SectionHeading title="业务结果" level={3} actions={<button onClick={addResult}>添加结果</button>}/><SectionHeading title="来源说明" level={3} appearance="group"/></>)
+  const actions=screen.getByRole('heading',{name:'业务操作',level:2})
+  const results=screen.getByRole('heading',{name:'业务结果',level:3})
+  expect(actions.className).toBe(results.className)
+  expect(screen.getByRole('heading',{name:'来源说明',level:3}).className).not.toBe(results.className)
+  fireEvent.click(within(results.closest('header')!).getByRole('button',{name:'添加结果'}))
+  expect(addResult).toHaveBeenCalledOnce();expect(addAction).not.toHaveBeenCalled()
+  expect(within(actions.closest('header')!).getByRole('button',{name:'添加操作'})).toBeVisible()
+})
 
 it('普通通知默认中性，风险提示显式声明且保留操作与状态文字',()=>{
   const retry=vi.fn()
@@ -98,6 +213,48 @@ it('页签键盘切换同步选中值和焦点',()=>{
   expect(screen.getByRole('tab',{name:'业务结果'})).toHaveAttribute('aria-selected','true')
 })
 
+it('快速反向选择接续当前运动，减少动效立即停止且不延迟选择',()=>{
+  const motions:Array<{frames:Keyframe[];animation:Animation}>=[],listeners=new Set<()=>void>()
+  const preference={matches:false,addEventListener:(_type:string,listener:()=>void)=>listeners.add(listener),removeEventListener:(_type:string,listener:()=>void)=>listeners.delete(listener)}
+  vi.spyOn(window,'matchMedia').mockReturnValue(preference as unknown as MediaQueryList)
+  vi.spyOn(HTMLElement.prototype,'offsetLeft','get').mockImplementation(function(this:HTMLElement){return this.textContent==='操作经过'?120:0})
+  vi.spyOn(HTMLElement.prototype,'offsetWidth','get').mockReturnValue(100)
+  vi.spyOn(HTMLElement.prototype,'offsetHeight','get').mockReturnValue(40)
+  const nativeStyle=window.getComputedStyle
+  vi.spyOn(window,'getComputedStyle').mockImplementation(node=>{const style=nativeStyle(node);style.setProperty('--motion-indicator','.2s');return style})
+  const descriptor=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'animate')
+  Object.defineProperty(HTMLElement.prototype,'animate',{configurable:true,value:(frames:Keyframe[],options:KeyframeAnimationOptions)=>{
+    expect(options.duration).toBe(300)
+    const animation={currentTime:0,cancel:vi.fn(),onfinish:null} as unknown as Animation
+    motions.push({frames,animation});return animation
+  }})
+  try{
+    function Scene(){const [value,setValue]=useState('result');return <Tabs label="检查依据" value={value} onValueChange={setValue} items={[{value:'result',label:'业务结果'},{value:'trace',label:'操作经过'}]}/>}
+    const view=render(<Scene/>)
+    fireEvent.click(screen.getByRole('tab',{name:'操作经过'}))
+    expect(motions).toHaveLength(1)
+    motions[0].animation.currentTime=75
+    fireEvent.click(screen.getByRole('tab',{name:'业务结果'}))
+    const x=(frame:Keyframe)=>Number(String(frame.transform).match(/translate3d\(([-\d.]+)/)?.[1])
+    expect(motions[0].animation.cancel).toHaveBeenCalledOnce()
+    expect(x(motions[1].frames[0])).toBeGreaterThan(0)
+    expect(x(motions[1].frames[0])).toBeLessThan(120)
+    // 改向起点仍保有上一运动的正速度，随后收束到新目标，不能原地停顿后倒放。
+    expect(x(motions[1].frames[1])).toBeGreaterThan(x(motions[1].frames[0]))
+    expect(x(motions[1].frames.at(-1)!)).toBe(0)
+    preference.matches=true;listeners.forEach(listener=>listener())
+    expect(motions[1].animation.cancel).toHaveBeenCalledOnce()
+    fireEvent.keyDown(screen.getByRole('tab',{name:'业务结果'}),{key:'ArrowRight'})
+    expect(screen.getByRole('tab',{name:'操作经过'})).toHaveFocus()
+    expect(screen.getByRole('tab',{name:'操作经过'})).toHaveAttribute('aria-selected','true')
+    expect(motions).toHaveLength(2)
+    view.unmount();expect(listeners.size).toBe(0)
+  }finally{
+    if(descriptor)Object.defineProperty(HTMLElement.prototype,'animate',descriptor)
+    else Reflect.deleteProperty(HTMLElement.prototype,'animate')
+  }
+})
+
 it('路由分类沿用链接语义，预载不切换位置或触发业务提交',()=>{
   const intent=vi.fn(),submit=vi.fn()
   render(<form onSubmit={submit}><LinkTabs label="设置分类" value="tools" onIntent={intent} items={[{value:'tools',label:'开发工具',href:'#/settings?section=tools'},{value:'storage',label:'本地存储',href:'#/settings?section=storage'}]}/><Tabs label="局部内容" value="a" items={[{value:'a',label:'当前内容'}]} onValueChange={vi.fn()}/></form>)
@@ -119,5 +276,5 @@ it('取消对话框不会执行提交，并在退出后返回原入口',async()=
   trigger.focus();fireEvent.click(trigger)
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'取消'}))
   await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(submit).not.toHaveBeenCalled();expect(trigger).toHaveFocus()
+  expect(submit).not.toHaveBeenCalled();await waitFor(()=>expect(trigger).toHaveFocus())
 })

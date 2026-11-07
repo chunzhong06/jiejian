@@ -8,6 +8,7 @@ from product.backend.domain.preparation.bindings import ActionExecutionBinding, 
 from product.backend.domain.boundaries.permissions import PermissionIntentRevision
 from product.protocols.checks.execution_request import WireModel, Hash, LogicalId, ActorId, EffectId, IdentityId, CaseRole, FrozenPermission, ExecutionAssetReference, RecordedProofReference, ObserverProofReference, EffectProofRequirement, RecoveryReference, ExecutionCase, ExecutionTwin, case_invariants, content_hash
 from typing import Literal
+from product.protocols.checks.scenarios import FrozenBusinessScenario
 from urllib.parse import parse_qsl, urlsplit
 
 
@@ -63,6 +64,7 @@ class ProjectCheckPlan(WireModel):
     actions: tuple[ActionCheckPlan, ...]
     gaps: tuple[CheckPlanGap, ...]
     plan_fingerprint: Hash
+    scenario: FrozenBusinessScenario | None = Field(default=None,exclude_if=lambda value:value is None)
 
 
 class PreparedActionInput(BoundaryModel):

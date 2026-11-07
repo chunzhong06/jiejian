@@ -20,7 +20,7 @@
 .jj-registration-targets { border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; }
 .jj-registration-targets label { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 16px; cursor: pointer; }
 .jj-registration-targets label + label { border-top: 1px solid var(--line); }
-.jj-registration-targets label[data-selected=true] { background:var(--selected); }
+.jj-registration-targets label[data-selected=true] { --ink:var(--selected-ink); --muted:var(--selected-ink); color:var(--selected-ink); background:var(--selected); }
 .jj-registration-targets label > span { min-width: 0; }
 .jj-registration-targets strong { display: block; font-size: var(--text-meta); font-weight: 550; }
 .jj-registration-targets small { display: block; margin-top: 5px; color: var(--muted); }

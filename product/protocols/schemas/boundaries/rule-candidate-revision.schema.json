@@ -356,6 +356,61 @@
       "title": "CoverageTarget",
       "type": "object"
     },
+    "FieldMutationRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_value": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Value"
+        },
+        "operation": {
+          "default": "CHANGE",
+          "enum": [
+            "CHANGE",
+            "ASSIGN",
+            "ADD",
+            "REMOVE"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FieldMutationRequirement",
+      "type": "object"
+    },
     "PermissionConditions": {
       "additionalProperties": false,
       "properties": {
@@ -367,6 +422,15 @@
           ],
           "title": "Principal",
           "type": "string"
+        },
+        "relationships": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RelationshipRequirement"
+          },
+          "maxItems": 4,
+          "title": "Relationships",
+          "type": "array"
         },
         "resource_states": {
           "default": [],
@@ -677,6 +741,17 @@
           "default": null,
           "title": "Expected State"
         },
+        "field_mutation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldMutationRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "item_id": {
           "pattern": "^peff_[0-9a-f]{16}$",
           "title": "Item Id",
@@ -804,6 +879,67 @@
         "protected_effect_item_ids"
       ],
       "title": "ProposedPermissionItem",
+      "type": "object"
+    },
+    "RelationshipRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "inherited_role": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited Role"
+        },
+        "kind": {
+          "enum": [
+            "ORGANIZATION",
+            "ROLE_INHERITANCE",
+            "SHARING",
+            "DELEGATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_depth": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "organization_scope": {
+          "default": "SAME",
+          "enum": [
+            "SAME",
+            "SUBJECT_ANCESTOR",
+            "RESOURCE_ANCESTOR"
+          ],
+          "title": "Organization Scope",
+          "type": "string"
+        },
+        "state": {
+          "default": "ACTIVE",
+          "enum": [
+            "ACTIVE",
+            "ABSENT",
+            "EXPIRED",
+            "REVOKED"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "RelationshipRequirement",
       "type": "object"
     },
     "RequirementSource": {

@@ -1,0 +1,149 @@
+{
+  "$defs": {
+    "ScenarioNodeProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "case_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Case Ids",
+          "type": "array"
+        },
+        "experiment_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Experiment Id",
+          "type": "string"
+        },
+        "experiment_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Experiment Label",
+          "type": "string"
+        },
+        "invocation_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "invocation_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Invocation Label",
+          "type": "string"
+        },
+        "observed_at_us": {
+          "minimum": 0,
+          "title": "Observed At Us",
+          "type": "integer"
+        },
+        "recovered_cases": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Recovered Cases",
+          "type": "array"
+        },
+        "recovery_intents": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Recovery Intents",
+          "type": "array"
+        },
+        "request": {
+          "default": "NOT_STARTED",
+          "enum": [
+            "NOT_STARTED",
+            "INTENT_SAVED",
+            "RECEIVED",
+            "UNCONFIRMED"
+          ],
+          "title": "Request",
+          "type": "string"
+        }
+      },
+      "required": [
+        "experiment_id",
+        "invocation_id",
+        "experiment_label",
+        "invocation_label",
+        "case_ids",
+        "observed_at_us"
+      ],
+      "title": "ScenarioNodeProgress",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "document_type": {
+      "const": "jiejian.scenario-execution",
+      "default": "jiejian.scenario-execution",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/ScenarioNodeProgress"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Nodes",
+      "type": "array"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "scenario_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Scenario Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "job_id",
+    "attempt",
+    "fencing_token",
+    "request_hash",
+    "scenario_fingerprint",
+    "nodes"
+  ],
+  "title": "ScenarioExecutionJournal",
+  "type": "object"
+}

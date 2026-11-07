@@ -1,0 +1,318 @@
+{
+  "$defs": {
+    "BatchInvocation": {
+      "additionalProperties": false,
+      "properties": {
+        "array_path": {
+          "items": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "maximum": 127,
+                "minimum": 0,
+                "type": "integer"
+              }
+            ]
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Array Path",
+          "type": "array"
+        },
+        "response_items_path": {
+          "anyOf": [
+            {
+              "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]+\\]){0,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Items Path"
+        },
+        "response_resource_field": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Resource Field"
+        },
+        "strategy": {
+          "enum": [
+            "ATOMIC",
+            "PER_ITEM"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "array_path"
+      ],
+      "title": "BatchInvocation",
+      "type": "object"
+    },
+    "ScenarioExperiment": {
+      "additionalProperties": false,
+      "properties": {
+        "control_experiment_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Experiment Id"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "invocations": {
+          "items": {
+            "$ref": "#/$defs/ScenarioInvocation"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Invocations",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "NORMAL",
+            "OMIT",
+            "REORDER",
+            "REPEAT",
+            "CHANGE_SUBJECT",
+            "REVOKE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "invocations"
+      ],
+      "title": "ScenarioExperiment",
+      "type": "object"
+    },
+    "ScenarioInvocation": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchInvocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "depends_on": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Depends On",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ScenarioItem"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        },
+        "label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "items"
+      ],
+      "title": "ScenarioInvocation",
+      "type": "object"
+    },
+    "ScenarioItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "permission": {
+          "$ref": "#/$defs/ScenarioPermission"
+        },
+        "resource_from": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource From"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "subject_identity_id": {
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Identity Id"
+        }
+      },
+      "required": [
+        "id",
+        "permission",
+        "resource_id"
+      ],
+      "title": "ScenarioItem",
+      "type": "object"
+    },
+    "ScenarioPermission": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "ScenarioPermission",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "Description",
+      "type": "string"
+    },
+    "document_type": {
+      "const": "jiejian.business-scenario",
+      "default": "jiejian.business-scenario",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "experiments": {
+      "items": {
+        "$ref": "#/$defs/ScenarioExperiment"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Experiments",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^bsc_[0-9a-f]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "project_id",
+    "revision",
+    "label",
+    "experiments"
+  ],
+  "title": "BusinessScenarioRevision",
+  "type": "object"
+}

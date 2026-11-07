@@ -9,6 +9,7 @@ from typing import Callable
 class FileEntityPolicy:
     max_bytes:int
     private_capture:Callable[[bytes],None]|None=None
+    dispatch_json:bool=False
 
     def __post_init__(self):
         if type(self.max_bytes) is not int or not 1<=self.max_bytes<=4*1024*1024:

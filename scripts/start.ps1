@@ -8,13 +8,7 @@ param(
     [ValidateSet("Interactive", "Gui", "Cli", "Prepare")]
     [string]$Mode = "Gui",
     [ValidateSet("Managed", "System")][string]$Browser = "Managed",
-    [switch]$ForcePrepare,
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
-    [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
-    [Parameter(DontShow = $true)][long]$DisplaySpinnerStartedAt = 0,
-    [Parameter(DontShow = $true)][string]$DisplaySpinnerStopEvent = "",
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii,
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerPanel
+    [switch]$ForcePrepare
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,10 +24,6 @@ try {
         . (Join-Path $PSScriptRoot "development/startup\$module")
     }
 
-    if ($DisplaySpinnerProcess) {
-        try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent ([bool]$DisplaySpinnerPanel) } catch { }
-        exit 0
-    }
     if ($script:FinalMode -eq "Interactive" -and -not $script:DisplayInteractive) {
         Fail-Start 40 "mode" "Interactive 模式需要可交互的输入和输出；请显式使用 -Mode Gui、-Mode Cli 或 -Mode Prepare" "使用 -Mode Gui、-Mode Cli 或 -Mode Prepare"
     }

@@ -340,8 +340,8 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
         run_id = "run_" + "9" * 32
         entry = SimpleNamespace(result_integrity="VALID", run=SimpleNamespace(run_id=run_id, policy_epoch=core.business_boundaries.view(project).policy_epoch, verdict=RunVerdict.PASS, created_at_us=1))
         core.workspace._reader.current_checks = WorkspaceCheckReaders(checks=core.checks,
-            reader=SimpleNamespace(active_for_project=lambda _: None, project_readings=lambda _: ((entry, SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),) if kind in {"VIEW_CURRENT_RESULT", "CURRENT_DELIVERY"} else (),
-                package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),
+            reader=SimpleNamespace(active_for_project=lambda _: None, project_readings=lambda _: ((entry, SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint, environment=understanding.environment))),) if kind in {"VIEW_CURRENT_RESULT", "CURRENT_DELIVERY"} else (),
+                package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint, environment=understanding.environment))),
             changes=SimpleNamespace(latest=lambda _: None), repairs=SimpleNamespace(evaluate=lambda _, **kwargs: repair),
             source_inspector=lambda _: "changed" if kind == "REGISTER_SOURCE_CHANGE" else understanding.source_fingerprint)
         delivery = None

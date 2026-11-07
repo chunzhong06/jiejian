@@ -1,3 +1,4 @@
+import {routeDefinition,routeAliases,type RouteDefinition} from '../shared/lib/routes'
 import {routePage} from '../shared/lib/routePage'
 import {PageSkeleton} from '../shared/ui/PageSkeleton'
 import type { ProjectDto } from '../entities/application/api/projects';
@@ -19,12 +20,12 @@ const Testing = routePage(() => import('../pages/testing/Testing').then(module=>
 const Issues = routePage(() => import('../pages/issues/Issues').then(module=>({default:module.Issues})),'/issues');
 const Collaboration = routePage(() => import('../pages/tools/Collaboration').then(module=>({default:module.Collaboration})),'/workspace');
 const CollaborationHub = routePage(() => import('../pages/tools/CollaborationHub').then(module=>({default:module.CollaborationHub})),'/workspace');
-const loaders: Record<string, () => Promise<unknown>> = { '/system': System.preload, '/workspace': Home.preload, '/permissions': Permissions.preload, '/preparation': Preparation.preload, '/reports': Reports.preload, '/application': ApplicationWorkbench.preload, '/testing': Testing.preload, '/issues': Issues.preload, '/environment': Connect.preload, '/changes': Changes.preload, '/tools': Agent.preload, '/storage': Storage.preload, '/archive': ArchivedExample.preload };
-loaders['/settings']=Agent.preload
-loaders['/settings?section=tools']=Agent.preload
-loaders['/settings?section=storage']=Storage.preload
-loaders['/settings?section=system']=System.preload
-export function preloadRoute(path: string) { void loaders[path]?.().catch(() => { }); }
+const loaders: Record<RouteDefinition['preload'], () => Promise<unknown>> = {system:System.preload,home:Home.preload,permissions:Permissions.preload,preparation:Preparation.preload,reports:Reports.preload,application:ApplicationWorkbench.preload,testing:Testing.preload,issues:Issues.preload,environment:Connect.preload,changes:Changes.preload,tools:Agent.preload,storage:Storage.preload,archive:ArchivedExample.preload};
+export function preloadRoute(path: string) {
+    const [pathname,search]=path.split('?'),route={path:routeAliases[pathname]??pathname,query:new URLSearchParams(search)}
+    const key=settingsSection(route)??routeDefinition(route.path)?.preload
+    if(key)void loaders[key]?.().catch(()=>{})
+}
 type Props = {
     current: string;
     route: Route;

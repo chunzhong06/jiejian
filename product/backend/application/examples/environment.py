@@ -88,12 +88,13 @@ class _Experience:
 class OfficialSampleExperience:
     def __init__(self, manager: OfficialSampleManager, *, understanding, boundaries, identities, secret_store,
                  registry, installer, bindings, preparation, changes, repairs, uow_factory, var_dir,
-                 archive_project, clock_us=None, reader=None, project_repairs=None, development=None):
+                 archive_project, clock_us=None, reader=None, project_repairs=None, development=None, development_reader=None):
         self._manager,self._understanding,self._boundaries=manager,understanding,boundaries
         self._identities,self._secrets,self._registry=identities,secret_store,registry
         self._installer,self._bindings,self._preparation=installer,bindings,preparation
         self._changes,self._repairs=changes,repairs
         self._development = development
+        self._development_reader = development_reader
         self._reader, self._project_repairs = reader, project_repairs
         self._uow_factory,self._var_dir,self._archive=uow_factory,var_dir,archive_project
         self._clock=clock_us or (lambda:time.time_ns()//1000)
@@ -140,8 +141,8 @@ class OfficialSampleExperience:
             scenario_prepared=bool(current and current.scenario_prepared),
             scenario_version=(None if retained is None else OfficialScenarioVersion(retained["scenario_version"])) if current is None else current.scenario_version,
             scenario_changed_at_us=None if current is None else current.scenario_changed_at_us,
-            vulnerable_change_id=None if current is None else current.vulnerable_change_id or preset_change_id(self._development, current, "VULNERABLE"),
-            repair_change_id=None if current is None else current.repair_change_id or preset_change_id(self._development, current, "FIXED"),
+            vulnerable_change_id=None if current is None else current.vulnerable_change_id or preset_change_id(self._development_reader, current, "VULNERABLE"),
+            repair_change_id=None if current is None else current.repair_change_id or preset_change_id(self._development_reader, current, "FIXED"),
             evidence_limited=bool(current and current.evidence_limited),
             pending_tasks=() if current is None else current.pending_tasks,
             lifecycle=lifecycle, history_project_id=None if operation is None else operation["project_id"],
@@ -383,7 +384,7 @@ class OfficialSampleExperience:
                 missing = version is OfficialScenarioVersion.VULNERABLE and current.vulnerable_change_id is None or version is OfficialScenarioVersion.FIXED and current.repair_change_id is None
                 if missing:
                     reference = None if repair_reference is None else CurrentRepairReference.model_validate(repair_reference)
-                    created = prepare_preset_task(self._development, current)
+                    created = prepare_preset_task(self._development, self._development_reader, current)
                     self._record_preset_delivery(current, version, reference, created)
                 return self.status()
             if current.preset_source_fingerprint is not None and self._understanding.inspect_source_fingerprint(current.project_id) != current.preset_source_fingerprint:
@@ -398,7 +399,7 @@ class OfficialSampleExperience:
                 if reference is None:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION,"修复版需要已发布原题引用")
                 self._repairs.resolve(current.project_id,reference)
-            created = prepare_preset_task(self._development, current)
+            created = prepare_preset_task(self._development, self._development_reader, current)
             current.runtime = self._manager.switch_behavior(current.runtime.experience_id,
                 authorization_order="AUTHORIZE_BEFORE_ENQUEUE" if version is OfficialScenarioVersion.FIXED else "ENQUEUE_BEFORE_AUTHORIZE",
                 owner_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE",
@@ -416,7 +417,7 @@ class OfficialSampleExperience:
             return self.status()
 
     def _record_preset_delivery(self, current, version, reference, created):
-        receipt = register_preset_delivery(self._development, current, version, reference, self._understanding, created)
+        receipt = register_preset_delivery(self._development, self._development_reader, current, version, reference, self._understanding, created)
         if version is OfficialScenarioVersion.FIXED:
             current.repair_change_id = receipt.change_id
         else:
@@ -462,7 +463,7 @@ class OfficialSampleExperience:
     def development_journey(self):
         from product.backend.application.examples.journey import build_development_journey
         return build_development_journey(self._require_active(), reader=self._reader,
-            understanding=self._understanding, boundaries=self._boundaries, repairs=self._project_repairs, development=self._development)
+            understanding=self._understanding, boundaries=self._boundaries, repairs=self._project_repairs, development=self._development_reader)
 
     def _require_active(self):
         current=self._current

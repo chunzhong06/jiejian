@@ -99,28 +99,30 @@ def validate_check_inputs(request: ExecutionRequest, bundle: CheckRuntimeBundle,
 def validate_check_decisions(package) -> None:
     """仅 Worker 发布时重验唯一纯规则；GET reader 不调用此入口。"""
     from product.backend.domain.verification.checks import (
-        CheckDecisionInput, aggregate_check_verdict, evaluate_check_case, project_check_effect_facts,
+        CheckDecisionInput, aggregate_check_verdict, evaluate_check_case, project_check_effect_facts,resolved_control_verdict,
     )
     results = {item.case_id: item for item in package.result.case_results}
     by_evidence = {item.evidence_id: item for item in package.evidence}
+    from product.backend.infrastructure.artifacts.checks.fact_validation import validate_scenario_bindings
+    validate_scenario_bindings(package.request,package.evidence)
     verdicts = []
     for action in package.request.actions:
-        controls = {item.deny_case_id: item.allow_case_id for item in action.twins}
         for case in action.cases:
             result = results[case.case_id]
             outcome = result.outcome
             observations = tuple(observation for reference in result.evidence_ids
                 for observation in by_evidence[reference].observations)
-            control = controls.get(case.case_id)
-            decision = evaluate_check_case(CheckDecisionInput(case=case, execution=outcome.execution_outcome,
+            effective=by_evidence[result.evidence_ids[0]].effective_case
+            decision = evaluate_check_case(CheckDecisionInput(case=effective, execution=outcome.execution_outcome,
                 actual_identity=outcome.actual_identity_status, run_correlated=outcome.run_correlated,
                 resource_correlated=outcome.resource_correlated, baseline_trusted=outcome.baseline_trusted,
                 recovery_verified=outcome.recovery_verified,
                 condition_observations=outcome.condition_observations,
-                allow_control_verdict=None if control is None else results[control].verdict,
-                effects=project_check_effect_facts(case, observations)))
+                allow_control_verdict=resolved_control_verdict(package.request,action,case,results),
+                effects=project_check_effect_facts(effective, observations)))
             if decision.verdict is not result.verdict:
                 raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "工件内容校验失败")
             verdicts.append(decision.verdict)
-    if package.result.verdict is not aggregate_check_verdict(tuple(verdicts), planned_case_count=len(results)):
+    expected=None if package.result.result_type in {'FAILED','CANCELLED'} else aggregate_check_verdict(tuple(verdicts), planned_case_count=len(results))
+    if package.result.verdict is not expected:
         raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "工件内容校验失败")

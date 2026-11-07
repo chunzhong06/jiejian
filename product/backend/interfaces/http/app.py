@@ -8,7 +8,6 @@ from contextlib import AsyncExitStack, asynccontextmanager
 import logging
 from pathlib import Path
 from time import perf_counter
-from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -40,6 +39,8 @@ from product.backend.interfaces.http.routers.changes.development import build_de
 from product.backend.interfaces.http.local_control import LocalControlGuard
 from product.backend.interfaces.http.mcp import build_mcp_control
 from product.backend.application.agent_access.service import MCPAccessController
+from product.backend.infrastructure.runtime.logging import request_log_context, request_trace_id
+from product.backend.interfaces.http.body import ApiBodyBudget, BodyBudgetExceeded, body_budget_error
 
 
 logger = logging.getLogger("jiejian.api.startup")
@@ -119,7 +120,7 @@ def create_app(
                 app.state.batch_coordinator = asyncio.create_task(
                     _advance_preparation_batches(context, app.state.batch_stop)
                 )
-            _log_startup_timing('ready_total', ready_started)
+            _log_startup_timing('worker_start', ready_started)
             app.state.local_maintenance_task = asyncio.create_task(_run_local_maintenance(context, app))
             yield
 
@@ -131,23 +132,27 @@ def create_app(
     app.state.mcp_server = mcp_control.server
     app.state.mcp_app = mcp_control.app
 
+    app.add_middleware(ApiBodyBudget)
+
     @app.middleware("http")
     async def local_control_middleware(request: Request, call_next):
         """先建立 trace，再统一执行 Host、会话和写请求同源校验。"""
 
-        trace_id = request.headers.get("x-trace-id") or f"tr_{uuid4().hex}"
+        trace_id = request_trace_id(request.headers.get("x-trace-id"))
         request.state.trace_id = trace_id
         decision = app.state.local_control_guard.authorize(request)
-        if decision.allowed:
-            response = await call_next(request)
-            if decision.issue_session and response.status_code < 400:
-                app.state.local_control_guard.issue_session_cookie(response)
-        else:
-            response = app.state.local_control_guard.rejected_response(trace_id)
+        with request_log_context(trace_id):
+            if decision.allowed:
+                response = await call_next(request)
+                if decision.issue_session and response.status_code < 400:
+                    app.state.local_control_guard.issue_session_cookie(response)
+            else:
+                response = app.state.local_control_guard.rejected_response(trace_id)
         response.headers["x-trace-id"] = trace_id
         return response
 
     app.add_exception_handler(JiejianError, jiejian_error_handler)
+    app.add_exception_handler(BodyBudgetExceeded, body_budget_error)
     app.add_exception_handler(
         RequestValidationError, validation_error_handler
     )

@@ -6,6 +6,51 @@ from product.backend.application.preparation.proofs.commands import SaveProofSou
 from tests.support.builders.runtime.managed_records import ordinary_application, source_configuration, wait_for
 
 
+def test_directory_reads_one_scope_set_and_keeps_revocation_fresh(tmp_path, monkeypatch):
+    from product.backend.infrastructure.storage.preparation.proof_sources import ProofSourceRepository
+
+    harness = ordinary_application(tmp_path)
+    service, project = harness.core.proof_preparation, harness.project_id
+    try:
+        config = source_configuration(harness)
+        basis = service.context(project)['basis_id']
+        saved_count = 0
+        scope = None
+        for size in (1, 16, 64):
+            while saved_count < size:
+                saved = service.save(project, SaveProofSource(operation_id=uuid4().hex, basis_id=basis, config=config))
+                saved_count += 1
+                if scope is None:
+                    scope = service.grant_scope(project, GrantProofScope(operation_id=uuid4().hex,
+                        source_id=saved['result']['source_id'], revision=1, basis_id=basis, confirmed=True))
+            original_scopes, original_adoption = ProofSourceRepository.scopes, ProofSourceRepository.adoption
+            calls = {'scopes': 0, 'adoption': 0}
+
+            def scopes(repository, selected_project):
+                calls['scopes'] += 1
+                return original_scopes(repository, selected_project)
+
+            def adoption(repository, selected_project, source_id):
+                calls['adoption'] += 1
+                return original_adoption(repository, selected_project, source_id)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(ProofSourceRepository, 'scopes', scopes)
+                patch.setattr(ProofSourceRepository, 'adoption', adoption)
+                view = service.context(project)
+            # 保留既有50项目录边界，不把减少查询变成取消分页或跳过每项的归属校验。
+            assert len(view['sources']) == min(size, 50)
+            assert calls == {'scopes': 1, 'adoption': min(size, 50)}
+            assert len(view['read_scopes']) == 1
+            assert all(item['read_scope_confirmed'] for item in view['sources'])
+        service.revoke_scope(project, RevokeProofScope(operation_id=uuid4().hex, scope_id=scope['result']['scope_id']))
+        view = service.context(project)
+        assert view['read_scopes'] == []
+        assert not any(item['read_scope_confirmed'] for item in view['sources'])
+    finally:
+        harness.close()
+
+
 def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_path):
     harness = ordinary_application(tmp_path)
     core,project = harness.core,harness.project_id
@@ -45,6 +90,10 @@ def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_pat
         with core.uow_factory() as work:
             assert work.action_preparation.evidence(harness.action.action_id,1,harness.effect_id) is None
         preview = service.adoption_preview(project,source,preflight)
+        from product.backend.interfaces.http.envelope import data_response
+        from product.backend.interfaces.http.routers.preparation.projections import ProofAdoptionProjection
+        assert data_response(preview,projection=ProofAdoptionProjection).body == data_response(preview).body
+
         adoption_command = AdoptProofSource(operation_id=uuid4().hex,basis_id=preview['basis_id'],
             source_id=source,revision=1,preflight_id=preflight,confirmed=True)
         adopted = service.adopt(project,adoption_command)

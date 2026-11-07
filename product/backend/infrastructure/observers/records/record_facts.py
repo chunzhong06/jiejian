@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from product.backend.infrastructure.observers.adapters.json_source import JsonHistoryFact, SourceReadError
+from product.protocols.checks.field_mutation import mutation_happened
 
 
 def record_value(data, path):
@@ -13,14 +14,29 @@ def record_value(data, path):
     return value
 
 
-def _atomic_state(initial, operation, path, expected_state):
+def field_value(data, path, *, allow_missing=False):
+    value = data
+    for part in path:
+        if not isinstance(value, dict):
+            raise SourceReadError('MAPPING_MISSING')
+        if part not in value:
+            if allow_missing:
+                return False, None
+            raise SourceReadError('MAPPING_MISSING')
+        value = value[part]
+    return True, value
+
+
+def _atomic_state(initial, operation, path, expected_state, field_mutation=None):
     current=initial
     if operation.commit_semantics!='ATOMIC_COMMIT':raise SourceReadError('RECORD_HISTORY_INCOMPLETE')
     for index,transition in enumerate(operation.transitions):
         if transition.ordinal!=index or transition.before!=current:raise SourceReadError('RECORD_HISTORY_INCOMPLETE')
         current=transition.after
-    first,last=record_value(initial,path),record_value(current,path)
-    return current,first!=last and (expected_state is None or last==expected_state)
+    before_present, first = field_value(initial, path, allow_missing=field_mutation is not None)
+    after_present, last = field_value(current, path, allow_missing=field_mutation is not None)
+    return current, mutation_happened(field_mutation, first, last,
+        before_present=before_present, after_present=after_present, expected_state=expected_state)
 
 
 def transaction_fact(before,view,*,path,expected_state,request_key,subject_id,resource_id,owner_id,collection):
@@ -43,7 +59,7 @@ def transaction_fact(before,view,*,path,expected_state,request_key,subject_id,re
         ('BUSINESS_EFFECT_RECORDED' if happened else 'COMPLETE_HISTORY_UNCHANGED',))
 
 
-def request_fact(before,view,*,path,expected_state,request_nonce,request_digest,subject_id,resource_id,owner_id,collection):
+def request_fact(before,view,*,path,expected_state,request_nonce,request_digest,subject_id,resource_id,owner_id,collection,field_mutation=None):
     scope,after=view.scope,view.snapshot
     if before is None or scope is None:return JsonHistoryFact('UNKNOWN','OPEN',('HISTORY_BASELINE_MISSING',))
     if before.generation!=after.generation or scope.generation!=before.generation:
@@ -53,22 +69,28 @@ def request_fact(before,view,*,path,expected_state,request_nonce,request_digest,
         or (after.collection,after.resource_id,after.owner_id)!=(collection,resource_id,owner_id)):
         return JsonHistoryFact('UNKNOWN','OPEN',('OPERATION_CORRELATION_INVALID',))
     current,version,happened=before.data,before.version,False
-    for index,operation in enumerate(view.operations):
-        if (operation.scope_id!=scope.scope_id or operation.scope_ordinal!=index or operation.generation!=scope.generation
+    operations=resource_operations(view,collection,resource_id)
+    for operation in operations:
+        if (operation.scope_id!=scope.scope_id or operation.generation!=scope.generation
             or (operation.collection,operation.resource_id,operation.owner_id,operation.subject_id)!=(collection,resource_id,owner_id,subject_id)
             or operation.before_version!=version or operation.after_version!=version+1):
             return JsonHistoryFact('UNKNOWN','OPEN',('OPERATION_CORRELATION_INVALID',))
         try:
-            current,changed=_atomic_state(current,operation,path,expected_state)
+            current,changed=_atomic_state(current,operation,path,expected_state,field_mutation)
             happened=happened or changed
         except SourceReadError as error:return JsonHistoryFact('UNKNOWN','OPEN',(error.code,))
         version=operation.after_version
     if happened:return JsonHistoryFact('CONFIRMED','CLOSED',('BUSINESS_EFFECT_RECORDED',))
     if (scope.state!='COMPLETE' or current!=after.data or version!=after.version
-        or (not view.operations and after.last_operation_id!=before.last_operation_id)
-        or (view.operations and after.last_operation_id!=view.operations[-1].operation_id)):
+        or (not operations and after.last_operation_id!=before.last_operation_id)
+        or (operations and after.last_operation_id!=operations[-1].operation_id)):
         return JsonHistoryFact('UNKNOWN','OPEN',('RECORD_REQUEST_INCOMPLETE',))
     # 没有提交时也须确认采用字段真实存在，不能把缺失字段解释成没有发生。
-    try:record_value(current,path)
+    try:field_value(current,path,allow_missing=field_mutation is not None)
     except SourceReadError:return JsonHistoryFact('UNKNOWN','OPEN',('MAPPING_MISSING',))
     return JsonHistoryFact('ABSENT','CLOSED',('COMPLETE_HISTORY_UNCHANGED',))
+
+
+def resource_operations(view,collection,resource_id):
+    """请求窗保留全局提交顺序，单项效果只消费本资源的子序列。"""
+    return tuple(item for item in view.operations if (item.collection,item.resource_id)==(collection,resource_id))

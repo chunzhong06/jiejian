@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import json
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.agent_access.handoff import EditorHandoff
+
+_TASK_GROWTH_BYTES=8*1024*1024
 
 
 class TaskInput(BaseModel):
@@ -71,6 +74,7 @@ class CollaborationTasks:
                 editor=None if command.editor is None else command.editor.model_dump(mode='json'),
                 operations=[], questions=[], events=[], execution=None)
             self._event(value, 'USER', '已建立协作任务', 'WAITING_AGENT')
+            self._growth_allowed(value)
             work.collaboration.save(value)
             work.commit()
         return self._public(value)
@@ -116,9 +120,11 @@ class CollaborationTasks:
             if existing:
                 if existing['fingerprint'] != fingerprint:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '原补充请求已经用于其他目标')
-                return
+                return False
             if value['state'] in ('CANCELLED', 'COMPLETED'):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '原任务已结束，请建立新的协作目标')
+            if len(followups)>=128:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'本次任务的追加目标已满，请核对并结束后建立新任务')
             followups.append(dict(operation_id=command.operation_id, fingerprint=fingerprint,
                 goal=command.goal, purpose=command.purpose, references=command.references,
                 editor=None if command.editor is None else command.editor.model_dump(mode='json'),
@@ -131,6 +137,7 @@ class CollaborationTasks:
             value.pop('application_read', None)
             value.pop('outcome', None)
             self._event(value, 'USER', command.goal, self._next_state(value))
+            self._growth_allowed(value)
         return self._update(project, command.task_id, update)
 
     def execution_started(self, project, task, execution):
@@ -226,6 +233,7 @@ class CollaborationTasks:
                 if capability.level not in levels or levels[capability.level] > levels[execution['access_level']]:
                     raise JiejianError(ErrorCode.MCP_PERMISSION_REQUIRED, '此能力超出本次持续协作的授权')
             operation = next((item for item in value['operations'] if item['operation_id'] == command.operation_id), None)
+            new_operation = operation is None
             if operation:
                 if operation['fingerprint'] != fingerprint:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '同一操作不能用于不同内容')
@@ -241,14 +249,15 @@ class CollaborationTasks:
                 value['operations'].append(operation)
             if capability.approval and not approved:
                 self._event(value, 'AGENT', '请核对：' + capability.title, 'WAITING_USER')
+                if new_operation:self._growth_allowed(value)
                 work.collaboration.save(value); work.commit()
                 self.on_change(task)
                 return operation
-            if any(item['operation_id'] != command.operation_id and item['state'] in ('RUNNING', 'UNKNOWN')
-                for task_value in work.collaboration.list(project, limit=None) for item in task_value['operations']):
+            if work.collaboration.has_unsettled_write(project):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '当前应用仍有未确认的写入，请先核对原操作')
             operation['state'] = 'RUNNING'
             self._event(value, 'SYSTEM', capability.title, 'RUNNING')
+            if new_operation:self._growth_allowed(value)
             work.collaboration.save(value); work.commit()
         # 写前保存请求；业务用例拥有自己的事务，进程中断不能把请求当成尚未执行。
         try:
@@ -292,8 +301,12 @@ class CollaborationTasks:
             if existing and (existing['question'] != command.question or existing['options'] != command.options):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '原问题已经用于其他内容')
             if not existing:
+                if len(value['questions'])>=512:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'本次任务的问题记录已满，请处理已有问题后建立新任务')
                 value['questions'].append(command.model_dump() | dict(answer=None))
                 self._event(value, 'AGENT', command.question, 'WAITING_USER')
+                self._growth_allowed(value)
+            else:return False
         return self._update(project, task, update)
 
     def answer(self, project, task, question_id, answer):
@@ -400,6 +413,12 @@ class CollaborationTasks:
             result = self._public(value)
         self.on_change(task)
         return result
+
+    @staticmethod
+    def _growth_allowed(value):
+        # 只限制新委派；已有回执、回答、取消和迟到结果仍可保存，不能卡住收尾。
+        if len(json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8'))>_TASK_GROWTH_BYTES:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'本次任务资料已较多，请核对并结束后建立新任务；已有产物和回执保留')
 
     def assess(self, project, task):
         """只在推进边界核对目标产物；不在页面轮询中重读全部修复历史。"""

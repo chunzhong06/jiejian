@@ -241,7 +241,10 @@ def add_recording(
     action_revision: int | None = None,
     request_path: str | None = None,
     resource_location: str = "path[1]",
+    resource_consumer: ValueSlotConsumer = ValueSlotConsumer.PATH,
     request_json: dict | None = None,
+    response_status: int = 200,
+    created_response_resource: str | None = None,
 ) -> RecordingRecord:
     """把受控脱敏事件和当前 revision 的 FlowDraft 以真实记录形式落库。"""
 
@@ -284,7 +287,7 @@ def add_recording(
                 method=request_method,
                 path=path,
                 json_body=body if request_method != "GET" else {},
-                expected_statuses=(200,),
+                expected_statuses=(response_status,),
                 request_id=request_id,
                 source_event_sequences=(sequence * 2 - 1, sequence * 2),
                 depends_on_step_ids=(),
@@ -292,8 +295,8 @@ def add_recording(
                     (
                         FlowDraftResourceCandidate(
                             candidate_id="resource-0123456789abcdef",
-                            consumer=ValueSlotConsumer.PATH,
-                            location=resource_location,
+                            consumer=resource_consumer if created_response_resource is None else 'RESPONSE_JSON',
+                            location=resource_location if created_response_resource is None else '$.id',
                             label="文档标识",
                         ),
                     )
@@ -323,8 +326,8 @@ def add_recording(
                     request_id=request_id,
                     url=url,
                     method=request_method,
-                    status_code=200,
-                    body=json.dumps({"ok": True}),
+                    status_code=response_status,
+                    body=json.dumps({"ok": True} if created_response_resource is None else {'id':created_response_resource}),
                 ),
             )
         )
@@ -384,7 +387,8 @@ def add_recording(
     from product.backend.application.recording.submission import recording_target_scope
     from product.protocols.recording.events import RecordingRunnerRequest
     request = runner_request(recording_id)
-    slots = harness.core.preparation.get(harness.project_id).actions[0].identity_requirements.slots
+    prepared=next(item for item in harness.core.preparation.get(harness.project_id).actions if item.action_id==harness.action.action_id)
+    slots = prepared.identity_requirements.slots
     subject_slot = next((slot.requirement.slot_id for slot in slots if slot.test_identity_id == identity.identity_id), "isl_"+"0"*32)
     owner_slot = next((slot.requirement.slot_id for slot in slots if slot.test_identity_id == owner.identity_id), "isl_"+"0"*32)
     request = RecordingRunnerRequest.model_validate(request.model_dump() | {
@@ -394,7 +398,7 @@ def add_recording(
         "resource_owner_slot_id": owner_slot, "resource_owner_confirmed": identity.identity_id != owner.identity_id,
         "preparation_source_fingerprint": source_fingerprint, "purpose": purpose,
         "parent_recording_id": parent_recording_id, "effect_id": effect_id,
-        "target_scope": recording_target_scope(understanding.confirmed_endpoint),
+        "target_scope": understanding.environment.target if understanding.environment is not None else recording_target_scope(understanding.confirmed_endpoint),
         "sessions": (request.sessions[0].model_copy(update={"test_identity_id": identity.identity_id}),),
     })
     job_id = "job_"+uuid4().hex

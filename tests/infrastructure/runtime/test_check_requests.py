@@ -70,7 +70,7 @@ def test_current_reader_rejects_old_format_and_tampering(tmp_path):
         store.load(job_id, expected_hash=digest)
     with pytest.raises(JiejianError) as caught:
         store.load(job_id, expected_hash=hashlib.sha256(raw).hexdigest())
-    assert caught.value.code == "RUNNER_PROTOCOL_INVALID"
+    assert caught.value.code == "JOB_REQUEST_CORRUPT"
 
 
 @pytest.mark.parametrize("job_id", ["../job", "job_bad", "C:/outside", "job_" + "g" * 32])
@@ -79,3 +79,20 @@ def test_asset_paths_reject_invalid_job_ids(tmp_path, job_id):
         CheckRequestStore(tmp_path).path_for(job_id)
 
 pytestmark = [pytest.mark.level3]
+
+
+@pytest.mark.parametrize('missing',[False,True])
+def test_owned_snapshot_damage_is_internal_while_invalid_ids_remain_input(tmp_path,missing):
+    from product.backend.domain.failures import failure_kind,ErrorKind
+    store=CheckRequestStore(tmp_path)
+    job_id='job_'+'1'*32
+    digest,_=store.write(job_id,frozen_request())
+    path=store.path_for(job_id)
+    if missing:path.unlink()
+    else:path.write_bytes(b'corrupt')
+    with pytest.raises(JiejianError) as failure:store.load(job_id,expected_hash=digest)
+    assert failure.value.code=='JOB_REQUEST_CORRUPT'
+    assert failure_kind(failure.value.code)==ErrorKind.INTERNAL
+    with pytest.raises(JiejianError) as invalid:store.load('../bad',expected_hash=digest)
+    assert invalid.value.code=='JOB_REQUEST_CONFLICT'
+    assert failure_kind(invalid.value.code)==ErrorKind.INVALID

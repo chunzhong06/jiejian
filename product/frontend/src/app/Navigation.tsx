@@ -1,3 +1,4 @@
+import {routes,routeAliases,routeDefinition} from '../shared/lib/routes'
 import {preloadRoute} from './Router'
 import AppstoreOutlined from '@ant-design/icons/AppstoreOutlined';
 import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
@@ -8,21 +9,12 @@ import type {Route} from '../shared/lib/navigation'
 import {settingsSection,settingsSections} from '../shared/lib/settings'
 import {historyLocation,scopedPath} from '../shared/lib/navigation'
 
-const primary=[
-  {path:'/workspace',label:'工作台',icon:<AppstoreOutlined aria-hidden="true"/>},
-  {path:'/permissions',label:'权限与覆盖',icon:<SafetyOutlined aria-hidden="true"/>},
-  {path:'/testing',label:'测试',icon:<CarryOutOutlined aria-hidden="true"/>},
-  {path:'/issues',label:'问题',icon:<FileSearchOutlined aria-hidden="true"/>},
-  {path:'/application',label:'应用与来源',icon:<LinkOutlined aria-hidden="true"/>},
-]
-const connections=[
-  {path:'/environment',label:'官方示例'},
-]
+const icons:Record<string,React.ReactNode>={'/workspace':<AppstoreOutlined aria-hidden="true"/>,'/permissions':<SafetyOutlined aria-hidden="true"/>,'/testing':<CarryOutOutlined aria-hidden="true"/>,'/issues':<FileSearchOutlined aria-hidden="true"/>,'/application':<LinkOutlined aria-hidden="true"/>}
+const primary=routes.filter(item=>item.primary).map(item=>({...item,icon:icons[item.path]}))
+const connections=routes.filter(item=>item.path==='/environment')
 export function normalizedPath(route:Route){
   if(route.path==='/tests')return route.query.has('run_id')?'/reports':route.query.get('materials')==='1'||['task_id','proof_sources','source_id','material_kind','identities'].some(key=>route.query.has(key))?'/preparation':'/reports'
-  if(['/results','/history'].includes(route.path))return '/reports'
-  if(['/identities','/flows'].includes(route.path))return '/preparation'
-  return route.path==='/settings/models'?'/tools':route.path
+  return routeAliases[route.path]??route.path
 }
 export function pageTransitionKey(route:Route,projectId?:string){
   const path=normalizedPath(route),query=route.query
@@ -39,7 +31,7 @@ export function pageTransitionKey(route:Route,projectId?:string){
 }
 export function navigationDirection(from:Route,to:Route){
   if(normalizedPath(from)===normalizedPath(to))return from.query.size>to.query.size?'back':'forward'
-  const order=[...primary,...connections,{path:'/tools'},{path:'/storage'},{path:'/system'}].map(item=>item.path)
+  const order=[...primary,...connections,...routes.filter(item=>item.settings)].map(item=>item.path)
   return order.indexOf(normalizedPath(to))<order.indexOf(normalizedPath(from))?'back':'forward'
 }
 export function NavigationLinks({current,hasProject,projectId,onNavigate}:{current:string;hasProject:boolean;projectId?:string;onNavigate:()=>void}){
@@ -50,7 +42,7 @@ export function NavigationLinks({current,hasProject,projectId,onNavigate}:{curre
 export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectName?:string;projectId?:string}){
   const setting=settingsSection(route)
   const collaboration=route.path==='/workspace'&&route.query.get('view')==='collaboration'
-  const current=normalizedPath(route),section=[...primary,...connections,{path:'/reports',label:'运行记录'},{path:'/preparation',label:'测试准备'},{path:'/tools',label:'开发工具'},{path:'/changes',label:'源码修改'},{path:'/storage',label:'本地存储'},{path:'/system',label:'运行与维护'},{path:'/archive',label:'归档记录'}].find(item=>item.path===current)
+  const current=normalizedPath(route),section=routeDefinition(current)
   const detail=current==='/reports'?route.query.has('run_id')?'报告详情':route.query.get('view')==='plan'?'检查范围':undefined
     :current==='/permissions'&&route.query.has('proposal_id')?'审阅权限变更'
     :current==='/permissions'&&route.query.has('rule_id')?'规则详情'
@@ -58,7 +50,7 @@ export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectNa
 
     :current==='/changes'&&route.query.get('view')==='register'?'登记修改'
     :current==='/archive'&&route.query.has('run_id')?'报告详情':undefined
-  const global=['/environment','/tools','/storage','/system','/archive'].includes(current)||!projectName
+  const global=routeDefinition(current)?.global||!projectName
   const parent=current==='/reports'?historyLocation(projectId):current==='/archive'?'/archive?project_id='+encodeURIComponent(route.query.get('project_id')??''):section?.path
   const levels=setting?[{label:'界鉴',href:'#'+scopedPath('/workspace',projectId)},{label:'设置',href:'#'+scopedPath('/settings',projectId)},{label:settingsSections.find(item=>item.key===setting)!.label,href:undefined}]:[{label:global?'界鉴':projectName!,href:'#'+scopedPath('/workspace',projectId)},...(current==='/archive'?[{label:'官方示例',href:'#/environment'}]:[]),...(section?[{label:collaboration?'Agent 协作':section.label,href:detail&&parent?'#'+scopedPath(parent,projectId):undefined}]:[]),...(detail?[{label:detail,href:undefined}]:[])]
   return <nav className="jj-breadcrumb" aria-label="当前位置"><ol>{levels.map((item,index)=><li key={index}>{index>0&&<span className="jj-breadcrumb-separator" aria-hidden="true">/</span>}{item.href?<a href={item.href}>{item.label}</a>:<span aria-current="page">{item.label}</span>}</li>)}</ol></nav>

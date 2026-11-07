@@ -28,7 +28,7 @@ class OperationFlowService:
         self._uow,self._boundaries,self._identities=uow_factory,boundaries,identities
         self._var_dir,self._clock=var_dir,clock_us or (lambda:time.time_ns()//1000)
 
-    def context(self,project_id):
+    def context(self,project_id,*,summary=False):
         with self._uow() as work:
             boundary=self._boundaries.view(project_id,work=work)
             understanding=work.application_understanding.get(project_id)
@@ -51,12 +51,18 @@ class OperationFlowService:
                 execution=executions[key]
                 in_use=execution is not None and (execution.operation_flow_id,execution.operation_flow_revision)==(document.id,document.revision)
                 configuration_current=understanding is not None and document.source_fingerprint==understanding.source_fingerprint and document.environment==understanding.environment and document.target_scope.base_url==understanding.confirmed_endpoint and source_request_current(work,document) and any((action.action_id,action.revision)==(document.business_action_id,document.action_revision) for action in boundary.actions)
-                flows.append(dict(document=document.model_dump(mode='json'),adopted=item['adopted'],in_use=in_use,configuration_current=configuration_current))
+                value = (dict(id=document.id,revision=document.revision,business_action_id=document.business_action_id,
+                              action_revision=document.action_revision) if summary else dict(document=document.model_dump(mode='json')))
+                flows.append(dict(**value,adopted=item['adopted'],in_use=in_use,configuration_current=configuration_current))
+            actions=[dict(action_id=action.action_id,revision=action.revision,label=action.display_name,state_changing=action.state_changing,
+                effects=[dict(effect_id=effect.effect_id,label=effect.business_label,kind=effect.effect_kind.value,protected_projection=effect.protected_projection) for effect in action.effect_catalog]) for action in boundary.actions]
+            # 摘要仍核对采用修订和来源时效；只裁剪目录不消费的正文和录制列表。
+            if summary:
+                return dict(project_id=project_id,actions=actions,flows=flows)
             return dict(project_id=project_id,source_fingerprint=None if understanding is None else understanding.source_fingerprint,
                 endpoint=None if understanding is None else understanding.confirmed_endpoint,
-                recordings=[dict(recording_id=item.recording_id,action_id=item.business_action_id,label='操作录制',created_at_us=item.created_at_us) for item in work.recordings.list_for_project(project_id) if item.state.value=='COMPLETED' and item.purpose.value=='TARGET'],
-                actions=[dict(action_id=action.action_id,revision=action.revision,label=action.display_name,state_changing=action.state_changing,
-                    effects=[dict(effect_id=effect.effect_id,label=effect.business_label,kind=effect.effect_kind.value,protected_projection=effect.protected_projection) for effect in action.effect_catalog]) for action in boundary.actions],
+                recordings=[dict(recording_id=item.recording_id,action_id=item.business_action_id,label='操作录制',created_at_us=item.created_at_us) for item in work.recordings.list_summaries(project_id,completed_targets=True)],
+                actions=actions,
                 flows=flows)
 
     def read(self,project_id,flow_id,revision):
@@ -75,7 +81,7 @@ class OperationFlowService:
             if previous is not None:
                 if previous==document:return document
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'此修订已存在，请重新读取流程')
-            latest=next((item['document'] for item in work.operation_flows.latest(project_id) if item['document'].id==document.id),None)
+            latest=work.operation_flows.latest_revision(project_id,document.id)
             if document.revision!=(1 if latest is None else latest.revision+1):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'流程已变化，请读取当前修订')
             work.operation_flows.add(document,self._clock())

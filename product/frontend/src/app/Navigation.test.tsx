@@ -1,3 +1,6 @@
+import {normalizedPath} from './Navigation'
+import {scopedPath} from '../shared/lib/navigation'
+import {routes,routeAliases} from '../shared/lib/routes'
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
 import {Breadcrumbs,pageTransitionKey} from './Navigation'
@@ -111,4 +114,13 @@ it('旧设置链接和新分类共享页面归属，分类切换保留外层页�
   render(<Breadcrumbs route={route('/storage')} projectId="app-a"/>)
   expect(screen.getByRole('link',{name:'设置'})).toHaveAttribute('href','#/settings?project_id=app-a')
   expect(screen.getByText('本地存储')).toHaveAttribute('aria-current','page')
+})
+
+
+it('路由登记保持唯一，旧链接沿用归属和分类',()=>{
+  expect(new Set(routes.map(item=>item.path)).size).toBe(routes.length)
+  for(const [old,path] of Object.entries(routeAliases))expect(normalizedPath(route(old))).toBe(path)
+  for(const item of routes.filter(item=>item.scoped))expect(scopedPath(item.path,'project-a')).toContain('project_id=project-a')
+  expect(normalizedPath(route('/tests','materials=1'))).toBe('/preparation')
+  expect(normalizedPath(route('/tests','run_id=old'))).toBe('/reports')
 })

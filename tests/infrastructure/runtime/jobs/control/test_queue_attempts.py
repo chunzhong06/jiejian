@@ -10,6 +10,8 @@ from sqlalchemy import text
 
 from product.backend.domain.lifecycle import JobState, RunLifecycle
 from product.backend.domain.errors import ErrorCode, JiejianError
+
+
 from product.backend.infrastructure.storage.unit_of_work import StorageUnitOfWork
 from product.backend.infrastructure.storage.db import create_session_factory, create_sqlite_engine
 from product.backend.infrastructure.storage.execution.jobs import JobEventRepository
@@ -20,6 +22,23 @@ from product.backend.infrastructure.runtime.jobs.attempts import JobAttempts
 from product.backend.infrastructure.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailureCode, FatalFailure, WaitingFatalFailure, RequestCancellation, RetryPolicy, RetryableFailureCode, RetryableFailure, RenewLease
 
 NOW_US = 1_790_000_000_000_000
+
+
+def test_job_lookup_uses_current_repository_once_and_preserves_missing_error():
+    from types import SimpleNamespace
+    from product.backend.infrastructure.runtime.jobs.lookup import require_job
+
+    record=object();calls=[]
+    def get(key):
+        calls.append(key)
+        return record if key=='existing' else None
+    work=SimpleNamespace(jobs=SimpleNamespace(get=get))
+    assert require_job(work,'existing') is record
+    with pytest.raises(JiejianError) as failure:
+        require_job(work,'missing')
+    assert failure.value.code==ErrorCode.JOB_NOT_FOUND
+    assert '任务不存在' in str(failure.value)
+    assert calls==['existing','missing']
 
 
 def _claim_request(job_id: str, **changes: Any) -> ClaimJob:

@@ -2,8 +2,9 @@ import {request} from '../../../shared/api/http'
 export type CollaborationPurpose='RULES'|'SETUP'|'CHECK'|'CHECK_AND_REPAIR'|'REPAIR'|'UNDERSTAND'|'MAINTENANCE'
 export const purposeLabels:Record<CollaborationPurpose,string>={RULES:'整理权限要求',SETUP:'补齐检查准备',CHECK:'调查权限问题',CHECK_AND_REPAIR:'检查并修复',REPAIR:'修复指定问题',UNDERSTAND:'理解应用或报告',MAINTENANCE:'处理运行与维护'}
 export type FlowHandoff={kind:'FLOW';flow_id:string;revision:number;action_id:string;action_revision:number;subject_identity_id:string|null;owner_identity_id:string|null;target_step_id:string;steps:{id:string;method:string;path:string|null;parameters:{location:string;name:string;source:string;secret:boolean}[]}[];recovery_path:string|null;evidence_effect_ids:string[];evidence_queries?:{effect_id:string;request_path:string|null;resource_path:string;owner_path:string;data_path:string}[]}
-export type ProofHandoff={kind:'PROOF';basis_id:string;action_id:string;effect_id:string;resource_binding_id:string|null;table:string|null;protected_column:string|null;tenant_column:string|null;state_column:string|null}
-export type CollaborationEditor=FlowHandoff|ProofHandoff
+export type ProofHandoff={kind:'PROOF';basis_id:string;action_id:string;effect_id:string;resource_binding_id:string|null;table:string|null;connection_id?:string|null;collection?:string|null;async_export?:import('../../preparation/api/proofSources').AsyncExportMapping;protected_column:string|null;tenant_column:string|null;state_column:string|null;relationship_mapping?:import('../../preparation/api/proofSources').RelationshipSourceMapping|null}
+export type ScenarioHandoff={kind:'SCENARIO';document:import('../../preparation/api/businessScenarios').BusinessScenario}
+export type CollaborationEditor=FlowHandoff|ProofHandoff|ScenarioHandoff
 
 export type CollaborationOperation = {operation_id:string;capability:string;title:string;state:string;arguments:Record<string,unknown>;summary?:{label:string;value:string}[];result:unknown;error_code?:string}
 export type CollaborationCheck = {run_id:string;lifecycle:string;verdict:'PASS'|'BLOCK'|'INCONCLUSIVE'|null;revalidation:boolean;selected_scope?:boolean}

@@ -79,3 +79,75 @@ def test_restart_honors_persisted_cancellation_without_authorizing_more_preparat
             assert work.jobs.list_for_project(harness.project_id) == jobs_before
     finally:
         harness.close()
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_queue_rejection_waits_without_unknown_write_or_busy_wake(tmp_path, monkeypatch, cancel):
+    harness = build_preparation_harness(tmp_path)
+    service = harness.core.preparation_batches
+    operation = uuid4().hex
+    value = dict(operation_id=operation, project_id=harness.project_id, plan_hash='a'*64,
+        control_session_id=service._proofs.control_session_id, state='RUNNING', cancel_requested=False,
+        created_at_us=1, updated_at_us=1, payload=dict(schema_version='2', stage='NEXT',
+            plan=dict(sources=[{}]), items=[dict(label='结果',state='WAITING',pending=None)], message='开始'))
+    rejected = True
+    calls = []
+    def submit(project, command):
+        calls.append(command.operation_id)
+        if rejected:raise JiejianError(ErrorCode.JOB_QUEUE_FULL,'容量已满')
+        return dict(project_id=project,operation_id=command.operation_id,operation_kind='START_PREFLIGHT',
+            result=dict(preflight_id='ppf_'+uuid4().hex))
+    def step(current):
+        if current['cancel_requested']:
+            return service._finish(current,'CANCELLED','已取消')
+        if current['payload']['items'][0]['state']=='CHECKING':return
+        service._write(current,0,'START_PREFLIGHT',dict(source_id='psr_'+'1'*32,revision=1,basis_id='pb_'+'a'*64))
+    try:
+        with service._uow() as work:
+            work.preparation_batches.save(value);work.commit()
+        monkeypatch.setattr(service._proofs,'start',submit)
+        monkeypatch.setattr(service,'_step',step)
+        service.advance()
+        with service._uow() as work:saved=work.preparation_batches.get(harness.project_id,operation)
+        assert saved['state']=='RUNNING' and saved['payload']['items'][0]['pending'] is None
+        assert not service.wake.is_set() and len(calls)==1
+        if cancel:
+            service.cancel(harness.project_id,operation);service.advance()
+            assert service.show(harness.project_id,operation)['state']=='CANCELLED'
+            assert len(calls)==1
+        else:
+            rejected=False;service.advance()
+            with service._uow() as work:saved=work.preparation_batches.get(harness.project_id,operation)
+            assert saved['payload']['items'][0]['state']=='CHECKING'
+            assert saved['payload']['items'][0]['pending'] is None
+            assert calls[0]==calls[1]
+    finally:harness.close()
+
+
+@pytest.mark.parametrize('error,accepted', [('JOB_QUEUE_FULL',False),('STATE_PRECONDITION',False),('JOB_QUEUE_FULL',True)])
+def test_legacy_rejected_batch_requires_absence_of_job_and_receipt(tmp_path, monkeypatch, error, accepted):
+    from product.backend.application.preparation.batches import BatchSource, PreparationBatchPlan, StartPreparationBatch
+    harness=build_preparation_harness(tmp_path)
+    service=harness.core.preparation_batches
+    plan=PreparationBatchPlan(project_id=harness.project_id,mode='REVIEWED',basis_id='pb_'+'a'*64,
+        runtime_origin='http://127.0.0.1:8765',guard='a'*64,
+        sources=(BatchSource(source_id='psr_'+'1'*32,revision=1,config_hash='a'*64,label='结果'),))
+    previous=dict(operation_id=uuid4().hex,project_id=harness.project_id,plan_hash='a'*64,
+        control_session_id=service._proofs.control_session_id,state='BLOCKED',cancel_requested=False,
+        created_at_us=1,updated_at_us=1,payload=dict(schema_version='2',plan=plan.model_dump(mode='json'),
+            stage='NEXT',message='旧记录',error=dict(code=error),items=[dict(state='WAITING',label='结果',
+            pending=dict(kind='START_PREFLIGHT',command=dict(operation_id=uuid4().hex)))]))
+    try:
+        with service._uow() as work:
+            work.preparation_batches.save(previous);work.commit()
+            job_repo=type(work.jobs)
+        if accepted:monkeypatch.setattr(job_repo,'get_by_idempotency',lambda *_: object())
+        monkeypatch.setattr(service,'preview',lambda *_:plan)
+        command=StartPreparationBatch(operation_id=uuid4().hex,plan=plan,confirmed=True)
+        if error=='JOB_QUEUE_FULL' and not accepted:
+            assert service.start(harness.project_id,command)['state']=='RUNNING'
+            with service._uow() as work:
+                assert work.preparation_batches.get(harness.project_id,previous['operation_id'])['payload']['items'][0]['pending'] is None
+        else:
+            with pytest.raises(JiejianError,match='回执仍不明确'):service.start(harness.project_id,command)
+    finally:harness.close()

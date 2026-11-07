@@ -16,7 +16,6 @@ export type DeliveryPage = { project_id: string; task_id: string; items: Array<{
 export type DeliveryDetails = { project_id: string; delivery: DevelopmentDelivery; context: DevelopmentContext; relative_change: SourceChangeViewDto['change_set']; cumulative_change: SourceChangeViewDto['change_set']; verification: NonNullable<DevelopmentView['latest_verification']> & {same_source_run_id?:string|null} }
 const base = (project: string) => `/api/projects/${encodeURIComponent(project)}/development`
 const post = <T,>(url: string, body: object) => request<T>(url, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) })
-export const newOperationId = () => crypto.randomUUID().replaceAll('-', '')
 export const developmentApi = {
   history: (project: string, before?: string | null) => request<TaskHistoryPage>(`${base(project)}/history${before ? '?before_task_id=' + encodeURIComponent(before) : ''}`),
   deliveries: (project: string, task: string, before?: number | null) => request<DeliveryPage>(`${base(project)}/tasks/${encodeURIComponent(task)}/deliveries${before ? '?before_ordinal=' + before : ''}`),

@@ -27,6 +27,7 @@ class CheckWebRuntime:
         self._executed: set[str] = set()
         self._actual_identities: dict[str, str] = {}
         self._target_receipts = {}
+        self._batch_groups = {}
         self.adapter = HttpExecutionAdapter(bundle.target,
             cleanup_reserve=bundle.budget.recovery_reserve_requests,
             known_secrets=tuple(environ[name] for name in check_secret_names(bundle) if environ.get(name)),
@@ -42,9 +43,17 @@ class CheckWebRuntime:
     def close(self):
         self.adapter.close()
         self._target_responses = {}
+        self._batch_groups = {}
 
     def target_response(self, case_id):
-        return getattr(self, "_target_responses", {}).get(case_id)
+        response=getattr(self, "_target_responses", {}).get(case_id)
+        if response is not None:
+            return response
+        receipt=self._target_receipts.get(case_id)
+        if receipt is not None and self.target_attempted(case_id):
+            # 传输结果未知仍可查询原请求的提交记录；此对象不声称收到 HTTP 响应。
+            return HttpResponse(status_code=0,data={},body=b'{}',request_nonce=receipt[0],request_digest=receipt[1])
+        return None
 
     def target_attempted(self, case_id: str) -> bool:
         return case_id in self._executed
@@ -122,7 +131,12 @@ class CheckWebRuntime:
         """每个 Case 的 TARGET 最多发送一次；传输异常后也不清除已执行标记。"""
         if entity_policy is None and any(proof.effect_kind=='FILE_CONTENT_DELIVERY' for proof in action.proofs):
             from product.backend.infrastructure.execution.web.file_entity import FileEntityPolicy
-            entity_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes)
+            deferred=any(getattr(item.config,'async_export',None) is not None and item.config.action_id==action.action_id
+                for item in getattr(self.bundle,'proof_sources',()))
+            entity_policy=FileEntityPolicy(max_bytes=self.bundle.target.max_response_bytes,dispatch_json=deferred)
+        if case.case_id in self._batch_groups:
+            from product.backend.infrastructure.execution.web.batch import execute_batch
+            return execute_batch(self,action,case,self._batch_groups[case.case_id],verify_identity=verify_identity,before_target=before_target)
         return self.execute_steps(action.action_id,action.steps,case,verify_identity=verify_identity,
             entity_policy=entity_policy,before_target=before_target)
 
@@ -147,6 +161,8 @@ class CheckWebRuntime:
                     identity_status = self._verify_identity(runtime, case.subject_test_identity_id, case) if verify_identity else None
                     self._actual_identities[case.case_id] = identity_status or "UNKNOWN"
                     if before_target is not None:before_target(identity_status)
+                    progress=getattr(self,'side_effect_progress',None)
+                    if progress is not None:progress(case.case_id,'INTENT_SAVED')
                     self._executed.add(case.case_id)
                 # 先清除SETUP回执；TARGET在网络前失败时也不能借用前一请求。
                 if step.purpose=='TARGET':
@@ -158,6 +174,8 @@ class CheckWebRuntime:
                         entity_policy=entity_policy if step.purpose=='TARGET' else None)
                     if on_step is not None:on_step(step,execution,response)
                 except JiejianError as exc:
+                    if step.purpose=='TARGET' and getattr(self,'side_effect_progress',None) is not None:
+                        self.side_effect_progress(case.case_id,'UNCONFIRMED')
                     if on_step is not None:on_step(step,None,None,exc.code)
                     raise
                 finally:
@@ -168,6 +186,8 @@ class CheckWebRuntime:
                     if not hasattr(self, "_target_responses"):
                         self._target_responses = {}
                     self._target_responses[case.case_id] = response
+                    if getattr(self,'side_effect_progress',None) is not None:
+                        self.side_effect_progress(case.case_id,'RECEIVED')
                     return (execution, response, identity_status) if verify_identity else (execution, response)
                 if execution.outcome.value != "ACCEPTED":
                     raise JiejianError(ErrorCode.SETUP_STEP_FAILED, "工作流步骤依赖无法满足")
@@ -214,6 +234,8 @@ def check_secret_names(bundle: CheckRuntimeBundle | FlowTrialRuntime) -> tuple[s
         elif isinstance(value, list):
             for child in value:
                 visit(child, key)
+        elif isinstance(value,str) and key=='password_env' and re.fullmatch(r'JIEJIAN_DB_[A-Z0-9_]{1,64}',value):
+            names.add(value)
         elif isinstance(value, str) and key is not None and key.endswith("_ref") and re.fullmatch(r"env:[A-Z_][A-Z0-9_]{0,127}", value):
             names.add(value[4:])
     visit(bundle.model_dump(mode="json"))

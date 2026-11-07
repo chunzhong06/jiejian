@@ -1,0 +1,1 @@
+{"name":"jiejian-database-contract-fixture","version":"1.0.0","private":true,"dependencies":{"pg":"8.23.1","mysql2":"3.24.6"}}

@@ -36,14 +36,28 @@ class CheckExecutor:
         self.clock = clock_us or (lambda: time.time_ns() // 1000)
         self.cancelled = cancellation_requested
         self.progress = progress or (lambda _phase, _completed, _planned: None)
+        self.scenario_journal=None
+        if request.scenario is not None:
+            from product.backend.infrastructure.execution.scenario_journal import ScenarioJournal
+            self.scenario_journal=ScenarioJournal(request,runner_input,attempt_dir,self.clock)
         self.web = CheckWebRuntime(bundle, environ=environ, cancellation_requested=cancellation_requested,
             reserved_origins=reserved_origins, request_scope=(runner_input.run_id, runner_input.job_id, runner_input.attempt))
+        if request.scenario is not None:
+            from product.backend.domain.checks.scenarios import scenario_http_budget
+            cost=scenario_http_budget(request,bundle)
+            if cost is not None:
+                self.web.adapter.cleanup_reserve=min(bundle.target.max_requests-1,
+                    max(self.web.adapter.cleanup_reserve,cost[1]))
+        if self.scenario_journal is not None:
+            self.web.side_effect_progress=self.scenario_journal.record
         self.observers = CheckObserverRuntime(bundle, self.web, environ=environ, attempt_dir=attempt_dir,
             cancellation_requested=cancellation_requested, clock_us=self.clock)
         self._baselines = {}
         self._cleanup_issues = []
         self._first_error = None
         self._stopped = None
+        self._scenario_bindings={}
+        self._creation_baselines={}
         self._runtime_reference = getattr(bundle.runtime, "reference", None)
         self._var_dir = Path(environ["JIEJIAN_VAR_DIR"]) if self._runtime_reference is not None else None
         self._runtime_environment = environ
@@ -63,13 +77,14 @@ class CheckExecutor:
             self._stop("RUNTIME_IDENTITY_UNCONFIRMED", "PREPARING")
         results, evidence = {}, []
         configured = {item.action_id: item for item in self.bundle.actions}
-        cases = [(action, case) for action in self.request.actions for case in action.cases]
+        cases = [(action, case) for action in self.request.actions for case in action.cases if case.occurrence_id is None]
+        planned_count=sum(len(action.cases) for action in self.request.actions)
         # A1 去重后的 Case 是唯一执行单位；双角色合一执行一次，superset 控制和完整回归仍各自运行。
         cases.sort(key=lambda pair: (pair[1].permission.expectation == "DENY", pair[0].action_id, pair[1].case_id))
-        self.progress("PREPARING", 0, len(cases))
+        self.progress("PREPARING", 0, planned_count)
         try:
             for action, case in cases:
-                self.progress("EXECUTING", len(results), len(cases))
+                self.progress("EXECUTING", len(results), planned_count)
                 if self.cancelled() and self._stopped is None:
                     self._stop("EXEC_CANCELLED", "EXECUTION")
                 if self.clock() - started >= self.bundle.budget.max_duration_us and self._stopped is None:
@@ -79,11 +94,14 @@ class CheckExecutor:
                 result, document = self._case(action, configured[action.action_id], case, allow_verdict)
                 results[case.case_id] = result
                 evidence.append(document)
+            if self.request.scenario is not None:
+                from product.backend.infrastructure.execution.business_scenario import execute_business_scenario
+                execute_business_scenario(self,configured,results,evidence,started)
         finally:
             self.web.close()
         ordered = tuple(results[case.case_id] for action in self.request.actions for case in action.cases)
-        self.progress("FINALIZING", len(results), len(cases))
-        verdict = aggregate_check_verdict(tuple(item.verdict for item in ordered), planned_case_count=len(cases))
+        self.progress("FINALIZING", len(results), planned_count)
+        verdict = aggregate_check_verdict(tuple(item.verdict for item in ordered), planned_case_count=planned_count)
         blocked = any(item.verdict is CaseVerdict.VULNERABLE for item in ordered)
         cancelled = self._stopped == "EXEC_CANCELLED" and not blocked
         result_type = "CANCELLED" if cancelled else "SAFETY_STOPPED" if self._stopped else "SUCCESS"
@@ -102,21 +120,21 @@ class CheckExecutor:
                 after="MATCHED" if runtime_after else "UNCONFIRMED")})
         return CheckExecutionOutput(result, tuple(evidence))
 
-    def _case(self, action, configured, case, allow_verdict):
+    def _case(self, action, configured, case, allow_verdict, *, defer_recovery=False, preobserved=None):
         if getattr(configured, 'created_resource', None) is not None:
             from product.backend.infrastructure.execution.creation_check import execute_creation_case
-            return execute_creation_case(self, action, configured, case, allow_verdict)
+            return execute_creation_case(self, action, configured, case, allow_verdict,defer_recovery=defer_recovery)
         execution, status, identity = "UNKNOWN", None, "UNKNOWN"
         baseline, recovered, correlated = False, not configured.state_changing, False
         observations = []
         if self._stopped is None:
             try:
-                before = self._observe(configured, case, "BASELINE", baseline=False)
+                before = preobserved if preobserved is not None else self._observe(configured, case, "BASELINE", baseline=False)
                 observations.extend(item.observation for item in before)
                 observations.extend(item.observation for item in self._observe_auxiliary(configured, case, "BASELINE"))
                 projections = tuple(item.baseline_projection for item in before)
                 baseline = all(item is not None for item in projections)
-                key = (action.action_id, case.resource_id, tuple(proof.binding_fingerprint for proof in case.proof_requirements))
+                key = (action.action_id, case.resource_id, tuple(proof.binding_fingerprint for proof in case.proof_requirements), case.occurrence_id)
                 original = self._baselines.get(key)
                 reset_first = configured.state_changing and (not baseline or (original is not None and original != projections)
                     or self._creation_exists(configured, before))
@@ -181,7 +199,7 @@ class CheckExecutor:
                     observations.extend(item.observation for item in after)
                     correlated = any(item.observation.correlated for item in after)
             finally:
-                if configured.state_changing and self.web.target_attempted(case.case_id):
+                if configured.state_changing and self.web.target_attempted(case.case_id) and not defer_recovery:
                     try:
                         self._recover_request(configured, case)
                         restored = self._observe(configured, case, "RECOVERY", baseline=baseline, cleanup=True)
@@ -192,6 +210,13 @@ class CheckExecutor:
                     if not recovered:
                         self._cleanup_issues.append("RECOVERY_UNVERIFIED")
                         self._stop("RECOVERY_UNVERIFIED", "RECOVERY")
+        pending=dict(execution=execution,status=status,identity=identity,baseline=baseline,
+            recovered=recovered,correlated=correlated,observations=observations)
+        if defer_recovery:
+            return pending
+        return self._complete_case(action,configured,case,allow_verdict,**pending)
+
+    def _complete_case(self,action,configured,case,allow_verdict,*,execution,status,identity,baseline,recovered,correlated,observations):
         unique_observations = {}
         for item in observations:
             observation_key = (item.proof_fingerprint, item.observer_id, item.phase)
@@ -209,9 +234,11 @@ class CheckExecutor:
             run_correlated=correlated, resource_correlated=correlated, baseline_trusted=baseline,
             recovery_verified=recovered, allow_control_verdict=allow_verdict,
             effects=project_check_effect_facts(case, observations), condition_observations=outcome.condition_observations))
+        binding=self._scenario_bindings.get(case.case_id)
+        frozen=next((item for action in self.request.actions for item in action.cases if item.case_id==case.case_id),case)
         document = seal_check_evidence(run_id=self.input.run_id, job_id=self.input.job_id,
             attempt=self.input.attempt, action_id=action.action_id, action_revision=action.action_revision,
-            request_hash=self.input.request_hash, config_hash=self.input.config_hash, case=case,
+            request_hash=self.input.request_hash, config_hash=self.input.config_hash, case=frozen,resource_binding=binding,
             outcome=outcome, observations=tuple(observations), trace=self.observers.trace(configured, case),
             **self.observers.activity_fields(case), **evidence_fields)
         result = CheckCaseResult(case_id=case.case_id, action_id=action.action_id, verdict=decision.verdict,
@@ -228,7 +255,7 @@ class CheckExecutor:
         if identity != "MATCH" or binding is None:
             return False
         participating = {proof.binding_fingerprint for proof in action.proofs
-            if proof.rule == "REGISTERED_EFFECT" and any(source.observer_id == binding for source in proof.auxiliary_sources)}
+            if proof.rule == "REGISTERED_EFFECT" and (proof.observer_id==binding or any(source.observer_id == binding for source in proof.auxiliary_sources))}
         requirements = {proof.proof_fingerprint: proof for proof in case.proof_requirements
                         if proof.binding_fingerprint in participating}
         matches = tuple(item for item in eventual if item.observation.observer_id == binding)
@@ -286,10 +313,12 @@ class CheckExecutor:
 
     def _recover_request(self, action, case):
         recovery = action.recovery
-        if recovery is None or self.web.verify_identity(recovery.source_subject_identity_id, case, cleanup=True) != "MATCH":
+        if recovery is None or self.web.verify_identity(recovery.identity_for(case), case, cleanup=True) != "MATCH":
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备尚未完成")
-        self.web.request(recovery.request, case=case, action_id=action.action_id,
-            identity_id=recovery.source_subject_identity_id, cleanup=True)
+        response=self.web.request(recovery.request, case=case, action_id=action.action_id,
+            identity_id=recovery.identity_for(case), cleanup=True)
+        if not 200<=response.status_code<300:
+            raise JiejianError('RECOVERY_UNVERIFIED','恢复请求未被接受，请核对原请求和独立业务状态')
 
     @staticmethod
     def _creation_exists(action, observations):

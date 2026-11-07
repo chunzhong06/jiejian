@@ -5,12 +5,11 @@ import json
 from typing import Annotated,Literal
 from pydantic import Field,model_validator
 from product.protocols.checks.execution_request import WireModel,Hash,EffectId,IdentityId
+from product.protocols.checks.field_mutation import FactScalar, FieldPath
 
 FactId=Annotated[str,Field(pattern=r'^bf_[0-9a-f]{64}$')]
 ProofId=Annotated[str,Field(pattern=r'^[0-9a-f]{64}$')]
 RecordId=Annotated[str,Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$')]
-FactScalar=Annotated[str,Field(max_length=256)]|Annotated[int,Field(ge=-9_007_199_254_740_991,le=9_007_199_254_740_991)]|Annotated[float,Field(allow_inf_nan=False)]|bool|None
-FieldPath=Annotated[tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...],Field(min_length=1,max_length=8)]
 
 
 class FactProofReference(WireModel):
@@ -26,6 +25,14 @@ class CommittedFieldChange(WireModel):
     path:FieldPath
     before:FactScalar
     after:FactScalar
+    before_present: bool = Field(default=True, exclude_if=lambda value: value)
+    after_present: bool = Field(default=True, exclude_if=lambda value: value)
+
+    @model_validator(mode='after')
+    def absent_values(self):
+        if not self.before_present and self.before is not None or not self.after_present and self.after is not None:
+            raise ValueError('absent fields cannot carry a value')
+        return self
 
 
 class CommittedStateFact(WireModel):
@@ -114,6 +121,19 @@ class FileReceiptFact(WireModel):
         return self
 
 
+class AsyncTaskFact(WireModel):
+    kind:Literal['ASYNC_TASK']='ASYNC_TASK'
+    task_fingerprint:Hash
+    mapping_fingerprint:Hash
+    dispatch_request_digest:Hash
+    state:Literal['QUEUED','RUNNING','SUCCESS','FAILED','TIMED_OUT','CANCELLED']
+    subject_identity_id:IdentityId|None
+    owner_identity_id:IdentityId
+    resource_id:str=Field(min_length=1,max_length=256)
+    correlated:bool
+    polls_used:int=Field(ge=1,le=32)
+
+
 class ObjectCreationFact(WireModel):
     kind:Literal['OBJECT_CREATION']='OBJECT_CREATION'
     generation:RecordId
@@ -124,7 +144,7 @@ class ObjectCreationFact(WireModel):
     owner_identity_id:IdentityId
 
 
-FactData=Annotated[CommittedStateFact|IdentityCheckFact|AnonymousCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact|ObjectCreationFact,Field(discriminator='kind')]
+FactData=Annotated[CommittedStateFact|IdentityCheckFact|AnonymousCheckFact|FieldDisclosureFact|ReferenceArtifactFact|FileReceiptFact|AsyncTaskFact|ObjectCreationFact,Field(discriminator='kind')]
 
 
 def fact_content_id(payload):
@@ -137,7 +157,7 @@ class BusinessFact(WireModel):
     case_id:Annotated[str,Field(pattern=r'^case_[0-9a-f]{32}$')]
     request_ref:Annotated[str,Field(pattern=r'^req_[0-9a-f]{48}$')]
     observed_at_us:int=Field(ge=0)
-    collector_kind:Literal['CONTROLLED_RECORDS','IDENTITY_READER','HTTP_ENTITY','REFERENCE_STORE']
+    collector_kind:Literal['CONTROLLED_RECORDS','IDENTITY_READER','HTTP_ENTITY','REFERENCE_STORE','ASYNC_STATUS']
     collector_version:Literal['2']='2'
     proofs:tuple[FactProofReference,...]=Field(min_length=1,max_length=8)
     complete:bool
@@ -154,7 +174,7 @@ class BusinessFact(WireModel):
         if isinstance(self.data,CommittedStateFact) and {item.proof_fingerprint for item in self.data.changes}!=set(keys):
             raise ValueError('committed projection must cover exact proof references')
         collector={'OBJECT_CREATION':'CONTROLLED_RECORDS','COMMITTED_STATE':'CONTROLLED_RECORDS','IDENTITY_CHECK':'IDENTITY_READER','ANONYMOUS_CHECK':'IDENTITY_READER',
-            'FIELD_DISCLOSURE':'HTTP_ENTITY','FILE_RECEIPT':'HTTP_ENTITY','REFERENCE_ARTIFACT':'REFERENCE_STORE'}
+            'FIELD_DISCLOSURE':'HTTP_ENTITY','FILE_RECEIPT':'HTTP_ENTITY','REFERENCE_ARTIFACT':'REFERENCE_STORE','ASYNC_TASK':'ASYNC_STATUS'}
         if self.collector_kind!=collector[self.data.kind]:raise ValueError('business fact collector mismatch')
         return self
 
@@ -172,13 +192,24 @@ class RecordObservationWindow(WireModel):
     after_version:int=Field(ge=0)
     before_value:FactScalar
     after_value:FactScalar
+    before_present: bool = Field(default=True, exclude_if=lambda value: value)
+    after_present: bool = Field(default=True, exclude_if=lambda value: value)
     before_operation:RecordId|None=None
     after_operation:RecordId|None=None
     scope_state:Literal['OPEN','COMPLETE','INCOMPLETE','MISSING']
     operation_count:int=Field(ge=0,le=32)
+    operation_ordinals:tuple[Annotated[int,Field(ge=0,le=31)],...]=Field(default=(),max_length=32,exclude_if=lambda value:not value)
     request_matched:bool
     source_complete:bool
     field_path:FieldPath
+
+    @model_validator(mode='after')
+    def absent_values(self):
+        if self.operation_ordinals and (len(self.operation_ordinals)!=self.operation_count or tuple(sorted(set(self.operation_ordinals)))!=self.operation_ordinals):
+            raise ValueError('resource commit ordinal projection mismatch')
+        if not self.before_present and self.before_value is not None or not self.after_present and self.after_value is not None:
+            raise ValueError('absent fields cannot carry a value')
+        return self
 
 
 class DisclosureObservationWindow(WireModel):
@@ -198,6 +229,8 @@ class FileObservationWindow(WireModel):
     request_matched:bool
     scope_state:Literal['OPEN','COMPLETE','INCOMPLETE','MISSING']
     refused:bool
+    async_required:bool=Field(default=False,exclude_if=lambda value:not value)
+    task_fingerprint:Hash|None=Field(default=None,exclude_if=lambda value:value is None)
 
 
 class ObservationFactReference(WireModel):

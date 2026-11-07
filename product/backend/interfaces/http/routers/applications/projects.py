@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from typing import Literal
 from fastapi import APIRouter
-from pydantic import Field
+from pydantic import Field,SecretStr,BeforeValidator
+from typing import Annotated
+import json
 
 from product.backend.bootstrap import ApplicationCore
 from product.backend.domain.applications.models import ActionRiskHint, CandidateDecision, CandidateSelection
@@ -13,10 +15,28 @@ from product.backend.interfaces.http.envelope import data_response
 from product.backend.interfaces.http.envelope import ApiResponse
 from product.backend.interfaces.http.envelope import ApiModel
 from product.protocols.runtime.node_runtime import SqliteDatabaseCapture, SqliteTableCapture, SqliteIdentifier
+from product.protocols.runtime.database_capture import DatabaseCapture,Identifier
+from product.backend.infrastructure.storage.execution.jobs import QueueCapacity
+
+DatabaseBody=Annotated[DatabaseCapture,BeforeValidator(lambda value:DatabaseCapture.model_validate_json(json.dumps(value)) if isinstance(value,dict) else value)]
+
+
+class DatabaseCredentialRequest(ApiModel):
+    connection_id:Identifier
+    password:SecretStr=Field(min_length=1,max_length=4096)
 
 
 def build_projects_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
+
+    @router.get('/api/projects/{project_id}/job-capacity', response_model=ApiResponse[QueueCapacity])
+    def job_capacity(project_id: str, operation_type: Literal['CHECK','BROWSER_RECORDING','RUNTIME_LOAD',
+            'PROOF_PREFLIGHT','REFERENCE_CAPTURE','FLOW_TRIAL','IDENTITY_PREPARATION']='CHECK'):
+        return data_response(context.job_queue.capacity(project_id, operation_type), projection=QueueCapacity)
+
+    @router.put('/api/projects/{project_id}/runtime/databases/credential',response_model=ApiResponse)
+    def configure_database_credential(project_id:str,body:DatabaseCredentialRequest):
+        return data_response(context.node_runtime.configure_database_credential(project_id,body.connection_id,body.password.get_secret_value()))
 
     @router.get('/api/projects/{project_id}/readiness', response_model=ApiResponse)
     def readiness(project_id: str):
@@ -28,11 +48,11 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
 
     @router.post('/api/projects/{project_id}/controlled-runtime/preview', response_model=ApiResponse)
     def runtime_preview(project_id: str, body: RuntimePreviewRequest):
-        return data_response(context.node_runtime.preview(project_id,**body.model_dump(exclude={'sqlite'}),sqlite=tuple(item.capture() for item in body.sqlite)).model_dump(mode='json'))
+        return data_response(context.node_runtime.preview(project_id,**body.model_dump(exclude={'sqlite','databases'}),sqlite=tuple(item.capture() for item in body.sqlite),databases=tuple(body.databases)).model_dump(mode='json'))
 
     @router.post('/api/projects/{project_id}/controlled-runtime/start', response_model=ApiResponse)
     def runtime_start(project_id: str, body: RuntimeStartRequest):
-        return data_response(context.node_runtime.start(project_id,**body.model_dump(exclude={'sqlite'}),sqlite=tuple(item.capture() for item in body.sqlite)),status_code=202)
+        return data_response(context.node_runtime.start(project_id,**body.model_dump(exclude={'sqlite','databases'}),sqlite=tuple(item.capture() for item in body.sqlite),databases=tuple(body.databases)),status_code=202)
 
     @router.get('/api/projects/{project_id}/controlled-runtime', response_model=ApiResponse)
     def runtime_state(project_id: str):
@@ -244,6 +264,7 @@ class RuntimePreviewRequest(ApiModel):
     build_script: str | None = Field(default=None, pattern=r'^[A-Za-z0-9:_-]{1,64}$')
     allow_install_scripts: bool = False
     sqlite: list[RuntimeSqliteInput] = Field(default_factory=list, max_length=4)
+    databases:list[DatabaseBody]=Field(default_factory=list,max_length=4)
 
 
 class RuntimeStartRequest(ApiModel):
@@ -256,6 +277,7 @@ class RuntimeStartRequest(ApiModel):
     build_script: str | None = Field(default=None, pattern=r'^[A-Za-z0-9:_-]{1,64}$')
     allow_install_scripts: bool = False
     sqlite: list[RuntimeSqliteInput] = Field(default_factory=list, max_length=4)
+    databases:list[DatabaseBody]=Field(default_factory=list,max_length=4)
 
 
 class RuntimeStopRequest(ApiModel):

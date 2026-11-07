@@ -11,7 +11,7 @@ def test_receipt_preserves_reference_without_source_hashes_or_verdict():
     reference = CurrentRepairReference(source_run_id="run", source_case_id="case", repair_fingerprint="f" * 64)
     manifest = SimpleNamespace(project_id="p1", change_id="chg", reason="更新业务判断", submitted_by="MCP Agent",
         claimed_paths=("hint.py",), repair_reference=reference)
-    value = SimpleNamespace(manifest=manifest,
+    value = SimpleNamespace(manifest=manifest, rule_targets=(),
         change_set=SimpleNamespace(status="NO_BASELINE", added_paths=(), modified_paths=(), removed_paths=(), source_fingerprint="a" * 64),
         revalidation=SourceRevalidationInspection(project_id="p1", change_id="chg", status="NO_BASELINE"),
         assessment=SimpleNamespace(payload=SimpleNamespace(action_impacts=())))

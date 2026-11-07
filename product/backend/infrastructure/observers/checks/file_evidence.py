@@ -4,7 +4,7 @@ from product.protocols.checks.business_facts import (FactProofReference,Referenc
     FileObservationWindow,ObservationFactReference,seal_business_fact)
 
 
-def collect_file_evidence(*,source,case,requirement,proof,phase,before,view,target,clock,marker):
+def collect_file_evidence(*,source,case,requirement,proof,phase,before,view,target,clock,marker,export=None):
     config=source.config
     source_ref=FactProofReference(effect_id=requirement.effect_id,proof_fingerprint=requirement.proof_fingerprint,
         source_id=source.source_id,source_revision=source.revision,source_fingerprint=source.source_fingerprint)
@@ -15,7 +15,10 @@ def collect_file_evidence(*,source,case,requirement,proof,phase,before,view,targ
     snapshot_only=phase in {'BASELINE','BEFORE','RECOVERY'}
     resource_matched=(case.resource_id==config.reference_resource_id and case.resource_owner_test_identity_id==config.reference_owner_identity_id)
     request_matched=snapshot_only
-    receipt=None if target is None else target.entity_receipt
+    delivery=export.delivery if export is not None else target
+    receipt=None if delivery is None else delivery.entity_receipt
+    if export is not None and export.task is not None:
+        facts.append(seal_business_fact(**common,collector_kind='ASYNC_STATUS',data=export.task))
     reasons=()
     if not snapshot_only:
         scope=view.scope
@@ -31,10 +34,12 @@ def collect_file_evidence(*,source,case,requirement,proof,phase,before,view,targ
                 owner_identity_id=case.resource_owner_test_identity_id,resource_id=case.resource_id)))
             reasons=receipt.reason_codes
             if comparison=='DIFFERENT' and not receipt.refused:reasons=('FILE_CONTENT_DIFFERENT',)
-        else:reasons=('FILE_RECEIPT_UNAVAILABLE',)
+        else:reasons=(export.reason if export is not None and export.reason else 'FILE_RECEIPT_UNAVAILABLE',)
     if not resource_matched:reasons=('REFERENCE_RESOURCE_MISMATCH',)
     window=FileObservationWindow(expected=config.reference_artifact,resource_matched=resource_matched,request_matched=request_matched,
-        scope_state='MISSING' if snapshot_only or view.scope is None else view.scope.state,refused=receipt is not None and receipt.refused)
+        scope_state='MISSING' if snapshot_only or view.scope is None else view.scope.state,refused=receipt is not None and receipt.refused,
+        async_required=export is not None,
+        task_fingerprint=None if export is None or export.task is None else export.task.task_fingerprint)
     reference=ObservationFactReference(proof_fingerprint=requirement.proof_fingerprint,observer_id=proof.observer_id,phase=phase,
         source=source_ref,fact_ids=tuple(fact.fact_id for fact in facts),complete=request_matched and resource_matched,
         method='FILE_SNAPSHOT' if snapshot_only else 'FILE_DELIVERY',file_window=window,reason_codes=reasons)

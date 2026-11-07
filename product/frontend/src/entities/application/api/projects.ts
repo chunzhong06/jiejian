@@ -85,17 +85,19 @@ export type ApplicationConnectionDto = {
 export type ConnectionPreview = {source_root:string;snapshot:string;projects:ProjectDto[]}
 export type ConnectionChoice = {mode:'RESUME'|'NEW';existing_project_id?:string;expected_snapshot:string;operation_id?:string}
 export type SqliteCapture = {relative_path:string;tables:Array<{table:string;resource_column:string;owner_column:string;fields:string[]}>}
-export type RuntimeSettings = {build_script?:string|null;allow_install_scripts?:boolean;sqlite?:SqliteCapture[]}
+export type DatabaseCapture={connection_id:string;engine:'POSTGRESQL'|'MYSQL';host:'127.0.0.1';port:number;database:string;namespace:string;username:string;password_env:string;table:string;resource_column:string;owner_column:string;fields:string[]}
+export type RuntimeSettings = {build_script?:string|null;allow_install_scripts?:boolean;sqlite?:SqliteCapture[];databases?:DatabaseCapture[]}
 export type RuntimePackage = {manager:'npm';lockfile:string;build_script:string|null;allow_install_scripts:boolean}
 export type RuntimeCapabilities = {project_id:string;source_read_authorized:boolean;entries:string[];package:string|null;dependencies:string;build_scripts:string[];sqlite_setup?:{paths:string[];tables:Array<{name:string;columns:string[];primary_key:string|null;source:string}>};supported_database_driver?:string;node?:string}
-export type RuntimePreview = { project_id: string; revision: number; entry: string; port: number; preview_fingerprint: string; files: Array<{ relative_path: string }>;package?:RuntimePackage|null;sqlite?:SqliteCapture[] }
+export type RuntimePreview = { project_id: string; revision: number; entry: string; port: number; preview_fingerprint: string; files: Array<{ relative_path: string }>;package?:RuntimePackage|null;sqlite?:SqliteCapture[];databases?:DatabaseCapture[] }
 export type RuntimeOperation = { project_id: string; operation_id: string; instance_id: string; state: string }
-export type RuntimeState = { project_id: string; running: boolean; source_matches: boolean; configuration: { entry: string; port: number;package?:RuntimePackage|null;sqlite?:SqliteCapture[] } | null; operation: RuntimeOperation | null;preparation?:{stage:string;cache_reused:boolean}|null }
+export type RuntimeState = { project_id: string; running: boolean; source_matches: boolean; configuration: { entry: string; port: number;package?:RuntimePackage|null;sqlite?:SqliteCapture[];databases?:DatabaseCapture[] } | null; operation: RuntimeOperation | null;preparation?:{stage:string;cache_reused:boolean}|null }
 const runtimePath = (id: string) => `/api/projects/${encodeURIComponent(id)}/controlled-runtime`
 
 export type CandidateSelection = { kind: 'ROLE' | 'ACTION'; candidate_id: string; decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED'; display_name: string }
 
 export const projectsApi = {
+  databaseCredential:(project:string,connection:string,password:string)=>request<{password_env:string}>(`/api/projects/${encodeURIComponent(project)}/runtime/databases/credential`,{method:'PUT',body:JSON.stringify({connection_id:connection,password})}),
   readiness: (id: string, signal?: AbortSignal) => request<ApplicationReadiness>(`/api/projects/${id}/readiness`, {signal}),
   activity: (id: string, signal?: AbortSignal) => request<ApplicationActivity>(`/api/projects/${id}/activity`, {signal}),
   runtime: (id: string) => request<RuntimeState>(runtimePath(id)),

@@ -12,6 +12,7 @@ from product.protocols.runtime.node_runtime import NodeRuntimeReference, Project
 from product.protocols.checks.identity import CheckIdentity
 from product.protocols.web.target import WebTargetScope
 from product.protocols.checks.business_facts import ArtifactManifestReference
+from product.protocols.runtime.database_capture import DatabaseCapture
 
 SourceId=Annotated[str,Field(pattern=r'^psr_[0-9a-f]{32}$')]
 PreflightId=Annotated[str,Field(pattern=r'^ppf_[0-9a-f]{32}$')]
@@ -109,6 +110,39 @@ class ManagedIdentityClaim(SourceIdentityClaim):
         return value
 
 
+class RelationshipSourceMapping(RuntimeModel):
+    application_action: str = Field(pattern=SAFE_SUBJECT)
+    scope_complete_path: ObjectPath | None = None
+    source_time_path: ObjectPath | None = None
+    subject_organizations_path: ObjectPath | None = None
+    subject_groups_path:ObjectPath|None=None
+    resource_organization_path: ObjectPath | None = None
+    organization_parents_path: ObjectPath | None = None
+    subject_roles_path: ObjectPath | None = None
+    role_inheritance_path: ObjectPath | None = None
+    grants_path: ObjectPath | None = None
+    clock_uncertainty_us: int = Field(default=0, ge=0, le=5_000_000)
+
+    @model_validator(mode='after')
+    def public_paths(self):
+        paths = [getattr(self, name) for name in type(self).model_fields if name.endswith('_path')]
+        if not any(paths):
+            raise ValueError('relationship source requires explicit field mappings')
+        for path in paths:
+            ManagedIdentityClaim.nonsensitive(path)
+        return self
+
+    def supports(self, requirement):
+        if self.scope_complete_path is None:
+            return False
+        if requirement.kind == 'ORGANIZATION':
+            return (self.subject_organizations_path is not None and self.resource_organization_path is not None
+                and (requirement.organization_scope == 'SAME' or self.organization_parents_path is not None))
+        if requirement.kind == 'ROLE_INHERITANCE':
+            return self.subject_roles_path is not None and self.role_inheritance_path is not None
+        return self.grants_path is not None and self.source_time_path is not None
+
+
 class ManagedProofSourceConfig(ProofSourceConfig):
     source_kind:Literal['MANAGED_TRANSACTION_RECORDS']='MANAGED_TRANSACTION_RECORDS'
     source_contract_id:Literal['TRANSACTION_HISTORY_V1','RESOURCE_FIELDS_V1']
@@ -119,6 +153,8 @@ class ManagedProofSourceConfig(ProofSourceConfig):
     target_owner_path:ObjectPath=('owner_id',)
     target_data_path:tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')],...]=Field(default=('data',),max_length=8)
     protected_projection:tuple[Annotated[str,Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,7}$',max_length=256)],...]=Field(default=(),max_length=64)
+    relationship_mapping: RelationshipSourceMapping | None = Field(default=None, exclude_if=lambda value: value is None)
+    state_field_optional: bool = Field(default=False, exclude_if=lambda value: not value)
 
     @model_validator(mode='after')
     def provider_mapping(self):
@@ -151,6 +187,9 @@ def source_identity_paths(config, identities=()):
 
 def source_read_paths(config, identities=()):
     paths = {*source_identity_paths(config, identities), config.relative_path_template}
+    export=getattr(config,'async_export',None)
+    if export is not None:
+        paths.update((export.status_path_template,export.file_path_template))
     if config.source_kind in {'CREATED_OBJECT_RECORDS','SQLITE_OBJECTS'}:
         paths.add(f'/collections/{config.collection}')
     return tuple(sorted(paths))
@@ -201,6 +240,40 @@ class SqliteProofSourceConfig(AtomicProofSourceConfig):
         allowed = set(self.observed_columns or (self.protected_column,))
         if any(len(path) != 2 or path[1] not in allowed for key,path in self.mappings.items() if key in {'tenant','condition_state'}):
             raise ValueError('condition column is outside the declared SQLite capture')
+        if self.relationship_mapping is not None:
+            for name in ('resource_organization_path', 'organization_parents_path', 'role_inheritance_path', 'grants_path', 'scope_complete_path', 'source_time_path'):
+                path = getattr(self.relationship_mapping, name)
+                if path is not None and path[0] not in allowed:
+                    raise ValueError('relationship column is outside the declared SQLite capture')
+        return self
+
+
+class AsyncExportMapping(RuntimeModel):
+    dispatch_task_path:ObjectPath
+    status_path_template:str=Field(min_length=2,max_length=512)
+    file_path_template:str=Field(min_length=2,max_length=512)
+    task_path:ObjectPath
+    state_path:ObjectPath
+    resource_path:ObjectPath
+    owner_path:ObjectPath
+    subject_path:ObjectPath
+    request_nonce_path:ObjectPath
+    states:dict[Annotated[str,Field(pattern=r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')],Literal['QUEUED','RUNNING','SUCCESS','FAILED','TIMED_OUT','CANCELLED']]=Field(min_length=3,max_length=16)
+    max_polls:int=Field(default=16,ge=1,le=32)
+    poll_interval_us:int=Field(default=100_000,ge=10_000,le=1_000_000)
+    timeout_us:int=Field(default=5_000_000,ge=100_000,le=15_000_000)
+    max_response_bytes:int=Field(default=262144,ge=1024,le=262144)
+
+    @model_validator(mode='after')
+    def bounded_mapping(self):
+        for path in (self.status_path_template,self.file_path_template):
+            safe_source_path(path.replace('{task_id}','{resource_id}'))
+            if path.count('{task_id}')!=1:raise ValueError('async export requires one fixed task_id path')
+        if self.status_path_template==self.file_path_template:raise ValueError('status and final entity require separate paths')
+        for name in type(self).model_fields:
+            if name.endswith('_path'):ManagedIdentityClaim.nonsensitive(getattr(self,name))
+        if 'SUCCESS' not in self.states.values() or not {'FAILED','CANCELLED','TIMED_OUT'}&set(self.states.values()):
+            raise ValueError('async export requires success and failure mappings')
         return self
 
 
@@ -211,10 +284,13 @@ class FileProofSourceConfig(AtomicProofSourceConfig):
     reference_origin:Literal['UPLOAD','REFERENCE_CAPTURE']|None=None
     reference_resource_id:str=Field(min_length=1,max_length=256)
     reference_owner_identity_id:IdentityId
+    async_export:AsyncExportMapping|None=Field(default=None,exclude_if=lambda value:value is None)
 
     @model_validator(mode='after')
     def reference_pair(self):
         if (self.reference_artifact is None)!=(self.reference_origin is None):raise ValueError('file reference origin mismatch')
+        if self.async_export is not None and (self.async_export.timeout_us>self.timeout_us or self.async_export.max_response_bytes>self.max_response_bytes):
+            raise ValueError('async export exceeds the source read budget')
         return self
 
 
@@ -245,12 +321,35 @@ class SqliteCreationProofSourceConfig(CreationProofSourceConfig):
         return self
 
 
-CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig|SqliteProofSourceConfig|SqliteCreationProofSourceConfig,Field(discriminator='source_kind')]
+class DatabaseProofSourceConfig(AtomicProofSourceConfig):
+    source_kind:Literal['DATABASE_AUDIT']='DATABASE_AUDIT'
+    source_contract_id:Literal['TRANSACTION_HISTORY_V2']='TRANSACTION_HISTORY_V2'
+    database_capture:DatabaseCapture
+    protected_column:str=Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+
+    @model_validator(mode='after')
+    def declared_projection(self):
+        declared=self.database_capture
+        if (self.collection!=declared.table or self.protected_column not in declared.fields
+                or self.mappings.get('state')!=('data',self.protected_column)):
+            raise ValueError('database source must use its declared resource projection')
+        if any(path[0]!='data' or len(path)!=2 or path[1] not in declared.fields
+                for key,path in self.mappings.items() if key in {'tenant','condition_state'}):
+            raise ValueError('condition is outside database projection')
+        if self.relationship_mapping is not None:
+            for name in ('resource_organization_path','organization_parents_path','role_inheritance_path','grants_path','scope_complete_path','source_time_path'):
+                path=getattr(self.relationship_mapping,name)
+                if path is not None and path[0] not in declared.fields:
+                    raise ValueError('relationship is outside database projection')
+        return self
+
+
+CurrentProofSourceConfig=Annotated[AtomicProofSourceConfig|FileProofSourceConfig|CreationProofSourceConfig|SqliteProofSourceConfig|SqliteCreationProofSourceConfig|DatabaseProofSourceConfig,Field(discriminator='source_kind')]
 
 
 class ProofContractAttestation(RuntimeModel):
     contract_id:Literal['TRANSACTION_HISTORY_V2','RESOURCE_FIELDS_V1','FILE_RESPONSE_CONTENT_V1','OBJECT_CREATION_V1']
-    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1','SQLITE_ROW_HISTORY_V1','SQLITE_CREATION_HISTORY_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
+    implementation_profile:Literal['CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','CONTROLLED_CREATION_V1','SQLITE_ROW_HISTORY_V1','SQLITE_CREATION_HISTORY_V1','POSTGRESQL_ROW_HISTORY_V1','MYSQL_ROW_HISTORY_V1']='CONTROLLED_TRANSACTION_RECORDS_V2'
     fingerprint:Digest
     approved_effect_kind:Literal['STATE_MUTATION','DATA_DISCLOSURE','FILE_CONTENT_DELIVERY','OBJECT_CREATION']
 
@@ -314,6 +413,7 @@ class SourceReadScope(RuntimeModel):
     timeout_us:int=Field(ge=1000,le=5_000_000)
     created_at_us:int=Field(ge=0)
     sqlite:tuple[SqliteReadSelection,...]=Field(default=(),max_length=4,exclude_if=lambda value:not value)
+    databases:tuple[DatabaseCapture,...]=Field(default=(),max_length=4,exclude_if=lambda value:not value)
 
     @field_validator('origin')
     @classmethod
@@ -328,6 +428,7 @@ class SourceReadScope(RuntimeModel):
     def paths(cls,values,info):
         for value in values:
             if '{resource_id}' in value:safe_source_path(value)
+            elif '{task_id}' in value:safe_source_path(value.replace('{task_id}','{resource_id}'))
             else:safe_identity_path(value)
         if len(set(values))!=len(values):raise ValueError('duplicate paths')
         return values
@@ -355,9 +456,17 @@ class ProofPreflightInput(RuntimeModel):
     runtime_reference:NodeRuntimeReference
     contract:ProofContractAttestation|None=None
     created_at_us:int=Field(ge=0)
+    purpose:Literal['READ','INSTALL_DATABASE','REMOVE_DATABASE']=Field(default='READ',exclude_if=lambda value:value=='READ')
+    maintenance_plan_fingerprint:Digest|None=Field(default=None,exclude_if=lambda value:value is None)
 
     @model_validator(mode='after')
     def association(self):
+        if (self.purpose!='READ')!=(self.maintenance_plan_fingerprint is not None):
+            raise ValueError('database maintenance requires an exact approved plan')
+        if self.purpose!='READ' and (not isinstance(self.config,DatabaseProofSourceConfig) or self.authority_id!='LOCAL_GUI'):
+            raise ValueError('database maintenance requires local authorization')
+        if isinstance(self.config,DatabaseProofSourceConfig) and self.config.database_capture not in self.scope.databases:
+            raise ValueError('database connection is outside granted scope')
         if (self.project_id!=self.scope.project_id or self.project_id!=self.runtime_reference.project_id
             or self.target.base_url!=self.scope.origin or self.target.base_url!=f'http://127.0.0.1:{self.runtime_reference.port}'
             or self.source_fingerprint!=proof_fingerprint(self.config) or self.config.read_scope_id not in (None,self.scope.scope_id)
@@ -395,15 +504,18 @@ class ProofPreflightReport(RuntimeModel):
     attempt:int=Field(ge=1)
     fencing_token:int=Field(ge=1)
     lease_owner:str=Field(min_length=1,max_length=128)
-    assessment:Literal['USABLE','NEEDS_CHANGES','UNSUPPORTED']
+    assessment:Literal['USABLE','NEEDS_CHANGES','UNSUPPORTED','COMPLETED']
     checks:tuple[ProofCheckItem,...]=Field(min_length=1,max_length=48)
     started_at_us:int=Field(ge=0)
     completed_at_us:int=Field(ge=0)
+    purpose:Literal['READ','INSTALL_DATABASE','REMOVE_DATABASE']=Field(default='READ',exclude_if=lambda value:value=='READ')
 
     @model_validator(mode='after')
     def usable_requires_all_checks(self):
+        if self.assessment=='COMPLETED' and self.purpose=='READ' or self.assessment=='USABLE' and self.purpose!='READ':
+            raise ValueError('maintenance is distinct from source usability')
         if self.completed_at_us<self.started_at_us:raise ValueError('time order invalid')
-        if self.assessment=='USABLE' and any(item.status!='CONFIRMED' for item in self.checks):
+        if self.assessment in {'USABLE','COMPLETED'} and any(item.status!='CONFIRMED' for item in self.checks):
             raise ValueError('usable requires confirmed checks')
         return self
 

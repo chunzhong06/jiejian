@@ -75,7 +75,8 @@ class RuntimeLoadJobs:
 
     @staticmethod
     def read_in_work(work, request):
-        """只读核验调用方事务内的请求、Job 和回执；不另开事务或提交。"""
+        """在调用方同一只读快照核对请求、Job 和回执；已有写事务保持原所有权。"""
+        work.begin_read_snapshot()
         job = work.jobs.get_by_runtime_load(request.load_id)
         receipt = work.runtime_loads.receipt(request.load_id)
         if (job is None or job.project_id != request.project_id or job.request_hash != node_document_fingerprint(request)

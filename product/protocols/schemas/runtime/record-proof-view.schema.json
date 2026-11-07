@@ -480,6 +480,15 @@
       ],
       "default": null
     },
+    "operation_projection": {
+      "default": "REQUEST",
+      "enum": [
+        "REQUEST",
+        "RESOURCE"
+      ],
+      "title": "Operation Projection",
+      "type": "string"
+    },
     "operations": {
       "default": [],
       "items": {
@@ -490,8 +499,11 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "2",
       "default": "2",
+      "enum": [
+        "2",
+        "3"
+      ],
       "title": "Schema Version",
       "type": "string"
     },

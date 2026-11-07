@@ -6,14 +6,13 @@
 .jj-issue-index > button > span, .jj-issue-index small { font-size:var(--text-meta); color:var(--muted); }
 .jj-issue-reading { min-width:0; padding:24px 0 0 28px; border-left:1px solid var(--line); }
 .jj-issue-reading > header { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-.jj-issue-reading h2 { font-size:var(--text-section); }
 .jj-issue-comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:26px; background:var(--inset); border-radius:var(--radius-surface); }
 .jj-issue-comparison > section { padding:22px; }
 .jj-issue-comparison > section + section { border-left:1px solid var(--line); }
-.jj-issue-comparison h3 { font-size:var(--text-meta); color:var(--muted); margin-bottom:12px; }
+.jj-issue-comparison h3 {  color:var(--muted); margin-bottom:12px; }
 .jj-issue-comparison p { line-height:1.8; }
 .jj-issue-comparison small { display:block; color:var(--muted); margin-top:8px; }
-.jj-issue-comparison .jj-button { padding-inline:0; margin-top:12px; }
+.jj-issue-comparison .jj-button { margin-top:12px; }
 .jj-issue-verification { margin-top:28px; }
 .jj-issue-verification h3 { margin-bottom:16px; }
 .jj-issue-verification th:first-child { width:54%; }

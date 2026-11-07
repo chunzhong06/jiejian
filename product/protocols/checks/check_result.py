@@ -101,6 +101,11 @@ class CheckObservation(WireModel):
         return self
 
 
+class ScenarioResourceBinding(WireModel):
+    producer_case_id: CaseId
+    resource_id: str = Field(min_length=1,max_length=256)
+
+
 class CheckCaseOutcome(WireModel):
     execution_outcome: Literal["ACCEPTED", "DENIED", "FAILED", "UNKNOWN"]
     http_status: int | None = Field(default=None, ge=100, le=599)
@@ -124,6 +129,7 @@ class CheckEvidence(WireModel):
     request_hash: Hash
     config_hash: Hash
     case: ExecutionCase
+    resource_binding: ScenarioResourceBinding | None = Field(default=None,exclude_if=lambda value:value is None)
     outcome: CheckCaseOutcome
     observations: tuple[CheckObservation, ...] = Field(max_length=240)
     trace: ExecutionTrace | None = None
@@ -131,9 +137,14 @@ class CheckEvidence(WireModel):
     activity: RequestActivity | None = Field(default=None, exclude_if=lambda value: value is None)
     activity_error: ReasonCode | None = Field(default=None, exclude_if=lambda value: value is None)
 
+    @property
+    def effective_case(self):
+        binding=self.resource_binding
+        return self.case if binding is None else self.case.bind_resource(binding.resource_id,binding.producer_case_id)
+
     @model_validator(mode="after")
     def validate_associations(self):
-        proofs = {proof.proof_fingerprint: proof for proof in self.case.proof_requirements}
+        proofs = {proof.proof_fingerprint: proof for proof in self.effective_case.proof_requirements}
         for item in self.observations:
             proof = proofs.get(item.proof_fingerprint)
             if proof is None or proof.effect_id != item.effect_id or (
@@ -160,7 +171,7 @@ class CheckEvidence(WireModel):
         facts={item.fact_id:item for item in self.business_facts}
         if len(facts)!=len(self.business_facts):raise ValueError('duplicate business fact')
         marker=check_request_marker(self.run_id,self.job_id,self.attempt,self.case.case_id)
-        proofs={proof.proof_fingerprint:proof for proof in self.case.proof_requirements}
+        proofs={proof.proof_fingerprint:proof for proof in self.effective_case.proof_requirements}
         operations=set()
         for fact in facts.values():
             if (fact.case_id,fact.request_ref)!=(self.case.case_id,marker):raise ValueError('fact belongs to another request')

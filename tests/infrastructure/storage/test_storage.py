@@ -100,6 +100,9 @@ def test_migrated_schema_matches_sqlalchemy_metadata(
 ) -> None:
     _, engine, _ = migrated_storage
     inspector = inspect(engine)
+    def index_column(expression):
+        column = getattr(expression, 'element', expression)
+        return column.name if hasattr(column, 'name') else str(column)
     assert set(inspector.get_table_names()) - {"alembic_version"} == set(
         Base.metadata.tables
     )
@@ -172,7 +175,8 @@ def test_migrated_schema_matches_sqlalchemy_metadata(
         } == expected_foreign_keys
 
         expected_indexes = {
-            (index.name, tuple(column.name for column in index.columns), index.unique)
+            # index.columns 会漏掉 desc("column") 的表达式；比较真实索引列序。
+            (index.name, tuple(index_column(expression) for expression in index.expressions), index.unique)
             for index in expected_table.indexes
         }
         assert {

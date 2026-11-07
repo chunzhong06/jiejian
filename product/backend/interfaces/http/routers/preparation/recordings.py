@@ -150,14 +150,9 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     def list_recordings(project_id: str):
         context.projects.get(project_id)
         with context.uow_factory() as work:
-            recordings = work.recordings.list_for_project(project_id)
+            recordings = work.recordings.list_summaries(project_id)
         # 列表只返回定位和生命周期摘要，浏览器事件不是页面列表的数据来源。
-        fields = {
-            "recording_id", "project_id", "flow_id", "business_action_id", "action_revision",
-            "subject_test_identity_id", "resource_owner_test_identity_id", "state", "purpose", "parent_recording_id", "effect_id",
-            "created_at_us", "updated_at_us",
-        }
-        return data_response([item.model_dump(mode="json", include=fields) for item in recordings])
+        return data_response([item.model_dump(mode="json") for item in recordings])
 
     @router.post(
         "/api/recordings/{recording_id}/review", response_model=ApiResponse

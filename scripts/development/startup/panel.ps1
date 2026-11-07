@@ -1,4 +1,4 @@
-﻿# 启动面板只投影现有阶段与就绪事实；光标由主进程和已协商停止的等待进程轮流持有。
+﻿# 启动面板只投影现有阶段与就绪事实；光标由主线程和已停止绘制的等待任务轮流持有。
 $script:StartupPanelActive = $false
 $script:StartupPanelRows = 0
 $script:StartupPanelWidth = 0
@@ -78,7 +78,7 @@ function Get-StartupPanelLines([int]$Width, [int]$Height = 0) {
     } elseif ($null -ne $script:StartupPanelClock) {
         "启动已用 {0:N0} 秒" -f [Math]::Floor($script:StartupPanelClock.Elapsed.TotalSeconds)
     } else { "" }
-    # 父进程和等待动画共用这一行；重绘前先交还输出权，面板不保留另一份静态计时。
+    # 主线程和等待动画共用这一行；重绘前先交还输出权，面板不保留另一份静态计时。
     Format-StartupLine $elapsed $Width $script:StartupPanelKeys
 }
 
@@ -134,6 +134,7 @@ function Set-StartupStatus([string]$Status, [string]$Title, [string]$Detail) {
         if ($null -eq $script:StartupPanelReadySeconds -and $null -ne $script:StartupPanelClock) {
             $script:StartupPanelReadySeconds = $script:StartupPanelClock.Elapsed.TotalSeconds
             $script:StartupPanelClock.Stop()
+            Write-Startup ("[timing] {0} {1:N0} ms" -f $Status, ($script:StartupPanelReadySeconds * 1000))
             if ($null -ne $script:DisplayStageTimer) { $script:DisplayStageTimer.Stop() }
         }
     }

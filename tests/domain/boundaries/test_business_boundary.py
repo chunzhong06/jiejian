@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import pytest
 from pydantic import ValidationError
 
@@ -9,6 +10,23 @@ from product.backend.domain.boundaries.approval import HumanApproval, HumanAppro
 from product.backend.domain.boundaries.proposals import BoundarySourceSnapshot
 from product.backend.domain.boundaries.entities import ActorImplementationBinding, BusinessActionOperationKind, BusinessActionRevision, BusinessEffectDefinition, BusinessRevisionState, ImplementationCandidateSnapshot, boundary_sha256
 from product.backend.domain.boundaries.semantics import BusinessEffectKind as SecurityEffectKind
+from product.backend.domain.canonical import canonical_sha256
+
+
+@pytest.mark.parametrize('payload,encoded',[
+    ({'b':[2,3],'a':1},b'{"a":1,"b":[2,3]}'),
+    ({'z':None,'a':'界鉴'},'{"a":"界鉴","z":null}'.encode('utf-8')),
+])
+def test_business_fingerprints_keep_exact_json_bytes(payload,encoded):
+    expected=hashlib.sha256(encoded).hexdigest()
+    assert canonical_sha256(payload)==expected
+    assert boundary_sha256(payload)==expected
+
+
+def test_business_fingerprints_reject_non_finite_numbers():
+    for digest in (canonical_sha256,boundary_sha256):
+        with pytest.raises(ValueError,match='Out of range float values'):
+            digest({'value':float('nan')})
 
 
 ACTION_ID = "bac_" + "1" * 32

@@ -39,7 +39,7 @@
 .jj-storage-layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr); min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); }
 .jj-storage-layout > .jj-storage-workspace { border:0; border-radius:0; }
 .jj-storage-layout .jj-storage-kept { background:var(--inset); border-left:1px solid var(--line); padding:24px; min-width:0; }
-.jj-storage-kept > h2 { font-size:var(--text-body); margin-bottom:16px; }
+.jj-storage-kept > h2 {  margin-bottom:16px; }
 .jj-storage-kept > p { font-size:var(--text-meta); color:var(--muted); line-height:1.8; margin-bottom:20px; }
 .jj-storage-kept > details { padding:16px 0; }
 .jj-storage-kept > details > .jj-small { margin:0 0 16px; }

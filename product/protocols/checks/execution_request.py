@@ -1,16 +1,15 @@
 # 独立执行快照 wire：只依赖 Pydantic 与标准库，严格冻结无秘密的权限实验事实。
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from enum import StrEnum
 from typing import Annotated, Literal
-from product.protocols.codec import encode_json, decode_document, decode_json
+from product.protocols.codec import content_hash, encode_json, decode_document, decode_json
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from product.protocols.checks.conditions import PermissionConditions
 from product.protocols.web.environment import FrozenEnvironment
+from product.protocols.checks.scenarios import FrozenBusinessScenario, validate_scenario_cases
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
 Hash = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -30,11 +29,6 @@ class WireModel(BaseModel):
         if value is not None and (value in {".", ".."} or re.fullmatch(r"[\w.-]{1,256}", value) is None):
             raise ValueError("resource identifier")
         return self
-
-
-def content_hash(domain: str, value) -> str:
-    return hashlib.sha256(json.dumps({"kind": domain, "facts": value}, ensure_ascii=False,
-        sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
 
 
 class PermissionReference(WireModel):
@@ -169,9 +163,29 @@ class ExecutionCase(WireModel):
     recovery: RecoveryReference | None
     source_fingerprint: Hash | None
     config_fingerprint: Hash
+    occurrence_id: str | None = Field(default=None, pattern=r'^occ_[0-9a-f]{32}$', exclude_if=lambda value:value is None)
+    invocation_kind: Literal['BATCH_ATOMIC','BATCH_PER_ITEM'] | None = Field(default=None, exclude_if=lambda value:value is None)
+    batch_effect_expectation: Literal['PRESENT','ABSENT'] | None = Field(default=None, exclude_if=lambda value:value is None)
+
+    @property
+    def expects_absence(self):
+        return self.batch_effect_expectation=='ABSENT' if self.batch_effect_expectation is not None else self.permission.expectation=='DENY'
+
+    def bind_resource(self,resource_id:str,producer_case_id:str):
+        """从冻结模板派生本轮资源；原 Case 身份保留，由场景证据另行核对产生者。"""
+        proofs=[]
+        for proof in self.proof_requirements:
+            payload=proof.model_dump(mode='json',exclude={'proof_fingerprint'})|dict(resource_id=resource_id)
+            proofs.append(payload|dict(proof_fingerprint=content_hash('EffectProofRequirement',payload)))
+        payload=self.model_dump(mode='json')|dict(resource_id=resource_id,proof_requirements=proofs,
+            resource_binding_fingerprint=content_hash('ScenarioResource',dict(template=self.resource_binding_fingerprint,
+                producer_case_id=producer_case_id,resource_id=resource_id)))
+        return type(self).model_validate_json(__import__('json').dumps(payload))
 
     @model_validator(mode="after")
     def validate_case(self):
+        if (self.invocation_kind is None)!=(self.batch_effect_expectation is None) or self.invocation_kind is not None and self.occurrence_id is None:
+            raise ValueError('batch obligations require a distinct frozen invocation occurrence')
         anonymous = self.permission.conditions is not None and self.permission.conditions.principal == 'ANONYMOUS'
         if anonymous != (self.subject_test_identity_id is None and self.subject_identity_fingerprint is None):
             raise ValueError('case principal requires either a real identity or an explicit anonymous condition')
@@ -282,7 +296,9 @@ class ExecutionAction(WireModel):
                 raise ValueError("twin invariant mismatch")
             if twin.fingerprint != content_hash("CheckTwin", twin.model_dump(mode="json", exclude={"fingerprint"})):
                 raise ValueError("twin fingerprint")
-        deny_ids = {item.case_id for item in self.cases if item.permission.expectation == "DENY"}
+        # 场景节点在根 reader 核对完整正常实验；历史场景保留其已冻结的单动作 twin。
+        deny_ids = {item.case_id for item in self.cases if item.permission.expectation == "DENY" and
+            (item.occurrence_id is None or any(twin.deny_case_id==item.case_id for twin in self.twins))}
         if len(self.twins) != len(deny_ids) or {item.deny_case_id for item in self.twins} != deny_ids:
             raise ValueError("deny requires exactly one complete control")
         controls = {item.case_id for item in self.cases if CaseRole.ALLOW_CONTROL in item.roles}
@@ -387,6 +403,7 @@ class ExecutionRequest(WireModel):
     change_context: ChangeContext | None = None
     repair_context: RepairContext | None = None
     external_recheck: ExternalRecheckContext | None = Field(default=None,exclude_if=lambda value:value is None)
+    scenario: FrozenBusinessScenario | None = Field(default=None,exclude_if=lambda value:value is None)
 
     @model_serializer(mode="wrap")
     def preserve_full_request_encoding(self, handler):
@@ -403,7 +420,7 @@ class ExecutionRequest(WireModel):
         if self.source_fingerprint is None and self.environment is None:
             raise ValueError('source-free execution requires a frozen environment')
         if self.external_recheck is not None and (self.environment is None or self.source_fingerprint is not None
-            or self.repair_context is None or self.change_context is not None or self.selection is not None):
+            or self.repair_context is None or self.change_context is not None):
             raise ValueError('external recheck requires its original contract and external environment')
         if self.environment is None and any(proof.rule == 'HTTP_ENTITY_QUERY'
             for action in self.actions for case in action.cases for proof in case.proof_requirements):
@@ -436,6 +453,11 @@ class ExecutionRequest(WireModel):
                 case["proof_requirements"].sort(key=lambda item: (item["effect_id"], item["level"]))
         plan = dict(project_id=self.project_id, source_fingerprint=self.source_fingerprint,
                     policy_epoch=self.policy_epoch, engine_version=self.engine_version, actions=actions, gaps=[])
+        if self.scenario is not None:
+            validate_scenario_cases(self.scenario,self.actions)
+            plan['scenario']=self.scenario.model_dump(mode='json')
+        elif any(case.occurrence_id is not None for action in self.actions for case in action.cases):
+            raise ValueError('orphan scenario occurrence')
         if self.plan_fingerprint != content_hash("ProjectCheckPlan", plan):
             raise ValueError("plan content identity")
         return self
@@ -458,7 +480,9 @@ class ExecutionRequest(WireModel):
             selection = self.selection
             keys = lambda values: {(item.intent_id, item.revision, item.intent_hash) for item in values}
             if self.change_context is not None or self.repair_context is not None:
-                raise ValueError("original-case revalidation cannot narrow its scope")
+                # 原题可能来自全量、选定规则或业务场景；均须完整保留合同中的准确规则范围。
+                if self.repair_context is None or keys(self.repair_context.original_intents)!=facts:
+                    raise ValueError("original-case revalidation cannot narrow its scope")
             if keys(selection.selected) | keys(selection.added_controls) != facts:
                 raise ValueError("selected scope does not match executed cases")
             controls = {(case.permission.intent_id, case.permission.revision, case.permission.intent_hash)

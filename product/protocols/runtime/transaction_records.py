@@ -159,7 +159,8 @@ class RecordOperation(RuntimeModel):
 
 
 class RecordProofView(RuntimeModel):
-    schema_version: Literal['2'] = '2'
+    schema_version: Literal['2','3'] = '2'
+    operation_projection:Literal['REQUEST','RESOURCE']=Field(default='REQUEST',exclude_if=lambda value:value=='REQUEST')
     snapshot: RecordSnapshot
     operation: RecordOperation | None = None
     scope: RecordRequestScope | None = None
@@ -168,10 +169,19 @@ class RecordProofView(RuntimeModel):
     @model_validator(mode='after')
     def complete_scope_sequence(self):
         bounded_record_data(self.snapshot.data)
+        if (self.schema_version=='3')!=(self.operation_projection=='RESOURCE'):
+            raise ValueError('resource operation projection requires explicit version 3')
+        if self.operation_projection=='RESOURCE' and self.scope is None:
+            raise ValueError('resource operation projection requires the actual request scope')
         if len({item.operation_id for item in self.operations})!=len(self.operations):
             raise ValueError('duplicate committed operation')
+        ordinals=tuple(item.scope_ordinal for item in self.operations)
+        if self.operation_projection=='RESOURCE' and ordinals!=tuple(sorted(set(ordinals))):
+            raise ValueError('resource operation subsequence order')
         for index,item in enumerate(self.operations):
-            if self.scope is None or item.scope_id!=self.scope.scope_id or item.scope_ordinal!=index or item.generation!=self.scope.generation:
+            if (self.scope is None or item.scope_id!=self.scope.scope_id or item.generation!=self.scope.generation
+                or self.operation_projection=='REQUEST' and item.scope_ordinal!=index
+                or self.operation_projection=='RESOURCE' and (item.collection,item.resource_id)!=(self.snapshot.collection,self.snapshot.resource_id)):
                 raise ValueError('request commit sequence mismatch')
         return self
 

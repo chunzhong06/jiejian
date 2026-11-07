@@ -6,6 +6,25 @@ import {projectsApi} from '../../../entities/application/api/projects'
 import {proofSourcesApi,type ProofContext} from '../../../entities/preparation/api/proofSources'
 
 const context:ProofContext={project_id:'app',basis_id:'basis',runtime_available:false,runtime_origin:null,sqlite:[],actions:[],identities:[],resources:[],sources:[],read_scopes:[]}
+
+it('文件证明可以直接配置，任务映射分类切换保留草稿并阻止不完整保存',async()=>{
+    const runtime=vi.spyOn(projectsApi,'runtime')
+    const fileContext:ProofContext={...context,project_id:'async-app',runtime_available:true,
+        actions:[{action_id:'export',revision:1,label:'导出资料',effects:[{effect_id:'entity',label:'完整文件已接收',kind:'FILE_CONTENT_DELIVERY'}]}],
+        resources:[{resource_binding_id:'r1',action_id:'export',action_revision:1,resource_id:'document',owner_identity_id:'owner'}]}
+    render(<SourceConfiguration projectId="async-app" context={fileContext} onClose={()=>{}} onSave={vi.fn()}/> )
+    fireEvent.change(screen.getByLabelText('资源所在的受控记录集合'),{target:{value:'documents'}})
+    expect(screen.getByRole('button',{name:'保存判断方式'})).toBeEnabled()
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'交付方式'}))
+    fireEvent.click(await screen.findByRole('option',{name:'先创建导出任务，再接收文件'}))
+    expect(screen.getByRole('button',{name:'保存判断方式'})).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('任务查询路径'),{target:{value:'/exports/{task_id}'}})
+    fireEvent.click(screen.getByRole('tab',{name:'关联字段'}))
+    expect(screen.getByLabelText('原请求关联标记')).toBeVisible()
+    fireEvent.click(screen.getByRole('tab',{name:'任务与文件'}))
+    expect(screen.getByLabelText('任务查询路径')).toHaveValue('/exports/{task_id}')
+    expect(runtime).not.toHaveBeenCalled()
+})
 afterEach(()=>vi.restoreAllMocks())
 
 it.each([true,false])('无可用数据库时根据已有配置恢复，并保留返回证明设置的位置：%s',async(configured)=>{
@@ -44,7 +63,8 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     vi.spyOn(proofSourcesApi,'context').mockResolvedValue(sourceContext)
     const write=vi.spyOn(proofSourcesApi,'write'),back=vi.fn()
     render(<Sources projectId="app" onBack={back} onError={vi.fn()}/> )
-    const fileInput=await screen.findByLabelText('选择完整测试参照文件')
+    const filePicker=await screen.findByRole('group',{name:'完整测试参照文件'})
+    const fileInput=filePicker.querySelector('input[type=file]')!
     const file=new File(['reference'],'reference.pdf',{type:'application/pdf'})
     fireEvent.change(fileInput,{target:{files:[file]}})
     fireEvent.click(screen.getByRole('tab',{name:'核对记录'}))
@@ -53,7 +73,7 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     expect(within(checks).getByText('已确认')).toBeInTheDocument()
     expect(within(checks).getByText('尚未确认')).toBeVisible()
     expect(screen.getByText('字段映射与技术引用')).not.toBeVisible()
-    expect(screen.queryByLabelText('选择完整测试参照文件')).not.toBeVisible()
+    expect(filePicker).not.toBeVisible()
     fireEvent.click(screen.getByRole('tab',{name:'来源与管理'}))
     const settings=screen.getByRole('tabpanel',{name:'来源与管理'})
     expect(within(settings).getByText('/files/{resource_id}')).toBeVisible()
@@ -65,8 +85,8 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     fireEvent.click(within(dialog).getByRole('button',{name:'保留授权'}))
     await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab',{name:'结果说明'}))
-    expect(screen.getByLabelText('选择完整测试参照文件')).toBe(fileInput)
-    expect(screen.getByText('reference.pdf，1 KiB')).toBeVisible()
+    expect(screen.getByRole('group',{name:'完整测试参照文件'}).querySelector('input[type=file]')).toBe(fileInput)
+    expect(screen.getByText('reference.pdf')).toBeVisible()
     expect(write).not.toHaveBeenCalled()
     expect(back).not.toHaveBeenCalled()
 })

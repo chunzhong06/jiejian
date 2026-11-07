@@ -1,3 +1,4 @@
+import type {ScenarioReference} from '../../entities/preparation/api/businessScenarios'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
 import { useRef, useState } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
@@ -19,11 +20,15 @@ import { RuleCheckScope } from './RuleCheckScope';
 import { CheckScopePicker } from './CheckScopePicker';
 
 export function Plan({ projectId, onError, route, refresh }: PageProps) {
-    const ruleId = route.query.get('rule_id'), changeId = route.query.get('change_id'), key = `jiejian.studio.check:${projectId}`;
+    const ruleId=route.query.get('rule_id'),changeId=route.query.get('change_id');
+    const scenarioId=route.query.get('scenario_id'),scenarioRevision=Number(route.query.get('scenario_revision'));
+    const scenario:ScenarioReference|undefined=scenarioId&&Number.isInteger(scenarioRevision)&&scenarioRevision>0?{scenario_id:scenarioId,revision:scenarioRevision}:undefined;
+    const invalidScenario=Boolean(scenarioId&&!scenario);
+    const key=`jiejian.studio.check:${projectId}`+(scenario?':'+scenario.scenario_id+':'+scenario.revision:'');
     const origin = returnDestination(route.query.get('return_to'));
-    type Pending = { fingerprint: string; operation: string; change: string | null; selected?: PermissionReference[] | null };
+    type Pending = { fingerprint: string; operation: string; change: string | null; selected?: PermissionReference[] | null; scenario?:ScenarioReference };
     const scopeId = useRef(route.query.get('scope_id') ?? operationId());
-    const [selected, setSelected] = useState<PermissionReference[] | null>(() => changeId ? null : readPending<{refs: PermissionReference[]}>(`jiejian.studio.scope:${projectId}:${scopeId.current}`)?.refs ?? readPending<Pending>(key)?.selected ?? null);
+    const [selected, setSelected] = useState<PermissionReference[] | null>(() => changeId||scenario ? null : readPending<{refs: PermissionReference[]}>(`jiejian.studio.scope:${projectId}:${scopeId.current}`)?.refs ?? readPending<Pending>(key)?.selected ?? null);
     const select = (refs: PermissionReference[] | null) => {
         savePending(`jiejian.studio.scope:${projectId}:${scopeId.current}`, refs === null ? undefined : {refs});
         const query = new URLSearchParams(location.hash.split('?')[1]);
@@ -33,14 +38,19 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
     };
     const [pending, setPending] = useState(() => readPending<Pending>(key));
     const [busy, setBusy] = useState(false), [notFound, setNotFound] = useState(false), lock = useRef(false);
-    const state = useRead('plan:' + projectId + ':' + changeId, async () => {
-        const [preview, materials, identities] = await Promise.all([api.preview(projectId, changeId), preparationApi.get(projectId), testIdentitiesApi.list(projectId)]);
-        [preview.project_id, materials.project_id].forEach(id => assertProject(id, projectId));
+    const state = useRead(invalidScenario?null:'plan-materials:' + projectId, async () => {
+        const [materials, identities] = await Promise.all([preparationApi.get(projectId), testIdentitiesApi.list(projectId)]);
+        assertProject(materials.project_id, projectId);
         identities.forEach(item => assertProject(item.project_id, projectId));
-        return { preview, materials, identities };
+        return { materials, identities };
     });
-    const chosen = useRead(selected?.length ? 'selected-plan:' + projectId + ':' + JSON.stringify(selected) : null, () => api.preview(projectId, null, selected));
-    const activePreview = selected === null ? state.data?.preview : chosen.data;
+    // 全部和选定范围共用一个预览所有者；空选区不构造全量计划，换键后不展示旧结果。
+    const chosen = useRead(invalidScenario || selected?.length === 0 ? null : 'plan:' + projectId + ':' + JSON.stringify({changeId, scenario, selected}), async () => {
+        const preview = await api.preview(projectId, changeId, selected, scenario);
+        assertProject(preview.project_id, projectId);
+        return preview;
+    });
+    const activePreview = chosen.data;
     const open = (runId: string) => { savePending(key, undefined); setPending(undefined); refresh(); go('/reports?' + new URLSearchParams({ run_id: runId, ...(ruleId ? { rule_id: ruleId } : {}), ...(origin ? {return_to:origin} : {}) })); };
     const act = async (callback: () => Promise<void>) => {
         if (lock.current) return;
@@ -57,18 +67,19 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
     };
     const submit = async () => {
         if (!activePreview?.can_execute) return;
-        const preview = await api.preview(projectId, changeId, selected);
+        const preview = await api.preview(projectId,changeId,selected,scenario);
         if (!preview.can_execute || preview.plan_fingerprint !== activePreview.plan_fingerprint || pending && pending.fingerprint !== preview.plan_fingerprint) {
             state.reload(); chosen.reload(); throw new ApiError('STATE_PRECONDITION', '检查范围已变化，请重新核对。');
         }
         const active = await api.list(projectId, true);
         if (active.length) { open(active[0].run.run_id); return; }
-        const saved = pending ?? { fingerprint: preview.plan_fingerprint, operation: operationId(), change: changeId, selected };
+        const saved = pending ?? { fingerprint: preview.plan_fingerprint, operation: operationId(), change: changeId, selected, scenario };
         savePending(key, saved); setPending(saved);
-        const result = await api.submit(projectId, saved.fingerprint, saved.operation, saved.change, saved.selected);
+        const result = await api.submit(projectId, saved.fingerprint, saved.operation, saved.change,saved.selected,undefined,saved.scenario);
         assertProject(result.run.project_id, projectId); open(result.run.run_id);
     };
-    if (state.loading) return <PageSkeleton view="/reports" title="检查范围"/>;
+    if(invalidScenario)return <PageError title="核对业务场景" error={new Error('场景引用缺少准确修订，请返回场景目录重新预览。')}/>;
+    if (state.loading || (selected === null && chosen.loading)) return <PageSkeleton view="/reports" title="检查范围"/>;
     if (!state.data || state.error) return <PageError title="核对本次检查范围" error={state.error}/>;
     const { materials, identities } = state.data;
     const preview = activePreview;
@@ -78,16 +89,17 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
         const key = gap.status + ':' + gap.message;
         requirementGaps.set(key, [...(requirementGaps.get(key) ?? []), gap]);
     }
-    const returnTo = '/reports?' + new URLSearchParams({ view: 'plan', ...(selected !== null ? {scope_id: scopeId.current} : {}), ...(changeId ? { change_id: changeId } : {}), ...(ruleId ? { rule_id: ruleId } : {}), ...(origin ? {return_to:origin} : {}) });
+    const returnTo = '/reports?' + new URLSearchParams({ view: 'plan', ...(scenario ? {scenario_id:scenario.scenario_id,scenario_revision:String(scenario.revision)} : {}), ...(selected !== null ? {scope_id: scopeId.current} : {}), ...(changeId ? { change_id: changeId } : {}), ...(ruleId ? { rule_id: ruleId } : {}), ...(origin ? {return_to:origin} : {}) });
     return <>
-        <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))}>{origin ? '返回修复任务' : ruleId ? '返回权限规则' : '全部检查记录'}</Button></div>
+        <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => go(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))}>{origin ? origin.startsWith('/testing')?'返回业务场景':'返回修复任务' : ruleId ? '返回权限规则' : '全部检查记录'}</Button></div>
         <Heading eyebrow="提交前预览" title="核对本次检查范围"/>
+        {activePreview?.scenario&&<section className="jj-scenario-plan-summary" aria-label="本次组合实验"><h2>{activePreview.scenario.document.label}</h2><p className="jj-small jj-muted">先执行所选规则的基础检查，再执行以下实验；每个实验结束后核对恢复。</p><ol>{activePreview.scenario.document.experiments.map(experiment=><li key={experiment.id}><strong>{experiment.label}</strong><span>{experiment.invocations.map(item=>item.label+(item.batch?'（一次批量，'+item.items.length+' 项）':'')).join(' → ')}</span></li>)}</ol></section>}
         {changeId && <RuleCheckScope projectId={projectId} changeId={changeId}/>}
         {pending && <Notice tone="caution">上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)}>查询原检查</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>重试原提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
-        <div className="jj-plan-layout" data-revalidation={Boolean(changeId)}>
-        {!changeId && <CheckScopePicker materials={materials} selected={selected} disabled={Boolean(pending) || busy} onChange={select}/>}
+        <div className="jj-plan-layout" data-revalidation={Boolean(changeId||scenario)}>
+        {!changeId&&!scenario && <CheckScopePicker materials={materials} selected={selected} disabled={Boolean(pending) || busy} onChange={select}/>}
         <div className="jj-plan-output">
-        {chosen.error && <><ErrorNote error={chosen.error}/><Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button></>}
+        {chosen.error && <><ErrorNote error={chosen.error}/>{!changeId&&!scenario&&<Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button>}</>}
         {preview ? <section className="jj-panel jj-check-preview jj-plan-workspace" aria-busy={selected !== null && chosen.loading}>
             <header className="jj-plan-overview"><div><h2>{preview.case_count ? `将执行 ${preview.case_count} 项检查` : '准备检查材料'}</h2><p className="jj-small jj-muted">{preview.action_count} 项业务操作{preview.selection && `，含 ${preview.selection.added_controls.length} 项正常对照，另有 ${preview.selection.omitted.length} 条规则未检查`}</p></div><Badge tone={preview.can_execute ? 'positive' : 'caution'}>{preview.can_execute ? '可以开始' : '尚缺材料'}</Badge></header>
             <div className="jj-plan-reading">{materials.actions.filter(action => !selected || preview.actions.some(item => item.action_id === action.action_id)).map(action => {
@@ -98,7 +110,7 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
                     </div>
                     <div className="jj-plan-task-preparation">
                         {gaps.length > 0 && <ul className="jj-plan-gaps">{gaps.map(({ kind, gap, messages }) => <li key={kind}><div><strong>{messages[0]}</strong>{messages.length > 1 && <p>{messages.slice(1).join('；')}</p>}</div><Button onClick={() => go(gapDestination(gap, returnTo, changeId))}>{gapAction(kind)}<ArrowRightOutlined aria-hidden="true"/></Button></li>)}</ul>}
-                        {!!plan?.cases.length && <section className="jj-plan-objects" aria-label="实际执行场景"><div className="jj-scroll-table"><table className="jj-plan-case-table"><thead><tr><th scope="col">操作账号</th><th scope="col" className="jj-table-state">预期结果</th><th scope="col">数据所有者</th><th scope="col">测试数据</th></tr></thead><tbody>{plan.cases.map(item=><tr key={item.case_id}><td>{text(item.subject_test_identity_id === null ? '未登录访客' : identities.find(identity=>identity.identity_id===item.subject_test_identity_id)?.label??'所选测试账号')}</td><td className="jj-table-state"><span className="jj-plan-expectation">{item.permission.expectation==='DENY'?'不应完成':'应当完成'}</span></td><td>{text(identities.find(identity=>identity.identity_id===item.resource_owner_test_identity_id)?.label??'所选资源账号')}</td><td>{item.resource_id}{conditionLabels(item.permission.conditions).length > 0 && <small>{conditionLabels(item.permission.conditions).join("，")}</small>}</td></tr>)}</tbody></table></div></section>}
+                        {!!plan?.cases.length && <section className="jj-plan-objects" aria-label="实际执行场景"><div className="jj-scroll-table"><table className="jj-plan-case-table"><thead><tr><th scope="col">操作账号</th><th scope="col" className="jj-table-state">预期结果</th><th scope="col">数据所有者</th><th scope="col">测试数据</th></tr></thead><tbody>{plan.cases.map(item=><tr key={item.case_id}><td>{text(item.subject_test_identity_id === null ? '未登录访客' : identities.find(identity=>identity.identity_id===item.subject_test_identity_id)?.label??'所选测试账号')}</td><td className="jj-table-state"><span className="jj-plan-expectation">{item.batch_effect_expectation==='ABSENT'?'不应产生效果':item.permission.expectation==='DENY'?'不应完成':'应当完成'}</span></td><td>{text(identities.find(identity=>identity.identity_id===item.resource_owner_test_identity_id)?.label??'所选资源账号')}</td><td>{item.resource_id}{conditionLabels(item.permission.conditions).length > 0 && <small>{conditionLabels(item.permission.conditions).join("，")}</small>}</td></tr>)}</tbody></table></div></section>}
                     </div>
                 </article>;
             })}{!materials.actions.length && <p>请先确认本应用的权限规则。</p>}</div>
@@ -106,15 +118,16 @@ export function Plan({ projectId, onError, route, refresh }: PageProps) {
             {!!preview.requirement_scope?.length && <details className="jj-plan-scope"><summary>业务要求与覆盖范围</summary>{preview.requirement_scope.flatMap(scope => scope.requirements.map(item => ({...item, scope}))).map(({scope, ...item}, index) => <div className="jj-scope-item" key={index}><Badge>{item.disposition === 'IN_SCOPE' ? (preview.selection?.uncovered_requirements.includes(`${scope.candidate_id}@${scope.revision}/${item.requirement_id}`) ? '本次未覆盖' : '纳入检查') : item.disposition === 'PREPARATION' ? '准备条件' : '未覆盖'}</Badge><p>{text(item.requirement)}</p></div>)}</details>}
             {!!preview.omitted_review_gaps?.length && <details className="jj-plan-scope"><summary>{preview.omitted_review_gaps.length} 项未决要求未纳入本次检查</summary>{preview.omitted_review_gaps.map(item => <p key={item.issue_id}>{text(item.message)}</p>)}</details>}
             <footer className="jj-plan-confirmation"><div><strong>{preview.can_execute ? '执行前会核对当前条件' : '请先补齐上方材料'}</strong><p className="jj-small jj-muted">{preview.can_execute ? '将执行真实操作，检查期间可离开此页。' : '已有材料保留，无需重新准备。'}</p></div><div className="jj-inline-actions"><Button kind="primary" busy={busy} disabled={!preview.can_execute || Boolean(pending)} onClick={() => void act(submit)}>开始检查<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
-        </section> : !chosen.error && <section className="jj-panel jj-plan-selection-empty" role="status">{selected?.length ? '正在核对所选规则与必要材料…' : '选中左侧规则，即可查看将执行的场景。'}</section>}
+        </section> : !chosen.error && <section className="jj-panel jj-plan-selection-empty" role="status">{chosen.loading ? '正在核对所选规则与必要材料…' : '选中左侧规则，即可查看将执行的场景。'}</section>}
         </div></div>
     </>;
 }
 
 export function gapName(reason: string) {
-    return ({ TEST_IDENTITY_LOGIN_REQUIRED: '测试账号需要重新登录', RESOURCE_OWNER_SOURCE_STALE: '测试数据的归属需要重新确认', RESOURCE_INJECTION_STALE: '操作中的测试数据位置需要重新确认', CONDITION_SOURCE_REQUIRED:'尚未设置租户或数据状态的判断依据', RULE_CASE_DATA_STALE:'规则的测试数据需要重新核对', TEST_IDENTITY_REQUIRED: '测试账号尚未就绪', IDENTITY_REQUIRED: '测试账号尚未就绪', ACTION_RESOURCE_REQUIRED: '测试资源尚未确认', RESOURCE_REQUIRED: '测试资源尚未确认', ACTION_EXECUTION_REQUIRED: '缺少操作录制', ACTION_EXECUTION_MISSING: '缺少可用操作录制', EXECUTION_REQUIRED: '缺少操作录制', EFFECT_EVIDENCE_REQUIRED: '尚未设置如何判断业务结果', EFFECT_VERDICT_PROOF_REQUIRED: '业务结果的判断依据还未准备好', REGISTERED_OBSERVER_UNAVAILABLE: '证明来源当前不可用', ACTION_RECOVERY_REQUIRED: '缺少恢复方式', RECOVERY_REQUIRED: '缺少恢复方式', ALLOW_CONTROL_REQUIRED: '需要选择一项应当成功的正常操作', PERMISSION_SEMANTICS_REQUIRED: '权限要求尚未确认', CREATED_RESOURCE_PROOF_REQUIRED: '缺少新建资源的独立记录', PREPARATION_REQUIRED: '材料需要重新核对' } as Record<string, string>)[reason] ?? '本项检查条件需要重新核对';
+    return ({ SCENARIO_REQUEST_BUDGET_INSUFFICIENT:'当前请求额度不足以完成实验及恢复，请先调整环境预算', SCENARIO_RESOURCE_PRODUCER_REQUIRED:'前一步尚未准备好可独立确认的新建对象', SCENARIO_ITEM_NOT_PREPARED:'本步引用的账号、资源或规则需要重新准备', SCENARIO_CONTROL_REQUIRED:'需要保留完整且同形的正常业务对照', SCENARIO_FULL_CONTROL_REQUIRED:'本步正常对照需要覆盖全部保护效果', BATCH_REQUEST_MAPPING_INVALID:'批量资源数组或返回项映射需要核对', BATCH_RESOURCE_ASSOCIATION_REQUIRED:'批量项必须使用同一动作并能逐项关联资源', TEST_IDENTITY_LOGIN_REQUIRED: '测试账号需要重新登录', RESOURCE_OWNER_SOURCE_STALE: '测试数据的归属需要重新确认', RESOURCE_INJECTION_STALE: '操作中的测试数据位置需要重新确认', CONDITION_SOURCE_REQUIRED:'尚未设置租户或数据状态的判断依据', RULE_CASE_DATA_STALE:'规则的测试数据需要重新核对', TEST_IDENTITY_REQUIRED: '测试账号尚未就绪', IDENTITY_REQUIRED: '测试账号尚未就绪', ACTION_RESOURCE_REQUIRED: '测试资源尚未确认', RESOURCE_REQUIRED: '测试资源尚未确认', ACTION_EXECUTION_REQUIRED: '缺少操作录制', ACTION_EXECUTION_MISSING: '缺少可用操作录制', EXECUTION_REQUIRED: '缺少操作录制', EFFECT_EVIDENCE_REQUIRED: '尚未设置如何判断业务结果', EFFECT_VERDICT_PROOF_REQUIRED: '业务结果的判断依据还未准备好', REGISTERED_OBSERVER_UNAVAILABLE: '证明来源当前不可用', ACTION_RECOVERY_REQUIRED: '缺少恢复方式', RECOVERY_REQUIRED: '缺少恢复方式', ALLOW_CONTROL_REQUIRED: '需要选择一项应当成功的正常操作', PERMISSION_SEMANTICS_REQUIRED: '权限要求尚未确认', CREATED_RESOURCE_PROOF_REQUIRED: '缺少新建资源的独立记录', PREPARATION_REQUIRED: '材料需要重新核对' } as Record<string, string>)[reason] ?? '本项检查条件需要重新核对';
 }
 export function gapDestination(gap: CheckPreview['gaps'][number], returnTo: string, changeId?: string | null) {
+    if(gap.reason==='SCENARIO_REQUEST_BUDGET_INSUFFICIENT')return '/application?view=environment';
     const focus = gapKind(gap.reason);
     return '/preparation?' + new URLSearchParams({ action_id: gap.action_id, return_to: returnTo, ...(['identity','resource','execution','recovery','evidence'].includes(focus) ? { focus } : {}), ...(gap.intent_id ? { rule_id: gap.intent_id } : {}), ...(gap.effect_id ? { effect_id: gap.effect_id } : {}), ...(changeId ? { change_id: changeId } : {}) });
 }

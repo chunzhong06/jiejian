@@ -279,37 +279,35 @@ function Get-WaitIndicatorLabel([string]$Stage) {
 }
 
 function Start-WaitIndicator([string]$Stage) {
-    if (-not $script:DisplayInteractive -or [Console]::IsOutputRedirected) { return }
-    # 动画是可降级的展示子进程，启动失败不得改变产品准备或服务退出语义。
+    if (-not $script:DisplayInteractive) { return }
+    # 只在进程内绘制等待行，不再为每个短步骤启动完整 PowerShell。
     try {
         Stop-WaitIndicator
-        $shell = (Get-Process -Id $PID -ErrorAction Stop).Path
-        $spinnerScript = Join-Path $script:ProjectRoot "scripts\start.ps1"
-        $quotedScript = '"' + $spinnerScript.Replace('"', '""') + '"'
         $startedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        # 面板中的各步骤共用启动起点；动画子进程重启不能重置总耗时。
         if ($script:StartupPanelActive -and $null -ne $script:StartupPanelClock) {
             $startedAt -= [long][Math]::Floor($script:StartupPanelClock.Elapsed.TotalMilliseconds)
         }
-        $eventName = "Local\JiejianWait-{0}-{1}" -f $PID, [guid]::NewGuid().ToString("N")
-        $createdNew = $false
-        $script:WaitIndicatorStopEvent = [Threading.EventWaitHandle]::new(
-            $false,
-            [Threading.EventResetMode]::ManualReset,
-            $eventName,
-            [ref]$createdNew
-        )
-        if (-not $createdNew) { throw "等待动画停止事件名称发生冲突" }
-        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage -DisplaySpinnerStartedAt $startedAt -DisplaySpinnerStopEvent $eventName"
-        if ($script:StartupPanelActive) { $arguments += " -DisplaySpinnerPanel" }
-        if (-not $script:DisplayUnicode) { $arguments += " -DisplaySpinnerAscii" }
-        $script:WaitIndicatorProcess = Start-Process -FilePath $shell -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
-    } catch {
-        if ($null -ne $script:WaitIndicatorStopEvent) {
-            try { $script:WaitIndicatorStopEvent.Dispose() } catch { }
+        $script:WaitIndicatorStopEvent = [Threading.ManualResetEvent]::new($false)
+        $definitions = @{}
+        foreach ($name in @("Invoke-WaitIndicator", "Get-DisplayCellWidth", "Format-StartupLine")) {
+            $definitions[$name] = (Get-Item ("Function:" + $name)).Definition
         }
-        $script:WaitIndicatorStopEvent = $null
-        $script:WaitIndicatorProcess = $null
+        $body = {
+            param($Definitions, $Label, $Ascii, $StartedAt, $StopEvent, $Panel, $TrueColor, $MutedColor)
+            foreach ($name in $Definitions.Keys) {
+                Set-Item -Path ("Function:" + $name) -Value ([scriptblock]::Create($Definitions[$name]))
+            }
+            Invoke-WaitIndicator $Label $Ascii $StartedAt $StopEvent $Panel $TrueColor $MutedColor
+        }
+        $script:WaitIndicatorWorker = [PowerShell]::Create()
+        [void]$script:WaitIndicatorWorker.AddScript($body.ToString()).AddArgument($definitions).
+            AddArgument((Get-WaitIndicatorLabel $Stage)).AddArgument((-not $script:DisplayUnicode)).
+            AddArgument($startedAt).AddArgument($script:WaitIndicatorStopEvent).
+            AddArgument([bool]$script:StartupPanelActive).AddArgument([bool]$script:DisplayTrueColor).
+            AddArgument($script:StartupPanelPalette.Muted)
+        $script:WaitIndicatorInvocation = $script:WaitIndicatorWorker.BeginInvoke()
+    } catch {
+        Stop-WaitIndicator
         $script:WaitIndicatorFallbackActive = $true
         try { [Console]::Write(("`r{0}..." -f (Get-WaitIndicatorLabel $Stage))) } catch { }
     }
@@ -325,64 +323,55 @@ function Clear-WaitIndicatorLine {
 }
 
 function Stop-WaitIndicator {
-    $process = $script:WaitIndicatorProcess
+    $worker = $script:WaitIndicatorWorker
+    $invocation = $script:WaitIndicatorInvocation
     $stopEvent = $script:WaitIndicatorStopEvent
-    $hadVisibleOutput = $null -ne $process -or $script:WaitIndicatorFallbackActive
-    $exited = $null -eq $process
-    if ($null -ne $process) {
-        # 先协商停止；只有子进程在期限内未退出时才强杀，且清行前必须确认退出。
-        try {
-            if (-not $process.HasExited) {
-                if ($null -ne $stopEvent) { try { $null = $stopEvent.Set() } catch { } }
-                $exited = $process.WaitForExit(2000)
-                if (-not $exited) {
-                    Stop-Process -Id $process.Id -Force -ErrorAction Stop
-                    $process.WaitForExit()
-                    $exited = $process.HasExited
-                }
-            } else {
-                $process.WaitForExit()
-                $exited = $true
-            }
-        } catch {
-            $exited = $process.HasExited
+    $hadVisibleOutput = $null -ne $worker -or $script:WaitIndicatorFallbackActive
+    $exited = $null -eq $invocation
+    try {
+        if ($null -ne $invocation) {
+            # 信号唤醒等待；EndInvoke 确认最后一帧结束后，主线程才能重绘。
+            if ($null -ne $stopEvent) { [void]$stopEvent.Set() }
+            if (-not $invocation.AsyncWaitHandle.WaitOne(2000)) { $worker.Stop() }
+            try { [void]$worker.EndInvoke($invocation) } catch [Management.Automation.PipelineStoppedException] { }
+            $exited = $invocation.IsCompleted
         }
+    } catch {
+        # 展示故障不改变产品退出码；Dispose 结束该流水线后再交还输出权。
+        if ($null -ne $worker) { try { $worker.Stop() } catch { } }
+    } finally {
+        if ($null -ne $worker) { try { $worker.Dispose(); $exited = $true } catch { } }
+        if ($exited -and $hadVisibleOutput) { Clear-WaitIndicatorLine }
+        if ($null -ne $stopEvent) { try { $stopEvent.Dispose() } catch { } }
+        $script:WaitIndicatorWorker = $null
+        $script:WaitIndicatorInvocation = $null
+        $script:WaitIndicatorStopEvent = $null
+        $script:WaitIndicatorFallbackActive = $false
     }
-    if ($exited -and $hadVisibleOutput) { Clear-WaitIndicatorLine }
-    if ($null -ne $process) { try { $process.Dispose() } catch { } }
-    if ($null -ne $stopEvent) { try { $stopEvent.Dispose() } catch { } }
-    $script:WaitIndicatorProcess = $null
-    $script:WaitIndicatorStopEvent = $null
-    $script:WaitIndicatorFallbackActive = $false
 }
 
-function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii, [long]$StartedAt = 0, [string]$StopEventName = "", [bool]$Panel = $false) {
-    if ([string]::IsNullOrWhiteSpace($StopEventName)) { return }
-    try { $stopEvent = [Threading.EventWaitHandle]::OpenExisting($StopEventName) }
-    catch { return }
-    try {
-        $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
-        $label = Get-WaitIndicatorLabel $Stage
-        $index = 0
-        # 快速探针在首帧出现前结束；收到停止信号后不再写任何一帧。
-        if ($stopEvent.WaitOne(130)) { return }
-        while ($true) {
-            $elapsed = if ($StartedAt -gt 0) { [Math]::Max(0, [int][Math]::Floor(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $StartedAt) / 1000)) } else { 0 }
-            $text = "{0} {1} {2}s" -f $frames[$index % $frames.Count], $label, $elapsed
-            if ($Panel) {
-                $text = "{0} 启动已用 {1} 秒 · {2}" -f $frames[$index % $frames.Count], $elapsed, $label
-                $terminalWidth = [Console]::WindowWidth
-                $width = [Math]::Max(1, [Math]::Min(88, $terminalWidth - 6))
-                $margin = " " * [Math]::Max(0, [int][Math]::Floor(($terminalWidth - $width) / 2))
-                $escape = [char]27
-                $color = if (-not $script:DisplayTrueColor) { "37" } else { "38;2;" + $script:StartupPanelPalette.Muted }
-                [Console]::Write(("`r{0}[2K{1}{0}[{2}m{3}{0}[0m" -f $escape, $margin, $color, (Format-StartupLine $text $width "Ctrl+C 退出")))
-            } else { [Console]::Write(("`r" + $text)) }
-            $index += 1
-            if ($stopEvent.WaitOne(120)) { break }
-        }
-    } finally {
-        $stopEvent.Dispose()
+function Invoke-WaitIndicator(
+    [string]$Label, [bool]$Ascii, [long]$StartedAt, [Threading.ManualResetEvent]$StopEvent,
+    [bool]$Panel, [bool]$TrueColor, [string]$MutedColor
+) {
+    $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
+    $index = 0
+    # 快速探针在首帧出现前结束；停止信号直接打断等待，不再补写一帧。
+    if ($StopEvent.WaitOne(130)) { return }
+    while ($true) {
+        $elapsed = [Math]::Max(0, [int][Math]::Floor(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $StartedAt) / 1000))
+        $text = "{0} {1} {2}s" -f $frames[$index % $frames.Count], $Label, $elapsed
+        if ($Panel) {
+            $text = "{0} 启动已用 {1} 秒 · {2}" -f $frames[$index % $frames.Count], $elapsed, $Label
+            $terminalWidth = [Console]::WindowWidth
+            $width = [Math]::Max(1, [Math]::Min(88, $terminalWidth - 6))
+            $margin = " " * [Math]::Max(0, [int][Math]::Floor(($terminalWidth - $width) / 2))
+            $escape = [char]27
+            $color = if ($TrueColor) { "38;2;" + $MutedColor } else { "37" }
+            [Console]::Write(("`r{0}[2K{1}{0}[{2}m{3}{0}[0m" -f $escape, $margin, $color, (Format-StartupLine $text $width "Ctrl+C 退出")))
+        } else { [Console]::Write(("`r" + $text)) }
+        $index += 1
+        if ($StopEvent.WaitOne(120)) { break }
     }
 }
 

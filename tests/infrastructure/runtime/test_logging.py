@@ -89,6 +89,45 @@ def test_configured_log_level_filters_lower_priority_records() -> None:
     assert payloads[0]["level"] == "WARNING"
 
 
+def test_startup_timings_retain_only_bounded_lifecycle_facts() -> None:
+    stream = StringIO()
+    logger = configure_logging("INFO", stream=stream)
+    logger.info("loaded", extra={"event_code": "STARTUP_STAGE_COMPLETED",
+        "stage": "http_import", "elapsed_ms": 123.5, "request_body": "private-body"})
+    logger.info("browser", extra={"event_code": "BROWSER_OPEN_COMPLETED",
+        "elapsed_ms": 0, "opened": False, "stage": "http_import"})
+    logger.info("ordinary", extra={"stage": "http_import", "elapsed_ms": 3, "opened": True})
+    loaded, browser, ordinary = map(json.loads, stream.getvalue().splitlines())
+    assert (loaded["stage"], loaded["elapsed_ms"]) == ("http_import", 123.5)
+    assert (browser["opened"], browser["elapsed_ms"]) == (False, 0)
+    assert "stage" not in browser
+    assert not {"stage", "elapsed_ms", "opened"} & ordinary.keys()
+    assert "private-body" not in stream.getvalue()
+
+
+@pytest.mark.parametrize("elapsed", [True, -1, float("nan"), float("inf"), "12", None])
+@pytest.mark.parametrize("stage", ["token=not-a-stage", ["http_import"], None])
+def test_invalid_timing_fields_cannot_break_or_expand_logging(elapsed, stage) -> None:
+    stream = StringIO()
+    logger = configure_logging("INFO", stream=stream)
+    logger.info("invalid", extra={"event_code": "STARTUP_STAGE_COMPLETED",
+        "stage": stage, "elapsed_ms": elapsed, "opened": "token=private"})
+    payload = json.loads(stream.getvalue())
+    assert not {"stage", "elapsed_ms", "opened"} & payload.keys()
+
+
+def test_browser_status_keeps_boolean_only_and_timings_remain_redacted() -> None:
+    stream = StringIO()
+    logger = configure_logging("INFO", stream=stream, known_secrets=("http_import",))
+    logger.info("loaded", extra={"event_code": "STARTUP_STAGE_COMPLETED",
+        "stage": "http_import", "elapsed_ms": 1})
+    logger.info("browser", extra={"event_code": "BROWSER_OPEN_COMPLETED", "opened": 1})
+    loaded, browser = map(json.loads, stream.getvalue().splitlines())
+    assert "http_import" not in stream.getvalue()
+    assert "opened" not in browser
+    assert loaded["elapsed_ms"] == 1
+
+
 def test_log_messages_and_exceptions_are_redacted() -> None:
     stream = StringIO()
     logger = configure_logging("INFO", stream=stream)

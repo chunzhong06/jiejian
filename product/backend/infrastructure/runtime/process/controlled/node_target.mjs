@@ -9,6 +9,7 @@ import { AsyncLocalStorage,createHook } from 'node:async_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {createRequire, registerHooks, syncBuiltinESMExports} from 'node:module'
 import {instrumentDatabase} from './sqlite_capture.mjs'
+import {instrumentPgClient,instrumentPgPool,instrumentMysqlPromise} from './database_capture.mjs'
 
 const fail = () => { throw new Error('NODE_RUNTIME_INPUT_INVALID') }
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
@@ -43,11 +44,11 @@ async function main() {
   const keys = ['schema_version','mode','instance_id','project_id','entry','port','files',
     'source_fingerprint','interpreter_fingerprint','executor_fingerprint']
   const standard=manifest.module_loader==='NODE_STANDARD'
-  if (Object.keys(manifest).some(key=>![...keys,'module_loader','package','sqlite','sqlite_source_root'].includes(key)) || keys.some(key=>!(key in manifest)) || manifest.schema_version !== '1'
+  if (Object.keys(manifest).some(key=>![...keys,'module_loader','package','sqlite','sqlite_source_root','databases'].includes(key)) || keys.some(key=>!(key in manifest)) || manifest.schema_version !== '1'
       || manifest.mode !== 'CONTROLLED_NODE_ESM' || !Number.isInteger(manifest.port)
       || manifest.port < 1024 || manifest.port > 65535 || !Array.isArray(manifest.files)
       || !manifest.files.length || manifest.files.length > 512) fail()
-  if (sha(Buffer.concat([bytes(fileURLToPath(import.meta.url),262144),...(standard?[bytes(fileURLToPath(new URL('./sqlite_capture.mjs',import.meta.url)),262144)]:[])])) !== manifest.executor_fingerprint) fail()
+  if (sha(Buffer.concat([bytes(fileURLToPath(import.meta.url),262144),...(standard?[bytes(fileURLToPath(new URL('./sqlite_capture.mjs',import.meta.url)),262144),bytes(fileURLToPath(new URL('./database_capture.mjs',import.meta.url)),262144)]:[])])) !== manifest.executor_fingerprint) fail()
   // 解释器摘要由外层 Worker 启动前核对；执行器不能用自己的声明替代内核所有权。
   const root = path.join(path.dirname(manifestFile), 'source')
   let executionFiles=manifest.files
@@ -213,6 +214,9 @@ async function main() {
     return {...namespace,request,get:(...args)=>{const outgoing=request(...args);outgoing.end();return outgoing}}
   }
   async function recordRequest(endpoint, payload, control = false) {
+    // 私有记录 RPC 的连接与超时不属于应用的后台业务；调用者仍用 pending 计数其完成。
+    // 保留应用自身的请求上下文和定时器检查，不能让宿主传输设施使正常请求随机不闭合。
+    return requestScopes.exit(async () => {
     if (!/^http:\/\/127\.0\.0\.1:[0-9]+$/.test(recordOrigin ?? '') || !recordCapability) throw new Error('RECORD_PROVIDER_UNAVAILABLE')
     const body = JSON.stringify(payload)
     if (Buffer.byteLength(body) > 98304) throw new Error('RECORD_INPUT_LIMIT')
@@ -221,6 +225,7 @@ async function main() {
     const data = await response.json()
     if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'RECORD_PROVIDER_UNAVAILABLE')
     return data.data
+    })
   }
   function recordScope(scope) {
     scope.opening ??= recordRequest('/scope/open',{request_nonce:scope.nonce,request_digest:scope.digest,
@@ -326,7 +331,10 @@ async function main() {
     syncBuiltinESMExports()
     const bridge=Symbol.for('jiejian.runtime.bridge')
     globalThis[bridge]={openCollection,sqlite:Database=>instrumentDatabase(Database,{root,dataRoot,
-      databases:manifest.sqlite??[],scope:()=>requestScopes.getStore(),capture:captureSync})}
+      databases:manifest.sqlite??[],scope:()=>requestScopes.getStore(),capture:captureSync}),
+      pg:Client=>instrumentPgClient(Client,{databases:manifest.databases??[],scope:()=>requestScopes.getStore()}),
+      pgPool:instrumentPgPool,
+      mysql:namespace=>instrumentMysqlPromise(namespace,{databases:manifest.databases??[],scope:()=>requestScopes.getStore()})}
     registerHooks({
       resolve(specifier,context,next) {
         if(specifier==='jiejian:records')return {url:specifier,shortCircuit:true}
@@ -342,6 +350,12 @@ async function main() {
         if(url==='jiejian:records')return {format:'module',shortCircuit:true,
           source:'export const openCollection=globalThis[Symbol.for("jiejian.runtime.bridge")].openCollection'}
         const result=next(url,context)
+        if((manifest.databases??[]).length) {
+          const filename=url.replaceAll('\\','/')
+          for(const [suffix,adapter] of [['/pg/lib/client.js','pg'],['/pg-pool/index.js','pgPool'],['/mysql2/promise.js','mysql']]) {
+            if(filename.endsWith(suffix))return {...result,source:String(result.source)+'\nmodule.exports=globalThis[Symbol.for("jiejian.runtime.bridge")].'+adapter+'(module.exports);'}
+          }
+        }
         if(url.replaceAll('\\','/').endsWith('/better-sqlite3/lib/index.js')) {
           adapterNames.add('better-sqlite3')
           return {...result,source:String(result.source)+'\nmodule.exports=globalThis[Symbol.for("jiejian.runtime.bridge")].sqlite(module.exports);'}

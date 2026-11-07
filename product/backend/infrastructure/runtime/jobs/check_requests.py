@@ -39,7 +39,7 @@ class CheckRequestStore:
                 raise ValueError("asset hash mismatch")
             return raw
         except (OSError, ValueError):
-            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求哈希不匹配") from None
+            raise JiejianError(ErrorCode.JOB_REQUEST_CORRUPT, "已保存的任务执行请求缺失或损坏") from None
 
     def _write(self, path: Path, raw: bytes) -> tuple[str, bool]:
         digest = hashlib.sha256(raw).hexdigest()
@@ -58,8 +58,11 @@ class CheckRequestStore:
                 created = True
             except FileExistsError:
                 created = False
-            if self._read(path, digest) != raw:
-                raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求与既有快照不一致")
+            try:
+                self._read(path, digest)
+            except JiejianError:
+                if created:raise
+                raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求与既有快照不一致") from None
             return digest, created
         except OSError:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务执行请求写入失败") from None
@@ -67,7 +70,7 @@ class CheckRequestStore:
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
-                logging.getLogger(__name__).warning("CHECK_TEMPORARY_CLEANUP_FAILED")
+                logging.getLogger("jiejian.infrastructure.runtime.jobs.check_requests").warning("CHECK_TEMPORARY_CLEANUP_FAILED")
 
     def write(self, job_id: str, request: ExecutionRequest) -> tuple[str, bool]:
         return self._write(self.path_for(job_id), canonical_execution_request_bytes(request))
@@ -76,7 +79,7 @@ class CheckRequestStore:
         try:
             return parse_execution_request(self._read(self.path_for(job_id), expected_hash))
         except ValueError:
-            raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "执行快照格式无效") from None
+            raise JiejianError(ErrorCode.JOB_REQUEST_CORRUPT, "已保存的执行快照格式无效") from None
 
     def write_bundle(self, job_id: str, bundle: CheckRuntimeBundle) -> tuple[str, bool]:
         raw = canonical_check_runtime_bytes(bundle)
@@ -87,7 +90,7 @@ class CheckRequestStore:
         try:
             return parse_check_runtime(self._read(self.path_for(job_id, config_hash=expected_hash), expected_hash))
         except ValueError:
-            raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "执行快照格式无效") from None
+            raise JiejianError(ErrorCode.JOB_REQUEST_CORRUPT, "已保存的执行快照格式无效") from None
 
     def remove_if_matches(self, job_id: str, request_hash: str, *, config_hash: str | None = None) -> None:
         """只清理由调用者证明没有持久 Job 引用、且仍为原 hash 的单个资产。"""

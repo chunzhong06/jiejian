@@ -8,6 +8,25 @@ from product.protocols.runner.evidence import build_evidence
 from tests.support.builders.runtime.runner import evidence
 pytestmark = pytest.mark.level2
 
+
+def test_evidence_keeps_its_existing_frozen_fingerprint():
+    # 合并前的确定性样本指纹；不能用本次待测编码器生成预期值。
+    assert evidence().evidence_hash=='32cd1db8ac67950c1fdbf886002ba2b590d2a9eeb85214842a53ddb62ce18b97'
+
+
+def test_shared_canonical_bytes_preserve_models_enums_and_mapping_keys():
+    from types import MappingProxyType
+    from pydantic import BaseModel
+    from product.backend.domain.verification.permissions.contract import canonical_json_bytes
+
+    class Item(BaseModel):
+        items: tuple[CaseVerdict,str]
+
+    value=MappingProxyType({2:Item(items=(CaseVerdict.SAFE,'界鉴')),'a':(1,False)})
+    assert canonical_json_bytes(value)=='{"2":{"items":["SAFE","界鉴"]},"a":[1,false]}'.encode('utf-8')
+    with pytest.raises(ValueError,match='Out of range float values'):
+        canonical_json_bytes({'value':float('inf')})
+
 def test_current_evidence_carries_execution_and_observation_facts() -> None:
     current_evidence = evidence()
     assert current_evidence.execution_fact.outcome is ExecutionOutcome.ACCEPTED

@@ -67,6 +67,63 @@ def test_unknown_write_is_not_replayed_and_can_only_be_reconciled(harness, monke
     assert calls == [command.operation_id]
 
 
+def test_operation_id_reused_by_another_task_cannot_bypass_unknown_write(harness):
+    calls=[]
+    def disconnected(project,arguments,operation):
+        calls.append(operation);raise OSError('interrupted')
+    harness.core.agent_capabilities.items['fixture.once']=Capability('fixture.once','保存','测试','PREPARE',Empty,disconnected)
+    service,project=harness.core.collaboration,harness.project_id
+    first,second=task(harness),task(harness)
+    command=CollaborationAction(operation_id=uuid4().hex,capability='fixture.once')
+    with pytest.raises(JiejianError):service.act(project,first['task_id'],command)
+    with pytest.raises(JiejianError,match='未确认'):
+        service.act(project,second['task_id'],command)
+    assert calls==[command.operation_id]
+
+
+def test_growth_limit_does_not_block_original_question_answer_or_stop(harness,monkeypatch):
+    import product.backend.application.agent_access.tasks as owner
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    question=CollaborationQuestion(question_id=uuid4().hex,question='成员是否允许修改？')
+    service.ask(project,value['task_id'],question)
+    monkeypatch.setattr(owner,'_TASK_GROWTH_BYTES',1)
+    assert len(service.ask(project,value['task_id'],question)['questions'])==1
+    with pytest.raises(JiejianError,match='资料已较多'):
+        service.ask(project,value['task_id'],CollaborationQuestion(question_id=uuid4().hex,question='新的问题'))
+    answered=service.answer(project,value['task_id'],question.question_id,'允许本人资源')
+    assert answered['questions'][0]['answer']=='允许本人资源'
+    assert service.control(project,value['task_id'],'pause')['state']=='PAUSED'
+
+
+def test_persisted_operation_state_is_strictly_accepted_before_continuing(harness):
+    from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRow
+    import json
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    with harness.core.uow_factory() as work:
+        row=work._require_session().get(CollaborationRow,value['task_id'])
+        document=json.loads(row.payload)
+        document['operations']=[dict(operation_id=uuid4().hex,capability='fixture.once',title='保存',
+            fingerprint='a'*64,arguments={},summary=[],state='NOT_A_STATE',result=None)]
+        row.payload=json.dumps(document);work.commit()
+    with pytest.raises(JiejianError) as failure:
+        service.show(project,value['task_id'])
+    assert failure.value.code=='STORAGE_STATE'
+
+
+def test_stored_task_keeps_accepted_project_identifiers_and_old_root_bytes(harness):
+    project, value = harness.project_id, task(harness)
+    with harness.core.uow_factory() as work:
+        legacy_project = work.projects.get(project).model_copy(update={'project_id':'legacy-project'})
+        work.projects.add(legacy_project)
+        original = work.collaboration.get(project, value['task_id'])
+        copied = original | dict(project_id='legacy-project', task_id='ctk_'+uuid4().hex)
+        work.collaboration.save(copied)
+        work.commit()
+    with harness.core.uow_factory() as work:
+        assert work.collaboration.get('legacy-project', copied['task_id']) == copied
+        assert work.collaboration.get(project, copied['task_id']) is None
+
+
 def test_capabilities_use_existing_identity_owner_and_reject_other_project(harness):
     service, project, value = harness.core.collaboration, harness.project_id, task(harness)
     existing = harness.core.test_identities.list(project)[0]
@@ -501,3 +558,62 @@ def test_legacy_agent_review_location_keeps_stage_and_exact_report_reference(har
     value=service.read(harness.project_id,'RESULTS',run_id='run-1',case_id='case-1')
     assert value['review_url'].startswith('#/reports?')
     assert 'run_id=run-1' in value['review_url'] and 'case_id=case-1' in value['review_url']
+
+
+@pytest.mark.parametrize('key', ['checks.start', 'flows.trial.start'])
+def test_registered_execution_lifecycle_recovers_without_resubmission(harness, monkeypatch, key):
+    catalog = harness.core.agent_capabilities
+    capability = catalog.get(key)
+    assert capability.approval and all(callable(hook) for hook in (capability.recover, capability.cancel, capability.describe))
+    operation = dict(capability=key, operation_id=uuid4().hex, arguments={})
+    if key == 'flows.trial.start':
+        monkeypatch.setattr(harness.core.flow_trials, 'requested', lambda project, identifier: None)
+    assert catalog.receipt(harness.project_id, operation) is None
+    monkeypatch.setattr(harness.core.checks, 'submit', lambda *args, **kwargs: pytest.fail('恢复不得再次执行'))
+    monkeypatch.setattr(harness.core.flow_trials, 'start', lambda *args, **kwargs: pytest.fail('恢复不得再次执行'))
+    assert catalog.receipt(harness.project_id, operation) is None
+
+
+def test_partial_capability_lifecycle_is_rejected():
+    with pytest.raises(ValueError, match='完整登记'):
+        Capability('fixture.partial', '未完整登记', '测试', 'EXECUTE', Empty, lambda *args: None,
+            recover=lambda *args: None)
+
+
+def test_unregistered_historical_capability_keeps_read_only_fallback(harness):
+    catalog=harness.core.agent_capabilities
+    operation=dict(capability='retired.fixture',operation_id=uuid4().hex,arguments={})
+    assert catalog.receipt(harness.project_id,operation) is None
+    assert catalog.describe(harness.project_id,'retired.fixture',Empty()) == []
+    with pytest.raises(JiejianError):catalog.get('retired.fixture')
+
+
+def test_growth_budget_accepts_final_root_including_archived_and_repeated_references(harness,monkeypatch):
+    import json
+    import product.backend.application.agent_access.tasks as owner
+    from product.backend.application.agent_access.tasks import CollaborationFollowup
+    service,project=harness.core.collaboration,harness.project_id
+    first=service.create(project,CreateCollaboration(operation_id=uuid4().hex,goal='原目标',purpose='CHECK',references={'note':'x'*2048}))
+    follow=CollaborationFollowup(operation_id=uuid4().hex,task_id=first['task_id'],goal='新目标',purpose='CHECK',references={'note':'y'*2048})
+    # 单份输入可接受，但归档旧引用和新引用的两份存储必须一并计量。
+    monkeypatch.setattr(owner,'_TASK_GROWTH_BYTES',6000)
+    with pytest.raises(JiejianError,match='资料已较多'):service.followup(project,follow)
+    assert service.show(project,first['task_id'])['goal']=='原目标'
+    monkeypatch.setattr(owner,'_TASK_GROWTH_BYTES',12000)
+    accepted=service.followup(project,follow)
+    with service.uow() as work:stored=work.collaboration.get(project,first['task_id'])
+    raw=json.dumps(stored,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode()
+    assert len(raw)>6000 and len(raw)<=12000
+    monkeypatch.setattr(owner,'_TASK_GROWTH_BYTES',1)
+    assert service.followup(project,follow)['revision']==accepted['revision']
+    assert service.control(project,first['task_id'],'pause')['state']=='PAUSED'
+
+
+def test_create_budget_counts_the_complete_saved_task(harness,monkeypatch):
+    import product.backend.application.agent_access.tasks as owner
+    monkeypatch.setattr(owner,'_TASK_GROWTH_BYTES',128)
+    command=CreateCollaboration(operation_id=uuid4().hex,goal='目标',purpose='CHECK')
+    with pytest.raises(JiejianError,match='资料已较多'):
+        harness.core.collaboration.create(harness.project_id,command)
+    with harness.core.uow_factory() as work:
+        assert work.collaboration.get(harness.project_id,'ctk_'+command.operation_id) is None

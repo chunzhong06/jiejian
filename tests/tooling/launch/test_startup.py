@@ -147,61 +147,60 @@ def test_root_batch_encoding_is_readable_by_windows_cmd():
     assert not payload.startswith(b'\xef\xbb\xbf')
 
 
-def test_wait_indicator_child_exits_on_named_event_without_late_output(tmp_path: Path) -> None:
-    stdout = tmp_path / "spinner.out"
-    stderr = tmp_path / "spinner.err"
-    command = (
+@pytest.mark.parametrize("shell_name", ["powershell", "pwsh"])
+def test_wait_indicator_runspace_stops_before_redraw_and_disposes(shell_name: str) -> None:
+    shell=shutil.which(shell_name)
+    if shell is None:
+        pytest.skip(shell_name+" is not installed")
+    command=(
         "$ErrorActionPreference='Stop';"
-        "$eventName='Local\\JiejianWait-Test-'+$PID+'-'+[guid]::NewGuid().ToString('N');$created=$false;"
-        "$event=[Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset,$eventName,[ref]$created);$process=$null;"
-        "try{$shell=(Get-Process -Id $PID).Path;"
-        f"$arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"'+{_powershell_literal(START)}+'\" -DisplaySpinnerProcess -DisplaySpinnerStage python -DisplaySpinnerStartedAt '+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+' -DisplaySpinnerStopEvent '+$eventName+' -DisplaySpinnerAscii';"
-        f"$process=Start-Process -FilePath $shell -ArgumentList $arguments -RedirectStandardOutput {_powershell_literal(stdout)} -RedirectStandardError {_powershell_literal(stderr)} -PassThru;"
-        "$deadline=[DateTime]::UtcNow.AddSeconds(5);do{if($process.HasExited){break};Start-Sleep -Milliseconds 50}while(((-not (Test-Path -LiteralPath '"
-        + str(stdout).replace("'", "''")
-        + "')) -or (Get-Item -LiteralPath '"
-        + str(stdout).replace("'", "''")
-        + "').Length -eq 0) -and [DateTime]::UtcNow -lt $deadline);"
-        f"$before=if(Test-Path -LiteralPath {_powershell_literal(stdout)}){{(Get-Item -LiteralPath {_powershell_literal(stdout)}).Length}}else{{0}};"
-        "$null=$event.Set();$graceful=$process.WaitForExit(2000);"
-        f"$atExit=if(Test-Path -LiteralPath {_powershell_literal(stdout)}){{(Get-Item -LiteralPath {_powershell_literal(stdout)}).Length}}else{{0}};"
-        f"Start-Sleep -Milliseconds 180;$after=if(Test-Path -LiteralPath {_powershell_literal(stdout)}){{(Get-Item -LiteralPath {_powershell_literal(stdout)}).Length}}else{{0}};"
-        "$process.Dispose();$process=$null;$event.Dispose();$event=$null;$eventStillExists=$true;"
-        "try{$probe=[Threading.EventWaitHandle]::OpenExisting($eventName);$probe.Dispose()}catch{$eventStillExists=$false};"
-        f"$stderrText=$(if(Test-Path -LiteralPath {_powershell_literal(stderr)}){{Get-Content -LiteralPath {_powershell_literal(stderr)} -Raw}}else{{''}});"
-        "[pscustomobject]@{created=$created;graceful=$graceful;before=$before;stable=($atExit -eq $after);event_still_exists=$eventStillExists;stderr=$stderrText}|ConvertTo-Json -Compress}"
-        "finally{if($null -ne $process){if(-not $process.HasExited){Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue};$process.Dispose()};if($null -ne $event){$event.Dispose()}}"
+        f". {_powershell_literal(PRESENTATION)};"
+        "$script:DisplayInteractive=$true;$script:DisplayUnicode=$false;$script:DisplayTrueColor=$false;"
+        "$script:StartupPanelActive=$false;$saved=[Console]::Out;$capture=New-Object IO.StringWriter;"
+        "try{[Console]::SetOut($capture);Start-WaitIndicator 'python';"
+        "$deadline=[DateTime]::UtcNow.AddSeconds(5);while($capture.ToString().Length -eq 0 -and [DateTime]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 20};"
+        "$before=$capture.ToString();$worker=$script:WaitIndicatorWorker;$invocation=$script:WaitIndicatorInvocation;"
+        "Stop-WaitIndicator;$atExit=$capture.ToString();Start-Sleep -Milliseconds 180;"
+        "$stable=$atExit -eq $capture.ToString();"
+        "$cleared=($null -eq $script:WaitIndicatorWorker -and $null -eq $script:WaitIndicatorInvocation -and $null -eq $script:WaitIndicatorStopEvent);"
+        "$completed=$invocation.IsCompleted;"
+        # 再启动一个短步骤：首帧延迟期间停止，不应向下一阶段补写旧动画。
+        "Start-WaitIndicator 'frontend';Stop-WaitIndicator;$shortStable=$atExit -eq $capture.ToString();"
+        "$script:DisplayInteractive=$false;Start-WaitIndicator 'serve';$redirected=$null -eq $script:WaitIndicatorWorker;"
+        "[Console]::SetOut($saved);"
+        "[pscustomobject]@{visible=($before.Length -gt 0);stable=$stable;cleared=$cleared;completed=$completed;short_stable=$shortStable;redirected=$redirected}|ConvertTo-Json -Compress"
+        "}finally{Stop-WaitIndicator;[Console]::SetOut($saved);$capture.Dispose()}"
     )
-    result = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True, check=False)
-    assert result.returncode == 0, result.stdout + result.stderr
-    record = json.loads(result.stdout.strip().splitlines()[-1])
-    assert record["created"] is True
-    assert record["graceful"] is True
-    assert record["before"] > 0
-    assert record["stable"] is True
-    assert record["event_still_exists"] is False
-    assert not record["stderr"]
+    result=subprocess.run([shell,"-NoLogo","-NoProfile","-Command",command],cwd=ROOT,
+        env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"},text=True,capture_output=True,timeout=15,check=False)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])==dict(visible=True,stable=True,cleared=True,completed=True,short_stable=True,redirected=True)
 
-def test_wait_indicator_uses_force_only_after_graceful_timeout() -> None:
-    command = (
+
+def test_wait_indicator_cancels_only_after_signal_timeout() -> None:
+    command=(
         f". {_powershell_literal(PRESENTATION)};"
         "function Clear-WaitIndicatorLine{$null=$script:Events.Add('clear')};"
-        "function Stop-Process{[CmdletBinding()]param([int]$Id,[switch]$Force);$null=$script:Events.Add('force');[void]($script:WaitIndicatorProcess.HasExited=$true)};"
-        "function New-FakeProcess{$value=[pscustomobject]@{Id=42;HasExited=$false};"
-        "$value|Add-Member ScriptMethod WaitForExit {param($Milliseconds=$null);if($null -eq $Milliseconds){$null=$script:Events.Add('wait-final');[void]($this.HasExited=$true);return};$null=$script:Events.Add(('wait-'+$Milliseconds));if($script:FakeMode -eq 'normal'){$this.HasExited=$true;return $true};return $false};"
-        "$value|Add-Member ScriptMethod Dispose {$null=$script:Events.Add('process-dispose')};return $value};"
-        "function New-FakeEvent{$value=[pscustomobject]@{};$value|Add-Member ScriptMethod Set {$null=$script:Events.Add('signal');return $true};$value|Add-Member ScriptMethod Dispose {$null=$script:Events.Add('event-dispose')};return $value};"
-        "function Invoke-Fake([string]$Mode){$script:FakeMode=$Mode;$script:Events=New-Object 'System.Collections.Generic.List[string]';$script:WaitIndicatorProcess=New-FakeProcess;$script:WaitIndicatorStopEvent=New-FakeEvent;$script:WaitIndicatorFallbackActive=$false;Stop-WaitIndicator;"
-        "return [pscustomobject]@{events=@($script:Events);process_cleared=($null -eq $script:WaitIndicatorProcess);event_cleared=($null -eq $script:WaitIndicatorStopEvent)}};"
-        "[pscustomobject]@{normal=(Invoke-Fake 'normal');timeout=(Invoke-Fake 'timeout')}|ConvertTo-Json -Depth 5 -Compress"
+        "function Invoke-Fake([bool]$Timeout){$script:Events=New-Object 'System.Collections.Generic.List[string]';"
+        "$handle=[pscustomobject]@{Timeout=$Timeout};$handle|Add-Member ScriptMethod WaitOne {param($ms);$null=$script:Events.Add(('wait-'+$ms));return -not $this.Timeout};"
+        "$script:WaitIndicatorInvocation=[pscustomobject]@{AsyncWaitHandle=$handle;IsCompleted=$true};"
+        "$script:WaitIndicatorWorker=[pscustomobject]@{};"
+        "$script:WaitIndicatorWorker|Add-Member ScriptMethod Stop {$null=$script:Events.Add('cancel')};"
+        "$script:WaitIndicatorWorker|Add-Member ScriptMethod EndInvoke {param($invocation);$null=$script:Events.Add('join')};"
+        "$script:WaitIndicatorWorker|Add-Member ScriptMethod Dispose {$null=$script:Events.Add('worker-dispose')};"
+        "$script:WaitIndicatorStopEvent=[pscustomobject]@{};"
+        "$script:WaitIndicatorStopEvent|Add-Member ScriptMethod Set {$null=$script:Events.Add('signal');return $true};"
+        "$script:WaitIndicatorStopEvent|Add-Member ScriptMethod Dispose {$null=$script:Events.Add('event-dispose')};"
+        "Stop-WaitIndicator;return ,@($script:Events)};"
+        "[pscustomobject]@{normal=(Invoke-Fake $false);timeout=(Invoke-Fake $true)}|ConvertTo-Json -Compress"
     )
-    result = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, text=True, capture_output=True, check=False)
-    assert result.returncode == 0, result.stdout + result.stderr
-    record = json.loads(result.stdout.strip().splitlines()[-1])
-    assert record["normal"]["events"] == ["signal", "wait-2000", "clear", "process-dispose", "event-dispose"]
-    assert record["timeout"]["events"] == ["signal", "wait-2000", "force", "wait-final", "clear", "process-dispose", "event-dispose"]
-    assert record["normal"]["process_cleared"] is True and record["normal"]["event_cleared"] is True
-    assert record["timeout"]["process_cleared"] is True and record["timeout"]["event_cleared"] is True
+    result=subprocess.run([POWERSHELL,"-NoLogo","-NoProfile","-Command",command],cwd=ROOT,
+        env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"},text=True,capture_output=True,check=False)
+    assert result.returncode==0,result.stdout+result.stderr
+    record=json.loads(result.stdout.strip().splitlines()[-1])
+    assert record['normal']==['signal','wait-2000','join','worker-dispose','clear','event-dispose']
+    assert record['timeout']==['signal','wait-2000','cancel','join','worker-dispose','clear','event-dispose']
+
 
 def test_prepare_status_parser_accepts_only_contiguous_whitelisted_events() -> None:
     command = (

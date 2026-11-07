@@ -153,3 +153,48 @@ def test_selected_deny_keeps_normal_control_and_requires_its_real_identity():
     assert {case.permission.expectation for case in result.actions[0].cases} == {'ALLOW', 'DENY'}
     missing = projected.model_copy(update={'identities': ()})
     assert 'TEST_IDENTITY_REQUIRED' in {gap.reason for gap in plan(missing).gaps}
+
+
+def test_business_scenario_occurrences_are_distinct_and_request_reader_checks_their_identity():
+    import json
+    from types import SimpleNamespace
+    from product.backend.domain.checks.scenarios import compile_business_scenario
+    from product.protocols.checks.scenarios import BusinessScenarioRevision
+    from product.protocols.checks.execution_request import ExecutionRequest
+    original=plan()
+    allow=next(case for case in original.actions[0].cases if case.permission.expectation=='ALLOW')
+    def invocation(key):
+        return dict(id=key,label='同一动作的明确 occurrence',items=[dict(id='item',
+            permission={key:getattr(allow.permission,key) for key in ('intent_id','revision','intent_hash')},
+            subject_identity_id=allow.subject_test_identity_id,resource_id=allow.resource_id)])
+    document=BusinessScenarioRevision.model_validate_json(json.dumps(dict(id='bsc_'+'1'*32,project_id=original.project_id,revision=1,
+        label='重复动作',experiments=[dict(id='normal',label='正常',kind='NORMAL',invocations=[invocation('once')]),
+            dict(id='repeat',label='再次执行',kind='REPEAT',control_experiment_id='normal',invocations=[invocation('first'),invocation('second')])])))
+    compiled=compile_business_scenario(original,document,SimpleNamespace(actions=()))
+    assert not compiled.gaps
+    generated=[case for case in compiled.actions[0].cases if case.occurrence_id is not None]
+    assert len(generated)==len({case.case_id for case in generated})==3
+    payload=compiled.model_dump(mode='json',exclude={'gaps'})
+    for action in payload['actions']:action.pop('gaps')
+    payload.update(config_fingerprint='c'*64,budget_fingerprint='d'*64)
+    request=ExecutionRequest.model_validate_json(json.dumps(payload))
+    assert request.scenario.document==document
+    payload['scenario']['invocations'][0]['case_ids']=[generated[1].case_id]
+    with pytest.raises(ValueError):ExecutionRequest.model_validate_json(json.dumps(payload))
+
+
+def test_batch_request_expands_exactly_one_adopted_array_and_preserves_input_order():
+    import json
+    from types import SimpleNamespace as NS
+    from product.backend.domain.checks.batch_requests import batch_request
+    from product.protocols.web.request import HttpRequestTemplate
+    request=HttpRequestTemplate.model_validate_json(json.dumps(dict(method='PATCH',path='/items/bulk',
+        body=dict(kind='JSON',value={'items':[{'id':{'$slot':'resource'},'value':True}]}),
+        input_slots=[dict(slot_id='resource',source='CASE_RESOURCE_ID',consumer='JSON_BODY')])))
+    action=NS(proofs=(NS(effect_kind='STATE_MUTATION'),),steps=(NS(purpose='TARGET',request=request),))
+    invocation=NS(batch=NS(array_path=('items',),response_items_path=None,response_resource_field=None))
+    result=batch_request(action,invocation,(NS(resource_id='owned'),NS(resource_id='foreign')))
+    assert result.body.value=={'items':[{'id':'owned','value':True},{'id':'foreign','value':True}]}
+    assert result.input_slots==()
+    invocation.batch.array_path=('unrelated',)
+    with pytest.raises(KeyError):batch_request(action,invocation,(NS(resource_id='owned'),))

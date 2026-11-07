@@ -76,7 +76,6 @@ def test_external_source_change_cannot_be_overwritten_by_preset(current_sample):
 def test_generic_runtime_reload_requires_new_sample_sessions(current_sample):
     import time
     from uuid import uuid4
-    from product.backend.application.examples.gallery_materials import gallery_identities
     core=current_sample;experience=core.official_experience
     project=experience.start(consent=True).project_id
     proposal=experience.boundary_proposal(exhibition_download=True).proposal
@@ -93,13 +92,13 @@ def test_generic_runtime_reload_requires_new_sample_sessions(current_sample):
         if receipt['state'] in {'SUCCEEDED','FAILED','CANCELLED'}:break
         time.sleep(.1)
     assert receipt['state']=='SUCCEEDED'
-    stale=gallery_identities(experience,project)
+    stale=experience.gallery_identities(project)
     assert {item.identity_id for item in stale}=={item.identity_id for item in original}
     assert all(item.auth_method is None for item in stale)
     experience.prepare()
     current=core.test_identities.list(project)
     assert all(item.status.value=='PREPARED' for item in current)
-    assert gallery_identities(experience,project)==list(current)
+    assert experience.gallery_identities(project)==list(current)
 
 
 def test_corrupted_flow_is_rejected_without_overwriting_frozen_material(current_sample):

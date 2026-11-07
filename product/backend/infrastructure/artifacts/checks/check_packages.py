@@ -126,7 +126,7 @@ def validate_check_package(directory: Path, *, published=False, known_secrets=()
                 raise ValueError("evidence frozen case association")
             configured = next(config for config in bundle.actions if config.action_id == action.action_id)
             proof_configs = {proof.binding_fingerprint: proof for proof in configured.proofs}
-            case_proofs = {proof.proof_fingerprint: proof for proof in case.proof_requirements}
+            case_proofs = {proof.proof_fingerprint: proof for proof in item.effective_case.proof_requirements}
             for observation in item.observations:
                 proof = proof_configs[case_proofs[observation.proof_fingerprint].binding_fingerprint]
                 expected_observer = proof.observer_id or "recorded-" + proof.binding_fingerprint[:32]
@@ -153,6 +153,8 @@ def validate_check_package(directory: Path, *, published=False, known_secrets=()
                 referenced.append(evidence_id)
         if len(referenced) != len(set(referenced)) or set(referenced) != set(evidence):
             raise ValueError("evidence coverage")
+        from product.backend.infrastructure.artifacts.checks.fact_validation import validate_scenario_bindings
+        validate_scenario_bindings(request,tuple(evidence.values()))
         files = tuple(CheckPublishedFile(path=name, sha256=hashlib.sha256(raw).hexdigest(), byte_count=len(raw))
             for name, raw in sorted(raw_files.items()) if name != MANIFEST_NAME)
         manifest = None

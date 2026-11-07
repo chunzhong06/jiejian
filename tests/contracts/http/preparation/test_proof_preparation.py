@@ -35,7 +35,7 @@ def test_slow_source_read_does_not_block_other_api_requests():
     anyio.run(scenario)
 
 
-@pytest.mark.parametrize('suffix',['sources','read-scopes','read-scopes/revoke','preflights','preflights/cancel','adoptions','suggestions','reference-inputs','reference-inputs/cancel','reference-captures','reference-captures/preview','reference-captures/cancel'])
+@pytest.mark.parametrize('suffix',['sources','read-scopes','read-scopes/revoke','preflights','preflights/cancel','adoptions','suggestions','reference-inputs','reference-inputs/cancel','reference-captures','reference-captures/preview','reference-captures/cancel','database-candidate','file-candidate','database-maintenance'])
 def test_preparation_mutations_require_current_gui_session_and_origin(tmp_path,suffix):
     app = create_app(tmp_path/'var',start_worker=False,environ={})
     path = '/api/projects/any/proof-preparation/' + suffix
@@ -52,6 +52,16 @@ def test_detached_proof_router_without_control_guard_rejects_requests():
     app.include_router(build_proof_sources_router(SimpleNamespace(proof_preparation=None)))
     with RawClient(app) as client:
         assert client.post('/api/projects/any/proof-preparation/adoptions',json={}).status_code == 403
+
+
+@pytest.mark.parametrize('path',['/api/projects/any/runtime/databases/credential','/api/projects/any/business-scenarios'])
+def test_new_local_writes_reject_detached_or_foreign_sessions(tmp_path,path):
+    with RawClient(create_app(tmp_path/'var',start_worker=False,environ={}),base_url=TEST_CONTROL_ORIGIN) as client:
+        assert client.put(path,json={}).status_code==403
+        client.cookies.set('jiejian_control_session','old-instance')
+        assert client.put(path,json={},headers={'Origin':TEST_CONTROL_ORIGIN}).status_code==403
+    with TestClient(create_app(tmp_path/'var',start_worker=False,environ={})) as client:
+        assert client.put(path,json={},headers={'Origin':'https://external.invalid'}).status_code==403
 
 
 def test_empty_project_preparation_context_is_read_only(tmp_path):

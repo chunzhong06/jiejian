@@ -89,7 +89,9 @@ def test_serve_reopens_same_url_profile_and_browser_without_new_server(tmp_path,
     var_dir = tmp_path / 'var'
     finished, launches, servers = Event(), [], []
     monkeypatch.setattr(system, 'runtime_settings', lambda _: SimpleNamespace(var_dir=var_dir, log_level='INFO'))
-    monkeypatch.setattr('product.backend.interfaces.http.create_app', lambda *_args, **_kwargs: object())
+    updates = SimpleNamespace(accept_startup=lambda: None, latest=lambda: None)
+    monkeypatch.setattr('product.backend.interfaces.http.create_app', lambda *_args, **_kwargs:
+        SimpleNamespace(state=SimpleNamespace(context=SimpleNamespace(updates=updates))))
     monkeypatch.setattr('uvicorn.Config', lambda *_args, **_kwargs: object())
 
     class Server:
@@ -124,3 +126,52 @@ def test_serve_reopens_same_url_profile_and_browser_without_new_server(tmp_path,
     assert launches[0][2]['session'].closed is True
 
 pytestmark = [pytest.mark.level3]
+
+
+@pytest.mark.parametrize('existing_environment', [False, True])
+@pytest.mark.parametrize('failure_stage', ['frontend_path', 'http_import'])
+def test_serve_startup_failure_restores_environment_and_releases_lock(tmp_path, monkeypatch, existing_environment, failure_stage):
+    import builtins
+    import os
+    from product.backend.infrastructure.runtime.serve_lock import ServeLock
+
+    var_dir = tmp_path / 'var'
+    monkeypatch.setattr(system, 'runtime_settings', lambda _: SimpleNamespace(var_dir=var_dir, log_level='INFO'))
+    names = ('JIEJIAN_SERVE_LOCK_PATH', 'JIEJIAN_SERVE_OWNER_TOKEN')
+    for name in names:
+        if existing_environment:
+            monkeypatch.setenv(name, 'prior-value')
+        else:
+            monkeypatch.delenv(name, raising=False)
+    original_import = builtins.__import__
+    held = []
+    acquire = ServeLock.acquire
+
+    def acquire_and_retain(root):
+        owned = acquire(root)
+        held.append(owned)
+        return owned
+
+    def fail_http_import(name, *args, **kwargs):
+        if failure_stage == 'http_import' and name == 'product.backend.interfaces.http':
+            raise ImportError('fixture import failure')
+        return original_import(name, *args, **kwargs)
+
+    def frontend_path():
+        if failure_stage == 'frontend_path':
+            raise OSError('fixture path unavailable')
+        return tmp_path / 'frontend'
+
+    monkeypatch.setattr(ServeLock, 'acquire', acquire_and_retain)
+    monkeypatch.setattr(builtins, '__import__', fail_http_import)
+    monkeypatch.setattr(system, 'default_frontend_dir', frontend_path)
+    try:
+        result = CliRunner().invoke(app, ['serve'])
+        assert result.exit_code != 0
+        assert all(os.environ.get(name) == ('prior-value' if existing_environment else None) for name in names)
+        assert len(held) == 1 and not held[0].acquired and held[0]._stream is None
+        next_owner = acquire(var_dir)
+        next_owner.release()
+    finally:
+        for owned in held:
+            owned.release()

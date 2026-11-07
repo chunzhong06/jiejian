@@ -16,6 +16,7 @@ export type BoundaryDraftViewDto = {
 }
 
 export type BusinessEffectKind = 'STATE_MUTATION' | 'DATA_DISCLOSURE' | 'FILE_CONTENT_DELIVERY' | 'OBJECT_CREATION' | 'EXTERNAL_DISPATCH' | 'RESTRICTED_FUNCTION_INVOCATION' | 'CREDENTIAL_ACCESS'
+export type FieldMutationRequirement = { path:string[]; operation:'CHANGE'|'ASSIGN'|'ADD'|'REMOVE'; expected_value:string|number|boolean|null }
 export type ProposedEffectDto = {
   item_id: string
   effect_id?: string | null
@@ -24,6 +25,7 @@ export type ProposedEffectDto = {
   resource_concept: string
   expected_state?: string | null
   protected_projection?: string[]
+  field_mutation?: FieldMutationRequirement | null
   description: string
 }
 export type ProposedActorDto = {
@@ -50,7 +52,11 @@ export type ProposedActionDto = {
   effect_catalog: ProposedEffectDto[]
   effective_state: 'ACTIVE' | 'RETIRED'
 }
-export type PermissionConditions = {principal: 'AUTHENTICATED' | 'ANONYMOUS'; tenant: 'SAME' | 'DIFFERENT' | null; resource_states: string[]}
+export type RelationshipRequirement = {
+  kind: 'ORGANIZATION'|'ROLE_INHERITANCE'|'SHARING'|'DELEGATION'; state:'ACTIVE'|'ABSENT'|'EXPIRED'|'REVOKED'
+  organization_scope:'SAME'|'SUBJECT_ANCESTOR'|'RESOURCE_ANCESTOR'; inherited_role:string|null; max_depth:number
+}
+export type PermissionConditions = {principal: 'AUTHENTICATED' | 'ANONYMOUS'; tenant: 'SAME' | 'DIFFERENT' | null; resource_states: string[]; relationships?:RelationshipRequirement[]}
 export type ProposedPermissionDto = {
   item_id: string
   write_mode: 'CREATE' | 'REFERENCE' | 'APPEND_REVISION'

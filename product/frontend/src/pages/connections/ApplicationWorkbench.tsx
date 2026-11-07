@@ -1,5 +1,5 @@
 import {useCallback,useRef,useState} from 'react'
-import {workbenchApi,type ApplicationEnvironment} from '../../entities/application/api/workbench'
+import {workbenchApi,type ApplicationEnvironment,type TargetScope} from '../../entities/application/api/workbench'
 import {projectsApi,type ProjectDto} from '../../entities/application/api/projects'
 import {useRead} from '../../shared/lib/useRead'
 import {operationId,readPending,savePending} from '../../shared/lib/operations'
@@ -23,6 +23,7 @@ export function ApplicationWorkbench({selected,onChanged}:{selected?:ProjectDto;
   const [pending,setPending]=useState(()=>readPending<{operation:string;name:string}>(pendingKey))
   const [name,setName]=useState(''),[environmentName,setEnvironmentName]=useState('测试环境'),[address,setAddress]=useState(''),[deployment,setDeployment]=useState('')
   const [sourceDirectory,setSourceDirectory]=useState('')
+  const [maxRequests,setMaxRequests]=useState(64),[environmentTarget,setEnvironmentTarget]=useState<TargetScope>()
   const [environmentEditing,setEnvironmentEditing]=useState(false)
   const [environmentRevision,setEnvironmentRevision]=useState(0)
   const [environmentId,setEnvironmentId]=useState(()=> 'env_'+operationId())
@@ -53,7 +54,7 @@ export function ApplicationWorkbench({selected,onChanged}:{selected?:ProjectDto;
     {view==='sources'?<SourceLibrary projectId={selected.project_id}/>:view==='business'?<Understanding embedded projectId={selected.project_id}/>:state.loading&&!current?<Loading/>:!current?<ErrorNote error={state.error}/>:view==='source'?current.source_available?<Connect embedded selected={selected} onChanged={onChanged} onError={setError}/>:<section className="jj-environment-editor"><h2>关联本地源码（可选）</h2><p>保留当前应用的环境、规则、身份、场景和报告。关联目录后，再单独确认读取授权。</p><Field label="源码目录的绝对路径"><input value={sourceDirectory} onChange={event=>setSourceDirectory(event.target.value)}/></Field><div className="jj-confirmation-actions"><Button kind="primary" busy={busy} disabled={!sourceDirectory.trim()} onClick={()=>void act(async()=>{await workbenchApi.attachSource(selected.project_id,sourceDirectory,current.revision);await state.reload();onChanged(selected.project_id)})}>关联到当前应用</Button></div></section>:<>
       <div className="jj-environments">
         {current.environments.length>0&&!environmentEditing&&<>
-          <header className="jj-environment-toolbar"><p>{current.environments.length} 个已保存环境</p>{!environmentEditing&&<Button onClick={()=>{setEnvironmentId('env_'+operationId());setEnvironmentRevision(0);setEnvironmentName('测试环境');setAddress('');setDeployment('');setEnvironmentEditing(true)}}>添加环境</Button>}</header>
+          <header className="jj-environment-toolbar"><p>{current.environments.length} 个已保存环境</p>{!environmentEditing&&<Button onClick={()=>{setEnvironmentId('env_'+operationId());setEnvironmentRevision(0);setEnvironmentName('测试环境');setAddress('');setDeployment('');setMaxRequests(64);setEnvironmentTarget(undefined);setEnvironmentEditing(true)}}>添加环境</Button>}</header>
           {!environmentEditing&&!current.active_environment&&current.confirmed_endpoint&&<div className="jj-environment-context"><span>当前运行地址</span><code>{current.confirmed_endpoint}</code><span className="jj-small jj-muted">未选择环境配置</span></div>}
           <div className="jj-environment-catalog" aria-label="已保存的环境">{environments.map(environment=>{
             const active=current.active_environment?.environment_id===environment.environment_id&&current.active_environment.revision===environment.revision
@@ -61,8 +62,8 @@ export function ApplicationWorkbench({selected,onChanged}:{selected?:ProjectDto;
               <header><h2>{environment.name}</h2>{active&&<Badge tone="accent">当前使用</Badge>}</header>
               <p className="jj-environment-address jj-mono">{environment.target.base_url}</p>
               <dl className="jj-environment-facts"><div><dt>部署说明</dt><dd>{environment.deployment_label??'未填写'}</dd></div><div><dt>部署版本</dt><dd>未核对</dd></div></dl>
-              {active&&<div className="jj-environment-reachability"><div><span>地址连通性</span><Badge tone={current.endpoint_reachable?'positive':'caution'}>{current.endpoint_reachable?'地址已核验':current.endpoint_reachable===false?'本次未能连通':'地址待核验'}</Badge></div><Button kind="quiet" busy={busy} onClick={()=>void act(async()=>{await projectsApi.confirmEndpoint(selected.project_id,environment.target.base_url,current.revision);state.reload();onChanged(selected.project_id)})}>核验当前地址</Button></div>}
-              <footer>{!active&&<Button busy={busy} onClick={()=>void act(async()=>{await workbenchApi.activateEnvironment(selected.project_id,environment.environment_id,environment.revision,current.revision);state.reload();onChanged(selected.project_id)})}>切换到此环境</Button>}<Button kind="quiet" disabled={busy} onClick={()=>{setEnvironmentId(environment.environment_id);setEnvironmentRevision(environment.revision);setEnvironmentName(environment.name);setAddress(environment.target.base_url);setDeployment(environment.deployment_label??'');setEnvironmentEditing(true)}}>编辑</Button></footer>
+              {active&&<div className="jj-environment-reachability"><div><span>地址连通性</span><Badge tone={current.endpoint_reachable?'positive':current.endpoint_reachable===false?'caution':'neutral'}>{current.endpoint_reachable?'地址已核验':current.endpoint_reachable===false?'本次未能连通':'地址待核验'}</Badge></div><Button kind="quiet" busy={busy} onClick={()=>void act(async()=>{await projectsApi.confirmEndpoint(selected.project_id,environment.target.base_url,current.revision);state.reload();onChanged(selected.project_id)})}>核验当前地址</Button></div>}
+              <footer>{!active&&<Button busy={busy} onClick={()=>void act(async()=>{await workbenchApi.activateEnvironment(selected.project_id,environment.environment_id,environment.revision,current.revision);state.reload();onChanged(selected.project_id)})}>切换到此环境</Button>}<Button kind="quiet" disabled={busy} onClick={()=>{setEnvironmentId(environment.environment_id);setEnvironmentRevision(environment.revision);setEnvironmentName(environment.name);setAddress(environment.target.base_url);setDeployment(environment.deployment_label??'');setMaxRequests(environment.target.max_requests??64);setEnvironmentTarget(environment.target);setEnvironmentEditing(true)}}>编辑</Button></footer>
             </section>
           })}</div>
         </>}
@@ -73,11 +74,12 @@ export function ApplicationWorkbench({selected,onChanged}:{selected?:ProjectDto;
             <Field label="环境名称"><input value={environmentName} onChange={event=>setEnvironmentName(event.target.value)}/></Field>
             <Field label="应用地址" hint="仅填写本机 IPv4 的 HTTP/HTTPS 地址，不含路径、参数或凭据。"><input value={address} onChange={event=>setAddress(event.target.value)} placeholder="http://127.0.0.1:8080"/></Field>
             <Field label="部署说明（可选）" hint="用于区分分支或构建，不代表已核对部署版本。"><input value={deployment} onChange={event=>setDeployment(event.target.value)} placeholder="例如：测试分支 · 本周构建"/></Field>
+            <Field label="每次检查请求上限" hint="计算对应用的身份核验、业务操作和恢复请求；范围为 1～500，保存并切换到此环境后生效。"><input type="number" min={1} max={500} step={1} value={Number.isFinite(maxRequests)?maxRequests:''} onChange={event=>setMaxRequests(event.target.valueAsNumber)}/></Field>
           </div>
-          <footer><p>保存后不会切换环境或发送请求；切换后需重新核对检查材料。</p><div>{current.environments.length>0&&<Button disabled={busy} onClick={()=>setEnvironmentEditing(false)}>取消编辑</Button>}<Button kind="primary" busy={busy} disabled={!environmentName.trim()||!address.trim()} onClick={()=>void act(async()=>{
+          <footer><p>保存后不会切换环境或发送请求；切换后需重新核对检查材料。</p><div>{current.environments.length>0&&<Button disabled={busy} onClick={()=>setEnvironmentEditing(false)}>取消编辑</Button>}<Button kind="primary" busy={busy} disabled={!environmentName.trim()||!address.trim()||!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>500} onClick={()=>void act(async()=>{
             const url=new URL(address.trim());if(url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('请填写不含路径、参数或凭据的应用地址。')
             const origin=url.origin,port=Number(url.port||(url.protocol==='https:'?443:80))
-            const configuration:ApplicationEnvironment={environment_id:environmentId,revision:environmentRevision+1,name:environmentName.trim(),target:{base_url:origin,allowed_origins:[origin],allowed_hosts:[url.hostname],allowed_ports:[port],allow_private_network:true},deployment_label:deployment.trim()||null,deployment_verification:'UNVERIFIED'}
+            const configuration:ApplicationEnvironment={environment_id:environmentId,revision:environmentRevision+1,name:environmentName.trim(),target:{...environmentTarget,base_url:origin,allowed_origins:[origin],allowed_hosts:[url.hostname],allowed_ports:[port],allow_private_network:true,max_requests:maxRequests},deployment_label:deployment.trim()||null,deployment_verification:'UNVERIFIED'}
             await workbenchApi.saveEnvironment(selected.project_id,configuration,environmentRevision);state.reload();setEnvironmentId('env_'+operationId());setEnvironmentRevision(0);setAddress('');setDeployment('');setEnvironmentEditing(false)
           })}>保存环境</Button></div></footer>
         </section>}

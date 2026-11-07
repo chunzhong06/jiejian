@@ -1,5 +1,7 @@
 # 通用来源预检查只确认当前字段、归属和组件能力；不产生权限结论。
-from product.backend.infrastructure.observers.records.record_facts import record_value
+from product.backend.infrastructure.observers.records.record_facts import record_value, field_value
+from product.protocols.checks.field_mutation import FactScalar
+from pydantic import TypeAdapter, ValidationError
 from product.backend.infrastructure.observers.adapters.json_source import SourceReadError
 from product.protocols.preparation.proof_sources import ProofCheckItem
 
@@ -9,15 +11,22 @@ def managed_source_checks(view, config, *, resource_id, owner_subject_id, contra
         valid = view.collection == config.collection and contract is not None and contract.implementation_profile in {'CONTROLLED_CREATION_V1','SQLITE_CREATION_HISTORY_V1'}
         return (ProofCheckItem(code='CREATION_COLLECTION_VERIFIED' if valid else 'CREATION_SOURCE_UNAVAILABLE',
             status='CONFIRMED' if valid else 'UNSUPPORTED'),)
-    if view.schema_version!='2' or (contract is not None and contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','SQLITE_ROW_HISTORY_V1'}):
+    if view.schema_version not in {'2','3'} or (contract is not None and contract.implementation_profile not in {'CONTROLLED_TRANSACTION_RECORDS_V2','CONTROLLED_FILE_RECEIPT_V1','SQLITE_ROW_HISTORY_V1','POSTGRESQL_ROW_HISTORY_V1','MYSQL_ROW_HISTORY_V1'}):
         return (ProofCheckItem(code='SOURCE_REQUIRES_MIGRATION',status='UNSUPPORTED'),)
     checks = []
     snapshot = view.snapshot
     payload = snapshot.model_dump(mode='json')
     for key, path in config.mappings.items():
         try:
-            value = record_value(payload, path)
-            valid = isinstance(value,str) and bool(value) and value not in {'[REDACTED]','<redacted>'}
+            present, value = field_value(payload,path,allow_missing=key=='state' and config.state_field_optional)
+            if key == 'state':
+                try:
+                    TypeAdapter(FactScalar).validate_python(value,strict=True)
+                    valid = not isinstance(value,str) or value not in {'[REDACTED]','<redacted>'}
+                except ValidationError:
+                    valid = False
+            else:
+                valid = present and isinstance(value,str) and bool(value) and value not in {'[REDACTED]','<redacted>'}
             checks.append(ProofCheckItem(code='MAPPING_READABLE' if valid else 'MAPPING_TYPE_INVALID',
                 status='CONFIRMED' if valid else 'MISSING',mapping_key=key))
         except SourceReadError:

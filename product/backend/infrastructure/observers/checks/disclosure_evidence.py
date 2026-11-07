@@ -26,7 +26,7 @@ def collect_disclosure_evidence(*,source,case,requirement,proof,phase,before,vie
             and view.scope.generation==before.generation==snapshot.generation)
         if matched:
             response=strict_json(target.body,config.max_response_bytes)
-            rejected=target.status_code in {401,403} and isinstance(response,dict) and set(response)<={'error'}
+            rejected=(target.status_code in {401,403} and isinstance(response,dict) and set(response)<={'error'}) or getattr(target,'batch_item_absent',False)
             if not rejected:
                 try:
                     content=record_value(response,config.target_data_path)

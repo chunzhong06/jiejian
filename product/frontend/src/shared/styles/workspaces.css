@@ -3,17 +3,17 @@
 .jj-collection .jj-scroll-table { border:0; border-radius:0; background:transparent; box-shadow:none; }
 .jj-collection .jj-scroll-table thead { background:transparent; }
 .jj-workspace-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 20px; }
-.jj-workspace-toolbar input { width: min(320px,100%); }
-.jj-collection-layout { display:grid; grid-template-columns:minmax(0,1fr) 290px; min-width:0; }
+.jj-workspace-toolbar > .jj-search-field { width:min(360px,100%); }
+.jj-collection-layout { display:grid; grid-template-columns:minmax(0,1fr) clamp(280px,29%,360px); min-width:0; }
 .jj-collection-layout:not(:has(> .jj-inspector)) { grid-template-columns:minmax(0,1fr); }
 .jj-collection-layout:not(:has(> .jj-inspector)) > .jj-collection-main { padding-right:0; }
 .jj-collection-main { min-width:0; padding-right:24px; }
 .jj-inspector { display:flex; flex-direction:column; min-width:0; padding:24px; border-left:1px solid var(--line); }
-.jj-inspector-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:12px; }
-.jj-inspector-heading > .jj-eyebrow { grid-column:1/-1; }
-.jj-inspector .jj-inspector-heading > h2 { margin:0; }
-.jj-inspector-heading > .jj-badge { justify-self:end; }
-.jj-inspector h2 { font-size:var(--text-section); line-height:1.7; margin:12px 0; }
+.jj-inspector-heading { display:grid; gap:12px; }
+.jj-inspector-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.jj-inspector-caption > .jj-button { width:30px; min-height:30px; padding:0; }
+.jj-collection-title { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
+.jj-inspector .jj-collection-title > h2 { margin:0; }
 .jj-inspector h3 { margin:26px 0 14px; }
 .jj-inspector .jj-facts { gap:14px; }
 .jj-inspector .jj-facts > div { grid-template-columns:80px minmax(0,1fr); gap:10px; font-size:var(--text-body); }
@@ -21,26 +21,52 @@
 .jj-object-table :is(th,td) { padding:16px 24px; border-bottom:1px solid var(--line); vertical-align:middle; }
 .jj-object-table thead th { color:var(--muted); font-size:var(--text-meta); font-weight:450; padding-block:13px; }
 .jj-object-table tbody tr:last-child > * { border-bottom:0; }
+.jj-object-table tbody tr[data-selected=true] { --ink:var(--selected-ink); --muted:var(--selected-muted); }
 .jj-object-table tbody tr[data-selected=true] > * { background:var(--selected); }
-.jj-object-table tbody tr[data-selected=true] > :first-child { box-shadow:inset 3px 0 var(--accent); }
-.jj-object-table tbody tr:not([data-selected=true]):hover > * { background:var(--inset); }
-.jj-object-select { display:block; width:100%; padding:0; border:0; background:none; text-align:left; color:inherit; font:inherit; }
+.jj-object-table tbody tr[data-selected=true] > :first-child { box-shadow:inset 3px 0 var(--selection-mark); }
+.jj-object-table tbody tr:has(.jj-object-select) { position:relative; cursor:pointer; }
+.jj-object-table tbody tr:has(.jj-object-select) > * { transition:background-color var(--motion-hover-out) var(--ease-respond); }
+@media(hover:hover) and (pointer:fine) {
+  .jj-object-table tbody tr:has(.jj-object-select):not([data-selected=true]):hover > * { background:var(--hover); transition-duration:var(--motion-hover-in); }
+  .jj-object-table tbody tr[data-selected=true]:hover > * { background:var(--selected-hover); transition-duration:var(--motion-hover-in); }
+}
+/* 一个原生按钮覆盖整行热区；保留表格语义和单一键盘入口，不在每格复制事件。 */
+.jj-object-select { display:block; position:static; width:100%; padding:0; border:0; background:none; text-align:left; color:inherit; font:inherit; cursor:inherit; }
+.jj-object-select::after { content:''; position:absolute; inset:0; cursor:pointer; }
+.jj-object-select:focus-visible { outline:none; }
+.jj-object-table tbody tr:has(.jj-object-select:focus-visible) { outline:2px solid var(--focus); outline-offset:-2px; }
+.jj-object-table tbody tr:has(.jj-object-select:active) > * { background:var(--selected); transition-duration:0ms; }
 .jj-object-select strong { display:block; font-size:var(--text-body); font-weight:550; }
 .jj-object-select small { display:block; font-weight:400; color:var(--muted); margin-top:5px; line-height:1.7; }
+.jj-collection[data-detail-open=true] .jj-object-summary { display:none; }
 .jj-object-table .jj-object-meta { font-size:var(--text-meta); color:var(--muted); }
 .jj-object-table .jj-table-state { white-space:nowrap; }
 .jj-page-state { width:100%; display:grid; gap:24px; }
 .jj-page-state-content { display:grid; grid-template-columns:40px minmax(0,1fr); gap:16px; padding:28px; }
 .jj-page-state-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:8px; background:var(--bad-soft); color:var(--bad); font-size:20px; }
-.jj-page-state-content h2 { font-size:18px; margin-bottom:8px; }
+.jj-page-state-content h2 {  margin-bottom:8px; }
 .jj-page-state-content p { max-width:70ch; color:var(--muted); font-size:var(--text-body); line-height:1.8; }
 .jj-page-state-content .jj-notice { margin-top:18px; }
 .jj-page-state-content .jj-form-actions { margin-top:18px; }
-.jj-reading-columns { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:32px; }
-.jj-reading-aside { border-left:1px solid var(--line); padding-left:24px; min-width:0; }
-.jj-reading-aside > section + section { margin-top:28px; }
-.jj-reading-aside h2,.jj-reading-aside h3 { font-size:14px; margin-bottom:16px; }
 .jj-notice + :is(.jj-panel,.jj-collection,.jj-source-workspace), :is(.jj-panel,.jj-collection,.jj-source-workspace) + .jj-notice { margin-top:16px; }
-@media(max-width:1100px) { .jj-collection-layout { grid-template-columns:minmax(0,1fr) 250px; } }
-@media(max-width:900px) { .jj-collection-layout,.jj-reading-columns { grid-template-columns:minmax(0,1fr); } .jj-collection-main { padding-right:0; } .jj-inspector,.jj-reading-aside { border-left:0; border-top:1px solid var(--line); padding:24px 0; } }
+@media(max-width:900px) { .jj-collection-layout { grid-template-columns:minmax(0,1fr); } .jj-collection-main { padding-right:0; } .jj-inspector { border-left:0; border-top:1px solid var(--line); padding:24px 0; } }
 @media(max-width:600px) { .jj-object-table :is(th,td) { padding:14px 16px; } .jj-page-state-content { grid-template-columns:minmax(0,1fr); padding:22px; } }
+
+/* 异步证明沿用共享页签；正文留出独立阅读间距，不增加新的表面层。 */
+.jj-async-export-fields { display: grid; gap: 20px; }
+.jj-async-export-fields [role="tabpanel"] { display: grid; gap: 20px; }
+
+/* 表单布局由共享层拥有，冷打开任一路由不依赖其他页面的样式加载。 */
+.jj-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px; }
+.jj-form-section { display:grid; gap:20px; min-width:0; }
+.jj-form-columns { container:form-columns / inline-size; min-width:0; }
+.jj-form-columns-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; align-items:start; }
+.jj-form-columns-layout > * { min-width:0; }
+.jj-field-stack { display:grid; gap:20px; min-width:0; }
+.jj-field-stack > .jj-section-header { margin-bottom:0; }
+@container form-columns (max-width:720px) { .jj-form-columns-layout { grid-template-columns:minmax(0,1fr); gap:28px; } }
+@media(max-width:650px) { .jj-form-grid { grid-template-columns:minmax(0,1fr); } }
+.jj-back-link > .jj-button { margin-left:-12px; min-height:32px; padding-block:5px; font-size:var(--text-meta); }
+
+/* 只给计数、时间和进度等数值角色固定数字宽度；不改变正文及业务名称。 */
+:where(time, progress, .jj-badge, .jj-pagination, .jj-testing-count, .jj-rule-directory-summary, .jj-source-toolbar p, .jj-inspector .jj-facts dd) { font-variant-numeric:tabular-nums; }

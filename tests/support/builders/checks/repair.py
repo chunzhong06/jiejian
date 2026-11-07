@@ -23,7 +23,8 @@ def package(*, allow_safe=True, forbidden=True, run_id="run_"+"1"*32):
                 observer_id=proof.reference.observer_id,level="VERDICT_REQUIRED",phase="AFTER",
                 state="CONFIRMED" if forbidden or not deny else "ABSENT",closure="CLOSED",complete=True,reliable=True,
                 correlated=True,authoritative=True,window_start_us=1,window_end_us=2) for proof in case.proof_requirements)
-            documents.append(SimpleNamespace(evidence_id=evidence_id,observations=observations))
+            # 此纯投影夹具没有动态资源绑定，有效 Case 即原冻结 Case。
+            documents.append(SimpleNamespace(evidence_id=evidence_id,observations=observations,effective_case=case))
     return SimpleNamespace(request=request,bundle=bundle,evidence=tuple(documents),
         result=SimpleNamespace(run_id=run_id,case_results=tuple(results),runtime_correspondence=SimpleNamespace(before='MATCHED',after='MATCHED'),verdict=RunVerdict.BLOCK if forbidden else
             RunVerdict.PASS if allow_safe else RunVerdict.INCONCLUSIVE))

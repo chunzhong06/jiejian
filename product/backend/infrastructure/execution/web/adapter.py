@@ -10,6 +10,7 @@ import secrets
 import json
 import ipaddress
 import re
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
@@ -50,6 +51,7 @@ class HttpResponse:
     request_nonce: str = ""
     request_digest: str = ""
     entity_receipt: object | None = None
+    batch_item_absent: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +279,7 @@ class HttpExecutionAdapter:
         cleanup_request: bool = False,
         test_mode: bool = False,
         entity_policy=None,
+        deadline_ns: int | None = None,
     ) -> HttpResponse:
         """在授权、取消和预算限制下发送一次目标请求。
 
@@ -294,6 +297,9 @@ class HttpExecutionAdapter:
 
         if not cleanup_request and self.cancellation_requested():
             raise JiejianError(ErrorCode.EXEC_CANCELLED, "运行已请求取消")
+        remaining=None if deadline_ns is None else (deadline_ns-time.monotonic_ns())/1_000_000_000
+        if remaining is not None and remaining<=0:
+            raise JiejianError(ErrorCode.EXEC_TIMEOUT,'观察已超过等待预算')
         rendered_query = _render_parameters(query, slot_values or {})
         rendered_headers = _render_parameters(headers, slot_values or {})
         guard = self.guard if auth_scope is None else WebTargetGuard(auth_scope)
@@ -341,18 +347,18 @@ class HttpExecutionAdapter:
                 target.url,
                 params=rendered_query,
                 headers=request_headers,
-                timeout=guard.scope.timeout_seconds,
+                timeout=guard.scope.timeout_seconds if remaining is None else min(guard.scope.timeout_seconds,remaining),
                 **request_kwargs,
             ) as response:
                 safe_secrets = tuple(self.known_secrets) + tuple(redaction_values)
                 if identity_runtime is not None:
                     safe_secrets += identity_runtime.redaction_secrets()
-                if entity_policy is not None:
+                if entity_policy is not None and not (entity_policy.dispatch_json and response.status_code==202):
                     from product.backend.infrastructure.execution.web.file_entity import receive_file_entity
                     if 300<=response.status_code<400 and response.headers.get('location'):
                         guard.authorize_redirect(target.url,response.headers['location'])
                     receipt=receive_file_entity(response,entity_policy,max_bytes=guard.scope.max_response_bytes,
-                        known_secrets=safe_secrets,cancelled=self.cancellation_requested)
+                        known_secrets=safe_secrets,cancelled=lambda:self.cancellation_requested() or (deadline_ns is not None and time.monotonic_ns()>=deadline_ns))
                     # TARGET原文不经过JSON解码，也不随HttpResponse离开采集边界。
                     return HttpResponse(status_code=response.status_code,data={},body=b'',headers={},url=target.url,
                         request_nonce=request_nonce,entity_receipt=receipt,
@@ -360,6 +366,8 @@ class HttpExecutionAdapter:
                 # 流式累计响应，避免先把超限内容完整读入内存。
                 content = bytearray()
                 for chunk in response.iter_bytes():
+                    if deadline_ns is not None and time.monotonic_ns()>=deadline_ns:
+                        raise JiejianError(ErrorCode.EXEC_TIMEOUT,'观察已超过等待预算')
                     content.extend(chunk)
                     if len(content) > guard.scope.max_response_bytes:
                         raise JiejianError(

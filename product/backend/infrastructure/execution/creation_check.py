@@ -8,7 +8,7 @@ from product.backend.infrastructure.observers.adapters.json_source import Source
 from product.protocols.checks.check_result import CheckCaseOutcome, CheckCaseResult, seal_check_evidence
 
 
-def execute_creation_case(executor, action, configured, case, allow_verdict):
+def execute_creation_case(executor, action, configured, case, allow_verdict,*,defer_recovery=False):
     web, observers = executor.web, executor.observers
     execution, status, identity = 'UNKNOWN', None, 'UNKNOWN'
     baseline, recovered, correlated = False, False, False
@@ -26,6 +26,7 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
         # SETUP执行后再建窗，防止准备步骤产生的对象被归到TARGET。
         values=observe('BASELINE')
         original=tuple(item.baseline_projection for item in values)
+        executor._creation_baselines[case.case_id]=original
         baseline=bool(values) and all(value is not None for value in original)
         if not baseline:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'新对象的独立观察基线尚未就绪')
@@ -54,17 +55,21 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
                 actual=response_resource(configured,web.target_response(case.case_id))
                 if execution=='ACCEPTED' and (not closed or len(ids)!=1 or actual not in ids or status==202):
                     execution='UNKNOWN'
-                try:
-                    if not closed:
-                        raise ValueError('creation window is not closed')
-                    recover_created(executor,configured,case,entries)
-                    restored=observe('RECOVERY',cleanup=True)
-                    recovered=baseline and tuple(item.baseline_projection for item in restored)==original
-                except (JiejianError,SourceReadError,ValueError):
-                    recovered=False
-                if not recovered:
-                    executor._cleanup_issues.append('CREATION_RECOVERY_UNVERIFIED')
-                    executor._stop('CREATION_RECOVERY_UNVERIFIED','RECOVERY')
+                if not defer_recovery:
+                    try:
+                        if not closed:
+                            raise ValueError('creation window is not closed')
+                        recover_created(executor,configured,case,entries)
+                        restored=observe('RECOVERY',cleanup=True)
+                        recovered=baseline and tuple(item.baseline_projection for item in restored)==original
+                    except (JiejianError,SourceReadError,ValueError):
+                        recovered=False
+                    if not recovered:
+                        executor._cleanup_issues.append('CREATION_RECOVERY_UNVERIFIED')
+                        executor._stop('CREATION_RECOVERY_UNVERIFIED','RECOVERY')
+    if defer_recovery:
+        return dict(execution=execution,status=status,identity=identity,baseline=baseline,
+            recovered=recovered,correlated=correlated,observations=observations)
     observations,facts,references=finalize_facts(tuple(observations),observers._evidence_sources)
     outcome=CheckCaseOutcome(execution_outcome=execution,http_status=status,actual_identity_status=identity,
         baseline_trusted=baseline,recovery_verified=recovered,run_correlated=correlated,resource_correlated=correlated,
@@ -81,33 +86,50 @@ def execute_creation_case(executor, action, configured, case, allow_verdict):
         reason_codes=decision.reason_codes,evidence_ids=(document.evidence_id,),outcome=outcome),document
 
 
-def recover_created(executor, action, case, entries):
+def recover_created(executor, action, case, entries,*,restored_resources=None):
     """只恢复同一请求独立证明的新对象；无创建不发删除请求，集合或对象并发变化即停。"""
     # 同动作的多个创建证明须覆盖同一集合；独立取证重复，恢复只执行一次。
     source=executor.observers._json_sources[action.proofs[0].observer_id]
     entry=entries[0]
     if any(other['before']!=entry['before'] or other['last']!=entry['last'] or other['created']!=entry['created'] for other in entries):
-        raise ValueError('creation sources disagree')
+        raise JiejianError('CREATION_SOURCES_DISAGREE','创建来源对对象集合的记录不一致')
     expected=entry['last']
+    reconciled=set()
+    if restored_resources:
+        # 仅接受使用节点刚刚独立核对的最终版本；实例、所有者和业务摘要仍须完全一致。
+        members=[]
+        for member in expected.members:
+            snapshot=restored_resources.get(member.resource_id)
+            if snapshot is not None:
+                import hashlib
+                import json
+                digest=hashlib.sha256(json.dumps(snapshot.data,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+                if (snapshot.generation,snapshot.collection,snapshot.resource_id,snapshot.owner_id,digest)!=(
+                        expected.generation,expected.collection,member.resource_id,member.owner_id,member.data_digest):
+                    raise JiejianError('CREATED_OBJECT_RESTORE_MISMATCH','后续操作的恢复记录与新建对象不一致')
+                reconciled.add(member.resource_id)
+            members.append(member if snapshot is None else member.model_copy(update={'version':snapshot.version}))
+        expected=expected.model_copy(update={'members':tuple(members)})
     for event in entry['created']:
         current=read_record_source(executor.observers.var_dir,executor.bundle.runtime.reference,source.config,
             case.resource_id,request_nonce=executor.web.target_request(case.case_id)[0])
         if (current.generation!=expected.generation or current.watermark!=expected.watermark
-                or current.foreign_mutations or collection_digest(current)!=collection_digest(expected)):
-            raise ValueError('creation resource changed before recovery')
+                or current.foreign_mutations and not {item.member.resource_id for item in entry['created']}<=reconciled
+                or collection_digest(current)!=collection_digest(expected)):
+            raise JiejianError('CREATED_COLLECTION_CHANGED','新建对象集合在恢复前发生了未确认的变化')
         member=next((item for item in current.members if item.resource_id==event.member.resource_id),None)
         if member is None:
             continue
         if member.incarnation!=event.member.incarnation:
-            raise ValueError('creation incarnation changed')
+            raise JiejianError('CREATED_INSTANCE_CHANGED','待恢复的对象实例已经变化')
         recovery=action.recovery
-        if executor.web.verify_identity(recovery.source_subject_identity_id,case,cleanup=True)!='MATCH':
-            raise ValueError('recovery identity mismatch')
-        executor.web.request(recovery.request,case=case,action_id='creation-recovery',identity_id=recovery.source_subject_identity_id,
+        if executor.web.verify_identity(recovery.identity_for(case),case,cleanup=True)!='MATCH':
+            raise JiejianError('CREATION_RECOVERY_IDENTITY_MISMATCH','恢复账号与原安排不一致')
+        executor.web.request(recovery.request,case=case,action_id='creation-recovery',identity_id=recovery.identity_for(case),
             resource_id=member.resource_id,cleanup=True)
         restored=read_record_source(executor.observers.var_dir,executor.bundle.runtime.reference,source.config,
             case.resource_id,request_nonce=executor.web.target_request(case.case_id)[0])
         remaining=tuple(item for item in expected.members if item.resource_id!=member.resource_id)
         if restored.generation!=expected.generation or restored.members!=remaining:
-            raise ValueError('creation recovery did not restore exact collection')
+            raise JiejianError('CREATED_COLLECTION_NOT_RESTORED','移除新建对象后集合未恢复到预期')
         expected=restored

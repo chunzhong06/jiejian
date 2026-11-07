@@ -1,16 +1,20 @@
+from product.backend.interfaces.http.routers.preparation.projections import ProofAdoptionProjection
 # GUI证明准备入口：既受app.py统一中间件保护，也显式要求当前本机会话和写请求同源校验。
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
+from product.backend.interfaces.http.body import read_bounded_body
 import json
 from typing import Annotated,Literal
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
 from pydantic import BeforeValidator,Field,ValidationError
 from product.backend.domain.preparation.suggestions import SavePreparationSuggestion
 from product.backend.application.preparation.proofs.commands import SaveProofSource, StartProofPreflight, GrantProofScope, AdoptProofSource, CancelProofPreflight, RevokeProofScope
+from product.backend.application.preparation.proofs.commands import MaintainDatabaseSource
 from product.backend.application.preparation.proofs.artifact_inputs import UploadProofArtifact,CancelProofArtifact
 from product.backend.application.preparation.proofs.capture_plan import CaptureSelection
 from product.backend.application.preparation.proofs.capture_service import StartReferenceCapture,CancelReferenceCapture
+from product.protocols.preparation.proof_sources import RelationshipSourceMapping
 from product.backend.domain.errors import ErrorCode,JiejianError
 from product.backend.application.preparation.batches import StartPreparationBatch
 
@@ -33,20 +37,6 @@ class SavePreparationSuggestionRequest(ApiModel):
         return SavePreparationSuggestion.model_validate_json(self.model_dump_json())
 
 
-class SqliteCandidateRequest(ApiModel):
-    schema_version:Literal['1']
-    basis_id:str
-    action_id:str
-    effect_id:str
-    resource_binding_id:str
-    database_path:str
-    table:str
-    protected_column:str
-    tenant_column:str|None=None
-    condition_state_column:str|None=None
-    identity_tenant_path:str|None=None
-
-
 def json_command(model):
     # HTTP数组按JSON语义进入冻结tuple；仍严格拒绝数字字符串、未知字段和无效嵌套值。
     def parse(value):
@@ -60,10 +50,66 @@ StartReferenceCaptureBody=Annotated[StartReferenceCapture,json_command(StartRefe
 SaveProofSourceBody=Annotated[SaveProofSource,json_command(SaveProofSource)]
 
 
+class SqliteCandidateRequest(ApiModel):
+    schema_version:Literal['1']
+    basis_id:str
+    action_id:str
+    effect_id:str
+    resource_binding_id:str
+    database_path:str
+    table:str
+    protected_column:str
+    tenant_column:str|None=None
+    condition_state_column:str|None=None
+    identity_tenant_path:str|None=None
+    relationship_mapping:Annotated[RelationshipSourceMapping,json_command(RelationshipSourceMapping)]|None=None
+
+
+class DatabaseCandidateRequest(ApiModel):
+    basis_id:str
+    action_id:str
+    effect_id:str
+    resource_binding_id:str
+    connection_id:str
+    protected_column:str
+    tenant_column:str|None=None
+    condition_state_column:str|None=None
+    identity_tenant_path:str|None=None
+    relationship_mapping:Annotated[RelationshipSourceMapping,json_command(RelationshipSourceMapping)]|None=None
+
+
+from product.protocols.preparation.proof_sources import AsyncExportMapping
+
+
+class FileCandidateRequest(ApiModel):
+    basis_id:str
+    action_id:str
+    effect_id:str
+    resource_binding_id:str
+    collection:str=Field(pattern=r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+    async_export:Annotated[AsyncExportMapping,json_command(AsyncExportMapping)]|None=None
+
+
 def build_proof_sources_router(context):
     router = APIRouter(prefix='/api/projects/{project_id}/proof-preparation',
         dependencies=[Depends(require_local_proof_session)])
     service = context.proof_preparation
+
+    @router.post('/file-candidate',response_model=ApiResponse)
+    def file_candidate(project_id:str,body:FileCandidateRequest):
+        return data_response(service.file_candidate(project_id,**{name:getattr(body,name) for name in type(body).model_fields}).model_dump(mode='json'))
+
+    @router.post('/database-candidate',response_model=ApiResponse)
+    def database_candidate(project_id:str,body:DatabaseCandidateRequest):
+        return data_response(service.database_candidate(project_id,**body.model_dump()).model_dump(mode='json'))
+
+    @router.get('/sources/{source_id}/database-maintenance-preview',response_model=ApiResponse)
+    def maintenance_preview(project_id:str,source_id:str,revision:int,purpose:Literal['INSTALL_DATABASE','REMOVE_DATABASE']):
+        return data_response(service.maintenance_preview(project_id,source_id,revision,purpose))
+
+    @router.post('/database-maintenance',response_model=ApiResponse,status_code=202)
+    def maintenance(project_id:str,body:Annotated[MaintainDatabaseSource,json_command(MaintainDatabaseSource)]):
+        return data_response(service.start(project_id,body),status_code=202)
 
     @router.post('/sqlite-candidate',response_model=ApiResponse)
     def sqlite_candidate(project_id:str,body:SqliteCandidateRequest):
@@ -97,11 +143,8 @@ def build_proof_sources_router(context):
             raise JiejianError(ErrorCode.INPUT_INVALID,'请选择文件上传方式')
         try:command=UploadProofArtifact.model_validate_json(header,strict=True)
         except ValidationError:raise JiejianError(ErrorCode.INPUT_INVALID,'参照文件信息无效') from None
-        content=bytearray()
-        async for chunk in request.stream():
-            if len(content)+len(chunk)>min(command.size,4194304):raise JiejianError(ErrorCode.INPUT_INVALID,'参照文件超出本次声明大小')
-            content.extend(chunk)
-        return data_response(await run_in_threadpool(context.proof_artifacts.upload,project_id,command,bytes(content)))
+        content=await read_bounded_body(request,limit=min(command.size,4194304),message='参照文件超出本次声明大小')
+        return data_response(await run_in_threadpool(context.proof_artifacts.upload,project_id,command,content))
 
     @router.get('/reference-inputs/{asset_id}/file')
     def download_reference(project_id:str,asset_id:str):
@@ -176,9 +219,9 @@ def build_proof_sources_router(context):
     def cancel_preflight(project_id:str,body:CancelProofPreflight):
         return data_response(service.cancel(project_id,body))
 
-    @router.get('/sources/{source_id}/adoption-preview',response_model=ApiResponse)
+    @router.get('/sources/{source_id}/adoption-preview',response_model=ApiResponse[ProofAdoptionProjection])
     def adoption_preview(project_id:str,source_id:str,preflight_id:str):
-        return data_response(service.adoption_preview(project_id,source_id,preflight_id))
+        return data_response(service.adoption_preview(project_id,source_id,preflight_id),projection=ProofAdoptionProjection)
 
     @router.post('/adoptions',response_model=ApiResponse)
     def adopt_source(project_id:str,body:AdoptProofSource):

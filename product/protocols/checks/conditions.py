@@ -2,6 +2,7 @@
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from product.protocols.checks.relationships import RelationshipRequirement, ObservedRelationship
 
 
 class ConditionModel(BaseModel):
@@ -15,6 +16,7 @@ class PermissionConditions(ConditionModel):
     principal: Literal['AUTHENTICATED', 'ANONYMOUS'] = 'AUTHENTICATED'
     tenant: Literal['SAME', 'DIFFERENT'] | None = None
     resource_states: tuple[PublicValue, ...] = Field(default=(), max_length=8)
+    relationships: tuple[RelationshipRequirement, ...] = Field(default=(), max_length=4, exclude_if=lambda value: not value)
 
     @field_validator('resource_states')
     @classmethod
@@ -25,9 +27,13 @@ class PermissionConditions(ConditionModel):
 
     @model_validator(mode='after')
     def meaningful_condition(self):
+        if len({item.kind for item in self.relationships}) != len(self.relationships):
+            raise ValueError('one finite requirement per relationship kind')
+        if self.relationships and self.principal == 'ANONYMOUS':
+            raise ValueError('relationship conditions require an authenticated subject')
         if self.principal == 'ANONYMOUS' and self.tenant is not None:
             raise ValueError('an anonymous principal has no verified tenant')
-        if self.principal == 'AUTHENTICATED' and self.tenant is None and not self.resource_states:
+        if self.principal == 'AUTHENTICATED' and self.tenant is None and not self.resource_states and not self.relationships:
             raise ValueError('use an absent condition for an unconditional authenticated rule')
         return self
 
@@ -41,6 +47,7 @@ class ObservedPermissionConditions(ConditionModel):
     owner_tenant: PublicValue | None = None
     resource_tenant: PublicValue | None = None
     resource_state: PublicValue | None = None
+    relationships: tuple[ObservedRelationship, ...] = Field(default=(), max_length=4, exclude_if=lambda value: not value)
 
     @field_validator('subject_tenant', 'owner_tenant', 'resource_tenant', 'resource_state')
     @classmethod
@@ -67,6 +74,12 @@ def match_permission_conditions(expected, observed):
         if observed.resource_state is None:
             return 'UNKNOWN'
         checks.append(observed.resource_state in expected.resource_states)
+    for requirement in expected.relationships:
+        matches = [item for item in observed.relationships if item.requirement_fingerprint == requirement.fingerprint()
+            and item.kind == requirement.kind]
+        if len(matches) != 1 or matches[0].status == 'UNKNOWN':
+            return 'UNKNOWN'
+        checks.append(matches[0].status == 'MATCH')
     return 'MATCH' if all(checks) else 'MISMATCH'
 
 
@@ -87,4 +100,8 @@ def permission_conditions_overlap(left, right):
         return True
     if left.tenant is not None and right.tenant is not None and left.tenant != right.tenant:
         return False
+    for a in left.relationships:
+        for b in right.relationships:
+            if (a.kind, a.organization_scope, a.inherited_role, a.max_depth) == (b.kind, b.organization_scope, b.inherited_role, b.max_depth) and a.state != b.state:
+                return False
     return not (left.resource_states and right.resource_states and set(left.resource_states).isdisjoint(right.resource_states))

@@ -3,7 +3,6 @@
 .jj-workspace-header .jj-eyebrow { margin-bottom:5px; }
 .jj-workspace-symbol { display:inline-flex; justify-content:center; align-items:center; width:42px; height:42px; border-radius:12px; background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); flex:none; }
 .jj-path { overflow-wrap:anywhere; font-size:var(--text-meta); color:var(--muted); }
-.jj-workspace-header :is(h2,h3) { line-height:1.5; }
 .jj-workspace-header > div { min-width:0; }
 .jj-workspace-header .jj-small { margin-top:6px; }
 @media(max-width:700px) { .jj-workspace-header { padding:22px 20px; flex-wrap:wrap; } .jj-workspace-header > .jj-badge { margin-left:58px; } }

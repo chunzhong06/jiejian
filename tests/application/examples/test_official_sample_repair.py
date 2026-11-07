@@ -26,7 +26,7 @@ def test_fixed_version_validates_original_reference_before_mechanical_switch(tmp
     experience = OfficialSampleExperience(manager, understanding=SimpleNamespace(inspect_source_fingerprint=lambda _: "a" * 64), boundaries=None, identities=None, secret_store=None,
         registry=None, installer=None, bindings=None, preparation=None, changes=SimpleNamespace(submit=submit),
         repairs=SimpleNamespace(resolve=resolve), uow_factory=lambda: nullcontext(SimpleNamespace(environment_operations=SimpleNamespace(list=lambda limit: ([], False)), jobs=SimpleNamespace(list_for_project=lambda _: ()))),
-        var_dir=tmp_path, archive_project=None, development=development)
+        var_dir=tmp_path, archive_project=None, development=development, development_reader=development)
     experience._recovery = SimpleNamespace(read=lambda: (None, None, None, None))
     experience._current = _Experience(runtime=runtime, project_id="sample-repair", scenario_prepared=True)
     with pytest.raises(JiejianError):

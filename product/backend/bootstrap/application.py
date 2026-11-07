@@ -118,9 +118,9 @@ class ApplicationCore:
         from product.backend.application.runtime.setup import NodeRuntimeSetup
         node_provider=lambda:controlled_node_executable(self._base_environment)
         self.runtime_worker=LocalRuntimeSupervisor(self.var_dir,factory,node_executable_provider=node_provider,
-            environment_provider=lambda:dict(self._base_environment))
+            environment_provider=lambda:dict(self._base_environment),database_environment_provider=self.environment_for_secret_names)
         self.node_runtime=NodeRuntimeSetup(self.var_dir,factory,self.application_understanding,self.runtime_worker,
-            node_executable_provider=node_provider,control_origin=control_origin,clock_us=clock_us)
+            node_executable_provider=node_provider,control_origin=control_origin,clock_us=clock_us,secret_store=self.secret_store)
         self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
         from product.backend.application.preparation.supplemental.service import SupplementalMaterialService
         from product.backend.application.changes.observations import CodeObservationService
@@ -174,8 +174,11 @@ class ApplicationCore:
         self.checks = CheckService(uow_factory=factory, var_dir=self.var_dir, preparation=self.preparation,
             business_boundaries=self.business_boundaries, runtime_builder=self.check_runtime_builder,
             registry=self.check_registry, queue=self.job_queue, engine_version=__version__, clock_us=clock_us,
-            source_inspector=self.application_understanding.inspect_source_fingerprint, code_observations=self.code_observations)
+            source_inspector=self.application_understanding.inspect_source_fingerprint, code_observations=self.code_observations,
+            proof_authority=self.proof_preparation.sources_authorized)
         self.check_results = CheckResultReader(var_dir=self.var_dir, uow_factory=factory)
+        from product.backend.application.preparation.business_scenarios import BusinessScenarioService
+        self.business_scenarios=BusinessScenarioService(factory,self.checks,clock_us=clock_us)
         self.check_history = CheckHistoryService(self.check_results,factory)
         self.check_story = CheckStoryBuilder(self.check_results)
         from product.backend.application.changes import CurrentSourceChangeService
@@ -192,8 +195,7 @@ class ApplicationCore:
         from product.backend.application.development.reading import DevelopmentReader
         self.development_reader = DevelopmentReader(factory, results=self.check_results, repairs=self.check_repairs)
         self.development = DevelopmentService(uow_factory=factory, understanding=self.application_understanding,
-            boundaries=self.business_boundaries, changes=self.source_changes, clock_us=clock_us,
-            reading=self.development_reader)
+            boundaries=self.business_boundaries, changes=self.source_changes, clock_us=clock_us)
         self.checks.bind_delivery_recorder(self.development.attach_check_run)
         self.checks.set_revalidation_services(changes=self.source_changes,repairs=self.check_repairs)
         self.check_story.bind_repairs(self.check_repairs)
@@ -205,7 +207,7 @@ class ApplicationCore:
             reader=self.check_results, repairs=self.project_repair)
         from product.backend.application.workspace.reading import WorkspaceCheckReaders
         self.workspace = WorkspaceService(factory, self.business_boundaries, preparation=self.preparation,
-            var_dir=self.var_dir, development=self.development,
+            var_dir=self.var_dir, development=self.development_reader,
             current_checks=WorkspaceCheckReaders(checks=self.checks, reader=self.check_results,
                 changes=self.source_changes, repairs=self.project_repair,
                 source_inspector=self.application_understanding.inspect_source_fingerprint))
@@ -248,7 +250,7 @@ class ApplicationCore:
             self.var_dir, factory, self.job_queue, self.job_attempts,
             targets=self.job_targets, environment_provider=self.environment_for_secret_names,
             clock_us=clock_us,
-            job_authorized=lambda job:self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job) and self.flow_trials.job_authorized(job),
+            job_authorized=lambda job:self.checks.job_authorized(job) and self.proof_preparation.job_authorized(job) and self.reference_captures.job_authorized(job) and self.flow_trials.job_authorized(job),
             identity_cleanup=self.identity_preparations.reconcile_exited,
             capture_publisher=self.reference_captures.jobs,
             trial_publisher=self.flow_trials.jobs,
@@ -294,7 +296,7 @@ class ApplicationCore:
             self.official_experience=NodeOfficialSampleExperience(self.official_samples,runtime=self.node_runtime,
                 understanding=self.application_understanding,boundaries=self.business_boundaries,identities=self.test_identities,
                 identity_preparations=self.identity_preparations,
-                preparation=self.preparation,proofs=self.proof_preparation,artifacts=self.proof_artifacts,installer=self.official_scenario,changes=self.development,
+                preparation=self.preparation,proofs=self.proof_preparation,artifacts=self.proof_artifacts,installer=self.official_scenario,changes=self.development,development_reader=self.development_reader,
                 reader=self.check_results,repairs=self.project_repair,uow_factory=factory,
                 archive_project=self.project_lifecycle.archive,cancel_check=self.checks.cancel,clock_us=clock_us)
         else:
@@ -303,7 +305,7 @@ class ApplicationCore:
                 registry=self.check_registry, installer=self.official_scenario, bindings=self.preparation_bindings,
                 preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
                 uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
-                reader=self.check_results, project_repairs=self.project_repair, development=self.development)
+                reader=self.check_results, project_repairs=self.project_repair, development=self.development, development_reader=self.development_reader)
         from product.backend.application.runtime.ports import ProjectRuntimePorts, RuntimeProvider
         def owns_official_project(project_id):
             with factory() as work:
@@ -319,7 +321,7 @@ class ApplicationCore:
         self.rule_details = BusinessRuleDetails(uow_factory=factory,boundaries=self.business_boundaries,
             preparation=self.preparation,results=self.check_results,source_inspector=self.application_understanding.inspect_source_fingerprint,
             runtime_reader=self.runtime_ports.reference)
-        self.development.bind_runtime_reader(self.runtime_ports.reference)
+        self.development_reader.bind_runtime_reader(self.runtime_ports.reference)
         from product.backend.application.runtime.activation import RuntimeActivationService
         self.runtime_activation = RuntimeActivationService(uow_factory=factory,
             loader=self.runtime_ports.load_delivery, reader=self.runtime_ports.reference,
@@ -347,7 +349,7 @@ class ApplicationCore:
     def _validate_connections(self) -> None:
         """装配结束只核对必需端口；不执行回调，不增加启动目标或秘密访问。"""
         for service in (self.checks, self.source_changes, self.check_story, self.check_registry,
-                        self.check_runtime_builder, self.development, self.workspace):
+                        self.check_runtime_builder, self.development_reader, self.workspace):
             service.validate_connections()
 
     def close(self) -> None:
@@ -370,6 +372,18 @@ class ApplicationCore:
 
     def environment_for_secret_names(self, names) -> dict[str, str]:
         values = self.runtime_secrets.resolve(names)
+        if any(name.startswith('JIEJIAN_DB_') for name in names):
+            from product.backend.infrastructure.runtime.process.controlled.node_owned import read_node_manifest
+            from product.backend.infrastructure.secrets.refs import credential_ref
+            with self.uow_factory() as work:
+                loads=[work.runtime_loads.latest(project.project_id) for project in work.projects.list_all()]
+            for load in loads:
+                if load is None:continue
+                _,manifest=read_node_manifest(self.var_dir,load,verify_files=False)
+                for declaration in manifest.databases:
+                    if declaration.password_env in names:
+                        secret=self.secret_store.read(credential_ref('database',load.project_id,declaration.connection_id))
+                        if secret:values[declaration.password_env]=secret
         values.update(self.official_samples.resolve_secret_names(tuple(name for name in names if name not in values)))
         values.update(self.check_credentials.resolve(tuple(name for name in names if name not in values)))
         for name in names:

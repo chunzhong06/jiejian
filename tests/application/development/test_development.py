@@ -41,8 +41,8 @@ def test_create_replay_conflict_and_one_active_task(development):
         service.create(harness.project_id, **{**values, "goal": "新的目标"})
     with pytest.raises(JiejianError, match="未结束任务"):
         service.create(harness.project_id, **{**values, "operation_id": uuid4().hex})
-    assert len(service.list(harness.project_id)) == 1
-    assert service.receipt("other", "CREATE", key) is None
+    assert len(harness.core.development_reader.list(harness.project_id)) == 1
+    assert harness.core.development_reader.receipt("other", "CREATE", key) is None
 
 
 def test_same_source_history_is_visible_without_inventing_delivery_link(development):
@@ -65,8 +65,8 @@ def test_same_source_history_is_visible_without_inventing_delivery_link(developm
         ]):
             work.runs.add(RunRecord(run_id=run_id,project_id=harness.project_id,request_hash='a'*64,plan_fingerprint='b'*64,source_fingerprint=fingerprint,policy_epoch=epoch,engine_version='test',lifecycle=RunLifecycle.COMPLETED,verdict=RunVerdict.PASS,created_at_us=created,updated_at_us=created,finished_at_us=created))
         work.commit()
-    service._reader._results=SimpleNamespace(status=lambda run_id,project_id:SimpleNamespace(result_integrity='VALID'))
-    result=service.delivery_verification(harness.project_id,receipt.delivery_id)
+    harness.core.development_reader._results=SimpleNamespace(status=lambda run_id,project_id:SimpleNamespace(result_integrity='VALID'))
+    result=harness.core.development_reader.delivery_verification(harness.project_id,receipt.delivery_id)
     assert result['run_id'] is None and result['same_source_run_id']==expected
     assert result['verdict'] is None
     with harness.core.uow_factory() as work:
@@ -80,7 +80,7 @@ def test_concurrent_same_key_returns_one_persistent_task(development):
         calls = [executor.submit(service.create, harness.project_id, operation_id=key, title="并发请求", goal="同一任务") for _ in range(2)]
         receipts = [call.result(timeout=20) for call in calls]
     assert receipts[0] == receipts[1]
-    assert len(service.list(harness.project_id)) == 1
+    assert len(harness.core.development_reader.list(harness.project_id)) == 1
 
 
 def test_two_deliveries_keep_relative_and_cumulative_start_and_replay_after_source_changes(development):
@@ -123,8 +123,8 @@ def test_receipt_failure_rolls_back_understanding_change_delivery_and_task(devel
     with pytest.raises(RuntimeError, match="receipt failure"):
         service.deliver(harness.project_id, accepted.task_id, operation_id=key, expected_version=accepted.task_version,
             context_id=accepted.context_id, reason="回滚验证", submitted_by="Codex test")
-    assert service.receipt(harness.project_id, "DELIVER", key) is None
-    assert service.task(harness.project_id, accepted.task_id).version == accepted.task_version
+    assert harness.core.development_reader.receipt(harness.project_id, "DELIVER", key) is None
+    assert harness.core.development_reader.task(harness.project_id, accepted.task_id).version == accepted.task_version
     assert harness.core.application_understanding.get(harness.project_id) == before
     with harness.core.uow_factory() as work:
         assert work.development.deliveries(harness.project_id, accepted.task_id) == ()
@@ -140,7 +140,7 @@ def test_revision_invalidates_old_context_and_close_has_no_verdict(development):
         service.deliver(harness.project_id, accepted.task_id, operation_id=uuid4().hex,
             expected_version=revised.task_version, context_id=accepted.context_id, reason="旧上下文", submitted_by="Codex test")
     closed = service.finish(harness.project_id, accepted.task_id, operation_id=uuid4().hex, expected_version=revised.task_version)
-    task = service.task(harness.project_id, accepted.task_id)
+    task = harness.core.development_reader.task(harness.project_id, accepted.task_id)
     assert task.status == "CLOSED" and "verdict" not in task.model_dump()
     assert closed.kind == "CLOSE"
     new = service.create(harness.project_id, operation_id=uuid4().hex, title="下一项任务", goal="继续修改")
@@ -157,23 +157,23 @@ def test_delivery_cumulative_diff_paging_and_cancelled_history(development):
     path.write_text("# 第二批\nvalue = 2\n", encoding="utf-8")
     second = service.deliver(harness.project_id, accepted.task_id, operation_id=uuid4().hex,
         expected_version=first.task_version, context_id=accepted.context_id, reason="第二批", submitted_by="Codex test")
-    details = service.delivery_details(harness.project_id, second.change_id)
+    details = harness.core.development_reader.delivery_details(harness.project_id, second.change_id)
     assert details["relative_change"]["modified_paths"] == ["delivery.py"]
     assert details["cumulative_change"]["added_paths"] == ["delivery.py"]
     assert details["verification"]["run_id"] is None
-    page = service.delivery_page(harness.project_id, accepted.task_id, limit=1)
+    page = harness.core.development_reader.delivery_page(harness.project_id, accepted.task_id, limit=1)
     assert page["items"][0]["delivery"]["delivery_id"] == second.delivery_id and page["next_ordinal"] == 2
-    earlier = service.delivery_page(harness.project_id, accepted.task_id, before_ordinal=page["next_ordinal"], limit=1)
+    earlier = harness.core.development_reader.delivery_page(harness.project_id, accepted.task_id, before_ordinal=page["next_ordinal"], limit=1)
     assert earlier["items"][0]["delivery"]["delivery_id"] == first.delivery_id and earlier["next_ordinal"] is None
     service.finish(harness.project_id, accepted.task_id, operation_id=uuid4().hex, expected_version=second.task_version, cancel=True)
     newer = service.create(harness.project_id, operation_id=uuid4().hex, title="下一项任务", goal="继续开发")
-    history = service.history(harness.project_id, limit=1)
+    history = harness.core.development_reader.history(harness.project_id, limit=1)
     assert history["items"][0]["task_id"] == newer.task_id
-    history = service.history(harness.project_id, before_task_id=history["next_task_id"], limit=1)
+    history = harness.core.development_reader.history(harness.project_id, before_task_id=history["next_task_id"], limit=1)
     assert history["items"][0]["status"] == "CANCELLED" and history["items"][0]["title"] == "导出体验优化"
-    assert service.delivery_details("other", second.change_id) is None
+    assert harness.core.development_reader.delivery_details("other", second.change_id) is None
     with pytest.raises(JiejianError):
-        service.history("other", before_task_id=accepted.task_id)
+        harness.core.development_reader.history("other", before_task_id=accepted.task_id)
 
 
 def test_unaccepted_context_and_stale_task_version_do_not_scan(development, monkeypatch):
@@ -199,7 +199,7 @@ def test_new_service_recovers_receipt_without_scanning_again(development, monkey
     def forbidden(*args, **kwargs):
         raise AssertionError("replay must not scan")
     monkeypatch.setattr(harness.core.source_changes, "prepare_change", forbidden)
-    assert restored.receipt(harness.project_id, "DELIVER", args["operation_id"]) == saved
+    assert harness.core.development_reader.receipt(harness.project_id, "DELIVER", args["operation_id"]) == saved
     assert restored.deliver(harness.project_id, accepted.task_id, **args) == saved
 
 
@@ -255,12 +255,12 @@ def test_runtime_activation_recovers_saved_process_without_loading_twice(develop
 def test_lightweight_registration_creates_context_without_acceptance_and_replays(development, monkeypatch):
     harness, service = development
     preview = service.registration_preview(harness.project_id)
-    assert service.active(harness.project_id) is None
+    assert harness.core.development_reader.active(harness.project_id) is None
     (harness.source_root / "simple.py").write_text("# 修改后才登记。\nvalue = 1\n", encoding="utf-8")
     args = dict(operation_id=uuid4().hex, expected_registration_fingerprint=preview["fingerprint"], submitted_by="MCP · Codex")
     first = service.register_change(harness.project_id, **args)
     assert first.change_id and first.delivery_id
-    assert service.view(harness.project_id, first.task_id)["acceptance"] is None
+    assert harness.core.development_reader.view(harness.project_id, first.task_id)["acceptance"] is None
     def forbidden(*args, **kwargs):
         raise AssertionError("replay must not scan")
     monkeypatch.setattr(harness.core.source_changes, "prepare_change", forbidden)
@@ -281,8 +281,8 @@ def test_lightweight_registration_rolls_back_new_context_with_failed_receipt(dev
     key = uuid4().hex
     with pytest.raises(RuntimeError, match="atomic receipt failure"):
         service.register_change(harness.project_id, operation_id=key, expected_registration_fingerprint=preview["fingerprint"])
-    assert service.active(harness.project_id) is None
-    assert service.receipt(harness.project_id, "DELIVER", key) is None
+    assert harness.core.development_reader.active(harness.project_id) is None
+    assert harness.core.development_reader.receipt(harness.project_id, "DELIVER", key) is None
     assert harness.core.application_understanding.get(harness.project_id) == before
     with harness.core.uow_factory() as work:
         assert work.source_changes.current_changes(harness.project_id) == ()
@@ -296,13 +296,13 @@ def test_lightweight_registration_concurrent_replay_and_stale_preview(developmen
         results = [pool.submit(service.register_change, harness.project_id, **args) for _ in range(2)]
         receipts = [result.result(timeout=25) for result in results]
     assert receipts[0] == receipts[1]
-    assert len(service.list(harness.project_id)) == 1
+    assert len(harness.core.development_reader.list(harness.project_id)) == 1
     with pytest.raises(JiejianError, match="登记范围已变化"):
         service.register_change(harness.project_id, **{**args, "operation_id": uuid4().hex})
     next_preview = service.registration_preview(harness.project_id)
     next_receipt = service.register_change(harness.project_id, operation_id=uuid4().hex,
         expected_registration_fingerprint=next_preview["fingerprint"])
-    details = service.delivery_details(harness.project_id, next_receipt.change_id)
+    details = harness.core.development_reader.delivery_details(harness.project_id, next_receipt.change_id)
     assert details["delivery"]["ordinal"] == 2
     assert details["delivery"]["task_id"] == receipts[0].task_id
 
@@ -320,6 +320,6 @@ def test_lightweight_registration_does_not_overwrite_concurrent_context(developm
         service.register_change(harness.project_id, operation_id=uuid4().hex, expected_registration_fingerprint=preview["fingerprint"])
     with harness.core.uow_factory() as work:
         assert work.source_changes.current_changes(harness.project_id) == ()
-    assert service.view(harness.project_id, service.active(harness.project_id).task_id)["context"]["title"] == "existing client"
+    assert harness.core.development_reader.view(harness.project_id, harness.core.development_reader.active(harness.project_id).task_id)["context"]["title"] == "existing client"
 
 pytestmark = [pytest.mark.level3]

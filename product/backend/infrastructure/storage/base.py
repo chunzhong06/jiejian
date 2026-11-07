@@ -98,6 +98,17 @@ def _canonical_json(value: Any) -> str:
         raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "持久化 JSON 无效") from None
 
 
+def acquire_write_lock(session: Session) -> None:
+    """在读写判定前取得 SQLite 写事务；提交权仍归调用方工作单元。"""
+    try:
+        connection = session.connection()
+        if not connection.connection.driver_connection.in_transaction:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+    except SQLAlchemyError:
+        session.rollback()
+        raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前有其他写操作，请先核对状态") from None
+
+
 def _flush(session: Session) -> None:
     try:
         session.flush()

@@ -34,10 +34,15 @@ it('同一角色的多条条件规则分别对应自己的状态和详情，筛�
     expect(within(archived).getByText(/数据状态：archived/)).toBeVisible();
     expect(within(archived).getByText('负责人不得完成工单')).toBeVisible();
     expect(within(archived).getByText('发现违规')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'收起详情'}));
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    expect(within(archived).getByRole('button')).toHaveFocus();
+    expect(screen.getByRole('region',{name:'权限规则目录'})).toHaveAttribute('data-detail-open','false');
     fireEvent.click(within(archived).getByRole('button'));
+    expect(screen.getByRole('complementary',{name:'负责人不得完成工单'})).toBeVisible();
     expect(screen.getByRole('link',{name:'规则、结果与修改'})).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
     expect(screen.getByRole('link',{name:'规则、结果与修改'})).toHaveAttribute('href',expect.stringContaining('project_id=app'));
-    fireEvent.change(screen.getByRole('textbox',{name:'查找规则'}),{target:{value:'open'}});
+    fireEvent.change(screen.getByRole('searchbox',{name:'查找规则'}),{target:{value:'open'}});
     expect(screen.queryByRole('row',{name:/负责人不得完成工单/})).not.toBeInTheDocument();
     const open=screen.getByRole('row',{name:/负责人可以完成工单/});
     expect(within(open).getByText(/数据状态：open/)).toBeVisible();

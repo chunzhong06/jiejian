@@ -19,6 +19,49 @@ from product.backend.infrastructure.runtime.jobs.models import ClaimJob, Confirm
 NOW_US = 1_790_000_000_000_000
 
 
+def test_capacity_is_atomic_and_preserves_replay_cancel_and_project_scope(worker_services, monkeypatch):
+    from product.backend.infrastructure.storage.execution import jobs as owner
+    monkeypatch.setitem(owner.QUEUE_OPERATION_LIMITS, 'CHECK', 1)
+    barrier = Barrier(2)
+
+    def submit(key):
+        barrier.wait()
+        try:
+            return worker_services.queue.submit(worker_services.submit_request(idempotency_key=key))
+        except JiejianError as exc:
+            return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = tuple(pool.map(submit, ('first', 'second')))
+    accepted = next(item for item in outcomes if not isinstance(item, str))
+    assert ErrorCode.JOB_QUEUE_FULL.value in outcomes
+    assert worker_services.queue.submit(worker_services.submit_request(idempotency_key=accepted.job.idempotency_key)).created is False
+    with StorageUnitOfWork(worker_services.session_factory) as work:
+        full = work.jobs.capacity(accepted.job.project_id, 'CHECK')
+        other = work.jobs.capacity('other-project', 'CHECK')
+        other_kind = work.jobs.capacity(accepted.job.project_id, 'FLOW_TRIAL')
+    assert (full.queued, full.project_queued, full.operation_queued, full.can_submit) == (1, 1, 1, False)
+    assert other.project_queued == other.operation_queued == 0
+    assert other_kind.project_queued == 1 and other_kind.operation_queued == 0
+    with worker_services.engine.connect() as connection:
+        assert connection.execute(text('SELECT count(*) FROM runs')).scalar_one() == 1
+        assert connection.execute(text('SELECT count(*) FROM jobs')).scalar_one() == 1
+    worker_services.queue.request_cancellation(RequestCancellation(job_id=accepted.job.job_id, now_us=NOW_US+1))
+    assert worker_services.queue.capacity(accepted.job.project_id, 'CHECK').can_submit
+    assert worker_services.queue.submit(worker_services.submit_request(idempotency_key='after-cancel')).created
+
+
+@pytest.mark.parametrize('budget', ['QUEUE_GLOBAL_LIMIT', 'QUEUE_PROJECT_LIMIT'])
+def test_shared_capacity_limits_are_independent_of_operation_budget(worker_services, monkeypatch, budget):
+    from product.backend.infrastructure.storage.execution import jobs as owner
+    monkeypatch.setattr(owner, budget, 1)
+    first = worker_services.queue.submit(worker_services.submit_request())
+    with pytest.raises(JiejianError) as failure:
+        worker_services.queue.submit(worker_services.submit_request(idempotency_key='over-limit'))
+    assert failure.value.code == ErrorCode.JOB_QUEUE_FULL.value
+    assert worker_services.queue.submit(worker_services.submit_request()).job.job_id == first.job.job_id
+
+
 def _claim_request(job_id: str, **changes: Any) -> ClaimJob:
     values = {
         "job_id": job_id,

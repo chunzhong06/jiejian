@@ -1,6 +1,8 @@
 """环境与接口来源的控制面适配；导入不执行目标请求或外部脚本。"""
 from typing import Literal
 from fastapi import APIRouter, Query, Request
+from starlette.concurrency import run_in_threadpool
+from product.backend.interfaces.http.body import read_bounded_body
 from pydantic import Field, ValidationError
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
@@ -69,14 +71,12 @@ def build_workbench_router(context):
     @router.post('/api/projects/{project_id}/environments', response_model=ApiResponse)
     async def save_environment(project_id: str, request: Request):
         # 在 HTTP 边界使用 JSON 模式，保留严格协议中数组到元组的解析契约。
-        raw = await request.body()
-        if len(raw) > 32768:
-            raise JiejianError(ErrorCode.INPUT_INVALID, '环境配置过大')
+        raw = await read_bounded_body(request, limit=32768, message='环境配置过大')
         try:
             body = SaveEnvironment.model_validate_json(raw)
         except ValidationError:
             raise JiejianError(ErrorCode.INPUT_INVALID, '环境配置格式不正确') from None
-        return data_response(context.application_environments.save(project_id, body.configuration, expected_revision=body.expected_revision))
+        return data_response(await run_in_threadpool(context.application_environments.save, project_id, body.configuration, expected_revision=body.expected_revision))
 
     @router.post('/api/projects/{project_id}/environments/{environment_id}/activate', response_model=ApiResponse)
     def activate_environment(project_id: str, environment_id: str, body: ActivateEnvironment):
@@ -85,6 +85,10 @@ def build_workbench_router(context):
     @router.get('/api/projects/{project_id}/api-sources', response_model=ApiResponse)
     def sources(project_id: str, source_id: str | None = Query(default=None, pattern=r'^src_[0-9a-f]{32}$')):
         return data_response(context.application_sources.context(project_id, source_id))
+
+    @router.get('/api/projects/{project_id}/api-sources/summary', response_model=ApiResponse)
+    def source_summary(project_id: str):
+        return data_response(context.application_sources.summary(project_id))
 
     @router.post('/api/projects/{project_id}/api-sources/preview', response_model=ApiResponse)
     def preview_source(project_id: str, body: ImportPreview):

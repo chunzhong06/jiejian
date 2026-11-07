@@ -1,6 +1,4 @@
 // 材料建议与真实准备状态分开读取；保存由原Agent完成，GUI只消费精确建议修订。
-import { request } from '../../../shared/api/http'
-export type MaterialSuggestionKind='identity'|'execution'|'resource'|'evidence'|'recovery'
 export type SuggestedMaterial=
   |{kind:'identity';account_requirement:string;slot_id?:string|null;existing_identity_ids?:string[]}
   |{kind:'execution';normal_steps:string[];entry_candidate_id?:string|null;existing_recording_ids?:string[]}
@@ -14,4 +12,3 @@ export type SuggestionItemView={item_id:string;current:boolean;reason_codes?:str
 export type PreparationSuggestionView={suggestion:{project_id:string;suggestion_id:string;revision:number;basis_id:string;submitted_via:'MCP'|'LOCAL_GUI';content:{items:MaterialSuggestion[];unresolved_questions:string[]}};
   state:'CURRENT'|'PARTIAL'|'STALE'|'SUPERSEDED';current_count?:number;review_count?:number;current_basis_id:string;latest_revision:number;items:SuggestionItemView[];review_url:string}
 export type PreparationSuggestionContext={project_id:string;basis_id?:string;state:'CURRENT'|'NEEDS_REFRESH'|'UNAVAILABLE';latest:PreparationSuggestionView|null;note?:string}
-export const preparationSuggestionsApi={show:(projectId:string,id:string,revision?:string|null)=>request<PreparationSuggestionView>(`/api/projects/${encodeURIComponent(projectId)}/proof-preparation/suggestions/${encodeURIComponent(id)}${revision==null?'':`?revision=${encodeURIComponent(revision)}`}`)}

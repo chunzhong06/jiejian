@@ -7,6 +7,10 @@ from __future__ import annotations
 import json
 import logging as stdlib_logging
 import sys
+import re
+from contextlib import contextmanager
+from contextvars import ContextVar
+from uuid import uuid4
 from logging.handlers import RotatingFileHandler
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +20,22 @@ from typing import TextIO
 from product.backend.domain.redaction import redact_known_secrets
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.backend.infrastructure.runtime.generated_files import register_generated_file
+
+_request_trace: ContextVar[str | None] = ContextVar("request_trace", default=None)
+
+
+def request_trace_id(supplied: str | None) -> str:
+    """外部关联只接受短标识；无效值不回显到响应或日志。"""
+    return supplied if supplied and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", supplied) else f"tr_{uuid4().hex}"
+
+
+@contextmanager
+def request_log_context(trace_id: str):
+    token = _request_trace.set(trace_id)
+    try:
+        yield
+    finally:
+        _request_trace.reset(token)
 
 
 class OwnedRotatingFileHandler(RotatingFileHandler):
@@ -49,13 +69,27 @@ class JsonFormatter(stdlib_logging.Formatter):
             "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "component": getattr(record, "component", record.name),
-            "trace_id": getattr(record, "trace_id", self.default_trace_id),
+            "trace_id": getattr(record, "trace_id", _request_trace.get() or self.default_trace_id),
             "run_id": getattr(record, "run_id", None),
             "job_id": getattr(record, "job_id", None),
             "case_id": getattr(record, "case_id", None),
             "event_code": getattr(record, "event_code", None),
             "message": record.getMessage(),
         }
+        # 生命周期日志只接受固定阶段与数值，不透传可能含凭据或业务正文的任意 extra。
+        event = payload["event_code"]
+        if type(event) is str and event in {"STARTUP_STAGE_COMPLETED", "STARTUP_MAINTENANCE_FAILED", "BROWSER_OPEN_COMPLETED"}:
+            elapsed = getattr(record, "elapsed_ms", None)
+            if type(elapsed) in (int, float) and 0 <= elapsed <= sys.float_info.max:
+                payload["elapsed_ms"] = elapsed
+            stage = getattr(record, "stage", None)
+            if event != "BROWSER_OPEN_COMPLETED" and type(stage) is str and stage in {
+                "http_import", "application_assembly", "worker_start", "startup_maintenance",
+            }:
+                payload["stage"] = stage
+            opened = getattr(record, "opened", None)
+            if event == "BROWSER_OPEN_COMPLETED" and type(opened) is bool:
+                payload["opened"] = opened
         if record.exc_info:
             payload["error"] = self.formatException(record.exc_info)
         return json.dumps(

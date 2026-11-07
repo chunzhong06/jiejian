@@ -1,0 +1,10 @@
+.jj-search-field { display:flex; align-items:center; gap:10px; width:100%; min-width:0; min-height:40px; padding-inline:12px 4px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); color:var(--muted); }
+.jj-search-field:hover { border-color:var(--accent); }
+.jj-search-field:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:3px; }
+.jj-search-field > .anticon { flex:none; font-size:var(--text-body); line-height:1; }
+.jj-search-field > input { flex:1; width:0; min-height:38px; padding:8px 0; border:0; border-radius:0; outline:0; box-shadow:none; background:transparent; }
+.jj-search-field > input::-webkit-search-cancel-button { -webkit-appearance:none; }
+.jj-search-clear { flex:none; width:30px; display:grid; place-items:center; }
+.jj-search-clear > .jj-button { width:30px; min-height:30px; padding:0; }
+.jj-search-field[data-embedded=true] { min-height:32px; padding-inline:0; border-color:transparent; background:transparent; }
+.jj-search-field[data-embedded=true] > input { min-height:30px; padding-block:5px; font-size:var(--text-meta); }

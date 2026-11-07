@@ -54,7 +54,7 @@ def test_prepare_file_and_check_real_delivery(tmp_path,origin):
             assert core.reference_captures.start(project,command)==receipt
             core.worker.start()
             status=wait_for(lambda:core.reference_captures.status(project,receipt['result']['capture_id']))
-            assert status['state']=='SUCCEEDED' and status['report']['state']=='CANDIDATE',status
+            assert status['state']=='SUCCEEDED' and status['report']['state']=='CANDIDATE',json.dumps(status,ensure_ascii=False)
             assert status['report']['recovery_verified'] is True
         with core.uow_factory() as work:
             asset=work.proof_artifacts.input(project,receipt['result']['asset_id'])

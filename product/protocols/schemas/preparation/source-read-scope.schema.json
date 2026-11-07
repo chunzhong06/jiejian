@@ -1,5 +1,95 @@
 {
   "$defs": {
+    "DatabaseCapture": {
+      "additionalProperties": false,
+      "properties": {
+        "connection_id": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "database": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Database",
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "POSTGRESQL",
+            "MYSQL"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "host": {
+          "const": "127.0.0.1",
+          "default": "127.0.0.1",
+          "title": "Host",
+          "type": "string"
+        },
+        "namespace": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "owner_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Owner Column",
+          "type": "string"
+        },
+        "password_env": {
+          "pattern": "^JIEJIAN_DB_[A-Z0-9_]{1,64}$",
+          "title": "Password Env",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1024,
+          "title": "Port",
+          "type": "integer"
+        },
+        "resource_column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Resource Column",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Table",
+          "type": "string"
+        },
+        "username": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Username",
+          "type": "string"
+        }
+      },
+      "required": [
+        "connection_id",
+        "engine",
+        "port",
+        "database",
+        "namespace",
+        "username",
+        "password_env",
+        "table",
+        "resource_column",
+        "owner_column",
+        "fields"
+      ],
+      "title": "DatabaseCapture",
+      "type": "object"
+    },
     "SqliteReadSelection": {
       "additionalProperties": false,
       "properties": {
@@ -40,6 +130,15 @@
       "minimum": 0,
       "title": "Created At Us",
       "type": "integer"
+    },
+    "databases": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DatabaseCapture"
+      },
+      "maxItems": 4,
+      "title": "Databases",
+      "type": "array"
     },
     "document_type": {
       "const": "jiejian.source-read-scope",

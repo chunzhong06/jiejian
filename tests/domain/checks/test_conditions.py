@@ -11,6 +11,8 @@ from product.protocols.checks.conditions import PermissionConditions, ObservedPe
 from product.protocols.checks.execution_request import ExecutionAction, PermissionReference
 from tests.support.builders.checks.assurance import permission
 from tests.support.builders.checks.check_plan import prepared_action, plan
+from product.protocols.checks.relationships import (RelationshipRequirement, RelationshipSnapshot,
+    RelationshipGrant, RelationshipEdge, observe_relationship)
 
 
 def conditioned_preparation(*, anonymous=False, state=False):
@@ -114,3 +116,97 @@ def test_a_confirmed_effect_is_only_attributed_to_a_rule_whose_conditions_match(
         effects=(CheckEffectFact(effect_id=proof.effect_id,proof_fingerprint=proof.proof_fingerprint,state='CONFIRMED',
             complete=True,reliable=True,correlated=True,authoritative=True,closure='CLOSED'),),condition_observations=(observed,))
     assert evaluate_check_case(facts).verdict is expected
+
+
+def test_relationship_graph_respects_direction_budget_and_rejects_cycles():
+    snapshot = RelationshipSnapshot(subject_id='alice', owner_id='bob', resource_id='ticket', action='read',
+        observed_at_us=100, subject_organizations=('headquarters',), resource_organization='team',
+        organization_parents=(RelationshipEdge(child='team',parent='department'),
+            RelationshipEdge(child='department',parent='headquarters')))
+    limited = RelationshipRequirement(kind='ORGANIZATION',organization_scope='SUBJECT_ANCESTOR')
+    assert observe_relationship(limited,snapshot).status == 'UNKNOWN'
+    allowed = limited.model_copy(update={'max_depth':2})
+    observed = observe_relationship(allowed,snapshot)
+    assert observed.status == 'MATCH' and observed.path == ('team','department','headquarters')
+    assert observe_relationship(allowed.model_copy(update={'organization_scope':'RESOURCE_ANCESTOR'}),snapshot).status == 'MISMATCH'
+    with pytest.raises(ValueError,match='cyclic'):
+        RelationshipSnapshot.model_validate_json(snapshot.model_dump_json().replace(
+            '"parent":"headquarters"','"parent":"team"'))
+
+
+@pytest.mark.parametrize('time,uncertainty,state,expected',[
+    (10,0,'ACTIVE','MATCH'),(20,0,'EXPIRED','MATCH'),(25,0,'REVOKED','MATCH'),
+    (19,2,'EXPIRED','UNKNOWN'),(9,2,'ACTIVE','UNKNOWN'),(30,0,'ACTIVE','MISMATCH')])
+def test_relationship_validity_uses_actual_half_open_interval_and_revocation(time,uncertainty,state,expected):
+    snapshot = RelationshipSnapshot(subject_id='alice', owner_id='bob', resource_id='ticket',action='read',
+        observed_at_us=time,clock_uncertainty_us=uncertainty,grants=(RelationshipGrant(grant_id='g1',
+            kind='SHARING',grantor_id='bob',grantee_id='alice',resource_id='ticket',actions=('read',),
+            valid_from_us=10,valid_until_us=20,revoked_at_us=25),))
+    assert observe_relationship(RelationshipRequirement(kind='SHARING',state=state),snapshot).status == expected
+
+
+def test_an_active_grant_prevents_old_revocation_from_proving_access_was_removed():
+    revoked = RelationshipGrant(grant_id='old',kind='DELEGATION',grantor_id='bob',grantee_id='alice',
+        resource_id='ticket',actions=('read',),valid_from_us=1,revoked_at_us=5)
+    active = revoked.model_copy(update={'grant_id':'new','revoked_at_us':None})
+    snapshot=RelationshipSnapshot(subject_id='alice',owner_id='bob',resource_id='ticket',action='read',
+        observed_at_us=10,grants=(revoked,active))
+    assert observe_relationship(RelationshipRequirement(kind='DELEGATION',state='REVOKED'),snapshot).status == 'MISMATCH'
+    assert observe_relationship(RelationshipRequirement(kind='DELEGATION'),snapshot).status == 'MATCH'
+
+
+def test_group_sharing_requires_verified_membership_and_fresh_time_bounds():
+    grant=RelationshipGrant(grant_id='shared-group',kind='SHARING',grantor_id='owner',grantee_id='editors',
+        grantee_kind='GROUP',resource_id='ticket',actions=('read',),valid_from_us=1,valid_until_us=20)
+    base=RelationshipSnapshot(subject_id='member',owner_id='owner',resource_id='ticket',action='read',
+        observed_at_us=10,source_time_us=10,grants=(grant,))
+    rule=RelationshipRequirement(kind='SHARING')
+    assert observe_relationship(rule,base).status=='UNKNOWN'
+    assert observe_relationship(rule,base.model_copy(update={'subject_groups':()})).status=='MISMATCH'
+    member=base.model_copy(update={'subject_groups':('editors',)})
+    assert observe_relationship(rule,member).path==('owner','editors','member')
+    assert observe_relationship(rule,member.model_copy(update={'observed_at_us':21})).status=='UNKNOWN'
+    assert observe_relationship(rule,member.model_copy(update={'observed_at_us':6_000_000})).status=='UNKNOWN'
+
+
+def test_missing_or_foreign_relationship_fact_never_satisfies_permission_condition():
+    requirement=RelationshipRequirement(kind='ORGANIZATION')
+    condition=PermissionConditions(relationships=(requirement,))
+    base=dict(proof_fingerprint='a'*64,source_id='psr_'+'1'*32,source_fingerprint='b'*64,principal='AUTHENTICATED')
+    snapshot=RelationshipSnapshot(subject_id='alice',owner_id='bob',resource_id='ticket',action='read',
+        observed_at_us=10,subject_organizations=('team',),resource_organization='team')
+    fact=observe_relationship(requirement,snapshot)
+    assert match_permission_conditions(condition,ObservedPermissionConditions(**base)) == 'UNKNOWN'
+    assert match_permission_conditions(condition,ObservedPermissionConditions(**base,relationships=(fact,))) == 'MATCH'
+    assert match_permission_conditions(condition,ObservedPermissionConditions(**base,
+        relationships=(fact.model_copy(update={'requirement_fingerprint':'f'*64}),))) == 'UNKNOWN'
+    assert permission_conditions_overlap(condition,PermissionConditions(relationships=(requirement.model_copy(update={'state':'ABSENT'}),))) is False
+
+
+def test_relation_projection_uses_verified_identity_and_declared_resource_fields():
+    from product.protocols.preparation.proof_sources import RelationshipSourceMapping
+    from product.backend.infrastructure.observers.checks.relationship_facts import collect_relationship_conditions
+    requirement=RelationshipRequirement(kind='ORGANIZATION')
+    mapping=RelationshipSourceMapping(application_action='read',subject_organizations_path=('organizations',),
+        resource_organization_path=('organization',),scope_complete_path=('complete',))
+    observed=collect_relationship_conditions(requirements=(requirement,),mapping=mapping,
+        identity={'organizations':['team']},resource={'organization':'team','complete':True},subject_id='alice',owner_id='bob',resource_id='ticket',observed_at_us=10)
+    assert observed[0].status == 'MATCH'
+    assert set(observed[0].model_dump()) == {'requirement_fingerprint','kind','status','observed_at_us','path','reason'}
+    assert collect_relationship_conditions(requirements=(requirement,),mapping=None,identity={},resource={},
+        subject_id='alice',owner_id='bob',resource_id='ticket',observed_at_us=10) == ()
+
+
+def test_sql_relationship_projection_decodes_declared_arrays_but_requires_real_time():
+    import json
+    from product.protocols.preparation.proof_sources import RelationshipSourceMapping
+    from product.backend.infrastructure.observers.checks.relationship_facts import collect_relationship_conditions
+    mapping=RelationshipSourceMapping(application_action='read',scope_complete_path=('complete',),
+        grants_path=('grants',),source_time_path=('time',))
+    grant=dict(grant_id='g1',kind='SHARING',grantor_id='owner',grantee_id='member',resource_id='ticket',actions=['read'],valid_from_us=1)
+    resource=dict(complete=1,time=10,grants=json.dumps([grant]))
+    arguments=dict(requirements=(RelationshipRequirement(kind='SHARING'),),mapping=mapping,identity={},resource=resource,
+        subject_id='member',owner_id='owner',resource_id='ticket',observed_at_us=10,sql_values=True)
+    assert collect_relationship_conditions(**arguments)[0].status=='MATCH'
+    for missing in (None,True,'10'):
+        with pytest.raises(ValueError):collect_relationship_conditions(**(arguments|dict(resource=resource|dict(time=missing))))

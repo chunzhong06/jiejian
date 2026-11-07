@@ -11,7 +11,7 @@ export function judgement(action:ActionResultStory){return published[action.judg
 export const judgementLabels={positive:'符合规则',negative:'不符合规则',caution:'尚未确认',neutral:'其他结果'}
 export function subject(action:ActionResultStory){return text(action.fact_comparison.planned_identity.actor_label??action.fact_comparison.planned_identity.label??'测试账号')}
 export function owner(action:ActionResultStory){const identity=action.fact_comparison.planned_resource_owner;return action.permission.relation==='OWNS'?'操作账号本人':action.permission.relation==='SAME_ROLE_OTHER_ACCOUNT'?`另一个${text(identity?.actor_label??'同角色')}账号`:text(identity?.actor_label??identity?.label??'其他账号')}
-export function requirement(action:ActionResultStory){return `${subject(action)}${action.permission.expectation==='ALLOW'?'可以':'不得'}${text(action.display_name)}`}
+export function requirement(action:ActionResultStory){return action.scenario_context?.expected_effect==='ABSENT'&&action.permission.expectation==='ALLOW'?`整批应当拒绝：不得${text(action.display_name)}`:`${subject(action)}${action.permission.expectation==='ALLOW'?'可以':'不得'}${text(action.display_name)}`}
 export function resultTitle(story:ResultStory){
   const issues=story.actions.filter(item=>judgement(item)==='negative').length
   if(story.repair_verification?.verification_scope==='EXTERNAL_OBSERVATION')return {VERIFIED:story.verdict==='PASS'?'原问题与正常对照本次均符合要求':'原问题本次符合，其他范围仍需处理',NOT_VERIFIED:'原问题仍然存在',INCONCLUSIVE:'证据不足，原问题尚未验证',STALE:'权限已变化，需重新核对原问题'}[story.repair_verification.status]

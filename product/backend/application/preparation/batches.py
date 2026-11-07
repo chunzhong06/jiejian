@@ -106,7 +106,13 @@ class PreparationBatchService:
             for item in previous['payload'].get('items',[]) if previous else ():
                 pending=item.get('pending')
                 if pending and work.preparation_recovery.receipt(pending['command']['operation_id'],project_id=project,operation_kind=pending['kind']) is None:
-                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'上次准备步骤回执仍不明确，请先核对原批次')
+                    # 兼容旧版把容量拒绝记为未知的批次；必须同时证明没有接纳任务和业务回执。
+                    rejected = (previous['state']=='BLOCKED' and previous['payload'].get('error',{}).get('code')==ErrorCode.JOB_QUEUE_FULL.value
+                        and pending['kind']=='START_PREFLIGHT' and work.jobs.get_by_idempotency(project,'PROOF_PREFLIGHT',pending['command']['operation_id']) is None)
+                    if not rejected:
+                        raise JiejianError(ErrorCode.STATE_PRECONDITION,'上次准备步骤回执仍不明确，请先核对原批次')
+                    item['pending']=None
+                    work.preparation_batches.save(previous)
             work.preparation_batches.save(value)
             work.commit()
         self.wake.set()
@@ -144,6 +150,10 @@ class PreparationBatchService:
                     before=json.dumps(value,sort_keys=True)
                     try:self._step(value)
                     except JiejianError as exc:
+                        if exc.code==ErrorCode.JOB_QUEUE_FULL.value:
+                            value['payload']['message']='任务队列暂满，等待空位后继续；也可以取消本批准备'
+                            self._save(value,wake=False)
+                            break
                         self._finish(value,'BLOCKED',exc.to_dict()['message'],error=dict(code=exc.code))
                     except Exception as exc:
                         # 只保留代码位置和异常类别；异常正文、源码行和局部变量可能携带目标秘密。
@@ -166,7 +176,7 @@ class PreparationBatchService:
         recipe_wait=any(v['payload'].get('stage')=='RECIPE' for v in active)
         self.wake.wait(.2 if recipe_wait else 2)
 
-    def _save(self, value):
+    def _save(self, value, *, wake=True):
         value['updated_at_us'] = self._clock()
         with self._uow() as work:
             work.acquire_write_lock()
@@ -176,7 +186,7 @@ class PreparationBatchService:
                 if value['state'] in ('RUNNING','SUCCEEDED'):value['state']='CANCELLING'
             work.preparation_batches.save(value)
             work.commit()
-        self.wake.set()
+        if wake:self.wake.set()
 
     def _finish(self, value, state, message, *, error=None):
         value['state'], value['payload']['message'] = state, message
@@ -303,8 +313,8 @@ class PreparationBatchService:
             'ADOPT_SOURCE':(AdoptProofSource,self._proofs.adopt),'CANCEL_PREFLIGHT':(CancelProofPreflight,self._proofs.cancel)}[kind]
         try:receipt=method(value['project_id'],model.model_validate_json(json.dumps(body)))
         except JiejianError as exc:
-            if exc.code in {ErrorCode.STATE_PRECONDITION.value,ErrorCode.INPUT_INVALID.value,ErrorCode.RECORD_NOT_FOUND.value}:
-                item['pending']=None;self._save(value)
+            if exc.code in {ErrorCode.STATE_PRECONDITION.value,ErrorCode.INPUT_INVALID.value,ErrorCode.RECORD_NOT_FOUND.value,ErrorCode.JOB_QUEUE_FULL.value}:
+                item['pending']=None;self._save(value,wake=exc.code!=ErrorCode.JOB_QUEUE_FULL.value)
             raise
         self._accept(value,index,receipt)
 

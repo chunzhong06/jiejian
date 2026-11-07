@@ -58,9 +58,9 @@ def observe_http_entity(owner, *, case, action_id, proof, phase, common, source_
         matched = tuple(path for path in proof.protected_projection if path in target_fields
             and hmac.compare_digest(target_fields[path], baseline[path])) if same_resource else ()
         # 已确认披露不被之后的资源变化覆盖；缺席和正常对照则需要完整、稳定的比较。
-        if matched and (case.permission.expectation == 'DENY' or len(matched) == len(proof.protected_projection)):
+        if matched and (case.expects_absence or len(matched) == len(proof.protected_projection)):
             state, complete = 'CONFIRMED', True
-        elif stable and not target_fields and (same_resource or target.status_code in (401,403)
+        elif stable and not target_fields and (getattr(target,'batch_item_absent',False) or same_resource or target.status_code in (401,403)
                 and isinstance(target.data, dict) and set(target.data) <= {'error','message'}):
             state, complete = 'ABSENT', True
     digest = hashlib.sha256(json.dumps(before, sort_keys=True).encode()).hexdigest() if before else None

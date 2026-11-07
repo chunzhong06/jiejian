@@ -9,7 +9,7 @@ from product.protocols.preparation.proof_artifacts import CaptureId,ArtifactId
 from product.protocols.preparation.proof_sources import ManagedIdentityClaim,proof_fingerprint
 from product.protocols.checks.business_facts import ArtifactManifestReference
 from product.protocols.checks.execution_request import FrozenPermission
-from product.protocols.checks.check_runtime import CheckRuntimeBundle,CheckActionConfig,CheckProofConfig,CheckIdentity,CheckBudget
+from product.protocols.checks.check_runtime import validate_runtime_references,CheckActionConfig,CheckProofConfig,CheckIdentity,CheckBudget
 from product.protocols.web.target import WebTargetScope
 
 
@@ -29,7 +29,7 @@ class CaptureRuntimeConfig(RuntimeModel):
 
     @model_validator(mode='after')
     def runtime_associations(self):
-        CheckRuntimeBundle.validate_references_and_limits(self)
+        validate_runtime_references(self)
         reference = self.runtime_reference
         if (reference.project_id != self.project_id or reference.source_fingerprint != self.source_fingerprint
                 or self.target.base_url != f"http://127.0.0.1:{reference.port}"):

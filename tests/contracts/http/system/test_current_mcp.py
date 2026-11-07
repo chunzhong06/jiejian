@@ -145,7 +145,9 @@ def test_sdk_candidate_projection_errors_are_actionable_and_private(tmp_path):
                     effect["protected_projection"] = ["title", "summary"]
                     assert validator.is_valid(request)
                     saved = await client.call_tool("jiejian_rule_candidate_save", {"project_id": project, "candidate": request})
-                    assert saved.structured_content["assessment"] == "REVIEWABLE"
+                    # 参数格式正确只允许保存；未整理本轮要求仍需人工确认，不能视作可批准。
+                    assert saved.structured_content["assessment"] == "NEEDS_CHANGES"
+                    assert any(item['code'] == 'SCOPE_REQUIRED' for item in saved.structured_content['issues'])
                     assert core.business_boundaries.view(project).policy_epoch == 0
                     # SDK须收到精确修订和字段位置，而不是候选原文或泛泛的返回GUI提示。
                     revision_request = deepcopy(request)
@@ -413,7 +415,7 @@ def test_lightweight_mcp_registration_requires_prepare_without_task_handshake(tm
                 headers={"Authorization": "Bearer " + token, "Origin": TEST_CONTROL_ORIGIN}, follow_redirects=True) as http:
                 async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + "/mcp", http_client=http, terminate_on_close=False)) as client:
                     preview = (await client.call_tool("jiejian_change_registration_preview", {"project_id": project})).structured_content
-                    assert core.development.active(project) is None
+                    assert core.development_reader.active(project) is None
                     payload = dict(project_id=project, operation_id=uuid4().hex, expected_registration_fingerprint=preview["fingerprint"], reason="一次登记")
                     with pytest.raises(MCPError):
                         await client.call_tool("jiejian_change_register", payload)
@@ -421,7 +423,7 @@ def test_lightweight_mcp_registration_requires_prepare_without_task_handshake(tm
                     first = (await client.call_tool("jiejian_change_register", payload)).structured_content
                     replay = (await client.call_tool("jiejian_change_register", payload)).structured_content
                     assert first == replay
-                    assert core.development.view(project, first["task_id"])["acceptance"] is None
+                    assert core.development_reader.view(project, first["task_id"])["acceptance"] is None
                     saved = await client.call_tool("jiejian_receipt_show", {"project_id": project, "kind": "DELIVER", "operation_id": payload["operation_id"]})
                     assert saved.structured_content["receipt"]["change_id"] == first["change_id"]
                     assert str(harness.source_root) not in str(first)
@@ -444,7 +446,7 @@ def test_lightweight_http_registration_contract_and_local_guard(tmp_path):
         first = client.post(base + "/register", json=body)
         assert first.status_code == 201
         assert client.post(base + "/register", json=body).json()["data"] == first.json()["data"]
-        assert core.development.view(project, first.json()["data"]["task_id"])["acceptance"] is None
+        assert core.development_reader.view(project, first.json()["data"]["task_id"])["acceptance"] is None
         client.cookies.clear()
         assert client.post(base + "/register", json={**body, "operation_id": uuid4().hex}).status_code == 403
 

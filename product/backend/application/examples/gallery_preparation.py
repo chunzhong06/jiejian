@@ -1,7 +1,7 @@
 # 官方材料配方分步观察各自受监督的登录进程；取消与未知回执不重新提交目标动作。
 from copy import deepcopy
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.application.examples.gallery_materials import gallery_identities, prepare_gallery_content
+from product.backend.application.examples.gallery_materials import prepare_gallery_content
 
 
 def advance_gallery_preparation(service, project, progress, *, cancel=False):
@@ -11,7 +11,7 @@ def advance_gallery_preparation(service, project, progress, *, cancel=False):
     if not identities:
         if cancel:return dict(value,phase='CANCELLED')
         identities=[dict(identity_id=item.identity_id,account=account,preparation_id=None,state='WAITING')
-                    for item,account in zip(gallery_identities(service,project),('curator','judge'),strict=True)]
+                    for item,account in zip(service.gallery_identities(project),('curator','judge'),strict=True)]
         return dict(value,identities=identities,phase='LOGIN',started_at_us=service.clock())
     state=None if cancel else service.runtime.state(project)
     origin=None if cancel else f"http://127.0.0.1:{state['configuration']['port']}"

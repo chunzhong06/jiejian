@@ -37,7 +37,7 @@ def test_independent_questions_keep_two_choices_history_and_restart(tmp_path):
         _, four = review(client, prefix, three, 1)
         assert four["scenario_decisions"] == original_choices
         assert four["candidate"]["content"] == two["candidate"]["content"]
-        assert four["candidate"]["schema_version"] == "6"
+        assert four["candidate"]["schema_version"] == "1"
         assert len([item for item in four["issues"] if item["code"] == "RULE_KIND_UNSUPPORTED"]) == 3
         assert propose(client, prefix, four).status_code == 409
         for index, outcome in [(2, "PREPARATION_DEPENDENCY"), (3, "EVIDENCE_GAP"), (4, "COVERAGE_GAP")]:
@@ -46,7 +46,7 @@ def test_independent_questions_keep_two_choices_history_and_restart(tmp_path):
         assert len([item for item in gaps if item["message"] in content["unsupported_constraints"]]) == 3
         old = client.get(f"{prefix}/rule-candidates/{first['candidate']['candidate_id']}?revision=3").json()["data"]
         assert old["scenario_decisions"] == original_choices
-        assert old["candidate"]["schema_version"] == "6"
+        assert old["candidate"]["schema_version"] == "1"
     with TestClient(create_app(var, start_worker=False, environ={})) as client:
         latest = client.get(f"{prefix}/rule-candidates/{first['candidate']['candidate_id']}").json()["data"]
         assert latest["scenario_decisions"] == original_choices
@@ -160,7 +160,7 @@ def test_legacy_human_review_and_pending_scenarios_remain_project_obligations(tm
         content = scenario_content(); content["unresolved_questions"] = ["登录是否独立建模？"]
         _, first = _save(client, prefix, content)
         _, deferred = decide(client, prefix, first, action="DEFER")
-        assert deferred["candidate"]["schema_version"] == "6"
+        assert deferred["candidate"]["schema_version"] == "1"
         messages = {item["message"] for item in client.get(prefix + "/rule-context").json()["data"]["boundary_review_gaps"]}
         assert {"登录是否独立建模？", content["scenarios"][0]["question"]} <= messages
         _, resolved_scope = review(client, prefix, deferred)
@@ -168,7 +168,7 @@ def test_legacy_human_review_and_pending_scenarios_remain_project_obligations(tm
         assert any(item["message"] == content["scenarios"][0]["question"] for item in gaps)
         assert not any(item["message"] == "登录是否独立建模？" for item in gaps)
         _, resolved_all = decide(client, prefix, resolved_scope)
-        assert resolved_all["candidate"]["schema_version"] == "6"
+        assert resolved_all["candidate"]["schema_version"] == "1"
         resolved_all = confirm_scope(client, prefix, resolved_all)
         gaps=client.get(prefix + "/rule-context").json()["data"]["boundary_review_gaps"]
         assert len(gaps)==1

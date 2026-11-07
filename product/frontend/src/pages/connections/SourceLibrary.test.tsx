@@ -4,6 +4,30 @@ import {SourceLibrary} from './SourceLibrary'
 import {workbenchApi as api,type ApiSource,type ImportPreview,type SourcesContext} from '../../entities/application/api/workbench'
 import {businessBoundariesApi} from '../../entities/permission/api/businessBoundaries'
 
+it('选文件只读取本地内容，预览后无效替换仍保留原候选且不自动接受',async()=>{
+  sessionStorage.clear()
+  vi.spyOn(api,'sources').mockResolvedValue({project_id:'app',sources:[],annotations:[],request_references:[]})
+  vi.spyOn(businessBoundariesApi,'current').mockResolvedValue({actions:[]} as never)
+  const preview=vi.spyOn(api,'preview').mockResolvedValue({candidate_id:'candidate',requests:[],warnings:[],fingerprint:'f'.repeat(64),previous_revision:0,added:[],removed:[],changed:[]})
+  const accept=vi.spyOn(api,'accept')
+  render(<SourceLibrary projectId="app"/>)
+  fireEvent.click(await screen.findByRole('button',{name:'导入接口资料或请求'}))
+  const picker=screen.getByRole('group',{name:'JSON 文件'}),input=picker.querySelector('input[type=file]')!
+  const file=new File(['{}'],'orders.json',{type:'application/json'})
+  Object.defineProperty(file,'text',{value:async()=>'source-content'})
+  fireEvent.change(input,{target:{files:[file]}})
+  await screen.findByRole('button',{name:'更换JSON 文件'})
+  expect(preview).not.toHaveBeenCalled();expect(accept).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'预览并净化'}))
+  await screen.findByRole('heading',{name:'本次变化'})
+  expect(preview).toHaveBeenCalledExactlyOnceWith('app','source-content','OPENAPI',undefined)
+  fireEvent.change(input,{target:{files:[new File(['wrong'],'wrong.txt')]}})
+  expect(screen.getByRole('alert')).toBeVisible()
+  expect(screen.getByText('orders.json')).toBeVisible()
+  expect(screen.getByRole('heading',{name:'本次变化'})).toBeVisible()
+  expect(accept).not.toHaveBeenCalled()
+})
+
 it('来源保存回执未知时读取准确修订，已保存内容不再写入',async()=>{
   const item={item_id:'request',method:'GET',path:'/orders/{id}',label:'订单',pointer:'#/paths/orders/get',parameters:[]}
   const preview:ImportPreview={candidate_id:'candidate',requests:[item],warnings:[],fingerprint:'f'.repeat(64),previous_revision:0,added:['request'],removed:[],changed:[]}

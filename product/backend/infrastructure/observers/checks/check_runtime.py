@@ -74,15 +74,17 @@ class CheckObserverRuntime:
         self._http_entities = {}
         self._trusted_histories = {}
         self._json_histories = {}
+        self._last_record_views = {}
         self._evidence_sources = {}
         self.condition_observations = {}
         self._creation_histories = {}
+        self._async_exports = {}
         self._json_sources = {'json_' + item.source_id[4:]:item for item in bundle.proof_sources}
         self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if environ.get('JIEJIAN_VAR_DIR') else None
 
     def restart_case_baseline(self, case_id: str) -> None:
-        """恢复后的前置观察重新建窗；已返回的证据保留，内部投影不跨恢复动作拼接。"""
-        for collection in (self._envelopes, self._cursors, self._trusted_histories, self._json_histories, self._http_entities):
+        """节点开始或恢复后重新建窗；已返回证据保留，内部投影不跨业务动作拼接。"""
+        for collection in (self._envelopes, self._cursors, self._trusted_histories, self._json_histories, self._http_entities,self._async_exports,self.condition_observations):
             for key in tuple(collection):
                 if key[0] == case_id:
                     del collection[key]

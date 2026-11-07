@@ -35,12 +35,13 @@ class _ManagedRuntime:
 
 
 class LocalRuntimeSupervisor:
-    def __init__(self, var_dir: Path, uow_factory, *, node_executable_provider, environment_provider):
+    def __init__(self, var_dir: Path, uow_factory, *, node_executable_provider, environment_provider,database_environment_provider=None):
         self.var_dir=var_dir.resolve()
         self.control_session_id='rcs_'+uuid4().hex
         self._uow=uow_factory
         self._node=node_executable_provider
         self._environment=environment_provider
+        self._database_environment=database_environment_provider
         self._targets=runtime_load_targets()
         self._attempts=JobAttempts(uow_factory,targets=self._targets)
         self._recovery=JobRecovery(uow_factory,targets=self._targets)
@@ -122,6 +123,11 @@ class LocalRuntimeSupervisor:
                 return
             node=self._node()
             environment=dict(self._environment())
+            from product.backend.infrastructure.runtime.process.controlled.node_owned import read_node_manifest
+            _,manifest=read_node_manifest(self.var_dir,request,verify_files=False)
+            secret_names=tuple(item.password_env for item in manifest.databases)
+            if secret_names and self._database_environment is not None:
+                environment.update(self._database_environment(secret_names))
             environment.setdefault('JIEJIAN_VAR_DIR',str(self.var_dir))
             owner='runtime-worker-'+uuid4().hex
             def before_release(process,controller):
@@ -131,7 +137,7 @@ class LocalRuntimeSupervisor:
                 spawn_python_module(environment,'product.backend.interfaces.worker.runtime',
                     '--var-dir',str(self.var_dir),'--job-id',job.job_id,'--lease-owner',owner,
                     '--control-session-id',self.control_session_id,'--node-executable',str(node),
-                    role=ProcessEnvironmentRole.WORKER,cwd=self.var_dir,
+                    role=ProcessEnvironmentRole.WORKER,cwd=self.var_dir,secret_names=secret_names,
                     tree_name=worker_tree_name(job.job_id,owner),before_release=before_release,
                     stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
                     creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))

@@ -13,7 +13,7 @@ def test_choice_proposal_and_formal_rule_keep_exact_provenance(tmp_path):
     with TestClient(create_app(var, start_worker=False, environ={})) as client:
         project = _project(client, tmp_path/'source'); prefix = f'/api/projects/{project}/business-boundaries'
         _, first = _save(client, prefix, scenario_content())
-        assert first['candidate']['schema_version'] == '6'
+        assert first['candidate']['schema_version'] == '1'
         assert first['assessment'] == 'NEEDS_CHANGES'
         assert propose(client, prefix, first).status_code == 409
         command, selected = decide(client, prefix, first)

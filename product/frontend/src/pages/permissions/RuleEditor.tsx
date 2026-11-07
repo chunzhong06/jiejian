@@ -1,8 +1,8 @@
-import {RuleConditionsEditor} from '../../entities/permission/ui/RuleConditions';
+import {RuleConditionFields, conditionLabels} from '../../entities/permission/ui/RuleConditions';
 import type {PermissionConditions} from '../../entities/permission/api/businessBoundaries';
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import { InitialRules } from './InitialRules';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { businessBoundariesApi as api } from '../../entities/permission/api/businessBoundaries';
 import { ApiError } from '../../shared/api/http';
 import { assertProject } from '../../shared/model/page';
@@ -21,6 +21,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     const state = useRead('rule-maintenance:' + projectId, async () => { const value = await api.maintenanceDraft(projectId); assertProject(value.project_id, projectId); return value; });
     const [changes, setChanges] = useState<Record<string, 'ALLOW' | 'DENY'>>({}), [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(Boolean(sessionStorage.getItem('jiejian.studio.maintenance:' + projectId))), [proposals, setProposals] = useState<string[]>([]), lock = useRef(false);
     const [conditionChanges, setConditionChanges] = useState<Record<string,PermissionConditions | null>>({});
+    const [expandedRule, setExpandedRule] = useState<string | null>(null);
     if (state.loading)
         return <PageSkeleton view="/permissions" title="编辑权限要求"/>;
     if (state.error || !state.data)
@@ -51,12 +52,21 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
           const owner = value.actors.find(actor => actor.item_id === item.resource_owner_actor_item_id);
           const action = value.actions.find(action => action.item_id === item.business_action_item_id);
           const scope = item.relation === 'OWNS' ? '自己的资源' : item.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `其他${text(owner?.display_name ?? '同角色')}账号的资源` : `${text(owner?.display_name ?? '其他角色')}的资源`;
-          return <tr key={item.item_id}>
-            <td><h3>{text(actor?.display_name ?? '当前角色')}{text(action?.display_name ?? '当前业务操作')}</h3><p className="jj-small jj-muted">{scope}</p></td>
-            <td><RuleConditionsEditor value={item.item_id in conditionChanges ? conditionChanges[item.item_id] : item.conditions} relation={item.relation} disabled={busy || uncertain} onChange={conditions => setConditionChanges(current => ({...current, [item.item_id]:conditions}))}/></td>
+          const title = text(actor?.display_name ?? '当前角色') + text(action?.display_name ?? '当前业务操作');
+          const conditions = item.item_id in conditionChanges ? conditionChanges[item.item_id] : item.conditions;
+          const expanded = expandedRule === item.item_id;
+          const editorId = 'rule-conditions-' + item.item_id;
+          return <Fragment key={item.item_id}><tr>
+            <td><h3>{title}</h3><p className="jj-small jj-muted">{scope}</p></td>
+            <td><div className="jj-rule-condition-summary"><span className="jj-small jj-muted">{conditionLabels(conditions).join('，') || '已登录账号'}</span><Button kind="quiet" aria-expanded={expanded} aria-controls={editorId} aria-label={`${expanded ? '收起' : '编辑'}${title}对${scope}的适用条件`} onClick={() => setExpandedRule(expanded ? null : item.item_id)}>{expanded ? '收起条件' : '编辑条件'}</Button></div></td>
             <td><Badge>{item.expectation === 'ALLOW' ? '允许' : '禁止'}</Badge></td>
             <td><Choice aria-label={`调整${actor?.display_name}${action?.display_name}对${scope}的权限`} value={changes[item.item_id] ?? item.expectation} disabled={busy || uncertain} onValueChange={value => setChanges(current => ({ ...current, [item.item_id]: value as 'ALLOW' | 'DENY' }))}><option value="ALLOW">允许</option><option value="DENY">禁止</option></Choice></td>
-          </tr>;
+          </tr>{expanded && <tr className="jj-rule-condition-row"><td colSpan={4}>
+            <section id={editorId} className="jj-rule-condition-editor" aria-label={`${title}对${scope}的适用条件`}>
+              <h3>适用条件</h3>
+              <RuleConditionFields value={conditions} relation={item.relation} disabled={busy || uncertain} onChange={conditions => setConditionChanges(current => ({...current, [item.item_id]:conditions}))}/>
+            </section>
+          </td></tr>}</Fragment>;
         })}</tbody>
       </table></div>{!value.permissions.length && <Empty title="当前没有可调整的访问规则"/>}<label className="jj-field jj-rule-editor-reason"><span>变更理由</span><textarea value={reason} disabled={busy || uncertain} onChange={event => setReason(event.target.value)} placeholder="说明访问要求发生了什么变化"/></label><div className="jj-confirmation-actions jj-form-actions"><Button disabled={busy} onClick={onBack}>返回</Button><Button kind="primary" busy={busy} disabled={!changed || !reason.trim() || uncertain} onClick={() => void act(async () => { const key = 'jiejian.studio.maintenance:' + projectId; sessionStorage.setItem(key, 'pending'); try {
         const proposal = await api.createMaintenanceProposal(projectId, { expected_boundary_state_fingerprint: value.boundary_state_fingerprint, actors: value.actors, actions: value.actions, permissions: value.permissions.map(item => ({ ...item, expectation: changes[item.item_id] ?? item.expectation, ...(item.item_id in conditionChanges ? {conditions:conditionChanges[item.item_id]} : {}) })), provenance: reason.trim() });

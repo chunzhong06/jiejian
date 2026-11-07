@@ -6,7 +6,7 @@ import {repairsApi} from '../../entities/check/api/repairs';
 import './workbench.css';
 import { currentChecksApi } from '../../entities/check/api/currentChecks';
 import { preparationApi } from '../../entities/preparation/api/preparation';
-import { Button } from "../../shared/ui/actions";
+import { Button, ActionLink } from "../../shared/ui/actions";
 import { Heading } from "../../shared/ui/layout";
 import { Badge, Loading, ErrorNote } from "../../shared/ui/feedback";
 import { assertProject, type PageProps } from '../../shared/model/page';
@@ -34,7 +34,7 @@ export function Home({ projectId, name, workspace, experience }: PageProps & {
 }) {
     const material = useRead('home-material:' + projectId, async (signal) => { const value = await preparationApi.get(projectId, signal); assertProject(value.project_id, projectId); return value; });
     const history = useRead('home-history:' + projectId, signal => currentChecksApi.history(projectId, {}, signal));
-    const assets=useRead('home-assets:'+projectId,signal=>Promise.all([workbenchApi.environments(projectId,signal),workbenchApi.sources(projectId,signal),repairsApi.project(projectId)]));
+    const assets=useRead('home-assets:'+projectId,signal=>Promise.all([workbenchApi.environments(projectId,signal),workbenchApi.sourceSummary(projectId,signal),repairsApi.project(projectId)]));
     const environment=assets.data?.[0],sources=assets.data?.[1],issues=assets.data?.[2].tasks.filter(item=>item.status!=='VERIFIED');
     const task = workspace?.primary_task, active = workspace?.active_check, taskView = task ? tasks[task.task_kind] : undefined;
     const running = active && ['QUEUED', 'RUNNING'].includes(active.run.lifecycle);
@@ -62,18 +62,18 @@ export function Home({ projectId, name, workspace, experience }: PageProps & {
           <footer><span className="jj-small jj-muted">{running?'离开页面后，当前检查仍会继续。':stopped?'已保存的资料与报告可以继续查阅。':'沿用当前已确认的规则与资料'}</span><Button kind="primary" disabled={Boolean(task && taskView && !task.can_execute && !running && !stopped)} onClick={() => go(stopped ? '/environment' : destination)}>{running ? '查看进度' : stopped ? '打开示例环境' : taskView?.action ?? '查看权限规则'}<ArrowRightOutlined aria-hidden="true"/></Button></footer>
         </section>
         <div className="jj-home-metrics">
-          <button onClick={()=>go('/permissions')}><span>访问权限</span><strong>{count??'—'}<small>条生效规则</small></strong><small>{workspace?.actions.length??'—'} 项业务动作</small></button>
-          <button onClick={()=>go('/testing')}><span>测试准备</span><strong>{material.data?.actions.length?material.data.actions.filter(item=>item.preparation_complete).length:'—'}<small>{material.data?.actions.length?'/ '+material.data.actions.length+' 项动作':'等待确认权限'}</small></strong><small>{material.data?.preparation_complete?'当前材料已齐备':'按场景补齐所需资料'}</small></button>
-          <button onClick={()=>go('/issues')}><span>待处理问题</span><strong>{issues?.length??'—'}<small>项</small></strong><small>保留原问题与正常对照</small></button>
+          <Button kind="quiet" onClick={()=>go('/permissions')}><span>访问权限</span><strong>{count??'—'}<small>条生效规则</small></strong><small>{workspace?.actions.length??'—'} 项业务动作</small></Button>
+          <Button kind="quiet" onClick={()=>go('/testing')}><span>测试准备</span><strong>{material.data?.actions.length?material.data.actions.filter(item=>item.preparation_complete).length:'—'}<small>{material.data?.actions.length?'/ '+material.data.actions.length+' 项动作':'等待确认权限'}</small></strong><small>{material.data?.preparation_complete?'当前材料已齐备':'按场景补齐所需资料'}</small></Button>
+          <Button kind="quiet" onClick={()=>go('/issues')}><span>待处理问题</span><strong>{issues?.length??'—'}<small>项</small></strong><small>保留原问题与正常对照</small></Button>
         </div>
-        <section className="jj-home-check-history"><div className="jj-section-header"><h2>{focusedResult?'更早的检查':'最近的检查'}</h2><Button kind="quiet" onClick={()=>go('/reports')}>全部报告 <ArrowRightOutlined aria-hidden="true"/></Button></div>{history.error?<ErrorNote error={history.error}/>:history.loading?<Loading/>:recent?.length?<div className="jj-home-check-list">{recent.map(item=><button onClick={()=>go('/reports?run_id='+item.status.run.run_id)} key={item.status.run.run_id}><div><strong>{item.action_labels.join('、')||'权限检查'}</strong><small>{date(item.status.run.created_at_us)}</small></div><Badge tone={item.status.run.verdict==='PASS'?'positive':item.status.run.verdict==='BLOCK'?'negative':'caution'}>{item.status.run.verdict==='PASS'?'符合规则':item.status.run.verdict==='BLOCK'?'存在问题':'待确认'}</Badge><ArrowRightOutlined aria-hidden="true"/></button>)}</div>:<p className="jj-small jj-muted">{focusedResult?'后续检查会持续保留各轮范围和依据。':'尚无检查记录。完成准备后，每轮结果都会保留在这里。'}</p>}</section>
+        <section className="jj-home-check-history"><div className="jj-section-header"><h2 className="jj-title-group">{focusedResult?'更早的检查':'最近的检查'}</h2><Button kind="quiet" onClick={()=>go('/reports')}>全部报告 <ArrowRightOutlined aria-hidden="true"/></Button></div>{history.error?<ErrorNote error={history.error}/>:history.loading?<Loading/>:recent?.length?<div className="jj-home-check-list">{recent.map(item=><Button kind="quiet" onClick={()=>go('/reports?run_id='+item.status.run.run_id)} key={item.status.run.run_id}><div><strong>{item.action_labels.join('、')||'权限检查'}</strong><small>{date(item.status.run.created_at_us)}</small></div><Badge tone={item.status.run.verdict==='PASS'?'positive':item.status.run.verdict==='BLOCK'?'negative':'caution'}>{item.status.run.verdict==='PASS'?'符合规则':item.status.run.verdict==='BLOCK'?'存在问题':'待确认'}</Badge><ArrowRightOutlined aria-hidden="true"/></Button>)}</div>:<p className="jj-small jj-muted">{focusedResult?'后续检查会持续保留各轮范围和依据。':'尚无检查记录。完成准备后，每轮结果都会保留在这里。'}</p>}</section>
       </div>
       <aside className="jj-home-context">
-        <section><header><h2>当前环境</h2>{environmentAddress&&<Badge tone={environment?.endpoint_reachable?'positive':'neutral'}>{environment?.endpoint_reachable?'最近核验可达':environment?.endpoint_reachable===false?'未连通':'待核验'}</Badge>}</header>
+        <section><header><h2 className="jj-title-group">当前环境</h2>{environmentAddress&&<Badge tone={environment?.endpoint_reachable?'positive':'neutral'}>{environment?.endpoint_reachable?'最近核验可达':environment?.endpoint_reachable===false?'未连通':'待核验'}</Badge>}</header>
           {assets.loading?<p className="jj-small jj-muted">正在读取应用资料</p>:<dl className="jj-facts"><div><dt>环境</dt><dd>{environment?.active_environment?.name??'尚未保存环境'}</dd></div>{environmentAddress&&<div><dt>目标地址</dt><dd className="jj-mono">{environmentAddress}</dd></div>}<div><dt>源码</dt><dd>{environment?.source_available?'已关联本地目录':'尚未关联'}</dd></div>{environment?.active_environment?.deployment_label&&<div><dt>部署声明</dt><dd>{environment.active_environment.deployment_label}<small>版本未核对</small></dd></div>}</dl>}
           <Button kind="quiet" onClick={()=>go('/application?view=environment')}>{environmentAddress?'管理运行环境':'设置运行环境'}<ArrowRightOutlined aria-hidden="true"/></Button>
         </section>
-        <section><header><h2>应用资料</h2></header><nav aria-label="应用资料快捷入口"><a href={'#'+scopedPath('/application?view=sources',projectId)}><span>接口资料</span><span>{sources?sources.sources.reduce((sum,item)=>sum+item.requests.length,0)+' 个请求':'读取中'}<ArrowRightOutlined aria-hidden="true"/></span></a><a href={'#'+scopedPath('/preparation?identities=1',projectId)}><span>身份与会话</span><ArrowRightOutlined aria-hidden="true"/></a><a href={'#'+scopedPath('/preparation?proof_sources=1',projectId)}><span>业务结果证明</span><ArrowRightOutlined aria-hidden="true"/></a></nav></section>
+        <section><header><h2 className="jj-title-group">应用资料</h2></header><nav aria-label="应用资料快捷入口"><ActionLink href={'#'+scopedPath('/application?view=sources',projectId)}><span>接口资料</span><span>{sources?sources.request_count+' 个请求':'读取中'}<ArrowRightOutlined aria-hidden="true"/></span></ActionLink><ActionLink href={'#'+scopedPath('/preparation?identities=1',projectId)}><span>身份与会话</span><ArrowRightOutlined aria-hidden="true"/></ActionLink><ActionLink href={'#'+scopedPath('/preparation?proof_sources=1',projectId)}><span>业务结果证明</span><ArrowRightOutlined aria-hidden="true"/></ActionLink></nav></section>
         {assets.error&&<ErrorNote error={assets.error}/>}
       </aside>
     </div>{material.error&&<ErrorNote error={material.error}/>}</>;

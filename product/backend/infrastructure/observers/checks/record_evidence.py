@@ -1,5 +1,5 @@
 # 将受控记录投影为已采用字段、身份核对和请求窗；受保护正文与原始nonce不进入Evidence。
-from product.backend.infrastructure.observers.records.record_facts import record_value,request_fact
+from product.backend.infrastructure.observers.records.record_facts import field_value,request_fact,resource_operations
 from product.protocols.checks.business_facts import (FactProofReference,CommittedFieldChange,CommittedStateFact,
     IdentityCheckFact,AnonymousCheckFact,RecordObservationWindow,ObservationFactReference,seal_business_fact)
 
@@ -14,6 +14,7 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
         proofs=(source_ref,),complete=True)
     facts=identity_facts(common,case,proof)
     snapshot=view.snapshot
+    operations=resource_operations(view,config.collection,case.resource_id)
     snapshot_only=phase in {'BASELINE','BEFORE','RECOVERY'}
     before=snapshot if snapshot_only else before
     if before is None:raise ValueError('missing record baseline')
@@ -21,7 +22,7 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
     source_complete=True
     if not snapshot_only:
         if target is None:raise ValueError('missing target receipt')
-        checked=request_fact(before,view,path=path,expected_state=proof.expected_state,
+        checked=request_fact(before,view,path=path,expected_state=proof.expected_state,field_mutation=proof.field_mutation,
             request_nonce=target.request_nonce,request_digest=target.request_digest,
             subject_id='anonymous' if case.subject_test_identity_id is None else claims[case.subject_test_identity_id].application_subject_id,resource_id=case.resource_id,
             owner_id=claims[case.resource_owner_test_identity_id].application_subject_id,collection=config.collection)
@@ -30,10 +31,12 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
         source_complete=(checked.state=='ABSENT' or (checked.state=='CONFIRMED' and view.scope.state=='COMPLETE'))
         if matched:
             current=before.data
-            for operation in view.operations:
+            for operation in operations:
                 final=operation.transitions[-1].after if operation.transitions else current
+                before_present, first = field_value(current,path,allow_missing=proof.field_mutation is not None)
+                after_present, last = field_value(final,path,allow_missing=proof.field_mutation is not None)
                 change=CommittedFieldChange(proof_fingerprint=requirement.proof_fingerprint,path=path,
-                    before=record_value(current,path),after=record_value(final,path))
+                    before=first,after=last,before_present=before_present,after_present=after_present)
                 facts.append(seal_business_fact(**common,collector_kind='CONTROLLED_RECORDS',data=CommittedStateFact(
                     generation=operation.generation,operation_id=operation.operation_id,scope_ordinal=operation.scope_ordinal,
                     before_version=operation.before_version,after_version=operation.after_version,
@@ -41,11 +44,15 @@ def collect_record_evidence(*,source,case,requirement,proof,phase,before,view,ta
                     resource_id=case.resource_id,changes=(change,))))
                 current=final
             source_complete=source_complete and current==snapshot.data
+    before_present, first = field_value(before.data,path,allow_missing=proof.field_mutation is not None)
+    after_present, last = field_value(snapshot.data,path,allow_missing=proof.field_mutation is not None)
     window=RecordObservationWindow(generation=snapshot.generation,before_version=before.version,
-        after_version=snapshot.version,before_value=record_value(before.data,path),after_value=record_value(snapshot.data,path),
+        after_version=snapshot.version,before_value=first,after_value=last,
+        before_present=before_present,after_present=after_present,
         before_operation=before.last_operation_id,after_operation=snapshot.last_operation_id,
         scope_state='MISSING' if snapshot_only or view.scope is None else view.scope.state,
-        operation_count=0 if snapshot_only else len(view.operations),request_matched=matched,
+        operation_count=0 if snapshot_only else len(operations),request_matched=matched,
+        operation_ordinals=() if snapshot_only or tuple(item.scope_ordinal for item in operations)==tuple(range(len(operations))) else tuple(item.scope_ordinal for item in operations),
         source_complete=source_complete,field_path=path)
     reference=ObservationFactReference(proof_fingerprint=requirement.proof_fingerprint,observer_id=proof.observer_id,
         phase=phase,fact_ids=tuple(fact.fact_id for fact in facts),source=source_ref,

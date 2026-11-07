@@ -65,7 +65,8 @@
       "enum": [
         "USABLE",
         "NEEDS_CHANGES",
-        "UNSUPPORTED"
+        "UNSUPPORTED",
+        "COMPLETED"
       ],
       "title": "Assessment",
       "type": "string"
@@ -114,6 +115,16 @@
     "preflight_id": {
       "pattern": "^ppf_[0-9a-f]{32}$",
       "title": "Preflight Id",
+      "type": "string"
+    },
+    "purpose": {
+      "default": "READ",
+      "enum": [
+        "READ",
+        "INSTALL_DATABASE",
+        "REMOVE_DATABASE"
+      ],
+      "title": "Purpose",
       "type": "string"
     },
     "request_fingerprint": {

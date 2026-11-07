@@ -9,7 +9,7 @@ from product.backend.infrastructure.execution.web.check_runtime import CheckWebR
 from product.backend.infrastructure.execution.web.file_entity import FileEntityPolicy
 from product.backend.infrastructure.observers.adapters.json_source import strict_json
 from product.backend.infrastructure.observers.records.record_facts import record_value
-from product.backend.infrastructure.observers.records.record_source import read_record_source
+from product.backend.infrastructure.observers.records.record_source import read_managed_record
 from product.backend.infrastructure.runtime.process.controlled.node_owned import node_corresponds
 from product.backend.infrastructure.runtime.process.controlled.node_locator import controlled_node_executable
 from product.backend.infrastructure.artifacts.capture_guard import capture_inputs_current
@@ -42,7 +42,7 @@ def execute_capture(input,*,var_dir,directory,uow_factory,environ,cancellation_r
     claims={item.identity_id:item for item in plan.resource_source.identity_claims}
     owner=claims[case.resource_owner_test_identity_id].application_subject_id
     def snapshot(cleanup=False):
-        view=read_record_source(var_dir,plan.runtime.runtime_reference,plan.resource_source,case.resource_id,
+        view=read_managed_record(var_dir,plan.runtime.runtime_reference,plan.resource_source,case.resource_id,
             cancelled=(lambda:False) if cleanup else (lambda:not active()))
         if view.snapshot.owner_id!=owner:raise JiejianError(ErrorCode.STATE_PRECONDITION,'取样资源所有者不一致')
         return view.snapshot

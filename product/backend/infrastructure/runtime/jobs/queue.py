@@ -7,10 +7,12 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from uuid import uuid4
 from threading import Event
+import logging
 
 from product.backend.domain.lifecycle import JobState, RunLifecycle
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.storage import JobRecord, RunRecord, StorageUnitOfWork
+from product.backend.infrastructure.runtime.jobs.lookup import require_job
 from product.backend.infrastructure.runtime.jobs.events import append_job_event
 from product.backend.infrastructure.runtime.jobs.models import CancellationResult, JobEventType, JobSubmissionResult, RequestCancellation, SubmitJob, validate_control_request
 from product.backend.infrastructure.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry
@@ -24,7 +26,7 @@ _TERMINAL_JOB_STATES = {
 
 
 class JobQueue:
-    """为未来 API/CLI 提供幂等提交和请求取消。"""
+    """持久化幂等提交、容量查询与取消意图；实际执行仍由 Worker 负责。"""
 
     def __init__(
         self,
@@ -38,6 +40,12 @@ class JobQueue:
 
     def wake(self) -> None:
         self._submitted.set()
+
+    def capacity(self, project_id: str, operation_type: str):
+        with self._new_uow(()) as work:
+            if work.projects.get(project_id) is None:
+                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, '应用不存在')
+            return work.jobs.capacity(project_id, operation_type)
 
     def wait_for_submission(self, timeout: float) -> None:
         """本地通知只缩短等待；外部进程的提交仍由有界轮询发现。"""
@@ -121,6 +129,8 @@ class JobQueue:
                     metadata={"attempt": 0},
                 )
                 work.commit()
+                logging.getLogger("jiejian.runtime.queue").info("job accepted",
+                    extra={"event_code": "JOB_SUBMITTED", "job_id": job.job_id, "run_id": run.run_id})
                 self.wake()
                 return JobSubmissionResult(created=True, job=job, run=run)
         except JiejianError as exc:
@@ -143,7 +153,7 @@ class JobQueue:
         from contextlib import nullcontext
         owns_transaction = work is None
         with self._new_uow(known_secrets) if owns_transaction else nullcontext(work) as work:
-            initial = self._require_job(work, request.job_id)
+            initial = require_job(work, request.job_id)
             self._targets.resolve(initial)
             if initial.state in _TERMINAL_JOB_STATES:
                 if (
@@ -275,11 +285,6 @@ class JobQueue:
             known_secrets=tuple(secret for secret in known_secrets if secret)
         )
 
-    def _require_job(self, work: StorageUnitOfWork, job_id: str) -> JobRecord:
-        job = work.jobs.get(job_id)
-        if job is None:
-            raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
-        return job
 
     def _require_run(self, work: StorageUnitOfWork, run_id: str) -> RunRecord:
         run = work.runs.get(run_id)

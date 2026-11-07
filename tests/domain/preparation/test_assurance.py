@@ -59,6 +59,21 @@ def test_many_permissions_reuse_three_accounts_and_are_order_independent():
             assert item.resource_owner_slot_id in slot.distinct_slot_ids
 
 
+def test_revoked_grant_reuses_account_but_requires_concurrent_normal_control():
+    from product.protocols.checks.conditions import PermissionConditions
+    from product.protocols.checks.relationships import RelationshipRequirement
+    owner=permission(1,subject=OTHER_ACTOR,owner=OTHER_ACTOR)
+    shared=permission(2,subject=ACTOR,owner=OTHER_ACTOR,relation=Relation.OTHER_ROLE).model_copy(update={
+        'conditions':PermissionConditions(relationships=(RelationshipRequirement(kind='SHARING',state='ACTIVE'),))})
+    revoked=permission(3,subject=ACTOR,owner=OTHER_ACTOR,relation=Relation.OTHER_ROLE,
+        expectation=PermissionExpectation.DENY).model_copy(update={
+        'conditions':PermissionConditions(relationships=(RelationshipRequirement(kind='SHARING',state='REVOKED'),))})
+    contract=compile_action_assurance(action(),(owner,shared,revoked))
+    positions={item.permission.intent_id:item for item in contract.identity_requirements.permissions}
+    assert positions[shared.intent_id].subject_slot_id==positions[revoked.intent_id].subject_slot_id
+    assert contract.allow_controls[0].resolved_allow_permission.intent_id==owner.intent_id
+
+
 def test_more_than_twelve_components_use_conservative_distinct_allocation():
     permissions = tuple(permission(i, relation=Relation.SAME_ROLE_OTHER_ACCOUNT) for i in range(1, 8))
     plan = IdentityRequirementPlanner().plan(permissions)

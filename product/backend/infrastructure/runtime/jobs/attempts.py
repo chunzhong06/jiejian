@@ -10,6 +10,7 @@ from secrets import randbelow
 from product.backend.domain.lifecycle import JobState
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.storage import JobRecord, StorageUnitOfWork
+from product.backend.infrastructure.runtime.jobs.lookup import require_job
 from product.backend.infrastructure.runtime.jobs.events import EventMetadata, append_job_event
 from product.backend.infrastructure.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobEventType, JobMutationResult, RetryPolicy, RetryableFailure, RenewLease, WaitingFatalFailure, checked_time_add, compute_retry_available_at, validate_control_request
 from product.backend.infrastructure.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry
@@ -345,7 +346,7 @@ class JobAttempts:
         work: StorageUnitOfWork,
         request: CompleteCancellation | RetryableFailure | FatalFailure,
     ) -> JobRecord:
-        job = self._require_job(work, request.job_id)
+        job = require_job(work, request.job_id)
         if job.state is not JobState.RUNNING:
             if job.state in _TERMINAL_JOB_STATES:
                 raise JiejianError(
@@ -371,7 +372,7 @@ class JobAttempts:
         job_id: str,
         now_us: int,
     ) -> None:
-        job = self._require_job(work, job_id)
+        job = require_job(work, job_id)
         if job.state in _TERMINAL_JOB_STATES:
             raise JiejianError(ErrorCode.JOB_TERMINAL_CONFLICT, "终态任务不能领取")
         if job.state is JobState.RUNNING:
@@ -400,7 +401,7 @@ class JobAttempts:
         *,
         expired_code: ErrorCode,
     ) -> None:
-        job = self._require_job(work, job_id)
+        job = require_job(work, job_id)
         if job.state in _TERMINAL_JOB_STATES:
             raise JiejianError(ErrorCode.JOB_TERMINAL_CONFLICT, "终态任务不能修改")
         if job.state is not JobState.RUNNING:
@@ -440,9 +441,3 @@ class JobAttempts:
         return self._uow_factory(
             known_secrets=tuple(secret for secret in known_secrets if secret)
         )
-
-    def _require_job(self, work: StorageUnitOfWork, job_id: str) -> JobRecord:
-        job = work.jobs.get(job_id)
-        if job is None:
-            raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
-        return job

@@ -1,14 +1,14 @@
 .jj-flow-workspace { min-width:0; container:operation-flow / inline-size; background:transparent; }
-.jj-flow-workspace .jj-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.jj-flow-workspace .jj-form-grid { gap:20px; }
 .jj-flow-workspace > footer { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:20px 0; border-top:1px solid var(--line); }
 .jj-flow-phases { margin:0; padding:0 0 16px; list-style:none; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; border-bottom:1px solid var(--line); }
 .jj-flow-workspace[data-stages="5"] > .jj-flow-phases { grid-template-columns:repeat(5,minmax(0,1fr)); }
 .jj-flow-phases > li { min-width:0; }
 .jj-flow-phases button { display:flex; align-items:center; gap:10px; height:100%; }
 .jj-flow-phases button > span { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:50%; border:1px solid var(--line); font-size:11px; }
-.jj-flow-phases button[aria-current=step] > span { color:var(--accent-ink); border-color:var(--accent); }
+.jj-flow-phases button[aria-current=step] > span { color:var(--selected-ink); border-color:var(--accent); }
 .jj-flow-phases li[data-complete=true] span { color:var(--good); }
-.jj-flow-phases button:disabled { opacity:.55; }
+.jj-flow-phases button:disabled { color:var(--disabled-ink); }
 .jj-flow-body { min-width:0; }
 .jj-flow-start,.jj-flow-participants,.jj-flow-confirm { padding:28px; }
 .jj-flow-start header p,.jj-flow-participants header p,.jj-flow-confirm header p,.jj-flow-section-heading p { color:var(--muted); margin-top:10px; line-height:1.7; }
@@ -21,14 +21,12 @@
 .jj-flow-section-heading { padding:28px 0; }
 .jj-flow-editor { display:grid; grid-template-columns:260px minmax(0,1fr); align-items:stretch; }
 .jj-flow-step-index { min-width:0; padding:0 24px 28px 0; }
-.jj-flow-step-index > h3 { padding:4px 20px 20px; color:var(--muted); font-size:var(--text-meta); }
+.jj-flow-step-index > h3 { padding:4px 20px 20px; color:var(--muted);  }
 .jj-flow-step-index nav { display:grid; gap:0; }
 .jj-flow-step-index nav > button { display:flex; align-items:center; gap:12px; }
 .jj-flow-step-index nav > button div { display:grid; gap:6px; min-width:0; }
 .jj-flow-step-index nav small { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; font-size:var(--text-meta); }
 .jj-flow-step-index nav > button > span { display:grid; place-items:center; width:28px; height:28px; flex-shrink:0; border-radius:50%; border:1px solid var(--line); }
-.jj-flow-step-tools { display:grid; justify-items:start; gap:8px; padding:16px 4px 0; }
-.jj-flow-step-tools > .jj-button { max-width:100%; }
 .jj-flow-step { padding:0 28px 28px; border-left:1px solid var(--line); min-width:0; animation:jj-fade-enter var(--motion-disclosure) var(--ease-enter) both; }
 .jj-flow-step > header { display:flex; align-items:center; justify-content:space-between; gap:20px; min-height:32px; margin-bottom:24px; }
 .jj-flow-request { display:grid; grid-template-columns:120px minmax(0,1fr); gap:16px; }
@@ -50,7 +48,6 @@
   .jj-flow-workspace .jj-form-grid,.jj-flow-context,.jj-flow-editor,.jj-flow-request { grid-template-columns:minmax(0,1fr); }
   .jj-flow-step-index { padding:0 0 24px; }
   .jj-flow-step-index nav { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .jj-flow-step-tools { display:flex; flex-wrap:wrap; }
   .jj-flow-step { border-left:0; border-top:1px solid var(--line); padding:24px 0; }
   .jj-flow-start,.jj-flow-participants { padding:24px 0; }
   .jj-flow-phases .jj-index-item { padding:10px 12px; }
@@ -58,10 +55,6 @@
 @media(prefers-reduced-motion:reduce) { .jj-flow-step { animation:none; } }
 @media(prefers-reduced-motion:no-preference) { .jj-flow-start,.jj-flow-participants,.jj-flow-confirm,.jj-flow-origin-content,.jj-flow-outcomes { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }
 
-.jj-file-button { display:inline-flex; align-items:center; padding:10px 16px; border-radius:var(--radius-control); background:var(--soft); color:var(--ink); font-weight:600; cursor:pointer; }
-.jj-file-button:hover { background:var(--hover); }
-.jj-file-button input { position:absolute; width:1px; height:1px; opacity:0; }
-.jj-file-button:focus-within { outline:2px solid var(--accent); outline-offset:3px; }
 
 .jj-flow-inputs { margin-top: 28px; }
 .jj-flow-inputs > header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; border-bottom:1px solid var(--line); }

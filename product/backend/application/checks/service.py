@@ -26,6 +26,8 @@ from product.backend.application.business_boundaries.candidates.coverage import 
 from product.backend.infrastructure.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
 from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import SubmitJob
+from product.backend.infrastructure.runtime.jobs.models import JobSubmissionResult
+from product.protocols.checks.scenarios import FrozenBusinessScenario,ScenarioReference
 from product.protocols.checks.check_runtime import check_runtime_fingerprint
 from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, FrozenRequirementScope, FrozenCheckSelection, PermissionReference, canonical_execution_request_bytes, content_hash
 
@@ -47,13 +49,21 @@ class CheckPreview(WireModel):
     requirement_scope: tuple[FrozenRequirementScope, ...] = ()
     selection: FrozenCheckSelection | None = None
     omitted_review_gaps: tuple[BoundaryReviewGap, ...] = ()
+    scenario: FrozenBusinessScenario | None = Field(default=None,exclude_if=lambda value:value is None)
+
+
+def _preview_fingerprint(plan, scope, selection):
+    fingerprint = content_hash('ScopedCheckPreview', {'plan': plan,
+        'scope': tuple(item.model_dump(mode='json') for item in scope)}) if scope else plan
+    return content_hash('SelectedCheckPreview', {'preview': fingerprint,
+        'selection': selection.model_dump(mode='json')}) if selection is not None else fingerprint
 
 
 class CheckService:
     """预览只读；提交重验全部当前事实与 expected plan，幂等性绑定完整请求字节。"""
 
     def __init__(self, *, uow_factory, var_dir, preparation, business_boundaries, runtime_builder,
-                 registry, queue, engine_version, source_inspector, clock_us=None, code_observations: CodeObservationService | None = None):
+                 registry, queue, engine_version, source_inspector, clock_us=None, code_observations: CodeObservationService | None = None, proof_authority=None):
         self._uow_factory, self._preparation = uow_factory, preparation
         self._boundaries, self._builder, self._registry = business_boundaries, runtime_builder, registry
         self._queue, self._store = queue, CheckRequestStore(var_dir)
@@ -64,6 +74,24 @@ class CheckService:
         self._changes = self._repairs = None
         self._code_observations = code_observations
         self._delivery_run_attacher = None
+        self._proof_authority=proof_authority or (lambda _project,sources:not sources)
+        self._authority_input=None
+
+    def job_authorized(self,job):
+        """多步骤执行持续核对源码及准确证明授权；只缓存不可变输入，不缓存授权结论。"""
+        if job.run_id is None:return True
+        try:
+            key=(job.job_id,job.request_hash)
+            if self._authority_input is None or self._authority_input[0]!=key:
+                request=self._store.load(job.job_id,expected_hash=job.request_hash)
+                bundle=self._store.load_bundle(job.job_id,expected_hash=request.config_fingerprint)
+                self._authority_input=(key,request,bundle)
+            _,request,bundle=self._authority_input
+            if request.scenario is None:return True
+            return (self._source_inspector(job.project_id)==request.source_fingerprint
+                and self._proof_authority(job.project_id,bundle.proof_sources))
+        except (OSError,ValueError,JiejianError):
+            return False
 
     def set_revalidation_services(self, *, changes: CurrentSourceChangeService, repairs: CurrentRepairService):
         """连接变化与原题读取；同一对象可重申，不能在装配后替换成另一套服务。"""
@@ -99,18 +127,75 @@ class CheckService:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND,"本项目检查不存在")
         return self._queue.request_cancellation(RequestCancellation(job_id=job.job_id,now_us=self._clock()))
 
-    def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None) -> CheckPreview:
+    def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None) -> CheckPreview:
         # 预览只反映本次读取的现场；提交会重新冻结，页面不能直接复用旧请求作为执行授权。
-        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
         return preview
 
-    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None):
+    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
         # 本地锁只避免同实例交错；跨进程的请求唯一性和事务前置条件仍由 JobQueue 核对。
         with self._submission_lock:
-            return self._submit(project_id, expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+            arguments = dict(expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,
+                change_id=change_id, selected_permissions=selected_permissions,
+                external_recheck=external_recheck, scenario_reference=scenario_reference)
+            previous = self._accepted_submission(project_id, **arguments)
+            if previous is not None:
+                return previous
+            try:
+                return self._submit(project_id, **arguments)
+            except JiejianError:
+                # 另一进程可能在本次现场核验期间接受了同一请求；只回读，不重放目标。
+                previous = self._accepted_submission(project_id, **arguments)
+                if previous is not None:
+                    return previous
+                raise
 
-    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None):
-        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+    def _accepted_submission(self, project_id, *, expected_plan_fingerprint, idempotency_key,
+                             change_id, selected_permissions, external_recheck, scenario_reference):
+        with self._uow_factory() as work:
+            job = work.jobs.get_by_idempotency(project_id, 'CHECK', idempotency_key)
+            if job is None:
+                return None
+            request = self._store.load(job.job_id, expected_hash=job.request_hash)
+            fingerprint = _preview_fingerprint(request.plan_fingerprint, request.requirement_scope, request.selection)
+            original_change = request.change_context.change_id if request.change_context else None
+            matches = original_change == change_id
+            if external_recheck is not None:
+                # 合同 reader 核对原 Run/Case/hash；不读取当前材料或执行环境。
+                contract = self._repairs.resolve(project_id, external_recheck.reference)
+                matches = matches and request.external_recheck is not None and request.repair_context is not None
+                if matches:
+                    matches = (request.repair_context.repair_reference == contract.repair_fingerprint
+                        and request.external_recheck.deployment_statement == external_recheck.deployment_statement)
+            else:
+                matches = matches and request.external_recheck is None
+            if request.external_recheck is not None:
+                fingerprint = content_hash('ExternalRecheckPreview', dict(preview=fingerprint,
+                    repair=request.repair_context.repair_reference,
+                    context=request.external_recheck.model_dump(mode='json')))
+            if change_id is not None or external_recheck is not None:
+                matches = matches and selected_permissions is None and scenario_reference is None
+            elif scenario_reference is not None:
+                document = request.scenario.document if request.scenario else None
+                matches = matches and selected_permissions is None and document is not None
+                if document is not None:
+                    matches = matches and (document.id, document.revision) == (scenario_reference.scenario_id, scenario_reference.revision)
+            else:
+                matches = matches and request.scenario is None
+                supplied = None if selected_permissions is None else tuple(sorted({
+                    (item.intent_id, item.revision, item.intent_hash) for item in selected_permissions}))
+                original = None if request.selection is None else tuple(
+                    (item.intent_id, item.revision, item.intent_hash) for item in request.selection.selected)
+                matches = matches and supplied == original
+            if not matches or fingerprint != expected_plan_fingerprint:
+                raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, '同一检查请求标识不能用于不同内容')
+            run = work.runs.get(job.run_id)
+            if run is None or run.project_id != project_id:
+                raise JiejianError(ErrorCode.STORAGE_STATE, '原检查回执关联不完整')
+            return JobSubmissionResult(created=False, job=job, run=run)
+
+    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
+        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
         if not preview.can_execute or request is None or preview.plan_fingerprint != expected_plan_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化",
                 details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint})
@@ -127,7 +212,7 @@ class CheckService:
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
             # 文件准备期间材料仍可能变化；在创建 Run/Job 的同一工作单元内重建计划并比较完整输入。
-            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
             if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
@@ -155,21 +240,49 @@ class CheckService:
                         self._store.remove_if_matches(job_id, request_hash)
                         self._store.remove_if_matches(job_id, request_hash, config_hash=request.config_fingerprint)
                 except (JiejianError, OSError):
-                    logging.getLogger(__name__).warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
+                    logging.getLogger("jiejian.application.checks.service").warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
 
-    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None):
+    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
         # 同次读取共享注册快照，防止计划与运行配置取到两代事实；作用域结束后不缓存授权。
         if work is None:
             with self._uow_factory() as current:
-                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
         with self._registry.read_scope(project_id):
-            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck)
+            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
 
-    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None):
-        if change_id is not None and selected_permissions is not None:
+    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
+        if (change_id is not None or external_recheck is not None) and selected_permissions is not None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "原题复验须保留原问题与正常对照，不能缩小范围。")
         if work.projects.get(project_id) is None:
             raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
+        scenario_document=None
+        if scenario_reference is not None:
+            if change_id is not None or external_recheck is not None or selected_permissions is not None:
+                raise JiejianError(ErrorCode.INPUT_INVALID,'场景有自己的准确规则范围，不能混入其他范围或复验合同')
+            scenario_document=work.business_scenarios.get(project_id,scenario_reference.scenario_id,scenario_reference.revision)
+            if scenario_document is None:
+                raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'场景修订不存在')
+            if not work.business_scenarios.is_reviewed(project_id,scenario_reference.scenario_id,scenario_reference.revision):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在本机审阅并保存这份场景，再执行其中的实验')
+        elif self._repairs is not None and (change_id is not None or external_recheck is not None):
+            references=(external_recheck.reference,) if external_recheck is not None else self._changes.repair_references(project_id,change_id)
+            frozen=[self._repairs.source_request(project_id,reference) for reference in references]
+            scenarios={item.scenario.fingerprint:item.scenario for item in frozen if item.scenario is not None}
+            selections={content_hash('OriginalSelection',None if item.selection is None else item.selection.model_dump(mode='json')):
+                item.selection for item in frozen}
+            if len(selections)>1:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'这些原问题的检查范围不同，请分别保留原题复验')
+            original_selection=next(iter(selections.values()),None)
+            if original_selection is not None:
+                selected_permissions=original_selection.selected
+            if len(scenarios)>1:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'这些原问题来自不同业务场景，请分别保留原题复验')
+            if scenarios:
+                scenario_document=next(iter(scenarios.values())).document
+        if scenario_document is not None:
+            selected_permissions=tuple(PermissionReference(**value) for value in {
+                (item.permission.intent_id,item.permission.revision,item.permission.intent_hash):item.permission.model_dump()
+                for experiment in scenario_document.experiments for invocation in experiment.invocations for item in invocation.items}.values())
         bundle, runtime_reason = None, None
         try:
             bundle = self._builder.build(project_id, work=work, **({} if selected_permissions is None else {"selected_permissions": selected_permissions}))
@@ -180,7 +293,16 @@ class CheckService:
             config_hash = content_hash("UnavailableCheckRuntime", dict(project_id=project_id,
                 registry_fingerprint=None if registration is None else registration.fingerprint, reason=runtime_reason))
         plan = self._preparation.current_plan(project_id, engine_version=self._engine_version, config_fingerprint=config_hash, selected_permissions=selected_permissions)
+        if scenario_document is not None:
+            from product.backend.domain.checks.scenarios import compile_business_scenario
+            plan=compile_business_scenario(plan,scenario_document,bundle)
         gaps = list(plan.gaps)
+        if bundle is not None and plan.scenario is not None:
+            from product.backend.domain.checks.scenarios import scenario_http_budget
+            cost=scenario_http_budget(plan,bundle)
+            if cost is not None and sum(cost)>bundle.budget.max_requests:
+                gaps.extend(CheckPlanGap(action_id=action.action_id,action_revision=action.action_revision,
+                    reason='SCENARIO_REQUEST_BUDGET_INSUFFICIENT') for action in plan.actions)
         if runtime_reason is not None:
             gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
                 reason=runtime_reason) for action in plan.actions)
@@ -219,17 +341,19 @@ class CheckService:
             selection = FrozenCheckSelection(selected=references(selected_keys), added_controls=references(controls-selected_keys),
                 omitted=references({permission_key(item) for item in current}-included), uncovered_requirements=uncovered,
                 pending_review_ids=tuple(sorted({item.issue_id for item in omitted_reviews})))
-        scope_payload = tuple(item.model_dump(mode='json') for item in requirement_scope)
         # 预览指纹还覆盖人工确认的要求范围，避免执行计划相同却漏掉新确认的业务要求。
-        preview_fingerprint = content_hash('ScopedCheckPreview', {'plan': plan.plan_fingerprint, 'scope': scope_payload}) if scope_payload else plan.plan_fingerprint
-        if selection is not None:
-            preview_fingerprint = content_hash('SelectedCheckPreview', {'preview': preview_fingerprint, 'selection': selection.model_dump(mode='json')})
+        preview_fingerprint = _preview_fingerprint(plan.plan_fingerprint, requirement_scope, selection)
         # 未纳入正式权限的真实要求没有action_id，不伪造Case；完整检查在冻结前阻塞。
         can_execute = bundle is not None and not gaps and not boundary_gaps and bool(plan.actions) and count > 0
         request = None
         if can_execute:
             request = self._preparation.build_execution_request(project_id, engine_version=self._engine_version,
                 config_fingerprint=config_hash, budget_fingerprint=bundle.budget.fingerprint(), selected_permissions=selected_permissions)
+            if plan.scenario is not None:
+                values=request.model_dump(mode='json')
+                values.update(actions=[action.model_dump(mode='json',exclude={'gaps'}) for action in plan.actions],
+                    scenario=plan.scenario.model_dump(mode='json'),plan_fingerprint=plan.plan_fingerprint)
+                request=type(request).model_validate_json(json.dumps(values))
             from product.protocols.checks.execution_request import ExecutionRequest
             request = ExecutionRequest(**request.model_dump(exclude={"requirement_scope"}),
                 requirement_scope=requirement_scope, selection=selection)
@@ -266,7 +390,7 @@ class CheckService:
         if external_recheck is not None:
             from product.protocols.checks.execution_request import ExternalRecheckContext
             from product.backend.domain.checks.repair import repair_context
-            if change_id is not None or selected_permissions is not None:
+            if change_id is not None:
                 raise JiejianError(ErrorCode.INPUT_INVALID,'外部原题复验不能混入源码变更或缩小原检查范围')
             contract, source_environment = self._repairs.external_source(project_id,external_recheck.reference)
             if contract.original_policy_epoch != plan.policy_epoch:
@@ -287,4 +411,4 @@ class CheckService:
             boundary_review_gaps=boundary_gaps,
             requirement_scope=requirement_scope, selection=selection, omitted_review_gaps=omitted_reviews,
             plan_fingerprint=preview_fingerprint, action_count=len(plan.actions), case_count=count,
-            actions=plan.actions), request, bundle
+            actions=plan.actions,scenario=plan.scenario), request, bundle

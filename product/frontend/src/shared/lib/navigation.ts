@@ -1,10 +1,11 @@
+import {routeDefinition} from './routes'
 export type Route={path:string;query:URLSearchParams}
 export function readRoute():Route{const [path,query]=(location.hash.slice(1)||'/workspace').split('?');return {path,query:new URLSearchParams(query)}}
 export function scopedPath(path:string,projectId?:string){
   // 路径明确指定的项目不被当前选择覆盖；补默认范围服务应用内页面与保留应用上下文的工具入口，不替代服务端归属校验。
   const [pathname,search]=path.split('?'),query=new URLSearchParams(search)
   const scope=projectId??readRoute().query.get('project_id')??localStorage.getItem('jiejian.studio.project')
-  if(scope&&['/workspace','/permissions','/preparation','/reports','/changes','/application','/tools','/storage','/system','/settings','/testing','/issues'].includes(pathname)&&!query.has('project_id'))query.set('project_id',scope)
+  if(scope&&routeDefinition(pathname)?.scoped&&!query.has('project_id'))query.set('project_id',scope)
   return pathname+(query.size?'?'+query:'')
 }
 export function go(path:string,projectId?:string){location.hash=scopedPath(path,projectId)}

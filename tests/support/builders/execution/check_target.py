@@ -34,19 +34,46 @@ def check_target():
                 if state["identity_mismatch"] and case is not None and case.permission.expectation == "DENY" and token == state.get("deny_token"):
                     subject = "unmapped-subject"
                 return self.reply(200, {"subject_id": subject})
-            return self.reply(200, dict(resource_id="resource-1", workflow_state="DRAFT", value=state["value"]))
+            resource=self.path.rsplit('/',1)[-1] if 'values' in state else 'resource-1'
+            return self.reply(200, dict(resource_id=resource, workflow_state="DRAFT", value=state.get('values',{}).get(resource,state['value'])))
         def do_POST(self):
             case_id = self.headers.get("X-Jiejian-Case-ID")
+            if self.path=='/bulk' and 'batch_strategy' in state:
+                data=json.loads(self.rfile.read(min(int(self.headers.get('Content-Length','0')),8192)))
+                subject=self.headers.get('Authorization','').removeprefix('Bearer credential-')
+                resources=[item['id'] for item in data['items']]
+                allowed=[subject=='3' or key=='resource-'+subject for key in resources]
+                mixed=not all(allowed)
+                for key,permitted in zip(resources,allowed,strict=True):
+                    execute=permitted or state.get('batch_fault')=='UNAUTHORIZED'
+                    if state['batch_strategy']=='ATOMIC' and mixed and state.get('batch_fault')!='PARTIAL_ATOMIC':execute=False
+                    if execute:state['values'][key]='changed'
+                state.setdefault('batch_payloads',[]).append(data)
+                state['target_calls'].append((case_id,self.headers.get('X-Jiejian-Request-ID')))
+                # 单项回归有独立拒绝状态；多项逐条策略只返回整次请求的接收状态。
+                return self.reply(403 if mixed and (len(resources)==1 or state['batch_strategy']=='ATOMIC') else 200,{})
+            if self.path=='/bulk' and 'batch_response_rows' in state:
+                raw=self.rfile.read(min(int(self.headers.get('Content-Length','0')),8192))
+                state.setdefault('batch_payloads',[]).append(json.loads(raw))
+                state['target_calls'].append((case_id,self.headers.get('X-Jiejian-Request-ID')))
+                return self.reply(200,dict(items=state['batch_response_rows']))
             if self.path.startswith("/restore/"):
                 state["recovery_calls"].append(case_id)
                 if state["recovery_fail"] and state["cases"][case_id].permission.expectation == "DENY":
                     return self.reply(500, {})
                 state["value"] = "original"
+                if 'values' in state:state['values'][self.path.rsplit('/',1)[-1]]='original'
                 return self.reply(200, {})
             case = state["cases"][case_id]
             deny = case.permission.expectation == "DENY"
             state["target_calls"].append((case_id, self.headers.get("X-Jiejian-Request-ID")))
             state["caller_pids"].append(int(self.headers.get("X-Jiejian-Runner-PID", "0")))
+            if 'pipeline' in state:
+                stage=state['pipeline'][case_id]
+                permitted=(not deny or state['deny_effect']) and state['value']==('original' if stage=='reviewed' else 'reviewed')
+                if permitted:state['value']=stage
+                state.setdefault('pipeline_events',[]).append((stage,permitted))
+                return self.reply(200 if permitted else 403,{})
             if state["deny_effect"] if deny else state["allow_effect"]:
                 state["value"] = "changed-by-" + case_id
             # 发布链测试在真实 TARGET 完成时落审计事件，保持请求标记与副作用同源。

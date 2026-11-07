@@ -83,3 +83,24 @@ def test_contract_has_strict_six_dimensions_and_stable_plan() -> None:
 def test_permission_rules_use_semantic_observation_requirements() -> None:
     contract = _contract(expectation=PermissionExpectation.DENY, observers=("resource_state",))
     assert contract.rules[0].required_observations == ("resource_state",)
+
+
+@pytest.mark.parametrize('batch',[False,True])
+def test_single_and_batch_rules_preserve_observation_validation(batch):
+    from product.backend.domain.verification.permissions.models import BatchPermissionRule, BatchResourceExpectation
+
+    if batch:
+        model=BatchPermissionRule
+        payload=dict(rule_id='batch',subject_id='viewer',action_id='read',coverage_dimensions=(CoverageDimension.BULK,),resource_expectations=(
+            BatchResourceExpectation(resource_id='first',expectation=PermissionExpectation.ALLOW),
+            BatchResourceExpectation(resource_id='second',expectation=PermissionExpectation.DENY),
+        ))
+    else:
+        model=PermissionRule
+        payload=_contract().rules[0].model_dump(mode='python')
+    valid=model.model_validate({**payload,'required_observations':('z_state','a_state')})
+    assert valid.required_observations==('a_state','z_state')
+    with pytest.raises(ValidationError,match='required_observations must be unique'):
+        model.model_validate({**payload,'required_observations':('same','same')})
+    with pytest.raises(ValidationError,match='bounded requirement IDs'):
+        model.model_validate({**payload,'required_observations':('bad id',)})

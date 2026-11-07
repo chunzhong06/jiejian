@@ -10,7 +10,7 @@
 .jj-change-entry { border-bottom: 1px solid var(--line); }
 .jj-change-entry:last-child { border: 0; }
 .jj-change-select { display: grid; grid-template-columns: 130px minmax(0,1fr) auto 14px; align-items: center; gap: 22px; width: 100%; border: 0; padding:20px 22px; background: transparent; color: var(--ink); text-align: left; }
-.jj-change-select[aria-expanded=true] { background:var(--selected); }
+.jj-change-select[aria-expanded=true] { --ink:var(--selected-ink); --muted:var(--selected-ink); color:var(--selected-ink); background:var(--selected); }
 .jj-change-select > .anticon { color: var(--muted); font-size: var(--text-meta); }
 .jj-change-select[aria-expanded=true] > .anticon { transform: rotate(180deg); }
 .jj-change-time { display: grid; gap: 6px; font-size: var(--text-meta); }

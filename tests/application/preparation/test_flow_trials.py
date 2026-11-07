@@ -15,6 +15,50 @@ def command(core,project,selection,operation=None):
     return StartFlowTrial(selection=selection,plan_hash=preview['plan_hash'],operation_id=operation or uuid4().hex,confirmed=True)
 
 
+def test_directory_summary_preserves_adopted_history_without_flow_body(tmp_path):
+    with external_application(tmp_path) as app:
+        service, project = app.core.operation_flows, app.project_id
+        service.adopt(project, app.flow.id, 1)
+        service.save(project, app.flow.model_copy(update={'revision': 2}))
+        full = service.context(project)
+        from product.backend.interfaces.http.envelope import data_response
+        from product.backend.interfaces.http.routers.preparation.projections import OperationContextProjection
+        assert data_response(full,projection=OperationContextProjection).body == data_response(full).body
+
+        summary = service.context(project, summary=True)
+        assert summary['actions'] == full['actions']
+        assert summary['flows'] == [dict(
+            id=item['document']['id'], revision=item['document']['revision'],
+            business_action_id=item['document']['business_action_id'], action_revision=item['document']['action_revision'],
+            adopted=item['adopted'], in_use=item['in_use'], configuration_current=item['configuration_current'])
+            for item in full['flows']]
+        assert next(item for item in summary['flows'] if item['in_use'])['revision'] == 1
+        assert {item['revision'] for item in summary['flows']} == {1, 2}
+        assert 'recordings' not in summary and 'workflow' not in json.dumps(summary)
+        assert len(json.dumps(summary)) < len(json.dumps(full))
+        assert service.read(project, app.flow.id, 1) == app.flow
+
+
+def test_flow_latest_query_does_not_decode_historical_revisions(tmp_path,monkeypatch):
+    from product.protocols.preparation.operation_flow import OperationFlow
+    with external_application(tmp_path) as app:
+        with app.core.uow_factory() as work:
+            for revision in range(2,42):
+                work.operation_flows.add(app.flow.model_copy(update={'revision':revision}),revision)
+            work.commit()
+        original=OperationFlow.model_validate_json;accepted=[]
+        def decode(raw,**options):
+            value=original(raw,**options);accepted.append(value.revision);return value
+        monkeypatch.setattr(OperationFlow,'model_validate_json',decode)
+        with app.core.uow_factory() as work:
+            latest=work.operation_flows.latest(app.project_id)
+            assert [item['document'].revision for item in latest]==[41]
+            assert accepted==[41]
+            assert work.operation_flows.get(app.flow.id,1)==app.flow
+            assert work.operation_flows.latest_revision(app.project_id,app.flow.id).revision==41
+            assert work.operation_flows.latest_revision('app_'+'f'*32,app.flow.id) is None
+
+
 def test_trial_is_once_and_observations_do_not_adopt_or_decide_permissions(tmp_path):
     with external_application(tmp_path) as app:
         core,project=app.core,app.project_id
@@ -67,7 +111,13 @@ def test_cancel_before_claim_never_sends_target_and_stale_preview_is_rejected(tm
         selection=TrialSelection(flow_id=app.flow.id,revision=1)
         start=command(core,project,selection)
         first=core.flow_trials.start(project,start)
-        cancelled=core.flow_trials.cancel(project,first['request']['trial_id'])
+        catalog = core.agent_capabilities
+        operation = dict(capability='flows.trial.start', title='执行已确认的场景试运行', operation_id=start.operation_id,
+            arguments=start.model_dump(mode='json'), result=first)
+        assert catalog.receipt(project, operation) == first
+        assert any(item['label'] == '受检操作' for item in catalog.describe(project, 'flows.trial.start', start))
+        catalog.cancel_owned(project, [operation])
+        cancelled=core.flow_trials.read(project,first['request']['trial_id'])
         assert cancelled['state']=='CANCELLED' and not cancelled['operation_may_have_run']
         core.worker.start()
         assert app.state['target_calls']==0

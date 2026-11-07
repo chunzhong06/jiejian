@@ -219,6 +219,7 @@ def _effect(effect_id: str, proposed: ProposedEffectItem) -> BusinessEffectDefin
         effect_kind=proposed.effect_kind,
         resource_concept=proposed.resource_concept,
         expected_state=proposed.expected_state,
+        field_mutation=proposed.field_mutation,
         protected_projection=proposed.protected_projection,
         description=proposed.description,
     )

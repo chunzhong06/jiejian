@@ -192,4 +192,92 @@ def test_independent_worker_runner_real_http_and_fenced_publication(check_target
             terminate_process_tree(process, 2) if process.poll() is None else release_process_tree(process)
         container.close()
 
+@pytest.mark.parametrize('forbidden,expected',[(False,RunVerdict.PASS),(True,RunVerdict.BLOCK)])
+def test_business_sequence_uses_same_runner_restores_and_survives_publisher_validation(check_target,tmp_path,forbidden,expected):
+    import hashlib,json
+    from product.backend.domain.errors import JiejianError
+    from product.backend.domain.checks.plan import ProjectCheckPlan,ActionCheckPlan
+    from product.backend.domain.checks.scenarios import compile_business_scenario
+    from product.protocols.checks.scenarios import BusinessScenarioRevision
+    from product.protocols.checks.execution_request import ExecutionRequest,canonical_execution_request_bytes
+    from product.protocols.checks.check_result import CheckAssetReference
+    from product.backend.infrastructure.artifacts.checks.check_validation import validate_check_decisions
+    from types import SimpleNamespace as NS
+    request,bundle,input,environment=execution_configuration(check_target,deny_effect=forbidden)
+    source=ProjectCheckPlan(project_id=request.project_id,source_fingerprint=request.source_fingerprint,policy_epoch=request.policy_epoch,
+        engine_version=request.engine_version,actions=tuple(ActionCheckPlan(**action.model_dump(),gaps=()) for action in request.actions),
+        gaps=(),plan_fingerprint=request.plan_fingerprint)
+    def invocation(expectation):
+        case=next(case for case in request.actions[0].cases if case.permission.expectation==expectation)
+        return dict(id='execute',label='准确规则下的真实动作',items=[dict(id='resource',
+            permission={name:getattr(case.permission,name) for name in ('intent_id','revision','intent_hash')},
+            subject_identity_id=case.subject_test_identity_id,resource_id=case.resource_id)])
+    document=BusinessScenarioRevision.model_validate_json(json.dumps(dict(id='bsc_'+'2'*32,project_id=request.project_id,revision=1,label='换主体实验',
+        experiments=[dict(id='normal',label='正常',kind='NORMAL',invocations=[invocation('ALLOW')]),
+            dict(id='other_subject',label='换主体',kind='CHANGE_SUBJECT',control_experiment_id='normal',invocations=[invocation('DENY')])])))
+    compiled=compile_business_scenario(source,document,bundle)
+    assert not compiled.gaps
+    raw=request.model_dump(mode='json')
+    raw.update(actions=[item.model_dump(mode='json',exclude={'gaps'}) for item in compiled.actions],
+        scenario=compiled.scenario.model_dump(mode='json'),plan_fingerprint=compiled.plan_fingerprint)
+    request=ExecutionRequest.model_validate_json(json.dumps(raw))
+    digest=hashlib.sha256(canonical_execution_request_bytes(request)).hexdigest()
+    input=input.model_copy(update=dict(request_hash=digest,assets=(CheckAssetReference(logical_id='request',sha256=digest),
+        CheckAssetReference(logical_id='runtime',sha256=request.config_fingerprint))))
+    check_target[1]['cases']={case.case_id:case for action in request.actions for case in action.cases}
+    output=CheckExecutor(request,bundle,input,environ=environment,attempt_dir=tmp_path,cancellation_requested=lambda:False).execute()
+    assert output.result.verdict is expected
+    assert len(check_target[1]['target_calls'])==len(output.result.case_results)==2
+    assert check_target[1]['value']=='original'
+    assert all(item.outcome.recovery_verified for item in output.result.case_results)
+    validate_check_decisions(NS(request=request,result=output.result,evidence=output.evidence))
+    from product.backend.infrastructure.artifacts.checks.scenario_progress import read_scenario_journal
+    journal=read_scenario_journal(tmp_path/'scenario-execution.json',request,input)
+    assert all(item.request=='RECEIVED' and item.recovered_cases==item.recovery_intents==item.case_ids for item in journal.nodes)
+    # 即使旧进程已经结束，同一 attempt 也不能因重新构造执行器而重放节点。
+    with pytest.raises(JiejianError):
+        CheckExecutor(request,bundle,input,environ=environment,attempt_dir=tmp_path,cancellation_requested=lambda:False)
+    assert len(check_target[1]['target_calls'])==2
+
+
+@pytest.mark.parametrize('response_kind',['complete','missing','duplicate'])
+def test_http_batch_is_sent_once_preserves_duplicates_and_separates_response_items(check_target,response_kind):
+    """只验证真实 HTTP 适配边界；不把这一项测试当作完整权限判断。"""
+    import json
+    from product.backend.infrastructure.execution.web.check_runtime import CheckWebRuntime
+    from product.protocols.web.request import HttpRequestTemplate
+    from product.protocols.checks.scenarios import ScenarioInvocation
+    request,bundle,_,environment=execution_configuration(check_target)
+    base=next(case for case in request.actions[0].cases if case.permission.expectation=='ALLOW')
+    members=(base,base.model_copy(update=dict(case_id='case_'+'e'*32,resource_id='resource-2')),
+        base.model_copy(update=dict(case_id='case_'+'f'*32)))
+    template=HttpRequestTemplate.model_validate_json(json.dumps(dict(method='POST',path='/bulk',
+        body=dict(kind='JSON',value={'items':[{'id':{'$slot':'resource'},'value':True}]}),
+        input_slots=[dict(slot_id='resource',source='CASE_RESOURCE_ID',consumer='JSON_BODY')])) )
+    action=bundle.actions[0].model_copy(update=dict(steps=tuple(step.model_copy(update=dict(request=template)) if step.purpose=='TARGET' else step for step in bundle.actions[0].steps)))
+    invocation=ScenarioInvocation.model_validate_json(json.dumps(dict(id='batch',label='逐项读取',batch=dict(strategy='PER_ITEM',
+        array_path=['items'],response_items_path='$.items',response_resource_field='resource_id'),items=[dict(id='item-'+str(index),
+        permission={name:getattr(case.permission,name) for name in ('intent_id','revision','intent_hash')},
+        subject_identity_id=case.subject_test_identity_id,resource_id=case.resource_id) for index,case in enumerate(members)])))
+    rows=[dict(resource_id='resource-1',value='first'),dict(resource_id='resource-2',value='second')]
+    check_target[1]['batch_response_rows']=rows if response_kind=='complete' else rows[:1] if response_kind=='missing' else [rows[0],rows[0]]
+    web=CheckWebRuntime(bundle,environ=environment,cancellation_requested=lambda:False)
+    group=dict(invocation=invocation,cases=members,before_others=lambda _actual:None)
+    web._batch_groups.update({case.case_id:group for case in members})
+    try:
+        responses=[web.execute_flow(action,case,verify_identity=True)[1] for case in members]
+        assert len(check_target[1]['target_calls'])==1
+        assert [item['id'] for item in check_target[1]['batch_payloads'][0]['items']]==['resource-1','resource-2','resource-1']
+        assert all(web.target_attempted(case.case_id) for case in members)
+        if response_kind=='complete':
+            assert [item.data['value'] for item in responses]==['first','second','first']
+            assert b'second' not in responses[0].body
+        elif response_kind=='missing':
+            assert responses[1].batch_item_absent and not responses[0].batch_item_absent
+        else:
+            assert all(item.data=={} and not item.batch_item_absent for item in responses)
+    finally:
+        web.close()
+
+
 pytestmark = [pytest.mark.level4]

@@ -99,6 +99,13 @@ def sorted_unique_values(values: tuple[str, ...], field_name: str) -> tuple[str,
     return tuple(sorted(values))
 
 
+
+def _required_observations(values: tuple[str, ...]) -> tuple[str, ...]:
+    if any(not re.fullmatch(INTENT_TEXT_PATTERN, value) for value in values):
+        raise ValueError("required_observations must contain bounded requirement IDs")
+    return sorted_unique_values(values, "required_observations")
+
+
 def validate_intent_text(value: str, field_name: str) -> str:
     """拒绝权限格式禁止的字面量；不作为通用秘密检测器。"""
     if _SECRET_OR_URL.search(value):
@@ -237,9 +244,7 @@ class PermissionRule(PermissionModel):
     @field_validator("required_observations")
     @classmethod
     def normalize_observations(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not re.fullmatch(INTENT_TEXT_PATTERN, value) for value in values):
-            raise ValueError("required_observations must contain bounded requirement IDs")
-        return sorted_unique_values(values, "required_observations")
+        return _required_observations(values)
 
     @field_validator("coverage_dimensions")
     @classmethod
@@ -286,9 +291,7 @@ class BatchPermissionRule(PermissionModel):
     @field_validator("required_observations")
     @classmethod
     def normalize_batch_observations(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not re.fullmatch(INTENT_TEXT_PATTERN, value) for value in values):
-            raise ValueError("required_observations must contain bounded requirement IDs")
-        return sorted_unique_values(values, "required_observations")
+        return _required_observations(values)
 
     @field_validator("coverage_dimensions")
     @classmethod

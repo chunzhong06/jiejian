@@ -1,0 +1,22 @@
+/* 曲线与半径分别维护；不支持 corner-shape 的浏览器继续使用原圆角。
+   Web 超椭圆是连续转角近似，不宣称等同苹果原生 continuous 曲线。 */
+@supports (corner-shape: superellipse(1.5)) {
+  :where(.jj-app, .jj-dialog, .jj-choice-menu, .jj-command-menu, .jj-example-menu, .jj-hint),
+  :where(.jj-app, .jj-dialog, .jj-choice-menu, .jj-command-menu, .jj-example-menu, .jj-hint) * {
+    corner-shape: superellipse(1.5);
+  }
+
+  /* 遮罩沿用宿主轮廓，避免悬停时在连续转角上露出普通圆弧。 */
+  :where(.jj-app, .jj-dialog, .jj-choice-menu, .jj-command-menu, .jj-example-menu, .jj-hint) ::before,
+  :where(.jj-app, .jj-dialog, .jj-choice-menu, .jj-command-menu, .jj-example-menu, .jj-hint) ::after {
+    corner-shape: inherit;
+  }
+
+  /* 圆形承载单选、进度及编号语义，不随矩形控件改成超椭圆。 */
+  :where(input[type=radio], progress, .jj-trace-order, .jj-working-dot, .jj-capability-marker, .jj-collaboration-state,
+    .jj-flow-phases button > span, .jj-flow-step-index nav > button > span,
+    .jj-flow-trial-outline > li > span, .jj-login-stages > li > span:first-child,
+    .jj-proof-stages > li > span, .jj-repair-task-progress li > span) {
+    corner-shape: round;
+  }
+}

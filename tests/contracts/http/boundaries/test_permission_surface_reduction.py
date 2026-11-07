@@ -32,9 +32,12 @@ def test_old_governance_and_execution_profile_routes_are_absent(tmp_path: Path) 
     assert "/api/runs/{run_id}/result-story" in paths
 
 
-def test_internal_execution_profile_storage_remains_registered() -> None:
-    assert "execution_profiles" in Base.metadata.tables
-    assert "contract_versions" in Base.metadata.tables
+def test_current_storage_excludes_retired_contract_and_execution_profiles() -> None:
+    from product.backend.infrastructure.storage.orm_registry import load_storage_orm_mappings
+    load_storage_orm_mappings()
+    assert "permission_intent_revisions" in Base.metadata.tables
+    assert "execution_profiles" not in Base.metadata.tables
+    assert "contract_versions" not in Base.metadata.tables
     assert "requirements" not in Base.metadata.tables
     assert "contract_candidates" not in Base.metadata.tables
 

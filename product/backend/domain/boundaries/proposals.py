@@ -11,11 +11,12 @@ from typing import Any, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, EFFECT_ID_PATTERN, BoundaryModel, BusinessActionOperationKind, BusinessRevisionState, boundary_sha256
+from product.backend.domain.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, EFFECT_ID_PATTERN, BoundaryModel, BusinessActionOperationKind, BusinessRevisionState, boundary_sha256, trimmed_text
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation
 from product.backend.domain.boundaries.semantics import PermissionExpectation, BusinessEffectKind
 from product.protocols.checks.conditions import PermissionConditions
+from product.protocols.checks.field_mutation import FieldMutationRequirement
 
 
 PROPOSAL_ID_PATTERN = r"^bpr_[0-9a-f]{32}$"
@@ -43,10 +44,6 @@ class BoundaryDecisionKind(StrEnum):
     REJECTED = "REJECTED"
 
 
-def _text(value: str, field_name: str) -> str:
-    if value != value.strip() or (not value and field_name != 'description') or any(ord(char) < 32 for char in value):
-        raise ValueError(f"{field_name} must be trimmed printable text")
-    return value
 
 
 class CandidateSourceSnapshot(BoundaryModel):
@@ -97,6 +94,7 @@ class ProposedEffectItem(BoundaryModel):
     effect_kind: BusinessEffectKind
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
+    field_mutation: FieldMutationRequirement | None = Field(default=None, exclude_if=lambda value: value is None)
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64,
         description="DATA_DISCLOSURE必须填写实际受保护的业务字段；其他效果类型留空。字段来自真实数据含义，不为通过校验编造。",
         json_schema_extra={"uniqueItems": True, "items": {"type": "string", "pattern": r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"}})
@@ -105,7 +103,7 @@ class ProposedEffectItem(BoundaryModel):
     @field_validator("business_label", "resource_concept", "expected_state", "description")
     @classmethod
     def validate_text(cls, value: str | None, info) -> str | None:
-        return None if value is None else _text(value, info.field_name)
+        return None if value is None else trimmed_text(value, info.field_name)
 
     @field_validator("protected_projection")
     @classmethod
@@ -119,6 +117,8 @@ class ProposedEffectItem(BoundaryModel):
 
     @model_validator(mode="after")
     def validate_projection_kind(self) -> ProposedEffectItem:
+        if self.field_mutation is not None and (self.effect_kind is not BusinessEffectKind.STATE_MUTATION or self.expected_state is not None):
+            raise ValueError('field mutation requires STATE_MUTATION without legacy expected_state')
         if self.effect_kind is BusinessEffectKind.DATA_DISCLOSURE:
             if not self.protected_projection:
                 raise PydanticCustomError("disclosure_projection_required", "DATA_DISCLOSURE requires protected projection")
@@ -150,7 +150,7 @@ class ProposedActorItem(_ProposedRevisionItem):
     @field_validator("display_name", "description")
     @classmethod
     def validate_text(cls, value: str, info) -> str:
-        return _text(value, info.field_name)
+        return trimmed_text(value, info.field_name)
 
     @field_validator("source_candidate_ids")
     @classmethod
@@ -181,7 +181,7 @@ class ProposedActionItem(_ProposedRevisionItem):
     @field_validator("display_name", "description", "primary_resource_concept")
     @classmethod
     def validate_text(cls, value: str, info) -> str:
-        return _text(value, info.field_name)
+        return trimmed_text(value, info.field_name)
 
     @field_validator("source_candidate_ids")
     @classmethod
@@ -258,7 +258,7 @@ class BoundaryProposalBundle(BoundaryModel):
     @field_validator("unresolved_questions")
     @classmethod
     def validate_questions(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        normalized = tuple(_text(value, "unresolved_questions") for value in values)
+        normalized = tuple(trimmed_text(value, "unresolved_questions") for value in values)
         if len(set(normalized)) != len(normalized):
             raise ValueError("unresolved questions must be unique")
         return normalized
@@ -266,7 +266,7 @@ class BoundaryProposalBundle(BoundaryModel):
     @field_validator("provenance")
     @classmethod
     def validate_provenance(cls, value: str) -> str:
-        return _text(value, "provenance")
+        return trimmed_text(value, "provenance")
 
     def fingerprint_payload(self) -> dict[str, Any]:
         payload = self.model_dump(mode="json", exclude={"proposal_fingerprint"})
@@ -312,7 +312,7 @@ class BoundaryProposalDecision(BoundaryModel):
     @field_validator("decided_by", "reason")
     @classmethod
     def validate_text(cls, value: str, info) -> str:
-        return _text(value, info.field_name)
+        return trimmed_text(value, info.field_name)
 
     @model_validator(mode="after")
     def validate_decider(self) -> BoundaryProposalDecision:

@@ -25,10 +25,13 @@ from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.checks.repair import CurrentRepairReference
 from product.backend.domain.recording.models import RecordingPurpose
 from product.protocols.preparation.operation_flow import OperationFlow, OperationFlowDraft
+from product.protocols.preparation.proof_sources import RelationshipSourceMapping
 from product.backend.application.preparation.flow_trials import TrialSelection,StartFlowTrial
 from product.protocols.runtime.node_runtime import SqliteDatabaseCapture
+from product.protocols.runtime.database_capture import DatabaseCapture
 from product.protocols.web.environment import FrozenEnvironment
 from product.protocols.checks.execution_request import PermissionReference
+from product.protocols.checks.scenarios import BusinessScenarioRevision,ScenarioReference
 from product.backend.application.preparation.models import RuleCaseDataSelection
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 
@@ -42,6 +45,15 @@ class Capability:
     model: type[BaseModel]
     handler: Callable
     approval: bool = False
+    recover: Callable | None = None
+    cancel: Callable | None = None
+    describe: Callable | None = None
+
+    def __post_init__(self):
+        # 生命周期试点必须成组登记；未迁移能力仍走已有适配，不伪报支持范围。
+        hooks = (self.recover, self.cancel, self.describe)
+        if any(hook is not None for hook in hooks) and not all(callable(hook) for hook in hooks):
+            raise ValueError('能力的恢复、取消与说明必须完整登记')
 
     def accept(self, arguments):
         try:
@@ -74,7 +86,7 @@ RunReference = parameters('RunReference', run_id=(str, ...))
 RuntimeOptions = parameters('RuntimeOptions', entry=(str, Field(min_length=1, max_length=512)),
     port=(int, Field(ge=1024, le=65535)), revision=(int, Field(ge=0)),
     build_script=(str | None, None), allow_install_scripts=(bool, False),
-    sqlite=(tuple[SqliteDatabaseCapture, ...], ()))
+    sqlite=(tuple[SqliteDatabaseCapture, ...], ()),databases=(tuple[DatabaseCapture,...],()))
 RuntimeStart = create_model('RuntimeStart', __base__=RuntimeOptions,
     preview_fingerprint=(str, Field(pattern=r'^[0-9a-f]{64}$')))
 IdentityCreate = parameters('IdentityCreate', actor_id=(str, ...), actor_revision=(int, Field(ge=1)),
@@ -82,6 +94,7 @@ IdentityCreate = parameters('IdentityCreate', actor_id=(str, ...), actor_revisio
 IdentityConfigure = parameters('IdentityConfigure', identity_id=(str, ...),
     profile=(AuthenticationProfile, ...), expected_updated_at_us=(int, Field(ge=0)))
 CheckScope = parameters('CheckScope', change_id=(str | None, None), external_recheck=(ExternalRecheckCommand | None,None),
+    scenario=(ScenarioReference|None,None),
     selected_permissions=(tuple[PermissionReference, ...] | None, Field(default=None, min_length=1, max_length=4096)))
 CheckStart = create_model('CheckStart', __base__=CheckScope, expected_plan_fingerprint=(str, Field(pattern=r'^[0-9a-f]{64}$')))
 ChangeReference = parameters('ChangeReference', change_id=(str | None, None))
@@ -150,9 +163,9 @@ class ProductCapabilities:
         add('runtime.read', '查看实际运行实例', '运行环境', 'READ', Empty,
             lambda p, a, o: core.node_runtime.state(p, verify_artifacts=False))
         add('runtime.preview', '准备启动方案', '运行环境', 'READ', RuntimeOptions,
-            lambda p, a, o: core.node_runtime.preview(p, **a.model_dump(exclude={'sqlite'}), sqlite=a.sqlite))
+            lambda p, a, o: core.node_runtime.preview(p, **a.model_dump(exclude={'sqlite','databases'}), sqlite=a.sqlite,databases=a.databases))
         add('runtime.start', '准备依赖并启动应用', '运行环境', 'EXECUTE', RuntimeStart,
-            lambda p, a, o: core.node_runtime.start(p, **a.model_dump(exclude={'sqlite'}), sqlite=a.sqlite,
+            lambda p, a, o: core.node_runtime.start(p, **a.model_dump(exclude={'sqlite','databases'}), sqlite=a.sqlite,databases=a.databases,
                 operation_id=o, consent_execute=True), approval=True)
         add('runtime.operation', '查询原启动请求', '运行环境', 'READ', parameters('RuntimeOperation', operation_id=(str, ...)),
             lambda p, a, o: core.node_runtime.operation(p, a.operation_id))
@@ -173,6 +186,12 @@ class ProductCapabilities:
             lambda p, a, o: self._preparation(p, a.preparation_id))
         add('flows.context', '读取已有操作与数据设置', '操作与数据', 'READ', Empty,
             lambda p, a, o: core.operation_flows.context(p))
+        add('scenarios.context','读取业务场景与准确动作','操作与数据','READ',Empty,
+            lambda p,a,o:core.business_scenarios.context(p))
+        add('scenarios.read','读取准确业务场景修订','操作与数据','READ',ScenarioReference,
+            lambda p,a,o:core.business_scenarios.read(p,a.scenario_id,a.revision).model_dump(mode='json'))
+        add('scenarios.save','保存业务场景候选','操作与数据','PREPARE',BusinessScenarioRevision,
+            lambda p,a,o:core.business_scenarios.save(p,a,submitted_via='MCP'))
         add('flows.read', '读取准确流程修订', '操作与数据', 'READ', FlowReference,
             lambda p, a, o: core.operation_flows.read(p, a.flow_id, a.revision))
         add('recordings.start', '打开独立业务录制窗口', '操作与数据', 'EXECUTE', RecordingStart,
@@ -193,7 +212,9 @@ class ProductCapabilities:
         add('flows.trial.preview','预览一次场景试运行','操作与数据','READ',TrialSelection,
             lambda p,a,o:core.flow_trials.preview(p,a))
         add('flows.trial.start','执行已确认的场景试运行','操作与数据','EXECUTE',StartFlowTrial,
-            lambda p,a,o:core.flow_trials.start(p,a),approval=True)
+            lambda p,a,o:core.flow_trials.start(p,a),approval=True,
+            recover=lambda p,o:core.flow_trials.requested(p,o['operation_id']),
+            cancel=lambda p,o,j:core.flow_trials.cancel(p,j.flow_trial_id),describe=self._describe_trial)
         add('flows.trial.history','读取场景试运行历史','操作与数据','READ',Empty,
             lambda p,a,o:core.flow_trials.history(p))
         trial_reference=parameters('FlowTrialReference',trial_id=(str,Field(pattern=r'^ftr_[0-9a-f]{32}$')))
@@ -219,10 +240,21 @@ class ProductCapabilities:
         add('proofs.sqlite_candidate', '从已声明数据库准备判断方式', '结果证明', 'READ',
             parameters('SqliteProofCandidate', basis_id=(str, ...), action_id=(str, ...), effect_id=(str, ...),
                 resource_binding_id=(str, ...), database_path=(str, ...), table=(str, ...), protected_column=(str, ...),
-                tenant_column=(str|None,None),condition_state_column=(str|None,None),identity_tenant_path=(str|None,None)),
+                tenant_column=(str|None,None),condition_state_column=(str|None,None),identity_tenant_path=(str|None,None),
+                relationship_mapping=(RelationshipSourceMapping|None,None)),
             lambda p, a, o: core.proof_preparation.sqlite_candidate(p, **a.model_dump()))
         add('proofs.save', '保存结果判断方式候选', '结果证明', 'PREPARE', SaveProofSource,
             lambda p, a, o: core.proof_preparation.save(p, a, submitted_via='MCP', client_name='协作任务')['result'])
+        from product.protocols.preparation.proof_sources import AsyncExportMapping
+        add('proofs.database_candidate','从服务库声明整理判断方式','结果证明','READ',
+            parameters('DatabaseProofCandidate',basis_id=(str,...),action_id=(str,...),effect_id=(str,...),resource_binding_id=(str,...),
+                connection_id=(str,...),protected_column=(str,...),tenant_column=(str|None,None),condition_state_column=(str|None,None),
+                identity_tenant_path=(str|None,None),relationship_mapping=(RelationshipSourceMapping|None,None)),
+            lambda p,a,o:core.proof_preparation.database_candidate(p,**a.model_dump()))
+        add('proofs.file_candidate','整理直接或异步文件证明','结果证明','READ',
+            parameters('FileProofCandidate',basis_id=(str,...),action_id=(str,...),effect_id=(str,...),resource_binding_id=(str,...),
+                collection=(str,Field(pattern=r'^[A-Za-z][A-Za-z0-9_]{0,63}$')),async_export=(AsyncExportMapping|None,None)),
+            lambda p,a,o:core.proof_preparation.file_candidate(p,**{name:getattr(a,name) for name in type(a).model_fields}))
         add('proofs.scope', '确认业务记录读取范围', '结果证明', 'EXECUTE', GrantProofScope,
             lambda p, a, o: core.proof_preparation.grant_scope(p, a)['result'], approval=True)
         add('proofs.preflight', '核对结果证明能否取得', '结果证明', 'EXECUTE', StartProofPreflight,
@@ -230,13 +262,15 @@ class ProductCapabilities:
         add('proofs.adopt', '采用已核对的结果证明', '结果证明', 'EXECUTE', AdoptProofSource,
             lambda p, a, o: core.proof_preparation.adopt(p, a)['result'], approval=True)
         add('checks.preview', '核对本次检查范围', '检查与结果', 'READ', CheckScope,
-            lambda p, a, o: core.checks.preview(p, change_id=a.change_id, selected_permissions=a.selected_permissions, external_recheck=a.external_recheck))
+            lambda p, a, o: core.checks.preview(p, change_id=a.change_id, selected_permissions=a.selected_permissions, external_recheck=a.external_recheck,scenario_reference=a.scenario))
         add('checks.routines', '读取保存的检查范围及变化', '检查与结果', 'READ', Empty,
             lambda p, a, o: core.check_routines.list(p))
         add('checks.remember', '保存本次规则选择供以后使用', '检查与结果', 'PREPARE', SaveCheckRoutine,
             lambda p, a, o: core.check_routines.save(p, a))
         add('checks.start', '执行已核对的检查', '检查与结果', 'EXECUTE', CheckStart,
-            lambda p, a, o: self._start_check(p, a, o), approval=True)
+            lambda p, a, o: self._start_check(p, a, o), approval=True,
+            recover=self._check_receipt,cancel=lambda p,o,j:core.checks.cancel(p,o['result']['run_id']),
+            describe=self._describe_check)
         add('checks.status', '读取本次检查与结果状态', '检查与结果', 'READ', RunReference,
             lambda p, a, o: core.check_results.status(a.run_id, project_id=p))
         add('results.report', '理解检查要求和实际结果', '检查与结果', 'READ', RunReference,
@@ -249,7 +283,7 @@ class ProductCapabilities:
         add('changes.preview', '核对实际代码变化与修复目标', '修改与复验', 'READ', Empty,
             lambda p, a, o: core.development.registration_preview(p))
         add('changes.history', '读取修改与验证关联', '修改与复验', 'READ', Empty,
-            lambda p, a, o: core.development.history(p))
+            lambda p, a, o: core.development_reader.history(p))
         add('changes.register', '登记实际修改与涉及的权限', '修改与复验', 'PREPARE', ChangeRegistration,
             lambda p, a, o: core.development.register_change(p, **a.model_dump(exclude={'repair_reference','rule_targets'}),
                 repair_reference=a.repair_reference, rule_targets=a.rule_targets, operation_id=o, submitted_by='Agent 协作'))
@@ -279,8 +313,8 @@ class ProductCapabilities:
             parameters('UpdatePreview', directory=(str, Field(min_length=1, max_length=32768)), return_path=(str, '/')),
             lambda p, a, o: core.updates.preview(a.directory, a.return_path), approval=True)
 
-    def _add(self, key, title, domain, level, model, handler, approval=False):
-        self.items[key] = Capability(key, title, domain, level, model, handler, approval)
+    def _add(self, key, title, domain, level, model, handler, approval=False, **lifecycle):
+        self.items[key] = Capability(key, title, domain, level, model, handler, approval, **lifecycle)
 
     def get(self, key):
         if key not in self.items:
@@ -388,6 +422,14 @@ class ProductCapabilities:
             return dict(fulfilled=ready, title='权限要求已处理' if ready else '权限要求尚需整理或审阅', destination='/permissions')
         if purpose == 'SETUP':
             editor = task.get('editor')
+            if editor and editor['kind']=='SCENARIO':
+                document=editor['document']
+                saved=any(item['capability']=='scenarios.save' and item['state']=='SUCCEEDED'
+                    and item['result']['id']==document['id'] and item['result']['revision']>=document['revision'] for item in task['operations'])
+                ready=saved and not self.pending_reviews(project,task['operations'])
+                return dict(fulfilled=ready,
+                    title='业务场景已整理并审阅' if ready else '业务场景候选等待审阅' if saved else '等待业务场景候选',
+                    destination='/testing?'+urlencode(dict(scenario=document['id'])))
             if editor and editor['kind'] == 'FLOW':
                 flows = self.core.operation_flows.context(project)['flows']
                 ready = any(item['document']['id'] == editor['flow_id'] and
@@ -418,6 +460,9 @@ class ProductCapabilities:
     def pending_reviews(self, project, operations, *, work=None):
         latest_flows = {}
         latest_proofs = {}
+        latest_scenarios={item['result']['id']:max(other['result']['revision'] for other in operations
+            if other['capability']=='scenarios.save' and other['state']=='SUCCEEDED' and other['result']['id']==item['result']['id'])
+            for item in operations if item['capability']=='scenarios.save' and item['state']=='SUCCEEDED'}
         for item in operations:
             if item['capability']=='flows.save' and item['state']=='SUCCEEDED':
                 result=item['result']
@@ -432,6 +477,11 @@ class ProductCapabilities:
             item['action_label'] = '审阅权限要求'
         with (self.core.uow_factory() if work is None else nullcontext(work)) as work:
             for operation in operations:
+                if operation['capability']=='scenarios.save' and operation['state']=='SUCCEEDED':
+                    result=operation['result']
+                    if result['revision']==latest_scenarios[result['id']] and work.business_scenarios.reviewed_revision(project,result['id'])<result['revision']:
+                        reviews.append(dict(id=result['id']+'@'+str(result['revision']),title='核对 Agent 整理的业务实验',
+                            action_label='审阅场景与正常对照',destination='/testing?'+urlencode(dict(scenario=result['id'],revision=result['revision']))))
                 if operation['capability']=='proofs.save' and operation['state']=='SUCCEEDED':
                     result=operation['result']
                     if result['revision']!=latest_proofs[result['source_id']]:
@@ -514,7 +564,7 @@ class ProductCapabilities:
         return items[-limit:] if limit else items
 
     def _start_check(self, project, arguments, operation):
-        result = self.core.checks.submit(project, **arguments.model_dump(exclude={'selected_permissions','external_recheck'}), selected_permissions=arguments.selected_permissions, external_recheck=arguments.external_recheck, idempotency_key=operation)
+        result = self.core.checks.submit(project, **arguments.model_dump(exclude={'selected_permissions','external_recheck','scenario'}), selected_permissions=arguments.selected_permissions, external_recheck=arguments.external_recheck,scenario_reference=arguments.scenario, idempotency_key=operation)
         return dict(run_id=result.run.run_id, job_id=result.job.job_id, state=result.job.state.value)
 
     def cancel_owned(self, project, operations):
@@ -528,10 +578,9 @@ class ProductCapabilities:
             if job is None or job.job_id not in active:
                 continue
             key = operation['capability']
-            if key == 'checks.start':
-                self.core.checks.cancel(project, result['run_id'])
-            elif key=='flows.trial.start':
-                self.core.flow_trials.cancel(project,job.flow_trial_id)
+            capability = self.items.get(key)
+            if capability is not None and capability.cancel is not None:
+                capability.cancel(project, operation, job)
             elif key in ('identities.login', 'identities.verify'):
                 self.core.identity_preparations.cancel(result['preparation_id'])
             elif key in ('runtime.start', 'changes.load'):
@@ -545,13 +594,15 @@ class ProductCapabilities:
     def receipt(self, project, operation):
         """适配各业务所有者的原请求查询；这里不以当前资源状态猜测写入是否成功。"""
         key, identifier, args = operation['capability'], operation['operation_id'], operation['arguments']
-        if key=='flows.trial.start':return self.core.flow_trials.requested(project,identifier)
+        capability = self.items.get(key)
+        if capability is not None and capability.recover is not None:
+            return capability.recover(project, operation)
         if key == 'runtime.start': return self.core.node_runtime.operation(project, identifier)
         if key == 'identities.create': return self.core.test_identities.created(project, identifier)
         if key in ('identities.login', 'identities.verify'):
             return self._identity(project, args['identity_id'], lambda: self.core.identity_preparations.requested(args['identity_id'], identifier))
         if key == 'materials.apply': return self.core.preparation_materials.receipt(project, identifier)
-        if key == 'changes.register': return self.core.development.receipt(project, 'DELIVER', identifier)
+        if key == 'changes.register': return self.core.development_reader.receipt(project, 'DELIVER', identifier)
         if key == 'changes.load': return self.core.runtime_activation.receipt(project, identifier)
         if key == 'proofs.save': return self.core.proof_preparation.receipt(project, 'SAVE_SOURCE', identifier)['result']
         if key == 'proofs.preflight': return self.core.proof_preparation.receipt(project, 'START_PREFLIGHT', identifier)['result']
@@ -559,32 +610,16 @@ class ProductCapabilities:
             with self.core.uow_factory() as work:
                 job = work.jobs.get_by_idempotency(project, 'BROWSER_RECORDING', identifier)
                 return None if job is None else dict(recording_id=job.recording_id, job_id=job.job_id, state=job.state.value)
-        if key == 'checks.start':
-            with self.core.uow_factory() as work:
-                job = work.jobs.get_by_idempotency(project, 'CHECK', identifier)
-                return dict(run_id=job.run_id, job_id=job.job_id, state=job.state.value) if job else None
         return None
 
     def describe(self, project, key, arguments):
         """把本次具名参数映射成可审阅的业务对象；真实执行仍核对自己的当前前提。"""
         rows = []
         values = arguments.model_dump(mode='json')
-        if key=='flows.trial.start':
-            preview=self.core.flow_trials.preview(project,arguments.selection)
-            if preview['plan_hash']!=arguments.plan_hash:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'场景或账号已变化，请重新预览')
-            plan=preview['plan'];case=plan['case']
-            identities={item.identity_id:item.label for item in self.core.test_identities.list(project)}
-            rows += [dict(label='目标地址',value=plan['runtime']['target']['base_url']),
-                dict(label='场景修订',value=str(plan['flow']['revision'])),dict(label='操作账号',value=identities[case['subject_test_identity_id']]),
-                dict(label='资源所有者',value=identities[case['resource_owner_test_identity_id']]),dict(label='资源编号',value=case['resource_id']),
-                dict(label='请求预算',value=str(plan['runtime']['budget']['max_requests'])+' 次'),
-                dict(label='本次操作',value='只执行原恢复请求' if plan['mode']=='RESTORE' else '执行一次场景，保留有限步骤事实')]
-            if plan['mode']=='TRIAL':
-                rows += [dict(label='受检操作' if step['purpose']=='TARGET' else '准备步骤',value=step['request_template']['method']+' '+step['request_template']['path']) for step in plan['flow']['workflow']['steps']]
-            if plan['state_changing']:
-                recovery=plan['flow']['recovery'];rows.append(dict(label='恢复请求',value=recovery['method']+' '+recovery['relative_path']))
-        elif key.startswith('runtime.'):
+        capability = self.items.get(key)
+        if capability is not None and capability.describe is not None:
+            return capability.describe(project, arguments)
+        if key.startswith('runtime.'):
             rows += [dict(label='运行入口', value=values['entry']), dict(label='本地端口', value=str(values['port']))]
             for database in values.get('sqlite', []):
                 rows.append(dict(label='观察业务数据', value=database['relative_path'] + ' / ' + '、'.join(item['table'] for item in database['tables'])))
@@ -623,18 +658,6 @@ class ProductCapabilities:
                 if config.get('database_path'):
                     rows.append(dict(label='数据库与表', value=config['database_path'] + ' / ' + config['table']))
                     rows.append(dict(label='读取字段', value='、'.join(config['observed_columns'])))
-        elif key == 'checks.start':
-            scope = self.get(key).accept(values)
-            plan = self.core.checks.preview(project, change_id=scope.change_id, selected_permissions=scope.selected_permissions, external_recheck=scope.external_recheck)
-            if plan.plan_fingerprint != values['expected_plan_fingerprint']:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, '检查范围已变化，请读取新的检查预览')
-            if scope.external_recheck is not None:
-                rows.append(dict(label='原问题',value=scope.external_recheck.reference.source_run_id))
-                rows.append(dict(label='本次部署声明',value=scope.external_recheck.deployment_statement+'；部署版本未核对'))
-            rows.append(dict(label='本次范围', value=f'{plan.action_count} 项业务操作，{plan.case_count} 个场景'))
-            rows.append(dict(label='检查依据', value='已批准的权限要求及必需正常对照'))
-            if plan.selection is not None:
-                rows.append(dict(label='本次未检查', value=f'{len(plan.selection.omitted)} 条规则；未决要求保持未覆盖'))
         elif key == 'maintenance.execute':
             rows.append(dict(label='影响范围', value='本机已预览的存储清理计划，应用、规则与报告保留'))
         elif key == 'application.authorize_source':
@@ -642,6 +665,45 @@ class ProductCapabilities:
         elif key == 'application.endpoint':
             rows.append(dict(label='应用访问地址', value=values['endpoint']))
         return rows
+
+    def _describe_trial(self, project, arguments):
+        rows = []
+        preview=self.core.flow_trials.preview(project,arguments.selection)
+        if preview['plan_hash']!=arguments.plan_hash:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'场景或账号已变化，请重新预览')
+        plan=preview['plan'];case=plan['case']
+        identities={item.identity_id:item.label for item in self.core.test_identities.list(project)}
+        rows += [dict(label='目标地址',value=plan['runtime']['target']['base_url']),
+            dict(label='场景修订',value=str(plan['flow']['revision'])),dict(label='操作账号',value=identities[case['subject_test_identity_id']]),
+            dict(label='资源所有者',value=identities[case['resource_owner_test_identity_id']]),dict(label='资源编号',value=case['resource_id']),
+            dict(label='请求预算',value=str(plan['runtime']['budget']['max_requests'])+' 次'),
+            dict(label='本次操作',value='只执行原恢复请求' if plan['mode']=='RESTORE' else '执行一次场景，保留有限步骤事实')]
+        if plan['mode']=='TRIAL':
+            rows += [dict(label='受检操作' if step['purpose']=='TARGET' else '准备步骤',value=step['request_template']['method']+' '+step['request_template']['path']) for step in plan['flow']['workflow']['steps']]
+        if plan['state_changing']:
+            recovery=plan['flow']['recovery'];rows.append(dict(label='恢复请求',value=recovery['method']+' '+recovery['relative_path']))
+        return rows
+
+    def _describe_check(self, project, arguments):
+        rows = []
+        values = arguments.model_dump(mode='json')
+        scope = arguments
+        plan = self.core.checks.preview(project, change_id=scope.change_id, selected_permissions=scope.selected_permissions, external_recheck=scope.external_recheck,scenario_reference=scope.scenario)
+        if plan.plan_fingerprint != values['expected_plan_fingerprint']:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '检查范围已变化，请读取新的检查预览')
+        if scope.external_recheck is not None:
+            rows.append(dict(label='原问题',value=scope.external_recheck.reference.source_run_id))
+            rows.append(dict(label='本次部署声明',value=scope.external_recheck.deployment_statement+'；部署版本未核对'))
+        rows.append(dict(label='本次范围', value=f'{plan.action_count} 项业务操作，{plan.case_count} 个场景'))
+        rows.append(dict(label='检查依据', value='已批准的权限要求及必需正常对照'))
+        if plan.selection is not None:
+            rows.append(dict(label='本次未检查', value=f'{len(plan.selection.omitted)} 条规则；未决要求保持未覆盖'))
+        return rows
+
+    def _check_receipt(self, project, operation):
+        with self.core.uow_factory() as work:
+            job = work.jobs.get_by_idempotency(project, 'CHECK', operation['operation_id'])
+            return dict(run_id=job.run_id, job_id=job.job_id, state=job.state.value) if job else None
 
     @classmethod
     def public(cls, value):

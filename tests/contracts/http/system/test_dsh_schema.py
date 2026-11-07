@@ -34,13 +34,63 @@ def test_projection_preserves_structure_and_full_runtime_validation():
 
 
 @pytest.mark.parametrize('schema',[
-    {'anyOf':[{'type':'integer'},{'type':'number'}]},
+    {'anyOf':[{'type':'integer'},{'type':'number','minimum':0}]},
     {'$ref':'https://example.invalid/schema'},
     {'$ref':'#/$defs/Loop','$defs':{'Loop':{'$ref':'#/$defs/Loop'}}},
     {'type':'object','unevaluatedProperties':False},
 ])
 def test_unsupported_shapes_fail_closed(schema):
     with pytest.raises(DshSchemaError):project_schema(schema)
+
+
+def test_numeric_union_keeps_integers_and_separate_boolean_with_original_limits():
+    original={'type':'object','properties':{'value':{'anyOf':[
+        {'type':'integer','minimum':-10,'maximum':10},{'type':'number'},
+        {'type':'boolean'},{'type':'string','maxLength':4},{'type':'null'}]}},
+        'required':['value'],'additionalProperties':False}
+    adapter=DshToolSchemas()
+    projected=adapter.adapt({'result':{'tools':[{'name':'save','inputSchema':original}]}})['result']['tools'][0]['inputSchema']
+    from jsonschema import Draft202012Validator
+    for value in (0,1,1.5,True,None,'data'):
+        assert Draft202012Validator(projected).is_valid({'value':value})
+        assert adapter.validate('save',{'value':value})
+    for value in ('long text',[],{}):
+        assert not adapter.validate('save',{'value':value})
+
+
+def test_conditional_projection_keeps_runtime_constraints_and_local_reference_boundary():
+    condition={'if':{'properties':{'kind':{'const':'READ'}},'required':['kind']},
+        'then':{'required':['fields'],'properties':{'fields':{'minItems':1}}},
+        'else':{'properties':{'fields':{'maxItems':0}}}}
+    schema={'type':'object','properties':{'kind':{'type':'string'},'fields':{'type':'array','items':{'type':'string'}}},
+        'required':['kind'],'allOf':[condition]}
+    adapter=DshToolSchemas();adapter.adapt({'result':{'tools':[{'name':'save','inputSchema':schema}]}})
+    assert adapter.validate('save',{'kind':'READ','fields':['title']})
+    assert adapter.validate('save',{'kind':'WRITE','fields':[]})
+    assert not adapter.validate('save',{'kind':'READ','fields':[]})
+    assert not adapter.validate('save',{'kind':'WRITE','fields':['title']})
+    with pytest.raises(DshSchemaError):
+        project_schema({**schema,'allOf':[{'$ref':'https://example.invalid/schema'}]})
+
+
+def test_nested_tagged_handoff_and_pattern_keys_keep_full_validation():
+    schema={'type':'object','properties':{'editor':{'anyOf':[{'oneOf':[
+        {'type':'object','properties':{'kind':{'type':'string','const':'FLOW'}},'required':['kind']},
+        {'type':'object','properties':{'kind':{'type':'string','const':'PROOF'},'states':{
+            'type':'object','patternProperties':{'^[A-Za-z]+$':{'type':'string','enum':['SUCCESS','FAILED']}},
+            'additionalProperties':False}},'required':['kind','states']}],
+        'discriminator':{'propertyName':'kind'}},{'type':'null'}]}},'required':['editor']}
+    adapter=DshToolSchemas()
+    result=adapter.adapt({'result':{'tools':[{'name':'create','inputSchema':schema}]}})
+    from jsonschema import Draft202012Validator
+    display=Draft202012Validator(result['result']['tools'][0]['inputSchema'])
+    for value in (None,{'kind':'FLOW'},{'kind':'PROOF','states':{'done':'SUCCESS'}}):
+        assert display.is_valid({'editor':value})
+        assert adapter.validate('create',{'editor':value})
+    for value in ({'kind':'OTHER'},{'kind':'PROOF','states':{'done':'unexpected'}},{'kind':'PROOF','states':{'not valid':'SUCCESS'}}):
+        assert not adapter.validate('create',{'editor':value})
+    with pytest.raises(DshSchemaError):
+        project_schema({'type':'object','patternProperties':{'.*':{'$ref':'https://example.invalid/schema'}}})
 
 
 def test_dsh_negotiation_declines_streaming_era_without_hitting_http():

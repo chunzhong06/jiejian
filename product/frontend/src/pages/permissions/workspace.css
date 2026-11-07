@@ -8,11 +8,14 @@
 .jj-rule-edit-column { width:20%; }
 .jj-rule-editor-table th,.jj-rule-editor-table td { text-align:left; padding:18px 24px; border-top:1px solid var(--line); vertical-align:middle; }
 .jj-rule-editor-table th { color:var(--muted); background:var(--surface-heading); font-size:var(--text-meta); font-weight:500; }
-.jj-rule-editor-table h3 { font-size:var(--text-body); line-height:1.6; }
 .jj-rule-editor-table p { margin-top:6px; }
-.jj-rule-editor-table .jj-rule-conditions { margin:0; padding:0; border:0; }
-.jj-rule-editor-table .jj-rule-conditions>summary { flex-wrap:wrap; gap:8px 12px; }
-.jj-rule-editor-table .jj-condition-fields { grid-template-columns:minmax(0,1fr); }
+.jj-rule-condition-summary { display:grid; justify-items:start; gap:8px; }
+.jj-rule-condition-summary>.jj-button { min-height:32px; padding:6px 10px; }
+.jj-rule-condition-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:20px 40px; }
+.jj-rule-condition-editor>h3 { grid-column:1/-1; }
+.jj-rule-condition-editor>.jj-condition-fields { grid-template-columns:minmax(0,1fr); padding:0; }
+.jj-rule-condition-editor>.jj-relationship-conditions { padding:0; }
+@media(max-width:1000px) { .jj-rule-condition-editor { grid-template-columns:minmax(0,1fr); } }
 .jj-rule-editor-reason { margin:24px; }
 .jj-rule-editor>.jj-form-actions { margin:0; padding:18px 24px; border-top:1px solid var(--line); background:var(--surface-heading); }
 
@@ -21,13 +24,17 @@
 .jj-rule-conditions > summary > span { margin-inline-start:12px; }
 .jj-condition-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding-block:16px; }
 .jj-condition-fields > :last-child { grid-column:1/-1; }
+.jj-relationship-conditions { display:grid; gap:20px; padding-block:8px 16px; }
+.jj-relationship-condition { min-width:0; }
+.jj-relationship-condition > header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; }
+.jj-relationship-condition > header > strong { font-size:var(--text-body); }
 @media(max-width:650px) { .jj-condition-fields { grid-template-columns:minmax(0,1fr); } .jj-rule-conditions > summary > span { display:block; margin:6px 0 0 20px; } }
 
 .jj-rule-directory-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:var(--text-meta); }
 .jj-rule-directory-summary > div { display:flex; gap:8px; flex-wrap:wrap; }
 .jj-rule-directory-summary .jj-button { font-size:var(--text-meta); min-height:32px; padding:5px 10px; }
-.jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--accent-ink); }
+.jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
 .jj-rule-inspector-links { display:grid; gap:6px; }
-.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:12px 0; background:transparent; font-size:var(--text-meta); white-space:normal; text-align:left; }
+.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 16px; background:transparent; font-size:var(--text-meta); white-space:normal; text-align:left; }
 .jj-rule-directory .jj-object-table th:first-child { width:58%; }
 @media(max-width:600px) { .jj-rule-directory .jj-object-table :is(th,td):last-child { display:none; } }

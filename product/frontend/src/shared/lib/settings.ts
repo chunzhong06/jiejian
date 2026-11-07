@@ -1,11 +1,11 @@
+import {routes,routeAliases,routeDefinition} from './routes'
 import type {Route} from './navigation'
 
-export const settingsSections=[{key:'tools',label:'开发工具'},{key:'storage',label:'本地存储'},{key:'system',label:'运行与维护'}] as const
+export const settingsSections=routes.filter((item):item is typeof item & {settings:'tools'|'storage'|'system'}=>item.settings!==undefined).map(item=>({key:item.settings,label:item.label}))
 export type SettingsSection=typeof settingsSections[number]['key']
 export function settingsSection(route:Route):SettingsSection|null{
-  if(route.path==='/tools'||route.path==='/settings/models')return 'tools'
-  if(route.path==='/storage')return 'storage'
-  if(route.path==='/system')return 'system'
+  const legacy=routeDefinition(routeAliases[route.path]??route.path)?.settings
+  if(legacy)return legacy
   if(route.path!=='/settings')return null
   return settingsSections.find(item=>item.key===route.query.get('section'))?.key??'tools'
 }

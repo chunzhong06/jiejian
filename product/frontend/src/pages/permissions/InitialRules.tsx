@@ -1,5 +1,6 @@
+import {prefixedId as id} from '../../shared/lib/id'
 import {RuleConditionsEditor, conditionLabels} from '../../entities/permission/ui/RuleConditions';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
@@ -9,14 +10,14 @@ import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
 import StopOutlined from '@ant-design/icons/StopOutlined';
 import { businessBoundariesApi as api, type BoundaryMaintenanceDraftDto, type BoundaryMaintenanceCommandDto, type ProposedEffectDto } from '../../entities/permission/api/businessBoundaries';
 import { ApiError } from '../../shared/api/http';
-import { readPending, savePending } from '../../shared/lib/operations';
+import { readPending, savePending, useCommand } from '../../shared/lib/operations';
 import { Button } from '../../shared/ui/actions';
 import { Choice } from '../../shared/ui/Choice';
-import { Heading, Field } from '../../shared/ui/layout';
+import { Heading, Field, SectionHeading, FormColumns } from '../../shared/ui/layout';
 import { Badge, Notice } from '../../shared/ui/feedback';
 import { Tabs } from '../../shared/ui/Tabs';
+import {FieldMutationEditor,validFieldMutation} from '../../entities/permission/ui/FieldMutation';
 
-const id = (prefix: string) => prefix + crypto.randomUUID().replaceAll('-', '').slice(0, 16);
 const effectKinds = { STATE_MUTATION: '状态改变', DATA_DISCLOSURE: '读取业务数据', FILE_CONTENT_DELIVERY: '交付文件内容', OBJECT_CREATION: '创建业务对象', EXTERNAL_DISPATCH: '发送外部消息', RESTRICTED_FUNCTION_INVOCATION: '调用受限功能', CREDENTIAL_ACCESS: '取得凭据' } as const;
 type Draft = BoundaryMaintenanceCommandDto & { provenance: string; proposal_id?: string; uncertain?: boolean };
 type Section = 'actors' | 'actions' | 'permissions';
@@ -26,16 +27,16 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
     const key = 'jiejian.studio.initial-rules:' + projectId;
     const [draft, setDraft] = useState<Draft>(() => readPending<Draft>(key) ?? { expected_boundary_state_fingerprint: basis.boundary_state_fingerprint, actors: basis.actors, actions: basis.actions, permissions: basis.permissions, provenance: '' });
     const [section, setSection] = useState<Section>('actors');
-    const [busy, setBusy] = useState(false), [proposals, setProposals] = useState<string[]>([]), lock = useRef(false);
+    const [proposals, setProposals] = useState<string[]>([]);
+    const {busy,run}=useCommand(key,onError,error=>error instanceof ApiError&&['INPUT_INVALID','STATE_PRECONDITION','API_VALIDATION_ERROR'].includes(error.code));
     const prefix = useId(), panelId = prefix + '-panel';
     useEffect(() => { savePending(key, draft); }, [key, draft]);
     // 草稿可以继续保留，但不能把旧依据下的编辑自动覆盖到已经变化的正式规则上。
     const changed = basis.boundary_state_fingerprint !== draft.expected_boundary_state_fingerprint;
     const disabled = busy || Boolean(draft.uncertain) || changed;
     const edit = (value: Partial<Draft>) => setDraft(current => ({ ...current, ...value }));
-    const run = async (callback: () => Promise<void>) => { if (lock.current) return; lock.current = true; setBusy(true); try { await callback(); } catch (error) { onError(error); } finally { lock.current = false; setBusy(false); } };
     const rolesReady = draft.actors.length > 0 && draft.actors.every(item => item.display_name.trim());
-    const actionsReady = draft.actions.length > 0 && draft.actions.every(item => item.display_name.trim() && item.primary_resource_concept.trim() && item.effects.length && item.effects.every(effect => effect.business_label.trim() && effect.resource_concept.trim() && (effect.effect_kind !== 'DATA_DISCLOSURE' || effect.protected_projection?.length)));
+    const actionsReady = draft.actions.length > 0 && draft.actions.every(item => item.display_name.trim() && item.primary_resource_concept.trim() && item.effects.length && item.effects.every(effect => effect.business_label.trim() && effect.resource_concept.trim() && validFieldMutation(effect.field_mutation) && (effect.effect_kind !== 'DATA_DISCLOSURE' || effect.protected_projection?.length)));
     const rulesReady = draft.permissions.length > 0 && draft.permissions.every(item => item.subject_actor_item_id && item.business_action_item_id && item.resource_owner_actor_item_id && item.protected_effect_item_ids.length);
     const valid = rolesReady && actionsReady && rulesReady;
     const missing: Array<{ section: Section; label: string }> = [
@@ -58,7 +59,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
             if (error instanceof ApiError && ['INPUT_INVALID', 'STATE_PRECONDITION', 'API_VALIDATION_ERROR'].includes(error.code)) edit({ uncertain: false });
             throw error;
         }
-    });
+    },'write');
     return <>
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>全部权限规则</Button></div>
         <Heading title="编写权限要求"><p>定义业务角色和操作，再明确每条访问要求。</p></Heading>
@@ -73,7 +74,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 <div role="tabpanel" id={panelId} aria-labelledby={prefix + '-' + section} className="jj-rule-authoring-panel" key={section}>
                     <fieldset className="jj-initial-rules" disabled={disabled}>
                         {section === 'actors' && <section className="jj-initial-definitions">
-                            <header><h2>定义业务角色</h2><Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => addRole()}>添加角色</Button></header>
+                            <SectionHeading title="业务角色" actions={<Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => addRole()}>添加角色</Button>}/>
                             {basis.candidate_options.some(item => item.candidate_kind === 'ROLE') && <div className="jj-initial-candidates"><Field label="从已识别角色添加"><Choice value="" placeholder="选择源码中的角色" onValueChange={value => addRole(value)}>{basis.candidate_options.filter(item => item.candidate_kind === 'ROLE' && !draft.actors.some(actor => actor.source_candidate_ids?.includes(item.candidate_id))).map(item => <option key={item.candidate_id} value={item.candidate_id}>{item.display_name}</option>)}</Choice></Field></div>}
                             {!draft.actors.length && <p className="jj-initial-empty">添加使用这项业务的角色，例如负责人、成员或访客。</p>}
                             {draft.actors.map((role, index) => <article className="jj-initial-role" key={role.item_id}>
@@ -85,48 +86,51 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                                 <Button kind="quiet" aria-label={'移除角色 ' + (role.display_name || index + 1)} disabled={draft.permissions.some(item => item.subject_actor_item_id === role.item_id || item.resource_owner_actor_item_id === role.item_id)} icon={<DeleteOutlined aria-hidden="true" />} onClick={() => edit({ actors: draft.actors.filter(item => item.item_id !== role.item_id) })} />
                             </article>)}
                         </section>}
-                        {section === 'actions' && <section className="jj-initial-definitions">
-                            <header><h2>定义操作与结果</h2><Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => addAction()}>添加操作</Button></header>
+                        {section === 'actions' && <section className="jj-initial-definitions" aria-label="业务操作">
+                            {!draft.actions.length&&<SectionHeading title="业务操作" actions={<Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => addAction()}>添加操作</Button>}/>}
                             {basis.candidate_options.some(item => item.candidate_kind === 'ACTION') && <div className="jj-initial-candidates"><Field label="从已识别操作添加"><Choice value="" placeholder="选择源码中的操作" onValueChange={value => addAction(value)}>{basis.candidate_options.filter(item => item.candidate_kind === 'ACTION' && !draft.actions.some(action => action.source_candidate_ids?.includes(item.candidate_id))).map(item => <option key={item.candidate_id} value={item.candidate_id}>{item.display_name}</option>)}</Choice></Field></div>}
                             {!draft.actions.length && <p className="jj-initial-empty">添加需要检查权限的业务操作，并说明怎样确认实际结果。</p>}
                             {draft.actions.map((action, index) => {
                                 const update = (value: Partial<typeof action>) => edit({ actions: draft.actions.map((item, i) => i === index ? { ...item, ...value } : item) });
-                                return <article className="jj-initial-action" key={action.item_id}>
-                                    <div className="jj-initial-action-fields">
+                                return <article className="jj-initial-action" key={action.item_id} aria-label={'业务操作 '+(index+1)}>
+                                    <FormColumns><section className="jj-initial-operation">
+                                        <SectionHeading title={index===0?'业务操作':'业务操作 '+(index+1)} level={index===0?2:3} actions={index===0?<Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => addAction()}>添加操作</Button>:undefined}/>
+                                    <div className="jj-field-stack">
                                         <Field label="操作名称"><input maxLength={256} value={action.display_name} onChange={event => update({ display_name: event.target.value })} /></Field>
                                         <Field label="操作的资源"><input maxLength={128} value={action.primary_resource_concept} onChange={event => update({ primary_resource_concept: event.target.value, effects: action.effects.map(effect => !effect.resource_concept || effect.resource_concept === action.primary_resource_concept ? { ...effect, resource_concept: event.target.value } : effect) })} /></Field>
-                                        <details className="jj-initial-extra"><summary>操作分类、说明与源码对应</summary><div><Field label="操作类型"><Choice disabled={disabled} value={action.operation_kind} onValueChange={value => update({ operation_kind: value as typeof action.operation_kind })}>{Object.entries({ READ: '读取', CHANGE: '修改', DELETE: '删除', EXPORT: '导出', ADMIN: '管理', CUSTOM: '其他' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Choice></Field>
-                                        <Field label="对应源码操作"><Choice disabled={disabled} value={action.source_candidate_ids?.[0] ?? ''} onValueChange={value => update({ source_candidate_ids: value ? [value] : [] })}><option value="">暂未对应</option>{basis.candidate_options.filter(item => item.candidate_kind === 'ACTION').map(item => <option key={item.candidate_id} value={item.candidate_id}>{item.display_name}</option>)}</Choice></Field>
+                                        <Field label="操作类型"><Choice disabled={disabled} value={action.operation_kind} onValueChange={value => update({ operation_kind: value as typeof action.operation_kind })}>{Object.entries({ READ: '读取', CHANGE: '修改', DELETE: '删除', EXPORT: '导出', ADMIN: '管理', CUSTOM: '其他' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Choice></Field>
+                                        {basis.candidate_options.some(item=>item.candidate_kind==='ACTION')&&<Field label="对应源码操作"><Choice disabled={disabled} value={action.source_candidate_ids?.[0] ?? ''} onValueChange={value => update({ source_candidate_ids: value ? [value] : [] })}><option value="">暂未对应</option>{basis.candidate_options.filter(item => item.candidate_kind === 'ACTION').map(item => <option key={item.candidate_id} value={item.candidate_id}>{item.display_name}</option>)}</Choice></Field>}
                                         <Field label="操作说明（选填）"><textarea rows={2} maxLength={1024} value={action.description} onChange={event => update({ description: event.target.value })} /></Field>
-                                        <label className="jj-checkbox"><input type="checkbox" checked={action.state_changing} onChange={event => update({ state_changing: event.target.checked })} /><span>此操作会改变业务数据</span></label></div></details>
-                                    </div>
-                                    <div className="jj-initial-effects">
-                                        <header><h3>业务结果</h3><Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => update({ effects: [...action.effects, {...newEffect(),resource_concept:action.primary_resource_concept}] })}>添加结果</Button></header>
+                                        <label className="jj-checkbox"><input type="checkbox" checked={action.state_changing} onChange={event => update({ state_changing: event.target.checked })} /><span>此操作会改变业务数据</span></label>
+                                    </div></section>
+                                    <section className="jj-initial-effects" aria-label={'业务操作 '+(index+1)+'的业务结果'}>
+                                        <SectionHeading title="业务结果" level={3} actions={<Button kind="quiet" icon={<PlusOutlined aria-hidden="true" />} onClick={() => update({ effects: [...action.effects, {...newEffect(),resource_concept:action.primary_resource_concept}] })}>添加结果</Button>}/>
                                         {action.effects.map((effect, effectIndex) => {
                                             const updateEffect = (value: Partial<ProposedEffectDto>) => update({ effects: action.effects.map((item, i) => i === effectIndex ? { ...item, ...value } : item) });
                                             return <section key={effect.item_id}>
-                                                <div className="jj-initial-effect-fields">
+                                                <div className="jj-field-stack">
                                                     <Field label="结果名称"><input maxLength={256} value={effect.business_label} onChange={event => updateEffect({ business_label: event.target.value })} /></Field>
                                                     <Field label="结果类型"><Choice disabled={disabled} value={effect.effect_kind} onValueChange={value => {
                                                         const kind=value as ProposedEffectDto['effect_kind'];
                                                         const classification=action.effects.length===1 ? ({STATE_MUTATION:{operation_kind:'CHANGE',state_changing:true},OBJECT_CREATION:{operation_kind:'CHANGE',state_changing:true},DATA_DISCLOSURE:{operation_kind:'READ',state_changing:false},FILE_CONTENT_DELIVERY:{operation_kind:'EXPORT',state_changing:false}} as const)[kind as 'STATE_MUTATION'|'OBJECT_CREATION'|'DATA_DISCLOSURE'|'FILE_CONTENT_DELIVERY'] : undefined;
-                                                        update({...classification,effects:action.effects.map((item,i)=>i===effectIndex?{...item,effect_kind:kind,protected_projection:[]}:item)});
+                                                        update({...classification,effects:action.effects.map((item,i)=>i===effectIndex?{...item,effect_kind:kind,protected_projection:[],field_mutation:null}:item)});
                                                     }}>{Object.entries(effectKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Choice></Field>
-                                                    <details className="jj-initial-extra"><summary>限定结果与补充说明（选填）</summary><div><Field label="结果涉及的资源"><input maxLength={128} value={effect.resource_concept} onChange={event => updateEffect({ resource_concept: event.target.value })} /></Field>
-                                                    <Field label="预期业务状态（选填）"><input maxLength={512} value={effect.expected_state ?? ''} onChange={event => updateEffect({ expected_state: event.target.value || null })} /></Field>
-                                                    <Field label="结果说明（选填）"><textarea rows={2} maxLength={1024} value={effect.description} onChange={event => updateEffect({ description: event.target.value })} /></Field></div></details>
+                                                    <Field label="结果涉及的资源"><input maxLength={128} value={effect.resource_concept} onChange={event => updateEffect({ resource_concept: event.target.value })} /></Field>
+                                                    {!effect.field_mutation&&<Field label="预期业务状态（选填）"><input maxLength={512} value={effect.expected_state ?? ''} onChange={event => updateEffect({ expected_state: event.target.value || null })} /></Field>}
+                                                    <details className="jj-initial-extra"><summary>补充结果说明（选填）</summary><div><Field label="结果说明（选填）"><textarea rows={2} maxLength={1024} value={effect.description} onChange={event => updateEffect({ description: event.target.value })} /></Field></div></details>
                                                     {effect.effect_kind === 'DATA_DISCLOSURE' && <Field label="受保护的业务字段" hint="填写真实字段名，以逗号分隔。"><input value={effect.protected_projection?.join(', ') ?? ''} onChange={event => updateEffect({ protected_projection: event.target.value.split(',').map(value => value.trim()).filter(Boolean) })} /></Field>}
+                                                    {effect.effect_kind==='STATE_MUTATION'&&<FieldMutationEditor value={effect.field_mutation} disabled={disabled} onChange={field_mutation=>updateEffect({field_mutation,expected_state:null})}/>}
                                                 </div>
                                                 {action.effects.length > 1 && <Button kind="quiet" disabled={draft.permissions.some(item => item.protected_effect_item_ids.includes(effect.item_id))} onClick={() => update({ effects: action.effects.filter(item => item.item_id !== effect.item_id) })}>移除此结果</Button>}
                                             </section>;
                                         })}
-                                    </div>
+                                    </section></FormColumns>
                                     <div className="jj-initial-entity-actions"><Button kind="quiet" disabled={draft.permissions.some(item => item.business_action_item_id === action.item_id)} icon={<DeleteOutlined aria-hidden="true" />} onClick={() => edit({ actions: draft.actions.filter(item => item.item_id !== action.item_id) })}>移除此操作</Button></div>
                                 </article>;
                             })}
                         </section>}
                         {section === 'permissions' && <section className="jj-initial-definitions">
-                            <header><h2>编写访问规则</h2><Button kind="quiet" disabled={!draft.actors.length || !draft.actions.length} icon={<PlusOutlined aria-hidden="true" />} onClick={addRule}>添加规则</Button></header>
+                            <SectionHeading title="访问规则" actions={<Button kind="quiet" disabled={!draft.actors.length || !draft.actions.length} icon={<PlusOutlined aria-hidden="true" />} onClick={addRule}>添加规则</Button>}/>
                             {!draft.permissions.length && <p className="jj-initial-empty">角色和操作填写后，即可添加允许或禁止的访问要求。</p>}
                             {draft.permissions.map((rule, index) => {
                                 const update = (value: Partial<typeof rule>) => edit({ permissions: draft.permissions.map((item, i) => i === index ? { ...item, ...value } : item) });
@@ -148,7 +152,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 </div>
             </div>
             {draft.permissions.length>0&&<aside className="jj-initial-preview" data-section={section} aria-label="权限草稿预览">
-                <header><span className="jj-initial-preview-symbol"><SafetyOutlined aria-hidden="true" /></span><h2>权限预览</h2><Badge>尚未生效</Badge></header>
+                <header><span className="jj-initial-preview-symbol"><SafetyOutlined aria-hidden="true" /></span><h2 className="jj-title-group">权限预览</h2><Badge>尚未生效</Badge></header>
                 <div className="jj-initial-preview-rules">{draft.permissions.map((rule, index) => {
                     const actor = draft.actors.find(item => item.item_id === rule.subject_actor_item_id), owner = draft.actors.find(item => item.item_id === rule.resource_owner_actor_item_id), action = draft.actions.find(item => item.item_id === rule.business_action_item_id);
                     const relation = rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '同角色其他账号的资源' : (owner?.display_name || '指定角色') + '的资源';

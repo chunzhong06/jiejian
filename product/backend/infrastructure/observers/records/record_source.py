@@ -82,7 +82,7 @@ def _read_owned_payload(var_dir, runtime_reference, path, *, timeout_us, max_res
 
 def read_record_source(var_dir, runtime_reference, config, resource_id, *, request_nonce=None, cancelled=lambda:False, trace=False, verified_subject=None):
     if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
-    if config.source_kind in {'SQLITE_AUDIT','SQLITE_OBJECTS'} and not trace:
+    if config.source_kind in {'SQLITE_AUDIT','SQLITE_OBJECTS','DATABASE_AUDIT'} and not trace:
         from product.backend.infrastructure.observers.records.sqlite_source import read_sqlite_source
         from product.protocols.runtime.transaction_records import RecordRequestScope
         scope = None
@@ -92,9 +92,19 @@ def read_record_source(var_dir, runtime_reference, config, resource_id, *, reque
             scope = RecordRequestScope.model_validate_json(json.dumps(body.get('data'), allow_nan=False))
             if scope.request_nonce != request_nonce:
                 raise SourceReadError('OPERATION_CORRELATION_INVALID')
+        if config.source_kind=='DATABASE_AUDIT':
+            from product.backend.infrastructure.observers.records.database_capture import read_database_source
+            return read_database_source(var_dir,runtime_reference.project_id,config,resource_id,scope=scope,
+                verified_subject=verified_subject,cancelled=cancelled)
         return read_sqlite_source(var_dir, runtime_reference, config, resource_id, scope=scope,
             verified_subject=verified_subject, cancelled=cancelled)
-    creation = config.source_kind == 'CREATED_OBJECT_RECORDS' and not trace
+    return read_managed_record(var_dir,runtime_reference,config,resource_id,request_nonce=request_nonce,
+        cancelled=cancelled,trace=trace,creation=config.source_kind=='CREATED_OBJECT_RECORDS' and not trace)
+
+
+def read_managed_record(var_dir,runtime_reference,config,resource_id,*,request_nonce=None,cancelled=lambda:False,trace=False,creation=False):
+    """读取声明集合的受控记录；取样只需集合与预算，不冒充带来源类型的完整证明配置。"""
+    if trace and request_nonce is None:raise SourceReadError('RECORD_SCOPE_REQUIRED')
     path = ('/creation/read/'+quote(config.collection,safe='')) if creation else (
         ('/trace/read/' if trace else '/proof/read/')+quote(config.collection,safe='')+'/'+quote(resource_id,safe=''))
     if request_nonce is not None:

@@ -150,12 +150,18 @@ def serve_command(
         serve_lock = ServeLock.acquire(settings.var_dir)
         previous_lock_path = os.environ.get("JIEJIAN_SERVE_LOCK_PATH")
         previous_owner_token = os.environ.get("JIEJIAN_SERVE_OWNER_TOKEN")
-        os.environ["JIEJIAN_SERVE_LOCK_PATH"] = str(serve_lock.path)
-        os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = serve_lock.owner_token
-        frontend_dir = (frontend_dir or default_frontend_dir()).resolve()
-        from product.backend.interfaces.http import create_app
-
         try:
+            os.environ["JIEJIAN_SERVE_LOCK_PATH"] = str(serve_lock.path)
+            os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = serve_lock.owner_token
+            frontend_dir = (frontend_dir or default_frontend_dir()).resolve()
+            # 导入也属于锁的持有期；导入失败同样必须恢复环境并释放本实例所有权。
+            import_started = time.perf_counter()
+            from product.backend.interfaces.http import create_app
+
+            logger.info("startup stage completed", extra={
+                "component": "serve", "event_code": "STARTUP_STAGE_COMPLETED",
+                "stage": "http_import", "elapsed_ms": round((time.perf_counter() - import_started) * 1_000, 3),
+            })
             if not frontend_dir.is_dir() or not (frontend_dir / "index.html").is_file():
                 raise JiejianError(ErrorCode.SERVE_FAILED, "前端静态资源缺少可读的 index.html")
             server_holder: dict[str, object] = {}
@@ -166,6 +172,7 @@ def serve_command(
                     print('__JIEJIAN_SERVE_STATUS__:stopping', flush=True)
                     setattr(server_instance, "should_exit", True)
 
+            assembly_started = time.perf_counter()
             api = create_app(
                 settings.var_dir,
                 control_origin=f"http://127.0.0.1:{port}",
@@ -173,6 +180,10 @@ def serve_command(
                 shutdown_callback=request_shutdown,
                 official_sample_root=official_sample_root,
             )
+            logger.info("startup stage completed", extra={
+                "component": "serve", "event_code": "STARTUP_STAGE_COMPLETED",
+                "stage": "application_assembly", "elapsed_ms": round((time.perf_counter() - assembly_started) * 1_000, 3),
+            })
             api.state.context.updates.accept_startup()
             config = uvicorn.Config(
                 api, host=host, port=port, log_level=settings.log_level.lower(),

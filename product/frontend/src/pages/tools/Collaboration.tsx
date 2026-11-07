@@ -6,7 +6,7 @@ import QuestionCircleOutlined from '@ant-design/icons/QuestionCircleOutlined'
 import FileSearchOutlined from '@ant-design/icons/FileSearchOutlined'
 import SafetyOutlined from '@ant-design/icons/SafetyOutlined'
 import SyncOutlined from '@ant-design/icons/SyncOutlined'
-import {Dropdown} from 'antd'
+import {CommandMenu} from '../../shared/ui/CommandMenu'
 import {collaborationApi,collaborationLabels,collaborationTone,purposeLabels,type CollaborationOperation,type CollaborationPurpose} from '../../entities/runtime/api/collaboration'
 import {useRead} from '../../shared/lib/useRead'
 import {go,scopedPath,returnDestination} from '../../shared/lib/navigation'
@@ -60,13 +60,12 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
   const activity=useRead('collaboration-activity:'+taskId+':'+state.data?.revision,()=>collaborationApi.activity(projectId,taskId),value=>value?.some(item=>!jobEnded(item.phase))?2000:0)
   // 请求标识跨网络失败保留；页面 busy 或离开页面均不意味着执行已结束。
   const executionRequest=useRef(crypto.randomUUID().replaceAll('-',''))
-  const [launch,setLaunch]=useState(false),[allowChanges,setAllowChanges]=useState(false),[menuOpen,setMenuOpen]=useState(false)
+  const [launch,setLaunch]=useState(false),[allowChanges,setAllowChanges]=useState(false)
   const [continuous,setContinuous]=useState(true)
   const [view,setView]=useState('work'),[selectedId,setSelectedId]=useState<string>()
   const [supplement,setSupplement]=useState(false),[goal,setGoal]=useState(''),[purpose,setPurpose]=useState<CollaborationPurpose>('CHECK')
   const followupRequest=useRef(crypto.randomUUID().replaceAll('-',''))
   const followupPayload=useRef<Pick<CollaborationTask,'goal'|'purpose'|'references'|'editor'>|undefined>(undefined)
-  const menuTrigger=useRef<HTMLButtonElement>(null)
   const [busy,setBusy]=useState(false),[error,setError]=useState<unknown>(),[copied,setCopied]=useState(false),[answers,setAnswers]=useState<Record<string,string>>({})
   const act=async(work:()=>Promise<unknown>)=>{
     setBusy(true);setError(undefined)
@@ -109,11 +108,11 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
   })
   return <>
     <div className="jj-back-link"><Button kind="quiet" onClick={()=>go('/workspace?view=collaboration',projectId)}><ArrowLeftOutlined aria-hidden="true"/>全部协作任务</Button></div>
-    <Heading title="Agent 协作" actions={!finished&&<Dropdown open={menuOpen} onOpenChange={setMenuOpen} trigger={['click']} placement="bottomRight" autoFocus overlayClassName="jj-example-menu" menu={{selectable:false,items:[
+    <Heading title="Agent 协作" actions={!finished&&<CommandMenu className="jj-example-menu" menu={{selectable:false,items:[
       {key:task.state==='PAUSED'?'resume':'pause',label:task.state==='PAUSED'?'继续任务':'暂停任务'},
       ...(!decisions&&!activeJobs.length&&task.execution?.state!=='RUNNING'?[{key:'finish',label:'结束本次协作'}]:[]),
       {type:'divider' as const},{key:'cancel',label:'停止任务',danger:true},
-    ],onClick:({key})=>{setMenuOpen(false);menuTrigger.current?.focus({preventScroll:true});void act(()=>collaborationApi.control(projectId,taskId,key))}}}><Button ref={menuTrigger} disabled={busy} aria-haspopup="menu" aria-expanded={menuOpen} className="jj-menu-trigger">任务操作<DownOutlined className="jj-menu-chevron" aria-hidden="true"/></Button></Dropdown>}/>
+    ],onClick:({key})=>{void act(()=>collaborationApi.control(projectId,taskId,key))}}}><Button disabled={busy} className="jj-menu-trigger">任务操作<DownOutlined className="jj-menu-chevron" aria-hidden="true"/></Button></CommandMenu>}/>
     {Boolean(error)&&!supplement&&<ErrorNote error={error}/>}
     {supplement&&<Dialog title="补充当前任务" closeDisabled={busy} onClose={()=>setSupplement(false)} actions={<><Button disabled={busy} onClick={()=>setSupplement(false)}>取消</Button><Button kind="primary" busy={busy} disabled={!goal.trim()} onClick={()=>void submitFollowup()}>{followupPayload.current?'核对原补充请求':'更新目标与说明'}</Button></>}><Field label="当前目标与补充要求"><textarea rows={5} maxLength={2000} value={goal} disabled={busy||Boolean(followupPayload.current)} onChange={event=>setGoal(event.target.value)}/></Field><Field label="任务类型"><Choice value={purpose} disabled={busy||Boolean(followupPayload.current)} onValueChange={value=>setPurpose(value as CollaborationPurpose)}>{Object.entries(purposeLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></Field><p className="jj-small jj-muted">已有操作、产物和决定继续保留。正在执行时，后续回合读取更新后的目标；暂停的任务仍保持暂停。</p>{Boolean(error)&&<ErrorNote error={error}/>}</Dialog>}
     {launch&&<Dialog title="启动本地 Agent" onClose={()=>setLaunch(false)} actions={<><Button onClick={()=>setLaunch(false)}>取消</Button><Button kind="primary" busy={busy} onClick={()=>void act(async()=>{await collaborationApi.execute(projectId,taskId,allowChanges,executionRequest.current,continuous);executionRequest.current=crypto.randomUUID().replaceAll('-','');setLaunch(false)})}>启动并继续任务<ArrowRightOutlined aria-hidden="true"/></Button></>}>
@@ -131,7 +130,7 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
       </div>
     </Dialog>}
     <section className="jj-collaboration-overview" aria-label="当前任务">
-      <div className="jj-collaboration-meta"><span>{purposeLabels[task.purpose]}</span><span className="jj-collaboration-state" data-tone={collaborationTone(task.state)}>{collaborationLabels[task.state]??task.state}</span></div>
+      <div className="jj-collaboration-meta"><span>{purposeLabels[task.purpose]}</span><span className="jj-collaboration-state" data-tone={collaborationTone(task.state)} data-active={task.execution?.state==='RUNNING'&&!stopped||undefined}>{collaborationLabels[task.state]??task.state}</span></div>
       <p className="jj-collaboration-goal">{task.goal}</p>
       {!finished&&<Button kind="quiet" disabled={busy} onClick={()=>{if(!followupPayload.current){setGoal(task.goal);setPurpose(task.purpose);setError(undefined)}setSupplement(true)}}>补充目标与说明</Button>}
     </section>
@@ -142,7 +141,7 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
         {selected&&task.state==='PAUSED'&&<div className="jj-collaboration-paused"><p>继续任务后可回答或确认待办。</p><Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button></div>}
         {selected?<div className="jj-collaboration-workbench">
           <nav className="jj-collaboration-queue" aria-label="待处理事项">
-            <header><h2>需要你处理</h2><span>{decisions} 项</span></header>
+            <header><h2 className="jj-title-group">需要你处理</h2><span>{decisions} 项</span></header>
             <IndexSelection identity={selected.id} label="事项选择">{items.map(item=>{const Icon=workIcons[item.kind];return <button key={item.id} className="jj-index-item jj-collaboration-item" aria-current={selected.id===item.id?'true':undefined} onClick={()=>setSelectedId(item.id)}><Icon aria-hidden="true"/><span><small>{item.label}</small><strong>{item.title}</strong></span></button>})}</IndexSelection>
           </nav>
           <section key={selected.id} className="jj-collaboration-detail" aria-label="当前事项">

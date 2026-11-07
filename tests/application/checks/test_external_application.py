@@ -24,7 +24,7 @@ from tests.support.secrets import MemorySecrets
 pytestmark=[pytest.mark.level4,pytest.mark.process]
 
 
-def test_source_free_entity_disclosure_and_repeat_check(tmp_path):
+def test_source_free_entity_disclosure_and_repeat_check(tmp_path, monkeypatch):
     tokens={uuid4().hex:'owner',uuid4().hex:'member'}
     state={'vulnerable':True,'target_calls':0}
     class Handler(BaseHTTPRequestHandler):
@@ -103,7 +103,8 @@ def test_source_free_entity_disclosure_and_repeat_check(tmp_path):
             recheck=None if contract is None else ExternalRecheckCommand(reference=contract.reference(),deployment_statement='订单读取授权已处理，核对当前部署的原问题')
             preview=core.checks.preview(project,external_recheck=recheck)
             assert preview.can_execute,preview
-            submitted=core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,idempotency_key=uuid4().hex,external_recheck=recheck)
+            operation_id=uuid4().hex
+            submitted=core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,idempotency_key=operation_id,external_recheck=recheck)
             deadline=time.monotonic()+35
             while time.monotonic()<deadline:
                 status=core.check_results.status(submitted.run.run_id,project_id=project)
@@ -125,6 +126,12 @@ def test_source_free_entity_disclosure_and_repeat_check(tmp_path):
         core.application_environments.activate(project,changed.environment_id,revision=2,expected_revision=current.revision)
         assert all(core.test_identities.get(identity).status.value=='NEEDS_REVIEW' for identity in identities.values())
         assert not core.checks.preview(project).can_execute
+        def no_refreeze(*args, **kwargs):
+            raise AssertionError('accepted request must not freeze changed materials again')
+        monkeypatch.setattr(core.checks, '_freeze', no_refreeze)
+        repeated=core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key=operation_id,external_recheck=recheck)
+        assert not repeated.created and repeated.job.job_id==submitted.job.job_id
         assert state['target_calls']==4
         for path in var.rglob('*'):
             if path.is_file() and path.suffix in {'.json','.jsonl','.log'}:

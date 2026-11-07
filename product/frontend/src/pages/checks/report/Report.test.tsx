@@ -28,6 +28,23 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
 
+it('业务场景按资源比较，展开依据后索引收敛并保留准确资源与发生位置',()=>{
+  const value=story(),first=value.actions[0]
+  first.scenario_context={scenario_label:'混合批量',experiment_label:'成员混合处理',experiment_kind:'CHANGE_SUBJECT',invocation_label:'发布资料',item_index:1,item_count:2,same_resource_occurrences:1,batch_strategy:'PER_ITEM',expected_effect:'ABSENT'}
+  first.fact_comparison.resource_id='alpha'
+  value.actions.push({...structuredClone(first),case_id:'c3',scenario_context:{...first.scenario_context,item_index:2},fact_comparison:{...structuredClone(first.fact_comparison),resource_id:'beta'}})
+  const view=render(<Report {...props(value)}/>)
+  const table=screen.getByRole('table',{name:'逐项业务场景结果'})
+  expect(within(table).getByText('alpha')).toBeVisible()
+  expect(within(table).getByText('beta')).toBeVisible()
+  expect(within(table).getByRole('columnheader',{name:'操作账号与归属'})).toBeVisible()
+  fireEvent.click(within(table).getByRole('button',{name:/alpha/}))
+  expect(location.hash).toContain('case_id=c1')
+  view.rerender(<Report {...props(value)} selectedCaseId="c1"/>)
+  expect(within(screen.getByRole('table',{name:'逐项业务场景结果'})).queryByRole('columnheader',{name:'操作账号与归属'})).not.toBeInTheDocument()
+  expect(screen.getByRole('button',{name:/beta/})).toBeVisible()
+})
+
 it('归档状态归入报告信息，保留只读边界与两个明确返回入口',()=>{
   render(<Report {...props(story())} readOnly archiveName="展馆历史工作区" basePath="/archive?project_id=app" returnPath="/archive?project_id=app"/> )
   expect(screen.getByText('已归档')).toBeVisible()

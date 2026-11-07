@@ -175,14 +175,13 @@ from product.protocols.recording.flow_draft import FlowDraft, canonical_flow_dra
 from product.protocols.recording.events import RecordingEventKind, RecordingEvent, RecordingHeader
 from product.backend.infrastructure.storage.base import StorageRecord, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
-class RecordingRecord(StorageRecord):
+class RecordingSummary(StorageRecord):
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
     subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
-    preparation_source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
@@ -190,6 +189,10 @@ class RecordingRecord(StorageRecord):
     state: RecordingState
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
+
+
+class RecordingRecord(RecordingSummary):
+    preparation_source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     started_at_us: int | None = Field(default=None, ge=0)
     capture_finished_at_us: int | None = Field(default=None, ge=0)
     finished_at_us: int | None = Field(default=None, ge=0)
@@ -329,6 +332,15 @@ class RecordingRepository:
             .order_by(RecordingRow.created_at_us.desc(), RecordingRow.recording_id),
         )
         return tuple(self._record(row) for row in rows)
+
+    def list_summaries(self,project_id,*,completed_targets=False):
+        """目录只取元数据；正文和事件由准确录制详情的 reader 接受。"""
+        columns=[getattr(RecordingRow,name) for name in RecordingSummary.model_fields]
+        query=select(*columns).where(RecordingRow.project_id==project_id)
+        if completed_targets:
+            query=query.where(RecordingRow.state=='COMPLETED',RecordingRow.purpose=='TARGET')
+        rows=self._session.execute(query.order_by(RecordingRow.created_at_us.desc(),RecordingRow.recording_id)).mappings()
+        return tuple(RecordingSummary.model_validate_json(_canonical_json(dict(row))) for row in rows)
 
     def preparation_references(self, project_id: str):
         """准备建议只需录制身份与生命周期；不为罗列引用加载全部浏览器事件正文。"""

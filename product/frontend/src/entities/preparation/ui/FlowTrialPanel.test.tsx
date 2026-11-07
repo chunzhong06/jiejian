@@ -11,6 +11,17 @@ const plan:TrialPlan={flow,case:{subject_test_identity_id:'owner',resource_owner
 const props={projectId:'app',flow,accounts:[{identity_id:'owner',label:'负责人'}],onResume:vi.fn()}
 const receipt=(operation:string):FlowTrial=>({request:{operation_id:operation,trial_id:'ftr_original',created_at_us:1000000,plan},job_id:'job_original',state:'RUNNING',report:null,operation_may_have_run:true,recovery_pending:false})
 
+test('业务场景传入的账号和资源用于预览，未确认前不执行',async()=>{
+  vi.mocked(api.history).mockResolvedValue([])
+  vi.mocked(api.preview).mockResolvedValue({plan,plan_hash:'b'.repeat(64)})
+  const selection={flow_id:flow.id,revision:flow.revision,subject_identity_id:'member',resource_owner_identity_id:'owner',resource_id:'order-2'}
+  render(<FlowTrialPanel {...props} onResume={undefined} accounts={[...props.accounts,{identity_id:'member',label:'成员'}]} initialSelection={selection}/>)
+  fireEvent.click(screen.getByRole('button',{name:'预览试运行'}))
+  await screen.findByRole('button',{name:'确认执行一次'})
+  expect(api.preview).toHaveBeenCalledWith('app',selection)
+  expect(api.start).not.toHaveBeenCalled()
+})
+
 test('未知提交回执和重新打开只查询原操作，不重新发送场景',async()=>{
   let original:FlowTrial|undefined
   vi.mocked(api.history).mockImplementation(async()=>original?[original]:[])

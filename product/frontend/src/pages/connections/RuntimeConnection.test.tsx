@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RuntimeConnection } from './RuntimeConnection';
+import { ServiceDatabaseOptions } from './ServiceDatabaseOptions';
+import { RuntimeOptions } from './RuntimeOptions';
 import { projectsApi as api } from '../../entities/application/api/projects';
 
 const idle = { project_id: 'app', running: false, source_matches: false, configuration: { entry: 'app.mjs', port: 3000 }, operation: null };
@@ -10,6 +12,28 @@ const props = { projectId: 'app', revision: 1, confirmedEndpoint: 'http://127.0.
 beforeEach(()=>{vi.spyOn(api,'runtimeCapabilities').mockResolvedValue({project_id:'app',source_read_authorized:true,entries:['app.mjs'],package:null,dependencies:'NOT_REQUIRED',build_scripts:[]});});
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
+
+it('数据库配置按连接和记录分组，取消填写不保存凭据或配置',()=>{
+    const credential=vi.spyOn(api,'databaseCredential'),change=vi.fn();
+    render(<ServiceDatabaseOptions projectId="app" value={[]} onChange={change} disabled={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:'添加连接'}));
+    expect(screen.getByRole('heading',{name:'连接位置'})).toBeVisible();
+    expect(screen.getByRole('heading',{name:'业务记录投影'})).toBeVisible();
+    fireEvent.change(screen.getByLabelText('数据库密码'),{target:{value:'temporary-test-value'}});
+    fireEvent.click(screen.getByRole('button',{name:'取消'}));
+    expect(credential).not.toHaveBeenCalled();expect(change).not.toHaveBeenCalled();
+});
+
+it('手动声明SQLite按记录和结果分组，编辑业务字段保留原归属对应',()=>{
+    const change=vi.fn();
+    render(<RuntimeOptions projectId="app" value={{sqlite:[{relative_path:'data/app.sqlite',tables:[{table:'orders',resource_column:'id',owner_column:'owner_id',fields:['status']}]}]}} onChange={change} disabled={false}/>);
+    fireEvent.click(screen.getByText(/依赖与测试数据/));
+    fireEvent.click(screen.getByRole('button',{name:'调整数据对应'}));
+    expect(screen.getByRole('heading',{name:'定位业务记录'})).toBeVisible();
+    expect(screen.getByRole('heading',{name:'核对业务结果'})).toBeVisible();
+    fireEvent.change(screen.getByLabelText('需观察的业务字段'),{target:{value:'status, visibility'}});
+    expect(change.mock.calls.at(-1)?.[0].sqlite[0].tables[0]).toEqual({table:'orders',resource_column:'id',owner_column:'owner_id',fields:['status','visibility']});
+});
 
 it('从证明缺口返回时直接展示已有启动配置，不重新选择方式或执行启动',async()=>{
     vi.spyOn(api,'runtime').mockResolvedValue(idle);

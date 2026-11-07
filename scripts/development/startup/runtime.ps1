@@ -88,6 +88,9 @@ function Handle-PrepareStatus([string]$Line) {
     if ($token -ne $expectedToken -or $state -ne $expectedState) { return $false }
     $script:PrepareStatusState[$token] = $state
     $script:PrepareStatusIndex += 1
+    if ($null -ne $script:StartupPanelClock) {
+        Write-Startup ("[timing] prepare/{0}/{1} {2:N0} ms" -f $token, $state, $script:StartupPanelClock.Elapsed.TotalMilliseconds)
+    }
     if ($state -eq "start") { Set-PrepareDisplayTask $token }
     else { Complete-PrepareDisplayTask $token }
     return $true
@@ -105,6 +108,9 @@ function Invoke-External(
     $script:DisplayStageSkipped = $false
     $script:FailureStage = $Stage
     $fullCommand = @($Command) + @($Arguments)
+    if ($null -ne $script:StartupPanelClock) {
+        Write-Startup ("[timing] command/{0}/start {1:N0} ms" -f $Stage, $script:StartupPanelClock.Elapsed.TotalMilliseconds)
+    }
     Write-Startup ("[{0}] & {1} {2}" -f $Stage, $fullCommand[0], (($fullCommand | Select-Object -Skip 1) -join " "))
     [object[]]$invokeArguments = @()
     if ($fullCommand.Count -gt 1) {
@@ -185,6 +191,9 @@ function Invoke-External(
                 Out-Null
         }
         $code = $LASTEXITCODE
+        if ($Stage -ne "serve" -and $null -ne $script:StartupPanelClock) {
+            Write-Startup ("[timing] command/{0}/done {1:N0} ms" -f $Stage, $script:StartupPanelClock.Elapsed.TotalMilliseconds)
+        }
         if ($Stage -eq "serve" -and $script:ServeStartupFailed -and $code -eq 0) {
             $code = 50
         }

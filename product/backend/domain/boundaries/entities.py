@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from enum import StrEnum
@@ -12,9 +11,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from product.backend.domain.canonical import canonical_sha256
+
 from product.backend.domain.boundaries.approval import HumanApproval
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.boundaries.semantics import BusinessEffectKind
+from product.protocols.checks.field_mutation import FieldMutationRequirement
 
 
 ACTOR_ID_PATTERN = r"^bar_[0-9a-f]{32}$"
@@ -63,17 +65,10 @@ class ImplementationCandidateSnapshot(BoundaryModel):
 
 
 def boundary_sha256(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_sha256(payload)
 
 
-def _trimmed_text(value: str, field_name: str) -> str:
+def trimmed_text(value: str, field_name: str) -> str:
     if value != value.strip() or (not value and field_name != 'description') or any(ord(char) < 32 for char in value):
         raise ValueError(f"{field_name} must be trimmed printable text")
     return value
@@ -86,12 +81,13 @@ class BusinessEffectDefinition(BoundaryModel):
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
+    field_mutation: FieldMutationRequirement | None = Field(default=None, exclude_if=lambda value: value is None)
     description: str = Field(default="", max_length=1024)
 
     @field_validator("business_label", "resource_concept", "expected_state", "description")
     @classmethod
     def validate_text(cls, value: str | None, info) -> str | None:
-        return None if value is None else _trimmed_text(value, info.field_name)
+        return None if value is None else trimmed_text(value, info.field_name)
 
     @field_validator("protected_projection")
     @classmethod
@@ -104,6 +100,8 @@ class BusinessEffectDefinition(BoundaryModel):
 
     @model_validator(mode="after")
     def validate_effect_kind(self) -> BusinessEffectDefinition:
+        if self.field_mutation is not None and (self.effect_kind is not BusinessEffectKind.STATE_MUTATION or self.expected_state is not None):
+            raise ValueError('field mutation requires STATE_MUTATION without legacy expected_state')
         if self.effect_kind is BusinessEffectKind.DATA_DISCLOSURE:
             if not self.protected_projection:
                 raise ValueError("DATA_DISCLOSURE requires protected projection")
@@ -143,7 +141,7 @@ class BusinessActorRevision(BoundaryModel):
     @field_validator("display_name", "description")
     @classmethod
     def validate_text(cls, value: str, info) -> str:
-        return _trimmed_text(value, info.field_name)
+        return trimmed_text(value, info.field_name)
 
     def semantic_payload(self) -> dict[str, Any]:
         return {
@@ -195,7 +193,7 @@ class BusinessActionRevision(BoundaryModel):
     @field_validator("display_name", "description", "primary_resource_concept")
     @classmethod
     def validate_text(cls, value: str, info) -> str:
-        return _trimmed_text(value, info.field_name)
+        return trimmed_text(value, info.field_name)
 
     @field_validator("effect_catalog")
     @classmethod
@@ -370,5 +368,5 @@ __all__ = [
     "BoundaryEffectiveState", "BusinessAction", "BusinessActionOperationKind",
     "BusinessActionRevision", "BusinessActor", "BusinessActorRevision",
     "BusinessEffectDefinition", "BusinessOperationKind", "BusinessRevisionState",
-    "ImplementationBindingStatus", "ImplementationCandidateSnapshot", "boundary_sha256",
+    "ImplementationBindingStatus", "ImplementationCandidateSnapshot", "boundary_sha256", "trimmed_text",
 ]

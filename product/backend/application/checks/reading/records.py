@@ -20,6 +20,19 @@ METHODS={
 }
 
 REASONS={
+    'ASYNC_DISPATCH_TASK_INVALID':'提交响应没有可安全跟随的真实任务编号。',
+    'ASYNC_EXPORT_UNCONFIRMED':'尚未形成可以跟随的异步导出链路。',
+    'ASYNC_TASK_CORRELATION_CONFLICT':'任务、资源、主体或原请求没有准确对应。',
+    'ASYNC_TASK_STATE_CONFLICT':'同一任务的状态倒退或发生终态冲突。',
+    'ASYNC_TASK_STATE_UNMAPPED':'任务状态尚未对应到已审阅的生命周期定义。',
+    'ASYNC_TASK_FAILED':'服务声明任务失败，未据此认定文件已交付或安全拒绝。',
+    'ASYNC_TASK_CANCELLED':'采集已停止或服务声明任务取消；后台工作是否结束仍须核对。',
+    'ASYNC_TASK_TIMED_OUT':'服务声明任务超时，最终业务后果尚未确认。',
+    'ASYNC_TASK_OBSERVATION_TIMEOUT':'等待预算已用尽；没有重新提交导出请求。',
+    'ASYNC_TASK_HTTP_STATUS':'状态接口未返回可读取的正常结果。',
+    'ASYNC_TASK_RESPONSE_LIMIT':'任务状态读取超过累计字节预算。',
+    'ASYNC_ACTUAL_IDENTITY_MISMATCH':'任务读取时的实际主体未能核对。',
+
     'PERMISSION_CONDITION_UNKNOWN':'执行前未能确认规则所需的身份、租户或数据状态，本项未执行目标操作。',
     'PERMISSION_CONDITION_MISMATCH':'执行前读取的实际身份、租户或数据状态不符合这条规则，本项未执行目标操作。',
     'ORPHAN_EFFECT_CONFIRMED':'已确认禁止的业务后果发生，且实际账号、请求和资源均能对应。之后的拒绝或恢复不会撤销这条事实。',
@@ -109,7 +122,7 @@ def _entries(document):
     add('OUTCOME',document.outcome,'/outcome','本次操作的执行记录')
     for index,fact in enumerate(getattr(document,'business_facts',())):
         labels={'OBJECT_CREATION':'本次创建的实际对象','COMMITTED_STATE':'已保存的数据修改','IDENTITY_CHECK':'实际账号核对','FIELD_DISCLOSURE':'受保护字段比较',
-            'REFERENCE_ARTIFACT':'已采用的文件参照','FILE_RECEIPT':'实际接收的文件内容'}
+            'REFERENCE_ARTIFACT':'已采用的文件参照','FILE_RECEIPT':'实际接收的文件内容','ASYNC_TASK':'异步任务与原请求关联','ANONYMOUS_CHECK':'实际访客身份核对'}
         label=f'第 {fact.data.scope_ordinal+1} 次数据修改' if fact.data.kind=='COMMITTED_STATE' else labels[fact.data.kind]
         add('FACT',fact,f'/business_facts/{index}',label)
     for index,item in enumerate(document.observations):
@@ -148,11 +161,13 @@ def _summary(link,value):
         if value.phase in {'BASELINE','BEFORE','RECOVERY'}:return PHASES[value.phase]+'的对照记录；最终业务后果还需结合操作后的观察。'
         return {'CONFIRMED':'这项业务后果已被观察到。','ABSENT':'在这条记录的观察范围内没有发现该后果。','UNKNOWN':'这条记录不足以确认业务后果。'}[value.state]
     data=value.data
+    if data.kind=='ANONYMOUS_CHECK':return '紧邻本次操作核对实际访客会话；没有登录身份不代表资源和后果已经确认。'
     if data.kind=='OBJECT_CREATION':return '独立业务记录确认本次请求创建了这个对象；随后删除或接口拒绝不会抹去创建事实。'
     if data.kind=='COMMITTED_STATE':return '这条记录保存了一次数据修改。下方列出修改前后的值，用于核对受保护字段是否发生变化。'
     if data.kind=='IDENTITY_CHECK':return '独立身份读取的结果：账号'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.subject_match]+'，角色'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.role_match]+'。'
     if data.kind=='FIELD_DISCLOSURE':return '对实际返回的受保护字段逐项比较；摘要用于核对内容，不展示原始敏感正文。'
     if data.kind=='REFERENCE_ARTIFACT':return '这是用户采用的测试参照，只定义要比较的内容，本身不能证明本次已经收到文件。'
+    if data.kind=='ASYNC_TASK':return '从实际提交响应跟随同一任务，并核对主体、资源和原请求。任务终态与实际文件接收分别证明。'
     return {'MATCH':'实际完整收到的内容与已采用参照一致。','DIFFERENT':'实际收到的内容与参照不同，不能把它当作原完整文件。','INCOMPLETE':'本次没有形成完整文件接收证明。'}[data.comparison]
 
 
@@ -160,7 +175,7 @@ def record_view(package,evidence_id,case_id,record_id):
     document,result=_select(package,evidence_id,case_id);entries=_entries(document)
     entry=next((entry for entry in entries if entry[0].record_id==record_id),None)
     if entry is None:raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'未找到这条封存记录，请从原检查项重新打开')
-    link,value,pointer=entry;case=document.case;outcome=document.outcome
+    link,value,pointer=entry;case=document.effective_case;outcome=document.outcome
     configuration=next(action for action in package.bundle.actions if action.action_id==document.action_id)
     identities={item.identity_id:item for item in package.bundle.identities}
     subject_label='未登录访客' if case.subject_test_identity_id is None else identities[case.subject_test_identity_id].label
@@ -179,6 +194,7 @@ def record_view(package,evidence_id,case_id,record_id):
         limitations.append('这条观察未封存字段比较或逐次修改明细，只能读取已保存的判断字段。')
     if link.kind=='ACTIVITY':
         limitations.append('探针覆盖已启用的 HTTP、SQLite 和文件调用，不记录应用内部的任意函数或自动推断权限决定。')
+    if link.kind=='FACT' and value.data.kind=='ASYNC_TASK':supporting=True
     if supporting:limitations.append('这条过程记录不能单独证明权限安全或业务后果。')
     method='；'.join(dict.fromkeys(METHODS[ref.method] for ref in refs))
     if refs:
@@ -227,11 +243,18 @@ def record_view(package,evidence_id,case_id,record_id):
     if link.kind=='FACT':
         data=value.data;fragment=dict(fact_id=value.fact_id,observed_at_us=value.observed_at_us,collector_kind=value.collector_kind,
             collector_version=value.collector_version,complete=value.complete,reason_codes=value.reason_codes,data=data.model_dump(mode='json'))
-        if data.kind=='COMMITTED_STATE':values=[dict(label='.'.join(change.path),before=change.before,after=change.after) for change in data.changes]
+        if data.kind=='COMMITTED_STATE':
+            for change in data.changes:
+                label='.'.join(change.path)
+                values.append(dict(label=label,before=change.before,after=change.after))
+                if not change.before_present or not change.after_present:
+                    values.append(dict(label=label+' · 字段存在',before=change.before_present,after=change.after_present))
         elif data.kind=='OBJECT_CREATION':values=[dict(label='本次实际对象',value=data.resource_id),dict(label='对象实例标识',value=data.incarnation),dict(label='创建记录序号',value=data.sequence),dict(label='录制样本（仅作材料引用）',value=case.resource_id)]
         elif data.kind=='FILE_RECEIPT':values=[dict(label='文件大小（字节）',before=data.expected.size,after=data.actual_size,before_label='参照文件',after_label='实际收到'),dict(label='内容指纹（SHA-256）',before=data.expected.sha256,after=data.actual_sha256,before_label='参照文件',after_label='实际收到'),dict(label='完整接收',value=data.complete)]
         elif data.kind=='FIELD_DISCLOSURE':values=[dict(label=item.path,value='与参照一致' if item.matched else '未形成一致比较') for item in data.fields]
         elif data.kind=='REFERENCE_ARTIFACT':values=[dict(label='参照大小（字节）',value=data.manifest.size),dict(label='参照SHA-256',value=data.manifest.sha256)]
+        elif data.kind=='ANONYMOUS_CHECK':values=[dict(label='实际为未登录访客',value=data.unauthenticated)]
+        elif data.kind=='ASYNC_TASK':values=[dict(label='任务生命周期',value={'QUEUED':'排队','RUNNING':'运行中','SUCCESS':'服务声明成功','FAILED':'服务声明失败','CANCELLED':'服务声明已取消','TIMED_OUT':'服务声明超时'}[data.state]),dict(label='主体、资源及原请求一致',value=data.correlated),dict(label='已查询次数',value=data.polls_used),dict(label='任务指纹',value=data.task_fingerprint)]
         else:values=[dict(label='账号一致',value=data.subject_match),dict(label='角色一致',value=data.role_match)]
     elif link.kind=='ACTIVITY':
         fragment=value.model_dump(mode='json')
@@ -248,7 +271,11 @@ def record_view(package,evidence_id,case_id,record_id):
             # 归约窗口也必须可见，才能解释闭合与未发生；不导出原请求nonce。
             fragment['collection']=tuple(ref.model_dump(mode='json') for ref in refs)
             window=getattr(refs[0],'record_window',None)
-            if window is not None:values=[dict(label='.'.join(window.field_path),before=window.before_value,after=window.after_value),dict(label='本次请求已保存的修改次数',value=window.operation_count),dict(label='本次请求的记录已收齐',value=window.scope_state=='COMPLETE')]
+            if window is not None:
+                label='.'.join(window.field_path)
+                values=[dict(label=label,before=window.before_value,after=window.after_value),dict(label='本次请求已保存的修改次数',value=window.operation_count),dict(label='本次请求的记录已收齐',value=window.scope_state=='COMPLETE')]
+                if not window.before_present or not window.after_present:
+                    values.insert(1,dict(label=label+' · 字段存在',before=window.before_present,after=window.after_present))
             elif getattr(refs[0],'creation_window',None) is not None:
                 created=refs[0].creation_window
                 values=[dict(label='本次创建记录数',value=created.created_count),dict(label='响应编号与独立记录对应',value=created.response_matched),

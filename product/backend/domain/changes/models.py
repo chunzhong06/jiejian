@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from product.protocols.checks.execution_request import WireModel, content_hash
 import hashlib
-import json
 import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from product.backend.domain.canonical import canonical_sha256
 from product.backend.domain.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.domain.reports.repair import RepairContractReference
 from product.backend.domain.checks.repair import CurrentRepairReference
@@ -53,15 +53,6 @@ def normalize_relative_source_path(value: str) -> str:
     return "/".join(parts)
 
 
-def _canonical_sha256(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 class SourceFileFingerprint(SourceChangeModel):
@@ -179,7 +170,7 @@ class SourceChangeSet(SourceChangeModel):
                 raise ValueError("no-baseline change set cannot claim a diff")
         elif self.previous_snapshot_id is None:
             raise ValueError("comparable change set requires previous snapshot")
-        if self.change_fingerprint != _canonical_sha256(self.canonical_payload()):
+        if self.change_fingerprint != canonical_sha256(self.canonical_payload()):
             raise ValueError("change fingerprint is inconsistent")
         return self
 
@@ -265,7 +256,7 @@ class ChangeImpactAssessment(SourceChangeModel):
             item.classification == "NO_DIRECT_EVIDENCE" for item in self.impacts
         ):
             raise ValueError("incomplete assessment cannot claim no direct evidence")
-        if self.impact_fingerprint != _canonical_sha256(self.canonical_payload()):
+        if self.impact_fingerprint != canonical_sha256(self.canonical_payload()):
             raise ValueError("impact fingerprint is inconsistent")
         return self
 
@@ -294,11 +285,11 @@ class RevalidationPlan(SourceChangeModel):
 
 
 def source_change_fingerprint(payload: dict[str, Any]) -> str:
-    return _canonical_sha256(payload)
+    return canonical_sha256(payload)
 
 
 def change_impact_fingerprint(payload: dict[str, Any]) -> str:
-    return _canonical_sha256(payload)
+    return canonical_sha256(payload)
 
 
 class CurrentChangeManifest(ChangeManifest):

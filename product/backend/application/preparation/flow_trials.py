@@ -10,7 +10,7 @@ from product.backend.domain.lifecycle import JobState
 from product.backend.application.checks.runtime_bundle import recorded_request_template
 from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.application.test_identities.freezing import freeze_check_identity
-from product.backend.application.preparation.trial_jobs import FlowTrialJobs,trial_recovery_gaps
+from product.backend.application.preparation.trial_jobs import FlowTrialJobs,trial_recovery_gaps,read_trial_facts,recovery_gaps_from_facts
 from product.backend.infrastructure.artifacts.trial_guard import trial_inputs_current
 from product.backend.infrastructure.runtime.jobs.models import RequestCancellation
 
@@ -114,24 +114,35 @@ class FlowTrialService:
             work.commit();return result
 
     def _read(self,work,project_id,trial_id):
-        request=work.flow_trials.get(project_id,trial_id)
-        if request is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'未找到该应用的试运行')
-        report=work.flow_trials.report(project_id,trial_id);job=work.jobs.get_by_flow_trial(trial_id)
+        readings=read_trial_facts(work,project_id)
+        item=next((item for item in readings if item.request.trial_id==trial_id),None)
+        if item is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'未找到该应用的试运行')
+        return self._view(item,{request.trial_id for request in recovery_gaps_from_facts(readings)})
+
+    @staticmethod
+    def _view(item,pending):
+        request,job,report=item.request,item.job,item.report
         return dict(request=request.model_dump(mode='json'),job_id=job.job_id,state=job.state.value,
             report=None if report is None else report.model_dump(mode='json'),operation_may_have_run=job.attempt>0,
-            recovery_pending=any(item.trial_id==trial_id for item in trial_recovery_gaps(work,project_id)))
+            recovery_pending=request.trial_id in pending)
 
     def read(self,project_id,trial_id):
-        with self._uow() as work:return self._read(work,project_id,trial_id)
+        with self._uow() as work:
+            work.begin_read_snapshot()
+            return self._read(work,project_id,trial_id)
 
     def requested(self,project_id,operation_id):
         with self._uow() as work:
+            work.begin_read_snapshot()
             job=work.jobs.get_by_idempotency(project_id,'FLOW_TRIAL',operation_id)
             return None if job is None else self._read(work,project_id,job.flow_trial_id)
 
     def history(self,project_id):
         with self._uow() as work:
-            return [self._read(work,project_id,item.trial_id) for item in work.flow_trials.list(project_id)]
+            work.begin_read_snapshot()
+            readings=read_trial_facts(work,project_id)
+            pending={item.trial_id for item in recovery_gaps_from_facts(readings)}
+            return [self._view(item,pending) for item in readings]
 
     def cancel(self,project_id,trial_id):
         with self._uow() as work:
@@ -151,14 +162,13 @@ class FlowTrialService:
             work.begin_read_snapshot()
             resources=tuple(item for root in work.business_boundaries.list_actions(project_id)
                 for item in work.action_preparation.resources(root.action_id,root.current_revision))
-            pending={item.trial_id:item for item in trial_recovery_gaps(work,project_id)}
-            for request in work.flow_trials.list(project_id):
-                job=work.jobs.get_by_flow_trial(request.trial_id)
-                if job.state in {JobState.PENDING,JobState.RUNNING,JobState.RETRY_WAIT}:pending[request.trial_id]=request
+            readings=read_trial_facts(work,project_id)
+            pending={item.trial_id for item in recovery_gaps_from_facts(readings)}
             result=[]
-            for request in pending.values():
-                job=work.jobs.get_by_flow_trial(request.trial_id)
+            for item in readings:
+                request,job=item.request,item.job
                 active=job.state in {JobState.PENDING,JobState.RUNNING,JobState.RETRY_WAIT}
+                if not active and request.trial_id not in pending:continue
                 case=request.plan.case
                 affected=tuple(sorted({item.business_action_id for item in resources if active or
                     (item.actual_resource_id,item.resource_owner_test_identity_id)==(case.resource_id,case.resource_owner_test_identity_id)}))

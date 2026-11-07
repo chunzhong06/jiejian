@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import json
 import math
+import hashlib
 
 
 def encode_json(payload: dict) -> bytes:
     # 排序、紧凑分隔和有限数字共同定义摘要输入；不能用另一套等价 JSON 文本代替这些字节。
     return json.dumps(payload, ensure_ascii=False, sort_keys=True,
         separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def content_hash(domain: str, value) -> str:
+    """按既有域名与事实封装计算摘要，供互相独立的协议模型核对相同内容身份。"""
+    return hashlib.sha256(encode_json({'kind':domain,'facts':value})).hexdigest()
 
 
 def decode_json(raw: bytes | str, *, limit: int | None = None) -> dict:

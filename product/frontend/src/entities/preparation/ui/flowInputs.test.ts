@@ -1,6 +1,7 @@
 import {expect,it} from 'vitest'
 import {compileSteps,decodeSteps,newParameter,type EditableStep} from './flowInputs'
-import type {FlowStep} from '../api/operationFlows'
+import {flowDraftReducer,type FlowEditorDraft} from './flowDraft'
+import type {OperationFlow,FlowStep} from '../api/operationFlows'
 
 const step=(id:string):FlowStep=>({id,purpose:'TARGET',identity_id:'CASE_SUBJECT',request_template:{method:'POST',path:'/orders/{case_resource_id}',body:{kind:'JSON',value:{title:'旧标题'}},query:[{name:'page',literal:'2'}],headers:[{name:'Accept',literal:'application/json'}],input_slots:[{slot_id:'case_resource_id',source:'CASE_RESOURCE_ID',consumer:'PATH',consumer_step_id:id}]},classifier:{accepted:[{kind:'STATUS_IN',statuses:[200]}],denied:[]},depends_on_step_ids:[]})
 
@@ -47,4 +48,19 @@ it('敏感固定值和未来依赖在形成公共候选前拒绝',()=>{
   expect(()=>compileSteps([input],'target','')).toThrow('敏感参数')
   input.parameters=[{...newParameter('HEADER'),name:'X-CSRF',source:'PRIOR_STEP_JSON_PATH',producer:'later',secret:true}]
   expect(()=>compileSteps([input],'target','')).toThrow('之前的请求')
+})
+
+it('载入流程同时切换身份资源和恢复，后续修改形成准确的新修订',()=>{
+  const before:FlowEditorDraft={phase:1,origin:'manual',entityEvidence:[],flowId:'old',revision:1,steps:decodeSteps([step('old')]),selected:0,target:'old',createdPath:'',subject:'old-subject',owner:'old-owner',resource:'old-resource',recovery:'/old',restoreMethod:'POST',restoreBody:'{}',provenance:'MANUAL',recordingId:''}
+  const document:OperationFlow={id:'new',revision:4,business_action_id:'action',action_revision:1,subject_test_identity_id:'subject',resource_owner_test_identity_id:'owner',provenance:'OPENAPI',source_recording_id:null,source_fingerprint:null,actual_resource_id:'resource',workflow:{steps:[step('target')],target_step_id:'target'},recovery:{method:'PUT',relative_path:'/restore',json_body:{state:'draft'}}}
+  const loaded=flowDraftReducer(before,{type:'load',document,steps:decodeSteps(document.workflow.steps),revision:4,phase:4,saved:true})
+  expect([loaded.flowId,loaded.subject,loaded.owner,loaded.resource,loaded.recovery,loaded.restoreMethod]).toEqual(['new','subject','owner','resource','/restore','PUT'])
+  expect(loaded.saved).toBe(document)
+  expect(before.flowId).toBe('old')
+  const dirty=flowDraftReducer(loaded,{type:'dirty',latestRevision:9})
+  expect(dirty.revision).toBe(10)
+  expect(dirty.saved).toBeUndefined()
+  const edited=flowDraftReducer(dirty,{type:'field',key:'steps',value:items=>[...items,...decodeSteps([step('later')])]})
+  expect(edited.steps.map(item=>item.id)).toEqual(['target','later'])
+  expect(edited.owner).toBe('owner')
 })

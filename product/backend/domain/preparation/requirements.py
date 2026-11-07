@@ -193,7 +193,8 @@ class IdentityRequirementPlanner:
             if control.resolved_allow_permission is not None:
                 merge((control.deny_permission.intent_id, "owner"),
                       (control.resolved_allow_permission.intent_id, "owner"))
-        # 同一资源的同租户与跨租户场景不能复用实际主体；租户仍是属性，不另造业务角色。
+        # 租户归属要求不同主体；共享或委托状态则可随时间变化，不能强迫换账号。
+        # 每次执行仍须从本次独立事实核对 ACTIVE/REVOKED/EXPIRED，账号复用不代替条件证明。
         for index, left in enumerate(ordered):
             for right in ordered[index + 1:]:
                 if (left.conditions is not None and right.conditions is not None
@@ -324,6 +325,7 @@ def compile_action_assurance(
 
 def _compile_allow_control(action, deny, allows, bindings):
     candidates = tuple(allow for allow in allows if _relation_valid(deny)
+        and not _exclusive_relationship_states(deny,allow)
         and (allow.resource_owner_actor_id, allow.resource_owner_actor_revision)
         == (deny.resource_owner_actor_id, deny.resource_owner_actor_revision)
         and set(allow.protected_effect_ids) >= set(deny.protected_effect_ids))
@@ -357,6 +359,13 @@ def _compile_allow_control(action, deny, allows, bindings):
         candidate_allow_permissions=identities, resolved_allow_permission=resolved,
         selection_fingerprint=fingerprint,
     )
+
+
+def _exclusive_relationship_states(left,right):
+    """同一时刻的正常对照不能要求同一资源授权既有效又已撤销或过期。"""
+    if left.conditions is None or right.conditions is None:return False
+    return any(a.kind==b.kind and a.kind in {'SHARING','DELEGATION'} and a.state!=b.state
+        for a in left.conditions.relationships for b in right.conditions.relationships)
 
 
 __all__ = [

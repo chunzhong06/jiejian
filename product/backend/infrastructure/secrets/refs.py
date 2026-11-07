@@ -12,6 +12,7 @@ _NAMESPACE_DEPTHS = {
     "llm": 1,
     "mcp-control": 1,
     "test-identity": 3,
+    "database": 2,
 }
 
 

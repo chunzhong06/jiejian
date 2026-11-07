@@ -17,3 +17,4 @@
 | [product/backend/migrations/versions/workspace_0007.py](../../../product/backend/migrations/versions/workspace_0007.py) | 21 | upgrade、downgrade |
 | [product/backend/migrations/versions/workspace_0008.py](../../../product/backend/migrations/versions/workspace_0008.py) | 164 | upgrade、downgrade |
 | [product/backend/migrations/versions/workspace_0009.py](../../../product/backend/migrations/versions/workspace_0009.py) | 97 | upgrade、downgrade |
+| [product/backend/migrations/versions/workspace_0010.py](../../../product/backend/migrations/versions/workspace_0010.py) | 29 | upgrade、downgrade |

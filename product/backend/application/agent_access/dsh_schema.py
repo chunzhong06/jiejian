@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -18,6 +19,15 @@ def project_schema(schema: dict) -> dict:
                    'exclusiveMaximum', 'multipleOf', 'minItems', 'maxItems', 'uniqueItems',
                    'minProperties', 'maxProperties'}
     budget = 4096
+
+    def accepted_types(node):
+        if isinstance(node.get('type'), str):
+            return {'number' if node['type'] == 'integer' else node['type']}
+        if 'oneOf' in node:
+            values = [accepted_types(branch) for branch in node['oneOf']]
+            if all(value is not None for value in values):
+                return set().union(*values)
+        return None
 
     def visit(node, refs=()):
         nonlocal budget
@@ -48,16 +58,42 @@ def project_schema(schema: dict) -> dict:
             elif key in {'anyOf', 'oneOf'}:
                 branches = [visit(item, refs) for item in value]
                 if key == 'anyOf':
-                    types = [item.get('type') for item in branches]
-                    if any(not isinstance(item, str) for item in types) or len(set(types)) != len(types) or {'integer', 'number'} <= set(types):
-                        raise DshSchemaError('工具联合类型无法等价转换')
+                    # JSON Schema 的 number 已包含整数。仅无约束的 number 分支可吸收
+                    # integer，避免转为 oneOf 后把有效整数同时命中两支而拒绝；调用仍校验原定义。
+                    if any(item.get('type') == 'number' and set(item) <= annotations | {'type'} for item in value):
+                        branches = [item for item in branches if item.get('type') != 'integer']
+                    seen = set()
+                    for branch in branches:
+                        types = accepted_types(branch)
+                        if types is None or seen & types:
+                            raise DshSchemaError('工具联合类型无法等价转换')
+                        seen.update(types)
                 result['oneOf'] = branches
             elif key == '$defs':
                 continue
+            elif key in {'allOf', 'if', 'then', 'else'}:
+                # 条件组合只缩小可接受输入；DSH 展示层省略，调用前原始校验器执行。
+                # 仍遍历每个分支，禁止藏入外部/递归引用或越过定义预算。
+                for branch in value if key == 'allOf' else (value,):
+                    visit(branch, refs)
+                notes.append(f'原始组合约束 {key}；调用时严格校验。')
+            elif key == 'patternProperties':
+                for pattern, branch in value.items():
+                    projected = visit(branch, refs)
+                    notes.append(f'键名匹配 {pattern} 时，值定义为 {json.dumps(projected, ensure_ascii=False)}；调用时严格校验。')
+            elif key == 'discriminator':
+                # Pydantic 的分派提示不是 JSON Schema 断言；oneOf 和 const 仍保留。
+                if not isinstance(value.get('propertyName'), str) or set(value) - {'propertyName', 'mapping'}:
+                    raise DshSchemaError('工具分派定义无法安全转换')
+                for reference in value.get('mapping', {}).values():
+                    visit({'$ref': reference}, refs)
             elif key in constraints:
                 notes.append(f'原始校验约束 {key}={value!s}；调用时严格校验。')
             else:
                 raise DshSchemaError('工具定义包含未适配的关键字')
+        if 'patternProperties' in node:
+            # 客户端不识别模式键；展示层不得把可接受的模式键错误判为额外字段。
+            result['additionalProperties'] = True
         if notes:
             result['description'] = ' '.join([str(result.get('description', '')), *notes]).strip()
         return result

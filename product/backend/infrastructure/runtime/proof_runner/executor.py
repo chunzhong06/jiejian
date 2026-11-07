@@ -21,7 +21,7 @@ def execute_preflight(input, *, var_dir, uow_factory, environ, cancellation_requ
     request = input.request
     started = time.time_ns() // 1000
     checks = []
-    names = check_secret_names(request)
+    names = ((request.config.database_capture.password_env,) if request.purpose!='READ' else check_secret_names(request))
     known = tuple(environ[name] for name in names if environ.get(name))
     node = controlled_node_executable(environ)
 
@@ -41,6 +41,21 @@ def execute_preflight(input, *, var_dir, uow_factory, environ, cancellation_requ
 
     adapter = HttpExecutionAdapter(request.target, known_secrets=known,
         cancellation_requested=lambda: not active(), executor_process_id=__import__('os').getpid())
+    if request.purpose!='READ':
+        try:
+            if not active():raise SourceReadError('READ_AUTHORITY_UNAVAILABLE')
+            from product.backend.infrastructure.observers.records.database_capture import maintain_database
+            maintain_database(var_dir,request.project_id,request.config.database_capture,purpose=request.purpose,
+                approved_fingerprint=request.maintenance_plan_fingerprint,operation_id=request.preflight_id,
+                environ=environ,cancelled=lambda:not active())
+            checks.append(ProofCheckItem(code='DATABASE_INSTALLED' if request.purpose=='INSTALL_DATABASE' else 'DATABASE_REMOVED',status='CONFIRMED'))
+        except SourceReadError as error:
+            checks.append(ProofCheckItem(code=error.code,status='UNAVAILABLE'))
+        finally:adapter.close()
+        return ProofPreflightReport(preflight_id=request.preflight_id,job_id=input.job_id,request_fingerprint=proof_fingerprint(request),
+            source_fingerprint=request.source_fingerprint,attempt=input.attempt,fencing_token=input.fencing_token,lease_owner=input.lease_owner,
+            purpose=request.purpose,assessment='COMPLETED' if all(item.status=='CONFIRMED' for item in checks) else 'NEEDS_CHANGES',
+            checks=tuple(checks),started_at_us=started,completed_at_us=time.time_ns()//1000)
     try:
         if not isinstance(request.config,AtomicProofSourceConfig):
             checks.append(ProofCheckItem(code='SOURCE_REQUIRES_MIGRATION',status='UNSUPPORTED'))

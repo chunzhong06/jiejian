@@ -11,6 +11,23 @@ from product.protocols.checks.check_runtime import CheckRuntimeProtocolError, ca
 from tests.support.builders.checks.check_runtime import runtime_bundle
 
 
+def test_recovery_owner_binding_preserves_legacy_bytes_and_dedicated_identity():
+    from product.protocols.checks.check_runtime import CheckRecoveryConfig
+    from tests.support.builders.checks.check_plan import plan
+    legacy=dict(binding_fingerprint='a'*64,source_subject_identity_id='tid_'+'9'*32,
+        request=dict(method='POST',path='/restore/{resource}',input_slots=[dict(slot_id='resource',source='CASE_RESOURCE_ID',consumer='PATH')]),projection_fields=[])
+    from product.protocols.web.request import HttpRequestTemplate
+    legacy['request']=HttpRequestTemplate.model_validate_json(json.dumps(legacy['request'])).model_dump(mode='json')
+    recovery=CheckRecoveryConfig.model_validate_json(json.dumps(legacy))
+    case=plan().actions[0].cases[0]
+    assert recovery.model_dump(mode='json')==legacy
+    assert recovery.identity_for(case)==legacy['source_subject_identity_id']
+    owner=CheckRecoveryConfig.model_validate_json(json.dumps(legacy|dict(subject_binding='RESOURCE_OWNER')))
+    assert owner.identity_for(case)==case.resource_owner_test_identity_id
+    assert owner.identity_for(case.model_copy(update=dict(resource_owner_test_identity_id='tid_'+'8'*32)))=='tid_'+'8'*32
+    assert CheckRecoveryConfig.model_validate_json(owner.model_dump_json())==owner
+
+
 def test_managed_python_runtime_rejects_source_mismatch():
     from product.protocols.checks.check_runtime import CheckRuntimeBundle
     from product.protocols.runtime.runtime_identity import ControlledRuntimeReference

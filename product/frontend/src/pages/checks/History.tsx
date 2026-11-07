@@ -1,3 +1,4 @@
+import {SearchField} from '../../shared/ui/SearchField'
 import { useEffect, useRef, useState } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
@@ -41,10 +42,11 @@ export function History({ projectId, name, route, archive = false }: ReportsProp
     useEffect(() => { if (!state.data || restored.current)
         return; restored.current = true; const frame = requestAnimationFrame(() => window.scrollTo({ top: saved.scroll, behavior: 'instant' })); return () => cancelAnimationFrame(frame); }, [Boolean(state.data)]);
     const openRun = (runId: string) => { scroll.current = window.scrollY; sessionStorage.setItem(key, JSON.stringify({ query, search, filter, cursor, stack, scroll: scroll.current })); go((archive ? '/archive?project_id=' + encodeURIComponent(projectId) + '&' : '/reports?') + 'run_id=' + encodeURIComponent(runId)); };
+    const hasHistoryContext=Boolean(state.data?.items.length||query||search||filter!=='ALL'||stack.length);
     return <>
     <Heading eyebrow={archive?'已归档：'+name:undefined} title="检查记录" actions={archive?<ActionLink href="#/environment"><ArrowLeftOutlined aria-hidden="true"/>返回官方示例</ActionLink>: (Boolean(state.data?.items.length) || Boolean(search) || filter!=='ALL') && <Button kind="primary" onClick={() => go('/reports?view=plan')}>发起新检查 <ArrowRightOutlined aria-hidden="true"/></Button>}/>
-    <section className="jj-history-workspace">
-      <div className="jj-history-toolbar"><form onSubmit={event => { event.preventDefault(); setCursor(undefined); setStack([]); setSearch(query); }}><label className="jj-sr-only" htmlFor="jj-history-search">查找检查记录</label><input id="jj-history-search" placeholder="查找业务操作或检查编号" value={query} onChange={event => setQuery(event.target.value)}/><Button type="submit">查找</Button></form><Choice aria-label="筛选检查结果" value={filter} onValueChange={value => { setFilter(value as CheckVerdict | 'ALL'); setCursor(undefined); setStack([]); }}><option value="ALL">全部结果</option><option value="PASS">符合规则</option><option value="BLOCK">存在问题</option><option value="INCONCLUSIVE">证据不足</option></Choice></div>
+    <section className="jj-history-workspace" data-empty={!state.loading&&Boolean(state.data)&&!state.data?.items.length||undefined}>
+      {hasHistoryContext&&<div className="jj-history-toolbar"><form onSubmit={event => { event.preventDefault(); setCursor(undefined); setStack([]); setSearch(query); }}><SearchField id="jj-history-search" label="查找检查记录" placeholder="查找业务操作或检查编号" value={query} onValueChange={setQuery}/><Button type="submit">查找</Button></form><Choice aria-label="筛选检查结果" value={filter} onValueChange={value => { setFilter(value as CheckVerdict | 'ALL'); setCursor(undefined); setStack([]); }}><option value="ALL">全部结果</option><option value="PASS">符合规则</option><option value="BLOCK">存在问题</option><option value="INCONCLUSIVE">证据不足</option></Choice></div>}
       {state.error && <ErrorNote error={state.error}/>}
       {state.loading ? <Loading page>正在读取检查记录</Loading> : state.data?.items.length ? <>
         <div className="jj-history-table-wrap"><table className="jj-history-table"><thead><tr><th scope="col">检查时间</th><th scope="col">业务操作</th><th scope="col" className="jj-table-state">结果</th><th scope="col" className="jj-table-state">检查用途</th><th scope="col" className="jj-table-actions"><span className="jj-sr-only">打开报告</span></th></tr></thead><tbody>{state.data.items.map(item => {
@@ -58,7 +60,7 @@ export function History({ projectId, name, route, archive = false }: ReportsProp
         </tr>;
             })}</tbody></table></div>
         <div className="jj-pagination jj-history-pagination"><Button disabled={!stack.length} onClick={() => { setCursor(stack.at(-1)); setStack(value => value.slice(0, -1)); }}>上一页</Button><span>第 {stack.length + 1} 页</span><Button disabled={!state.data.next_cursor} onClick={() => { setStack(value => [...value, cursor]); setCursor(state.data!.next_cursor ?? undefined); }}>下一页</Button></div>
-      </> : <Empty title={search || filter !== 'ALL' ? '没有符合筛选条件的检查' : archive ? '这份示例没有检查记录' : '这里将保存你的检查报告'} action={search || filter !== 'ALL' ? <Button onClick={() => { setQuery(''); setSearch(''); setFilter('ALL'); setCursor(undefined); setStack([]); }}>清除筛选</Button> : !archive && <Button onClick={() => go('/reports?view=plan')}>发起检查</Button>}/>}
+      </> : !state.data ? null : <Empty title={search || filter !== 'ALL' ? '没有符合筛选条件的检查' : archive ? '这份示例没有检查记录' : '这里将保存你的检查报告'} action={search || filter !== 'ALL' ? <Button onClick={() => { setQuery(''); setSearch(''); setFilter('ALL'); setCursor(undefined); setStack([]); }}>清除筛选</Button> : !archive && <Button kind="primary" onClick={() => go('/reports?view=plan')}>发起检查</Button>}>{!search&&filter==='ALL'&&!archive&&'完成一次检查后，可以在这里查阅结果、原始依据和后续复验。'}</Empty>}
     </section>
   </>;
 }

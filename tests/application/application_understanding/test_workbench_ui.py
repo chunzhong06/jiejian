@@ -7,6 +7,171 @@ import pytest
 pytestmark=[pytest.mark.level4,pytest.mark.browser,pytest.mark.process]
 
 
+def test_shared_file_picker_in_native_browser():
+    """系统选择、拖放和错误替换不自动预览；窄窗沿用同一文件行。"""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.runtime_server import launch
+    from tests.support.browser_review import settled
+    root=Path(__file__).resolve().parents[3]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text(encoding='utf-8'))
+    output=root/'var/maintenance/file-controls-startup-20261106/browser'/uuid4().hex
+    document=json.dumps({'openapi':'3.0.3','info':{'title':'Orders','version':'1'},'paths':{'/orders':{'get':{'responses':{'200':{'description':'OK'}}}}}}).encode()
+    filename='订单与结算接口-用于持续权限核验的测试资料.json'
+    previews=[]
+    with launch(output,Path(receipt['frontend']['dist'])) as server,sync_playwright() as engine:
+        browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1512,'height':980})
+            page.on('request',lambda request:previews.append(request.url) if request.method=='POST' and '/preview' in request.url else None)
+            page.goto(server.origin+'/#/application')
+            page.get_by_label('应用名称',exact=True).fill('文件导入审阅')
+            page.get_by_role('button',name='建立工作区',exact=True).click()
+            page.get_by_role('tab',name='接口来源',exact=True).click()
+            page.get_by_role('button',name='导入接口资料或请求',exact=True).click()
+            dialog=page.get_by_role('dialog',name='导入接口资料',exact=True)
+            group=dialog.get_by_role('group',name='JSON 文件',exact=True)
+            zone=group.locator('.jj-file-picker')
+            with page.expect_file_chooser() as chooser:
+                group.get_by_role('button',name='选择JSON 文件',exact=True).click()
+            chooser.value.set_files({'name':filename,'mimeType':'application/json','buffer':document})
+            expect(group.get_by_text(filename,exact=True)).to_be_visible()
+            expect(group.get_by_role('button',name='更换JSON 文件',exact=True)).to_be_enabled()
+            assert not previews
+            group.locator('input[type=file]').set_input_files({'name':'不支持.txt','mimeType':'text/plain','buffer':b'wrong'})
+            expect(group.get_by_role('alert')).to_be_visible()
+            expect(group.get_by_text(filename,exact=True)).to_be_visible()
+            assert not previews
+            # 外部拖放与系统窗口走相同路径，只有明确点击预览才请求解析。
+            zone.evaluate('''(node,document)=>{const data=new DataTransfer();data.items.add(new File([document],'orders.json',{type:'application/json'}));node.dispatchEvent(new DragEvent('dragenter',{bubbles:true,dataTransfer:data}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:data}))}''',document.decode())
+            expect(group.get_by_text('orders.json',exact=True)).to_be_visible()
+            expect(group.get_by_role('alert')).to_have_count(0)
+            assert not previews
+            for theme,width in [('dark',1512),('light',375)]:
+                page.evaluate('(theme)=>{document.documentElement.dataset.studioTheme=theme}',theme)
+                page.set_viewport_size({'width':width,'height':980})
+                settled(page)
+                assert dialog.evaluate('node=>node.scrollWidth<=node.clientWidth+1')
+                geometry=zone.evaluate('''node=>{const r=node.getBoundingClientRect(),text=node.querySelector('.jj-file-information').getBoundingClientRect(),actions=node.querySelector('.jj-file-actions').getBoundingClientRect();return {left:text.left-r.left,right:r.right-actions.right,overlap:!(text.bottom<=actions.top||text.right<=actions.left)}}''')
+                assert geometry['left']>=16 and geometry['right']>=15 and not geometry['overlap'],geometry
+                page.screenshot(path=str(output/f'file-picker-{theme}.png'),full_page=True)
+            dialog.get_by_role('button',name='预览并净化',exact=True).click()
+            expect(dialog.get_by_role('heading',name='本次变化',exact=True)).to_be_visible()
+            assert len(previews)==1
+            dialog.get_by_role('button',name='取消',exact=True).click()
+            expect(dialog).not_to_be_visible()
+            # 菜单取消只关闭当前浮层；移动导航中的第二次 Escape 才关闭导航本身。
+            page.set_viewport_size({'width':1512,'height':980})
+            switcher=page.locator('.jj-application-switcher')
+            switcher.focus();page.keyboard.press('ArrowDown');page.keyboard.press('Escape')
+            expect(page.get_by_role('menu')).not_to_be_visible()
+            expect(switcher).to_be_focused()
+            switcher.focus();page.keyboard.press('ArrowDown')
+            expect(page.get_by_role('menu')).to_be_visible()
+            expect(page.get_by_role('menuitem',name='文件导入审阅',exact=True)).to_be_focused()
+            page.keyboard.press('Escape')
+            expect(page.get_by_role('menu')).not_to_be_visible()
+            expect(switcher).to_be_focused()
+            page.set_viewport_size({'width':375,'height':980})
+            page.get_by_role('button',name='打开导航',exact=True).click()
+            switcher.focus();page.keyboard.press('ArrowDown')
+            expect(page.get_by_role('menu')).to_be_visible()
+            page.keyboard.press('Escape')
+            expect(page.get_by_role('menu')).not_to_be_visible()
+            expect(page.get_by_role('dialog')).to_be_visible()
+            expect(switcher).to_be_focused()
+            page.keyboard.press('Escape')
+            expect(page.get_by_role('dialog')).not_to_be_visible()
+            timings=[json.loads(line) for line in (output/'instance/logs/app/jiejian.log').read_text(encoding='utf-8').splitlines()]
+            stages={item['stage']:item['elapsed_ms'] for item in timings if item.get('event_code')=='STARTUP_STAGE_COMPLETED'}
+            assert {'http_import','application_assembly','worker_start'} <= stages.keys(),stages
+            assert all(value>=0 for value in stages.values())
+        finally:
+            browser.close()
+
+
+def test_shared_corner_profile_and_fallback_in_browser(readonly_official_review):
+    """实际控件与 Portal 同步曲线；禁用增强规则后尺寸和原半径不变。"""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.browser_review import navigate, settled
+    server, scenario, receipt = readonly_official_review
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(executable_path=receipt['playwright']['executable'], headless=True)
+        try:
+            page = browser.new_page(viewport={'width': 1512, 'height': 980})
+            for theme in ('light', 'dark'):
+                navigate(page, server.origin, '/application?view=sources&project_id='+scenario.project_id)
+                if page.locator('html').get_attribute('data-studio-theme') != theme:
+                    page.get_by_role('button', name='切换雾蓝深色' if theme == 'dark' else '切换浅色', exact=True).click()
+                page.get_by_role('button', name='导入接口资料或请求', exact=True).click()
+                dialog = page.get_by_role('dialog', name='导入接口资料', exact=True)
+                settled(page)
+                expect(dialog).to_have_css('border-radius', '16px')
+                assert page.evaluate("CSS.supports('corner-shape','superellipse(1.5)')")
+                for selector in ('.jj-dialog', '.jj-dialog input', '.jj-dialog .jj-button', '.jj-dialog .ant-select-selector'):
+                    assert '1.5' in page.locator(selector).first.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')"), selector
+                button = dialog.get_by_role('button', name='取消', exact=True)
+                assert button.evaluate("node=>getComputedStyle(node,'::before').getPropertyValue('corner-shape')") == button.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')")
+                dialog.locator('.ant-select-selector').first.click()
+                menu = page.locator('.jj-choice-menu:visible')
+                expect(menu).to_be_visible()
+                assert '1.5' in menu.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')")
+                page.keyboard.press('Escape')
+                if theme == 'dark':
+                    before = dialog.bounding_box()
+                    # 移除渐进增强，直接检查浏览器仍保有原轮廓与可操作的布局。
+                    removed = page.evaluate('''()=>{let count=0;for(const sheet of document.styleSheets){for(let i=sheet.cssRules.length-1;i>=0;i--){const rule=sheet.cssRules[i];if(rule instanceof CSSSupportsRule&&rule.conditionText.includes('corner-shape')){sheet.deleteRule(i);count++}}}return count}''')
+                    assert removed > 0
+                    expect(dialog).to_have_css('border-radius', '16px')
+                    assert dialog.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')") == 'round'
+                    assert dialog.bounding_box() == before
+                button.click()
+                expect(dialog).not_to_be_visible()
+        finally:
+            browser.close()
+
+
+def test_shared_selection_keeps_motion_and_reduced_motion_in_browser(readonly_official_review):
+    """以浏览器动画的实际插值验证反向接续，覆盖横向页签、分段与纵向索引。"""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.browser_review import navigate, settled
+    server, scenario, receipt = readonly_official_review
+    action = scenario.request('GET', f'/api/projects/{scenario.project_id}/operation-flows')['actions'][0]
+    paths = [('/application', '.jj-tabs'), ('/permissions', '.jj-toggle-group'),
+             ('/preparation?action_id='+action['action_id'], '.jj-index-selection')]
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(executable_path=receipt['playwright']['executable'], headless=True)
+        try:
+            page = browser.new_page(viewport={'width': 1512, 'height': 980})
+            # 浏览器创建动画时暂停采样，避免自动等待选择状态时短动画已播放完。
+            page.add_init_script('''(()=>{const animate=Element.prototype.animate;Element.prototype.animate=function(...args){const animation=animate.apply(this,args);if(window.pauseSelection&&this.hasAttribute('data-selection-indicator')){animation.pause();animation.currentTime=75}return animation}})()''')
+            for path, selector in paths:
+                page.evaluate('window.pauseSelection=false')
+                navigate(page, server.origin, path+('&' if '?' in path else '?')+'project_id='+scenario.project_id)
+                control = page.locator(selector).first
+                items = control.locator('button:not(:disabled)')
+                assert items.count() >= 2, selector
+                items.nth(0).click(); settled(page)
+                page.evaluate('window.pauseSelection=true')
+                items.nth(1).click()
+                # 路由页签由 hashchange 提交，点击返回不代表 React 已更新选择；只等实际目标。
+                attribute = 'aria-selected' if selector == '.jj-tabs' else 'aria-pressed'
+                expect(items.nth(1)).to_have_attribute(attribute, 'true')
+                marker = control.locator('[data-selection-indicator]')
+                before = marker.evaluate('''(node,selector)=>{const animation=node.getAnimations()[0];if(!animation)throw Error('missing selection animation '+selector+' '+node.outerHTML);animation.pause();animation.currentTime=75;const style=getComputedStyle(node),matrix=new DOMMatrix(style.transform);return {x:matrix.e,y:matrix.f,width:parseFloat(style.width),height:parseFloat(style.height)}}''',selector)
+                items.nth(0).click()
+                expect(items.nth(0)).to_have_attribute(attribute, 'true')
+                after = marker.evaluate('''node=>{const animations=node.getAnimations();if(animations.length!==1)throw Error('stale animation');const frame=animations[0].effect.getKeyframes()[0],matrix=new DOMMatrix(frame.transform);return {x:matrix.e,y:matrix.f,width:parseFloat(frame.width),height:parseFloat(frame.height)}}''')
+                assert all(abs(before[key]-after[key]) < .1 for key in before), (selector, before, after)
+                page.emulate_media(reduced_motion='reduce')
+                page.wait_for_function("[...document.querySelectorAll('[data-selection-indicator]')].every(node=>node.getAnimations().length===0)")
+                items.nth(1).focus(); page.keyboard.press('Enter')
+                expect(items.nth(1)).to_be_focused()
+                assert marker.evaluate('node=>node.getAnimations().length') == 0
+                page.emulate_media(reduced_motion='no-preference')
+        finally:
+            browser.close()
+
+
 def test_loading_costs_with_isolated_browser_contexts():
     """本机可比采样，不以耗时阈值代替行为验收；可显式提供旧构建对照。"""
     import hashlib
@@ -483,16 +648,20 @@ def test_registered_repair_heading_and_timestamp_in_browser():
 
 
 def test_populated_routes_and_shared_control_layout_in_browser(readonly_official_review):
-    """真实示例提供规则、账号与报告；只读遍历主要页面，不调用模型或更新部署。"""
+    """遍历双主题与三种窗口；只保存重点改动截图，不调用模型或更新部署。"""
     from playwright.sync_api import sync_playwright,expect
     from tests.support.runtime_server import launch
     from tests.support.official import OfficialScenario
     from tests.support.browser_review import settled,navigate
+    import os
     root=Path(__file__).resolve().parents[3]
     receipt=json.loads((root/'var/runtime/source/receipt.json').read_text(encoding='utf-8'))
     output=root/'var/audit/stage-a-layout'/uuid4().hex
     errors=[]
     observations=[]
+    # 产品构建未变化时，可从失败坐标续查；默认仍遍历完整矩阵，回执明确记录续查范围。
+    resume=os.environ.get('JIEJIAN_LAYOUT_REVIEW_RESUME')
+    resume_seen=resume is None
     server,scenario,receipt=readonly_official_review
     output.mkdir(parents=True,exist_ok=False)
     with sync_playwright() as engine:
@@ -524,6 +693,9 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
                 for width in (1512,800,375):
                     page.set_viewport_size({'width':width,'height':980})
                     for name,path in paths:
+                        if not resume_seen:
+                            if resume!=f'{theme}:{width}:{name}':continue
+                            resume_seen=True
                         separator='&' if '?' in path else '?'
                         navigate(page,server.origin,path+separator+'project_id='+scenario.project_id)
                         expect(page.locator('main h1').first).to_be_visible()
@@ -531,29 +703,54 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
                         expect(page.locator('[data-page-pending=true]')).to_have_count(0)
                         expect(page.locator('main .jj-loading')).to_have_count(0)
                         if name=='flow':
-                            page.get_by_role('tab',name='手动填写接口',exact=True).click()
-                            page.get_by_role('button',name='开始填写',exact=True).click()
-                            page.get_by_label('用于测试的数据编号',exact=True).fill('layout-review-resource')
-                            page.get_by_role('button',name='下一步：设置执行步骤',exact=True).click()
+                            # 页内导航按产品约定保留草稿；首次准备一次，其后缩放与换主题复用。
+                            if page.get_by_role('tab',name='手动填写接口',exact=True).count():
+                                page.get_by_role('tab',name='手动填写接口',exact=True).click()
+                                page.get_by_role('button',name='开始填写',exact=True).click()
+                                page.get_by_label('用于测试的数据编号',exact=True).fill('layout-review-resource')
+                                page.get_by_role('button',name='下一步：设置执行步骤',exact=True).click()
+                                expect(page.get_by_role('heading',name='设置执行请求',exact=True)).to_be_visible()
+                                page.get_by_label('接口路径',exact=True).fill('/orders/{case_resource_id}')
+                                page.get_by_role('button',name='添加查询参数',exact=True).click()
+                                page.get_by_label('参数名称',exact=True).fill('view')
+                                page.get_by_label('发送的值',exact=True).fill('detail')
+                                page.get_by_role('tab',name='请求头 0',exact=True).click()
+                                page.get_by_role('button',name='添加请求头',exact=True).click()
+                                page.get_by_label('参数名称',exact=True).fill('Accept')
+                                page.get_by_label('发送的值',exact=True).fill('application/json')
+                                page.get_by_role('button',name='准备动态防伪参数',exact=True).click()
+                                dialog=page.get_by_role('dialog',name='准备动态防伪参数',exact=True)
+                                dialog.get_by_role('button',name='加入准备步骤',exact=True).click()
+                                expect(dialog).not_to_be_visible()
+                                expect(page.get_by_role('tab',name='请求头 2',exact=True)).to_be_visible()
                             expect(page.get_by_role('heading',name='设置执行请求',exact=True)).to_be_visible()
-                            page.get_by_label('接口路径',exact=True).fill('/orders/{case_resource_id}')
-                            page.get_by_role('button',name='添加查询参数',exact=True).click()
-                            page.get_by_label('参数名称',exact=True).fill('view')
-                            page.get_by_label('发送的值',exact=True).fill('detail')
-                            page.get_by_role('tab',name='请求头 0',exact=True).click()
-                            page.get_by_role('button',name='添加请求头',exact=True).click()
-                            page.get_by_label('参数名称',exact=True).fill('Accept')
-                            page.get_by_label('发送的值',exact=True).fill('application/json')
-                            page.get_by_text('动态防伪参数',exact=True).click()
-                            page.get_by_role('button',name='添加参数准备步骤',exact=True).click()
+                            expect(page.get_by_label('接口路径',exact=True)).to_have_value('/orders/{case_resource_id}')
                             expect(page.get_by_role('tab',name='请求头 2',exact=True)).to_be_visible()
 
                         if name=='sample' and width==1512:
                             page.get_by_role('button',name='管理示例',exact=True).click()
                             expect(page.get_by_role('menu')).to_have_css('border-radius','10px')
                             settled(page)
-                            page.screenshot(path=str(output/f'example-menu-{theme}.png'),full_page=True)
                             page.keyboard.press('Escape')
+                        if name in {'permissions','testing'}:
+                            directory=page.get_by_role('region',name='权限规则目录' if name=='permissions' else '可维护场景',exact=True)
+                            selected=directory.locator('.jj-object-select[aria-pressed=true]')
+                            expect(directory.locator('.jj-inspector')).to_be_visible()
+                            expect(directory.locator('.jj-object-summary').first).not_to_be_visible()
+                            directory.get_by_role('button',name='收起详情',exact=True).click()
+                            expect(selected).to_be_focused()
+                            expect(directory.locator('.jj-inspector')).to_have_count(0)
+                            expect(directory.locator('.jj-object-summary').first).to_be_visible()
+                            assert directory.locator('.jj-collection-layout').evaluate("node=>getComputedStyle(node).gridTemplateColumns.split(' ').length") == 1
+                            selected.click()
+                            expect(directory.locator('.jj-inspector')).to_be_visible()
+                            # 清除只改变本目录筛选，宽度、焦点与项目范围保持稳定。
+                            search=page.get_by_role('searchbox',name='查找规则' if name=='permissions' else '查找场景',exact=True)
+                            before=search.locator('..').bounding_box()
+                            search.fill(selected.locator('strong').inner_text())
+                            page.get_by_role('button',name='清除查找规则' if name=='permissions' else '清除查找场景',exact=True).click()
+                            expect(search).to_be_focused();expect(search).to_have_value('')
+                            assert search.locator('..').bounding_box()['width'] == before['width']
                         settled(page)
                         measurements=page.evaluate('''()=>{
                             const issues=[],headingRows=[];let buttons=0,icons=0;
@@ -598,8 +795,15 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
                             return {pageOverflow:document.documentElement.scrollWidth>innerWidth+1,buttons,icons,headingRows,issues,entries};
                         }''')
                         observations.append(dict(theme=theme,width=width,page=name,**measurements))
-                        if width==1512 or name in {'workspace','business','identities','report','updates','testing','flow'}:
+                        if width==1512 and theme=='dark' and name in {'permissions','testing'}:
                             page.screenshot(path=str(output/f'{name}-{theme}-{width}.png'),full_page=True)
+                        if width==1512 and theme=='light' and name=='sources':
+                            page.get_by_role('button',name='导入接口资料或请求',exact=True).click()
+                            dialog=page.get_by_role('dialog',name='导入接口资料',exact=True)
+                            settled(page);page.screenshot(path=str(output/'source-import-light.png'),full_page=True)
+                            dialog.get_by_role('button',name='取消',exact=True).click()
+                            expect(dialog).not_to_be_visible()
+            assert resume_seen, '续查坐标不在当前视图矩阵中'
             assert errors==[]
             assert not [item for item in observations if item['pageOverflow'] or item['issues']],observations
         except Exception:
@@ -612,4 +816,4 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
             raise
         finally:
             browser.close()
-            (output/'layout.json').write_text(json.dumps(dict(schema_version='1',page_errors=errors,observations=observations),ensure_ascii=False,indent=2),encoding='utf-8')
+            (output/'layout.json').write_text(json.dumps(dict(schema_version='1',resume=resume,page_errors=errors,observations=observations),ensure_ascii=False,indent=2),encoding='utf-8')

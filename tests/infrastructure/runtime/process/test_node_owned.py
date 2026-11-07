@@ -8,15 +8,11 @@ import pytest
 from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.runtime.process.controlled.node_owned import node_reference_matches, start_owned_node
 from product.backend.infrastructure.runtime.process.tree import kernel_tree_has_exited
-from tests.support.builders.runtime.node_runtime import node_runtime_input as _input
+from tests.support.builders.runtime.node_runtime import free_port as _free_port, node_runtime_input as _input
 
 pytestmark = [pytest.mark.level4, pytest.mark.skipif(os.name != 'nt', reason='Windows kernel ownership boundary')]
 
 
-def _free_port():
-    with socket.socket() as sock:
-        sock.bind(('127.0.0.1',0))
-        return sock.getsockname()[1]
 
 
 def test_owned_node_matches_only_its_frozen_source_and_live_listener(tmp_path):

@@ -2,6 +2,8 @@
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from product.protocols.preparation.proof_sources import RelationshipSourceMapping,AsyncExportMapping
+from product.protocols.checks.scenarios import BusinessScenarioRevision
 
 
 class HandoffInput(BaseModel):
@@ -54,9 +56,18 @@ class ProofHandoff(HandoffInput):
     effect_id: str = Field(max_length=128)
     resource_binding_id: str | None = Field(default=None, max_length=128)
     table: str | None = Field(default=None, max_length=256)
+    connection_id: str | None = Field(default=None, pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+    collection: str | None = Field(default=None, pattern=r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+    async_export: AsyncExportMapping | None = None
     protected_column: str | None = Field(default=None, max_length=256)
     tenant_column: str | None = Field(default=None, max_length=256)
     state_column: str | None = Field(default=None, max_length=256)
+    relationship_mapping: RelationshipSourceMapping | None = None
 
 
-EditorHandoff = Annotated[FlowHandoff | ProofHandoff, Field(discriminator='kind')]
+class ScenarioHandoff(HandoffInput):
+    kind: Literal['SCENARIO']
+    document: BusinessScenarioRevision
+
+
+EditorHandoff = Annotated[FlowHandoff | ProofHandoff | ScenarioHandoff, Field(discriminator='kind')]

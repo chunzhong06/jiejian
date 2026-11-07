@@ -45,8 +45,8 @@
 .jj-tabs > :is(button,a)::before { content:''; position:absolute; inset:0; z-index:-1; border-radius:inherit; background:var(--state-fill); pointer-events:none; opacity:0; transition:opacity var(--motion-hover-out) var(--ease-respond); }
 @media(hover:hover) and (pointer:fine) { .jj-tabs > :is(button,a):not(:disabled):hover::before { opacity:1; transition-duration:var(--motion-hover-in); } }
 /* 悬停只反馈所在项，不能移动或遮盖当前分类的选中表面和指示线。 */
-.jj-tabs > :is([aria-selected=true],[aria-current=page]) { --state-fill:transparent; background:var(--tab-selected-fill); color:var(--accent-ink); font-weight:600; }
+.jj-tabs > :is([aria-selected=true],[aria-current=page]) { --state-fill:transparent; background:var(--tab-selected-fill); color:var(--selected-ink); font-weight:600; }
 .jj-tabs > :is(button,a):focus-visible { outline:2px solid var(--focus); outline-offset:-3px; }
 html[data-input-mode=pointer] .jj-tabs > :is(button,a):focus-visible { outline:none; }
-.jj-tab-indicator { position:absolute; left:0; top:0; z-index:3; height:2px; background:var(--accent); pointer-events:none; transition:transform var(--motion-indicator) var(--ease-layout),width var(--motion-indicator) var(--ease-layout); }
+.jj-tab-indicator { position:absolute; left:0; top:0; z-index:3; height:2px; background:var(--accent); pointer-events:none; transition:none; }
 @media(prefers-reduced-motion:reduce) { .jj-tabs > :is(button,a),.jj-tabs > :is(button,a)::before,.jj-tab-indicator { transition:none; } }

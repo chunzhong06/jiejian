@@ -13,11 +13,12 @@ import { Badge, Empty, Notice } from "../../../shared/ui/feedback";
 import { ActionLink, Button } from "../../../shared/ui/actions";
 import { AgentHandoff } from '../../../entities/check/ui/AgentHandoff';
 import { repairReference } from '../../../entities/check/api/repairs';
-import { Heading } from "../../../shared/ui/layout";
+import { Heading, SectionHeading } from "../../../shared/ui/layout";
 import { date, text } from '../../../shared/lib/format';
 import { go } from '../../../shared/lib/navigation';
 import { actual, gaps, judgement, judgementLabels, owner, requirement, repairGap, resultTitle, subject, type Tone } from '../../../entities/check/model/checks';
 import { EvidenceInspector } from './EvidenceInspector';
+import {ScenarioResults} from './ScenarioResults';
 export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proofId, stepId, checkedAt, onError, readOnly = false, basePath = '/reports', returnPath = '/reports', returnLabel = '全部报告', archiveName }: {
     story: ResultStory;
     selectedCaseId: string | null;
@@ -77,7 +78,7 @@ export function Report({ story, selectedCaseId, tab, evidenceId, recordId, proof
     {!story.repair_verification&&<Segmented label="按检查结果筛选" className="jj-report-summary" value={resultFilter} items={([{tone:'all',label:'全部结果'},{tone:'negative',label:'存在问题'},{tone:'caution',label:'尚未确认'},{tone:'positive',label:'符合规则'}] as const).map(item=>({value:item.tone,tone:item.tone,label:<><strong>{item.tone==='all'?ordered.length:ordered.filter(action=>judgement(action)===item.tone).length}</strong><span>{item.label}</span></>}))} onValueChange={value=>{setResultFilter(value);setPage(1);if(selectedCaseId)open(null)}}/>}
     <div className={`jj-report-layout${selectedCaseId ? ' has-inspector' : ''}`}>
       <div className="jj-report-results is-balanced">{story.repair_verification?.verification_scope==='EXTERNAL_OBSERVATION'&&<Notice tone="caution">本次核对原问题和正常对照在当前观察窗口中的行为。源码修复及部署版本对应尚未独立核验。{story.external_recheck&&<p>本次部署声明：{story.external_recheck.deployment_statement}</p>}</Notice>}
-        {story.repair_verification ? <RepairReading story={story} selectedCaseId={selectedCaseId} onInspect={open}/> : story.actions.length ? <div className="jj-result-groups" aria-label="逐项检查结果">{groups.map(group => { const items = visible.filter(action => judgement(action) === group.tone); return items.length > 0 ? <section className="jj-report-group" key={group.tone}><div className="jj-section-header"><h2>{group.title}</h2><span>{items.length} 项</span></div><IndexSelection className="jj-result-list" identity={selectedCaseId??""}>{items.map(action => <ResultRow key={action.case_id} action={action} selected={selectedCaseId === action.case_id} compact={Boolean(selectedCaseId)} compactContext={(requirementCounts.get(requirement(action)) ?? 0) > 1 ? owner(action) + "的资源" : undefined} onOpen={() => open(action.case_id)}/>)}</IndexSelection></section> : null; })}</div> : <Empty title="本报告没有可读取的检查项"/>}
+        {story.repair_verification ? <RepairReading story={story} selectedCaseId={selectedCaseId} onInspect={open}/> : story.actions.some(action=>action.scenario_context) ? <ScenarioResults actions={visible} selected={selectedCaseId} onOpen={open}/> : story.actions.length ? <div className="jj-result-groups" aria-label="逐项检查结果">{groups.map(group => { const items = visible.filter(action => judgement(action) === group.tone); return items.length > 0 ? <section className="jj-report-group" key={group.tone}><SectionHeading title={group.title} appearance="group" meta={items.length+' 项'}/><IndexSelection className="jj-result-list" identity={selectedCaseId??""}>{items.map(action => <ResultRow key={action.case_id} action={action} selected={selectedCaseId === action.case_id} compact={Boolean(selectedCaseId)} compactContext={(requirementCounts.get(requirement(action)) ?? 0) > 1 ? owner(action) + "的资源" : undefined} onOpen={() => open(action.case_id)}/>)}</IndexSelection></section> : null; })}</div> : <Empty title="本报告没有可读取的检查项"/>}
         {!story.repair_verification&&story.actions.length>0&&!filtered.length&&<Empty title="本次没有这类结果" action={<Button onClick={()=>setResultFilter('all')}>查看全部结果</Button>}/>}
         {!story.repair_verification && filtered.length > 10 && <div className="jj-pagination"><Button disabled={page === 1} onClick={() => setPage(value => value - 1)}>上一页</Button><span>第 {page} / {Math.ceil(filtered.length / 10)} 页</span><Button disabled={page * 10 >= filtered.length} onClick={() => setPage(value => value + 1)}>下一页</Button></div>}
       </div>
@@ -133,7 +134,7 @@ function RepairReading({story, selectedCaseId, onInspect}: {story: ResultStory; 
     return <>{[{id: 'DENY', title: '原权限问题'}, {id: 'NORMAL', title: '正常功能'}].map(section => {
         const items = rows.filter(item => section.id === 'DENY' ? item.roles.has('DENY') : !item.roles.has('DENY'));
         return <section className="jj-report-group jj-repair-group" key={section.id}>
-            <div className="jj-section-header"><h2>{section.title}</h2><span>{items.length} 项</span></div>
+            <SectionHeading title={section.title} appearance="group" meta={items.length+' 项'}/>
             {items.length ? <IndexSelection className="jj-repair-cards" identity={selectedCaseId??""}>{selectedCaseId ? items.map((entry, index) => {
                 const action = entry.row.match_status === 'MATCHED' ? story.actions.find(item => item.case_id === entry.row.after_case_id) : undefined;
                 const result = repairResult(entry, action);
@@ -145,7 +146,7 @@ function RepairReading({story, selectedCaseId, onInspect}: {story: ResultStory; 
                 return <tr key={index}><td><strong>{action ? requirement(action) : text(entry.row.subject_label ?? '原测试账号') + text(entry.row.action_label)}</strong><small>{action ? owner(action) : text(entry.row.resource_owner_label ?? '原资源所有者')}的资源</small></td><td>{beforeLabels[entry.row.before_verdict]}</td><td><Badge tone={result.tone}>{result.label}</Badge></td><td>{action && <Button kind="quiet" data-case={action.case_id} aria-label={'查看' + requirement(action) + '的复验依据'} onClick={() => onInspect(action.case_id)}>查看依据<ArrowRightOutlined aria-hidden="true"/></Button>}</td></tr>;
             })}</tbody></table></div>}</IndexSelection> : <Notice tone="caution">缺少对应的检查场景，无法完成这部分验收。</Notice>}
         </section>;
-    })}{story.actions.filter(item => !covered.has(item.case_id)).length > 0 && <section className="jj-report-group"><div className="jj-section-header"><h2>本轮其他检查</h2></div><div className="jj-result-cards">{story.actions.filter(item => !covered.has(item.case_id)).map(action => <ResultRow key={action.case_id} action={action} onOpen={() => onInspect(action.case_id)}/>)}</div></section>}
+    })}{story.actions.filter(item => !covered.has(item.case_id)).length > 0 && <section className="jj-report-group"><SectionHeading title="本轮其他检查" appearance="group"/><div className="jj-result-cards">{story.actions.filter(item => !covered.has(item.case_id)).map(action => <ResultRow key={action.case_id} action={action} onOpen={() => onInspect(action.case_id)}/>)}</div></section>}
     {[...new Set(reviews.filter(review => ['INCONCLUSIVE', 'STALE'].includes(review.verification.status)).map(review => repairGap(review.verification.reason_codes)))].map(message => <Notice tone="caution" key={message}>{message}</Notice>)}</>;
 }
 function RepairPrior({story, caseId}: {story: ResultStory; caseId: string}) {

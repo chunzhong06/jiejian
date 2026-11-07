@@ -3,43 +3,21 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from collections.abc import Mapping
-from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 
 from product.backend.domain.identifiers import RUN_ID_PATTERN
 from product.backend.domain.lifecycle import CaseVerdict
 from product.backend.domain.verification.differential import PermissionTwin, TwinExecutionRole
+# 编解码器仍从这里读取内部别名；规范字节转换只由权限契约实现拥有。
+from product.backend.domain.verification.permissions.contract import _jsonable, canonical_json_bytes as _canonical_bytes
 from product.backend.domain.verification.permissions.coverage import PermissionMutationCase
 from product.backend.domain.verification.facts import ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, SecurityEffectFact
 from product.protocols.runner.execution import ObserverRequirementBinding, ObserverRequirementKind, ProtocolModel
 from product.protocols.observer.config import ObservationCompleteness
 from product.protocols.observer.result import ObservationEnvelope, ObserverOutcome
 from .input import _HEX, _validate_reason_codes
-
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, BaseModel):
-        return _jsonable(value.model_dump(mode="python"))
-    if isinstance(value, StrEnum):
-        return value.value
-    if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list)):
-        return [_jsonable(item) for item in value]
-    return value
-
-
-def _canonical_bytes(value: Any) -> bytes:
-    return json.dumps(
-        _jsonable(value),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def _evidence_semantic_sha256(value: Any) -> str:

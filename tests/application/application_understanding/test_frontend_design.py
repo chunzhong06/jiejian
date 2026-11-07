@@ -14,6 +14,120 @@ def _record_switch(page,root_selector,button):
     return page.evaluate('window.localMotion')
 
 
+def test_collection_titles_keep_typography_across_semantic_levels():
+    """用实际构建核对同类标题、表单分组与窄窗阅读顺序，不提交规则。"""
+    import re
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.runtime_server import launch
+    from tests.support.browser_review import settled
+
+    root=Path(__file__).resolve().parents[3]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/maintenance/consolidation-20261106/title-review'/uuid4().hex
+    source=output/'source';source.mkdir(parents=True)
+    signatures=[]
+    with launch(output/'runtime',Path(receipt['frontend']['dist'])) as server,sync_playwright() as engine:
+        response=server.client.post('/api/applications/connect',json={'schema_version':'1','source_root':str(source),'project_name':'权限协作工作区'})
+        assert response.status_code==201,response.text
+        project=response.json()['data']['project']['project_id']
+        browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1512,'height':980})
+            errors=[]
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(server.origin+'/#/permissions?project_id='+project)
+            page.get_by_role('button',name=re.compile(r'^(编写|编辑)权限要求$')).click()
+            expect(page.get_by_role('heading',name='编写权限要求',exact=True)).to_be_visible()
+            page.get_by_role('tab',name='操作与结果 0',exact=True).click()
+            page.get_by_role('button',name='添加操作',exact=True).click()
+            page.get_by_label('操作名称',exact=True).fill('修改项目归属与授权范围')
+            for theme in ('light','dark'):
+                if page.locator('html').get_attribute('data-studio-theme')!=theme:
+                    page.get_by_role('button',name='切换'+('雾蓝深色' if theme=='dark' else '浅色'),exact=True).click()
+                for width in (1512,800,375):
+                    page.set_viewport_size({'width':width,'height':980})
+                    settled(page)
+                    values=[]
+                    for title,level in [('业务操作',2),('业务结果',3)]:
+                        heading=page.get_by_role('heading',name=title,level=level,exact=True)
+                        expect(heading).to_be_visible()
+                        values.append(heading.evaluate("node=>{const s=getComputedStyle(node);return {size:s.fontSize,line:s.lineHeight,weight:s.fontWeight,family:s.fontFamily}}"))
+                    assert values[0]==values[1],values
+                    assert values[0]['size']=='20px' and values[0]['line']=='30px' and values[0]['weight']=='600',values
+                    columns=page.locator('.jj-initial-action .jj-form-columns-layout').first
+                    operation,result=columns.locator(':scope > section').all()
+                    left,right=operation.bounding_box(),result.bounding_box()
+                    assert left and right
+                    if width==1512:
+                        assert abs(left['y']-right['y'])<1,(left,right)
+                        assert right['x']-(left['x']+left['width'])>=31,(left,right)
+                    else:
+                        assert right['y']>=left['y']+left['height']+27,(left,right)
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                    signatures.append(dict(theme=theme,width=width,typography=values[0]))
+                    if width==1512:
+                        page.mouse.move(1500,970)
+                        page.screenshot(path=str(output/f'titles-{theme}.png'),full_page=True)
+            assert not errors,errors
+        finally:
+            browser.close()
+    (output/'observations.json').write_text(json.dumps(signatures,ensure_ascii=False,indent=2),encoding='utf-8')
+
+
+def test_database_forms_group_fields_with_spacing_in_browser():
+    """只编辑数据库声明，核对两类配置的组间距；不保存凭据或启动应用。"""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.runtime_server import launch
+    from tests.support.browser_review import settled
+
+    root=Path(__file__).resolve().parents[3]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/maintenance/consolidation-20261106/database-review'/uuid4().hex
+    source=output/'source';source.mkdir(parents=True)
+    (source/'app.mjs').write_text('export const fixture = true\n',encoding='utf-8')
+    observations=[]
+    with launch(output/'runtime',Path(receipt['frontend']['dist'])) as server,sync_playwright() as engine:
+        response=server.client.post('/api/applications/connect',json={'schema_version':'1','source_root':str(source),'project_name':'数据库配置审阅'})
+        assert response.status_code==201,response.text
+        project=response.json()['data']['project']['project_id']
+        understanding=server.client.get(f'/api/projects/{project}/application-understanding').json()['data']
+        authorized=server.client.put(f'/api/projects/{project}/source-analysis-authorization',json={'schema_version':'1','authorized':True,'revision':understanding['revision']})
+        assert authorized.status_code==200,authorized.text
+        browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1512,'height':980})
+            errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(server.origin+'/#/application?view=source&project_id='+project)
+            page.get_by_role('radio',name='由界鉴启动',exact=True).check()
+            page.locator('.jj-runtime-options > summary').click()
+            page.get_by_role('button',name='手动添加',exact=True).click()
+            card=page.locator('.jj-runtime-database').first
+            for width in (1512,800,375):
+                page.set_viewport_size({'width':width,'height':980});settled(page)
+                bounds=card.evaluate('node=>[...node.children].map(item=>{const r=item.getBoundingClientRect();return {top:r.top,bottom:r.bottom}})')
+                assert all(bounds[i]['top']-bounds[i-1]['bottom']>=19 for i in range(1,len(bounds))),bounds
+                assert not page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                observations.append(dict(view='sqlite',width=width,children=bounds))
+            page.set_viewport_size({'width':1512,'height':980})
+            page.get_by_role('button',name='添加连接',exact=True).click()
+            dialog=page.get_by_role('dialog',name='声明测试数据库')
+            expect(dialog).to_be_visible()
+            for width in (1512,800,375):
+                page.set_viewport_size({'width':width,'height':980});settled(page)
+                bounds=dialog.locator('.jj-form-columns-layout').evaluate('node=>[...node.children].map(item=>{const r=item.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}})')
+                if width==1512:
+                    assert abs(bounds[0]['top']-bounds[1]['top'])<1,bounds
+                    assert bounds[1]['left']-bounds[0]['right']>=31,bounds
+                else:
+                    assert bounds[1]['top']-bounds[0]['bottom']>=27,bounds
+                assert not dialog.evaluate('node=>node.scrollWidth>node.clientWidth')
+                observations.append(dict(view='service',width=width,sections=bounds))
+            assert not errors,errors
+        finally:
+            browser.close()
+    (output/'observations.json').write_text(json.dumps(observations,ensure_ascii=False,indent=2),encoding='utf-8')
+
+
 def test_navigation_selection_motion_in_browser():
     from playwright.sync_api import sync_playwright,expect
     from tests.support.runtime_server import launch
@@ -315,33 +429,19 @@ def test_environment_form_and_navigation_reference_in_browser():
             browser.close()
 
 
-def test_shared_tabs_keep_the_same_presentation_across_workspaces():
+def test_shared_tabs_keep_the_same_presentation_across_workspaces(readonly_collaboration_review):
     """跨页比较真实计算样式，防止公共控件仍依赖某个页面的附加类。"""
     from playwright.sync_api import sync_playwright,expect
-    from tests.support.runtime_server import launch
     from tests.support.browser_review import navigate,settled
-    from tests.support.builders.preparation.action_preparation import build_preparation_harness
     from tests.support.builders.checks import assurance
     root=Path(__file__).resolve().parents[3]
-    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    server,project,action,task,receipt=readonly_collaboration_review
     output=root/'var/audit/shared-tabs'/uuid4().hex
-    seed=output/'seed';seed.mkdir(parents=True)
-    harness=build_preparation_harness(seed)
-    project,action,workspace=harness.project_id,harness.action,harness.var_dir
-    with harness.core.uow_factory() as work:
-        current=work.projects.get(project)
-        work.projects.replace(current.model_copy(update={'name':'文档协作系统'}))
-        work.commit()
-    harness.close()
+    output.mkdir(parents=True)
     samples=[];errors=[];writes=[]
     # 只比较组件自己的呈现；各工作面外围位置和内容不要求相同。
     signature="""root=>{const item=root.querySelector('[aria-selected=true],[aria-current=page]'),style=getComputedStyle(item),box=item.getBoundingClientRect(),marker=root.querySelector('.jj-tab-indicator').getBoundingClientRect();return {display:getComputedStyle(root).display,gap:getComputedStyle(root).columnGap,padding:style.padding,font:style.fontSize,lineHeight:style.lineHeight,radius:style.borderRadius,fill:style.backgroundColor,color:style.color,weight:style.fontWeight,height:box.height,boundary:getComputedStyle(root).borderBottomWidth,markerError:Math.max(Math.abs(box.x-marker.x),Math.abs(box.bottom-marker.bottom),Math.abs(box.width-marker.width))}}"""
-    with launch(output/'runtime',Path(receipt['frontend']['dist']),workspace=workspace) as server,sync_playwright() as engine:
-        response=server.client.post(f'/api/projects/{project}/collaboration',json=dict(operation_id=uuid4().hex,goal='补齐更新文档的接口流程，整理执行步骤、结果核对与恢复安排。',purpose='SETUP',references={}))
-        assert response.status_code==200,response.text
-        task=response.json()['data']['task_id']
-        response=server.client.post(f'/api/projects/{project}/collaboration/{task}/questions',json=dict(question_id=uuid4().hex,question='文档归档后还允许成员修改吗？',options=['仅负责人可以','所有成员可以']))
-        assert response.status_code==200,response.text
+    with sync_playwright() as engine:
         browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
         try:
             page=browser.new_page(viewport={'width':1512,'height':980},device_scale_factor=1)
@@ -413,39 +513,28 @@ def test_shared_tabs_keep_the_same_presentation_across_workspaces():
     print('shared_tabs_review='+str(output))
 
 
-def test_semantic_colors_keep_selection_and_task_state_separate():
+def test_semantic_colors_keep_selection_and_task_state_separate(readonly_collaboration_review):
     """真实导航和菜单验证状态归属，组合样本核对语义文字及选中底上的对比度。"""
     import re
     from playwright.sync_api import sync_playwright,expect
-    from tests.support.runtime_server import launch
     from tests.support.browser_review import navigate,settled
-    from tests.support.builders.preparation.action_preparation import build_preparation_harness
     root=Path(__file__).resolve().parents[3]
-    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
-    output=root/'var/audit/semantic-colors'/uuid4().hex
-    seed=output/'seed';seed.mkdir(parents=True)
-    harness=build_preparation_harness(seed)
-    project,workspace=harness.project_id,harness.var_dir
-    with harness.core.uow_factory() as work:
-        record=work.projects.get(project)
-        work.projects.replace(record.model_copy(update={'name':'文档协作系统'}))
-        work.commit()
-    harness.close()
+    server,project,action,task,receipt=readonly_collaboration_review
+    output=root/'var/maintenance/color-system-20261107/semantic-colors'/uuid4().hex
+    output.mkdir(parents=True)
     records=[];errors=[];writes=[]
     def contrast(foreground,background):
         def luminance(color):
-            components=[int(value)/255 for value in re.findall(r'\d+',color)[:3]]
+            if color.startswith('color(srgb '):
+                components=[float(value) for value in color.removeprefix('color(srgb ').rstrip(')').split()[:3]]
+            else:
+                components=[int(value)/255 for value in re.findall(r'\d+',color)[:3]]
             assert len(components)==3,color
             return sum(weight*(value/12.92 if value<=.04045 else ((value+.055)/1.055)**2.4) for value,weight in zip(components,(.2126,.7152,.0722)))
         low,high=sorted((luminance(foreground),luminance(background)))
         return (high+.05)/(low+.05)
     pair="node=>({foreground:getComputedStyle(node).color,background:getComputedStyle(node).backgroundColor})"
-    with launch(output/'runtime',Path(receipt['frontend']['dist']),workspace=workspace) as server,sync_playwright() as engine:
-        response=server.client.post(f'/api/projects/{project}/collaboration',json=dict(operation_id=uuid4().hex,goal='补齐更新文档的接口流程，核对执行步骤和业务要求。',purpose='SETUP',references={}))
-        assert response.status_code==200,response.text
-        task=response.json()['data']['task_id']
-        response=server.client.post(f'/api/projects/{project}/collaboration/{task}/questions',json=dict(question_id=uuid4().hex,question='文档归档后还允许成员修改吗？',options=['仅负责人可以','所有成员可以']))
-        assert response.status_code==200,response.text
+    with sync_playwright() as engine:
         browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
         try:
             page=browser.new_page(viewport={'width':1512,'height':980},device_scale_factor=1)
@@ -467,14 +556,27 @@ def test_semantic_colors_keep_selection_and_task_state_separate():
                 value=entry.evaluate("node=>({foreground:getComputedStyle(node.querySelector('.jj-collaboration-entry-status')).color,background:getComputedStyle(node).backgroundColor,entry:getComputedStyle(node).color})")
                 assert value['foreground']==value.pop('entry'),value
                 record('selected-sidebar',value,theme)
+                entry.hover();settled(page)
+                hovered=entry.evaluate("node=>({foreground:getComputedStyle(node.querySelector('.jj-collaboration-entry-status')).color,background:getComputedStyle(node,'::before').backgroundColor})")
+                assert hovered['background']!=value['background'],hovered
+                record('selected-sidebar-hover',hovered,theme)
+                page.locator('.jj-application-switcher').click()
+                selected=page.locator('.jj-application-menu .ant-dropdown-menu-item-selected')
+                expect(selected).to_be_visible();selected.hover();settled(page)
+                selected_pair=selected.evaluate(pair)
+                assert selected_pair['background']==value['background'],selected_pair
+                record('selected-menu-hover',selected_pair,theme)
+                record('selected-menu-hover-overlay',selected.evaluate("node=>({foreground:getComputedStyle(node).color,background:getComputedStyle(node,'::before').backgroundColor})"),theme)
+                page.keyboard.press('Escape')
                 expect(page.locator('.jj-collaboration-state')).to_have_attribute('data-tone','accent')
-                if theme=='dark':
-                    page.mouse.move(1500,965);settled(page)
-                    page.screenshot(path=str(output/'collaboration-state-dark.png'),full_page=True)
                 page.get_by_role('button',name='任务操作',exact=True).click()
                 danger=page.get_by_role('menuitem',name='停止任务',exact=True)
                 expect(danger).to_be_visible();danger.hover();settled(page)
                 record('danger-menu-hover',danger.evaluate(pair),theme)
+                menu=page.locator('.jj-command-menu .ant-dropdown-menu')
+                elevated=menu.evaluate("node=>{const sample=document.createElement('div');sample.style.backgroundColor='var(--surface-elevated)';document.body.append(sample);const color=getComputedStyle(sample).backgroundColor;sample.remove();return color}")
+                assert menu.evaluate('node=>getComputedStyle(node).backgroundColor')==elevated
+                records.append(dict(name='actual-menu-elevation',theme=theme,background=elevated))
                 page.keyboard.press('Escape')
                 visit('/workspace?view=collaboration')
                 badge=page.locator('.jj-collaboration-task-list .jj-badge')
@@ -483,6 +585,7 @@ def test_semantic_colors_keep_selection_and_task_state_separate():
                 visit('/preparation')
                 # CSS 组合样本不伪装成业务数据；共用控件的真实语义由组件测试及上述入口核对。
                 page.evaluate("""()=>{const host=document.createElement('section');host.id='semantic-color-fixture';for(const tone of ['neutral','accent','positive','caution','negative']){for(const kind of ['badge','notice']){const item=document.createElement('div');item.className='jj-'+kind+' is-'+tone;item.dataset.sample=kind+'-'+tone;item.textContent=tone;host.append(item)}}const selected=document.createElement('div');selected.className='jj-index-selection';selected.innerHTML='<button class="jj-index-item" aria-current="page"><span class="jj-account-index-status" data-tone="positive" data-sample="selected-ready">已准备</span><span class="jj-material-select-status" data-tone="caution" data-sample="selected-missing">待准备</span></button>';host.append(selected);document.querySelector('main').append(host)}""")
+                page.locator('#semantic-color-fixture').evaluate("""host=>host.insertAdjacentHTML('beforeend','<button class="jj-button is-primary" data-sample="primary-action">继续</button><button class="jj-button is-danger" data-sample="danger-action">移除</button><input data-sample="input-text" value="当前名称"><div class="jj-panel jj-muted" data-sample="surface-secondary">补充说明</div><button class="jj-button is-primary" disabled data-disabled-sample="button">暂不可用</button><input disabled value="暂不可编辑" data-disabled-sample="input">')""")
                 settled(page)
                 for item in page.locator('#semantic-color-fixture [data-sample]').all():
                     value=item.evaluate(pair)
@@ -491,8 +594,163 @@ def test_semantic_colors_keep_selection_and_task_state_separate():
                         selected_color=item.evaluate("node=>getComputedStyle(node.closest('.jj-index-item')).color")
                         assert value['foreground']==selected_color,value
                     record(item.get_attribute('data-sample'),value,theme)
+                danger_action=page.locator('#semantic-color-fixture [data-sample="danger-action"]')
+                danger_action.hover();settled(page)
+                record('danger-action-hover',danger_action.evaluate("node=>({foreground:getComputedStyle(node).color,background:getComputedStyle(node,'::before').backgroundColor})"),theme)
+                for item in page.locator('#semantic-color-fixture [data-disabled-sample]').all():
+                    value=item.evaluate("node=>{const css=getComputedStyle(node);return {foreground:css.color,background:css.backgroundColor,opacity:css.opacity}}")
+                    assert value['opacity']=='1',value
+                    record('disabled-'+item.get_attribute('data-disabled-sample'),value,theme)
                 page.locator('#semantic-color-fixture').evaluate('node=>node.remove()')
             assert not writes and not errors,(writes,errors)
         finally:browser.close()
     (output/'result.json').write_text(json.dumps(dict(records=records,errors=errors,writes=writes,model_calls=0),ensure_ascii=False,indent=2),encoding='utf-8')
     print('semantic_color_review='+str(output))
+
+
+
+def test_collection_hit_areas_feedback_and_review_reading_stay_consistent():
+    """真实示例核对整行选择、入口留白、稳定框架及概览与详情的切换。"""
+    from playwright.sync_api import sync_playwright,expect
+    from tests.support.runtime_server import launch
+    from tests.support.official import OfficialScenario
+    from tests.support.browser_review import navigate,settled
+    root=Path(__file__).resolve().parents[3]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/maintenance/color-system-20261107/browser'/uuid4().hex
+    metrics=[];errors=[]
+    with launch(output/'runtime',Path(receipt['frontend']['dist'])) as server,sync_playwright() as engine:
+        scenario=OfficialScenario(server.client);scenario.start()
+        proposal=next(item['path'].split('/')[-2] for item in scenario.operations if item['path'].endswith('/approve'))
+        browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1512,'height':980})
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            for theme in ('light','dark'):
+                navigate(page,server.origin,'/testing?project_id='+scenario.project_id)
+                if page.locator('html').get_attribute('data-studio-theme')!=theme:
+                    page.get_by_role('button',name='切换雾蓝深色' if theme=='dark' else '切换浅色',exact=True).click()
+                for width in (1512,800,375):
+                    page.set_viewport_size({'width':width,'height':980})
+                    for path in ('/testing','/permissions'):
+                        navigate(page,server.origin,path+'?project_id='+scenario.project_id)
+                        rows=page.locator('.jj-object-table tbody tr')
+                        count=rows.count();assert count>=3
+                        # 不等待详情动画结束，快速改向也应立即接受当前选择。
+                        for ordinal in (1,2,0,2,1,0):
+                            row=rows.nth(ordinal);cell=row.locator('td:visible').last
+                            cell.scroll_into_view_if_needed();box=cell.bounding_box();assert box
+                            page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
+                            expect(row.locator('.jj-object-select')).to_have_attribute('aria-pressed','true')
+                        button=rows.nth(1).locator('.jj-object-select')
+                        button.focus();page.keyboard.press('Enter')
+                        expect(button).to_have_attribute('aria-pressed','true')
+                        assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
+                        metrics.append(dict(theme=theme,width=width,path=path,changes=7))
+                    if theme=='light' and width==1512:
+                        navigate(page,server.origin,'/testing?project_id='+scenario.project_id)
+                        page.locator('.jj-object-select').first.click()
+                        # 固定背景按实际视口审阅，避免整页截图把视口外区域拼成背景断层。
+                        page.mouse.move(1500,970);settled(page);page.screenshot(path=str(output/'testing-light.png'),full_page=False)
+                page.set_viewport_size({'width':1512,'height':980})
+                navigate(page,server.origin,'/workspace?project_id='+scenario.project_id)
+                for link in page.get_by_role('navigation',name='应用资料快捷入口').get_by_role('link').all():
+                    link.hover()
+                    page.wait_for_function("node=>Number(getComputedStyle(node,'::before').opacity)>.5",arg=link.element_handle())
+                    metrics.append(dict(theme=theme,feedback=link.inner_text()))
+                for width in (1512,800,375):
+                    page.set_viewport_size({'width':width,'height':980})
+                    for metric in page.locator('.jj-home-metrics > button').all():
+                        metric.hover()
+                        page.wait_for_function("node=>Number(getComputedStyle(node,'::before').opacity)>.5",arg=metric.element_handle())
+                        inset=metric.evaluate("node=>{const box=node.getBoundingClientRect(),children=[...node.children].map(child=>child.getBoundingClientRect());return {top:Math.min(...children.map(child=>child.top))-box.top,bottom:box.bottom-Math.max(...children.map(child=>child.bottom)),left:Math.min(...children.map(child=>child.left))-box.left,right:box.right-Math.max(...children.map(child=>child.right))}}")
+                        assert min(inset.values())>=15,inset
+                        metrics.append(dict(theme=theme,width=width,metric=metric.inner_text(),inset=inset))
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
+                for width in (1512,800,375):
+                    page.set_viewport_size({'width':width,'height':980})
+                    navigate(page,server.origin,'/permissions?project_id='+scenario.project_id+'&proposal_id='+proposal)
+                    workspace=page.get_by_role('region',name='访问规则概览',exact=True)
+                    choices=workspace.locator('.jj-object-select')
+                    expect(choices).to_have_count(5)
+                    detail=workspace.locator('.jj-inspector')
+                    expect(detail).to_have_count(0)
+                    if theme=='dark' and width==1512:
+                        page.mouse.move(1500,970);settled(page)
+                        page.screenshot(path=str(output/'review-overview-dark.png'),full_page=False)
+                    for ordinal in range(5):
+                        choice=choices.nth(ordinal);choice.click()
+                        expect(choice).to_have_attribute('aria-pressed','true')
+                        expect(detail.locator('.jj-rule-meaning')).to_have_count(1)
+                        definition=detail.locator('.jj-rule-definition').bounding_box()
+                        effects=detail.locator('.jj-rule-effects').bounding_box()
+                        assert definition and effects and 16<=effects['y']-definition['y']-definition['height']<=24
+                        if width<=800:
+                            expect(workspace.locator('.jj-collection-main')).to_be_hidden()
+                            expect(detail.get_by_role('button',name='收起详情',exact=True)).to_be_focused()
+                        else:
+                            expect(workspace.locator('.jj-proposal-summary-column').first).to_be_hidden()
+                        detail.get_by_role('button',name='收起详情',exact=True).click()
+                        expect(detail).to_have_count(0);expect(choice).to_be_focused()
+                    choices.nth(1).click()
+                    selected=detail.locator('.jj-rule-title h3').inner_text()
+                    page.get_by_role('tab',name='提案来源',exact=True).click()
+                    expect(page.get_by_role('heading',name='提案来源',exact=True)).to_be_visible()
+                    page.get_by_role('tab',name='业务定义 5',exact=True).click()
+                    expect(page.get_by_role('heading',name='提案来源',exact=True)).to_have_count(0)
+                    page.get_by_role('tab',name='访问规则 5',exact=True).click()
+                    expect(detail.locator('.jj-rule-meaning')).to_have_count(1)
+                    expect(detail.locator('.jj-rule-title h3')).to_have_text(selected)
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
+                    if theme=='dark' and width==1512:
+                        page.mouse.move(1500,970);settled(page)
+                        page.screenshot(path=str(output/'review-detail-dark.png'),full_page=False)
+                    detail.get_by_role('button',name='收起详情',exact=True).click()
+                # 固定栏必须遮挡滚动内容；共用视口坐标可避免各自铺色产生接缝。
+                page.set_viewport_size({'width':1512,'height':500})
+                page.evaluate('window.scrollTo(0,120)')
+                expect(page.locator('.jj-topbar button').last).to_be_in_viewport()
+                page.screenshot(path=str(output/'review-scrolled-dark.png'),full_page=False)
+                assert page.locator('.jj-topbar').evaluate("node=>getComputedStyle(node).borderBottomWidth")=='0px'
+                page.evaluate('window.scrollTo(0,0)')
+                page.set_viewport_size({'width':1512,'height':980})
+                navigate(page,server.origin,'/reports?project_id='+scenario.project_id)
+                expect(page.get_by_role('button',name='发起检查',exact=True)).to_be_visible()
+                expect(page.locator('.jj-history-toolbar')).to_have_count(0)
+                canvas=page.locator('.jj-content').evaluate("node=>{const style=getComputedStyle(node);return {left:parseFloat(style.marginLeft),radius:parseFloat(style.borderTopLeftRadius),gradient:style.backgroundImage}}")
+                assert canvas['left']==0 and canvas['radius']==0 and canvas['gradient']=='none',canvas
+                assert page.locator('.jj-main').evaluate("node=>getComputedStyle(node).backgroundImage")=='none'
+                layers=page.locator('.jj-app,.jj-sidebar,.jj-topbar').evaluate_all("nodes=>nodes.map(node=>{const css=getComputedStyle(node);return {gradient:css.backgroundImage,attachment:css.backgroundAttachment,size:css.backgroundSize}})")
+                assert len(layers)==3 and all(layer==layers[0] for layer in layers),layers
+                assert 'linear-gradient' in layers[0]['gradient'] and layers[0]['attachment']=='fixed',layers
+                separator=page.locator('.jj-sidebar').evaluate("node=>{const css=getComputedStyle(node,'::after');return {top:parseFloat(css.top),bottom:parseFloat(css.bottom)}}")
+                assert separator['top']>0 and separator['bottom']>0,separator
+                canvas['layers']=layers
+                metrics.append(dict(theme=theme,canvas=canvas))
+                page.goto(server.origin+'/#/reports?project_id='+scenario.project_id+'&query=no-such-report')
+                # 同文档 hash 导航保留本地筛选；冷入口独立验证 URL 的初始查询。
+                page.reload()
+                expect(page.get_by_role('heading',name='检查记录',exact=True)).to_be_visible()
+                expect(page.get_by_label('查找检查记录',exact=True)).to_be_visible()
+                expect(page.get_by_role('button',name='清除筛选',exact=True)).to_be_visible()
+                assert page.locator('.jj-history-toolbar').evaluate("node=>getComputedStyle(node).borderBottomWidth")=='0px'
+                # 筛选是用户状态，跨页面返回应保留；显式清除后再检验下一主题的初始空态。
+                page.get_by_role('button',name='清除筛选',exact=True).click()
+                expect(page.locator('.jj-history-toolbar')).to_have_count(0)
+            # 使用真实检查形成历史入口，避免仅凭空列表推断行内留白。
+            scenario.check('BASELINE')
+            navigate(page,server.origin,'/workspace?project_id='+scenario.project_id)
+            for button in page.locator('.jj-home-check-list > button').all():
+                inset=button.evaluate("node=>{const s=getComputedStyle(node);return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(parseFloat)}")
+                assert min(inset)>=16,inset
+            page.emulate_media(reduced_motion='reduce')
+            navigate(page,server.origin,'/testing?project_id='+scenario.project_id)
+            rows=page.locator('.jj-object-table tbody tr');rows.nth(2).locator('button').click()
+            expect(rows.nth(2)).to_have_attribute('data-selected','true')
+            navigate(page,server.origin,'/permissions?project_id='+scenario.project_id+'&proposal_id='+proposal)
+            page.locator('.jj-proposal-workspace .jj-object-select').last.click()
+            expect(page.locator('.jj-proposal-workspace .jj-inspector .jj-rule-meaning')).to_have_count(1)
+            assert not errors,errors
+        finally:
+            (output/'result.json').write_text(json.dumps(dict(metrics=metrics,errors=errors),ensure_ascii=False,indent=2),encoding='utf-8')
+            browser.close()

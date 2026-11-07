@@ -52,10 +52,10 @@ def test_two_node_deliveries_and_atomic_runtime_receipt(tmp_path,monkeypatch):
         previous_instance=first['instance_id']
         for index in (1,2):
             entry.write_text(source.replace('VERSION',f'change-{index}'),encoding='utf-8')
-            active=core.development.view(project,task.task_id)
+            active=core.development_reader.view(project,task.task_id)
             delivered=core.development.deliver(project,task.task_id,operation_id=uuid4().hex,
                 expected_version=active['task']['version'],context_id=accepted.context_id,reason=f'修改{index}',submitted_by='test')
-            active=core.development.view(project,task.task_id)
+            active=core.development_reader.view(project,task.task_id)
             operation_id=uuid4().hex
             arguments=dict(operation_id=operation_id,expected_version=active['task']['version'])
             if index==1:
@@ -77,7 +77,7 @@ def test_two_node_deliveries_and_atomic_runtime_receipt(tmp_path,monkeypatch):
             assert loaded['instance_id']!=previous_instance
             assert completed.runtime_reference==core.runtime_ports.reference(project)
             assert core.runtime_activation.activate(project,delivered.delivery_id,**arguments)==completed
-            assert core.development.view(project,task.task_id)['runtime_state']=='MATCHED'
+            assert core.development_reader.view(project,task.task_id)['runtime_state']=='MATCHED'
             previous_instance=loaded['instance_id']
         # 只有初始加载和两批交付，不会因查询、失败回滚或幂等重放多启动一批。
         with core.uow_factory() as work:

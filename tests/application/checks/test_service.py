@@ -13,6 +13,47 @@ from tests.support.builders.preparation.action_preparation import build_preparat
 from tests.support.builders.checks.check_service import ready_check_harness
 
 
+def test_scenario_candidate_requires_exact_human_review_and_freezes_the_saved_revision(tmp_path):
+    import json
+    from product.protocols.checks.scenarios import BusinessScenarioRevision,ScenarioReference
+    harness=ready_check_harness(tmp_path)
+    core,project=harness.core,harness.project_id
+    try:
+        context=core.business_scenarios.context(project)
+        assert context['identities'] and context['actions'][0]['label']
+        allowed=next(case for case in context['actions'][0]['cases'] if case['permission']['expectation']=='ALLOW')
+        item=dict(id='resource',permission={name:allowed['permission'][name] for name in ('intent_id','revision','intent_hash')},
+            subject_identity_id=allowed['subject_test_identity_id'],resource_id=allowed['resource_id'])
+        document=BusinessScenarioRevision.model_validate_json(json.dumps(dict(id='bsc_'+'3'*32,project_id=project,revision=1,
+            label='已保存的正常业务',experiments=[dict(id='normal',label='正常业务',kind='NORMAL',
+                invocations=[dict(id='read',label='读取资料',items=[item])])])) )
+        reference=ScenarioReference(scenario_id=document.id,revision=1)
+        core.business_scenarios.save(project,document,submitted_via='MCP')
+        with pytest.raises(JiejianError,match='本机审阅'):
+            core.checks.preview(project,scenario_reference=reference)
+        core.business_scenarios.save(project,document)
+        preview=core.checks.preview(project,scenario_reference=reference)
+        assert preview.can_execute,preview.model_dump()
+        assert preview.scenario.document==document and preview.case_count==1
+        submitted=core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key='scenario-submit',scenario_reference=reference)
+        frozen=CheckRequestStore(harness.var_dir).load(submitted.job.job_id,expected_hash=submitted.job.request_hash)
+        assert frozen.scenario.document==document
+        newer=document.model_copy(update={'revision':2,'label':'后续编辑'})
+        core.business_scenarios.save(project,newer)
+        repeated=core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key='scenario-submit',scenario_reference=reference)
+        assert not repeated.created and repeated.job.job_id==submitted.job.job_id
+        listing=core.business_scenarios.listing(project)
+        assert listing['documents']==(dict(id=document.id,revision=2,label='后续编辑',description='',experiment_count=1),)
+        assert 'experiments' not in listing['documents'][0]
+        assert core.business_scenarios.read(project,document.id,1)==document
+        with pytest.raises(JiejianError,match='修订已保存'):
+            core.business_scenarios.save(project,document.model_copy(update={'label':'覆写历史'}))
+    finally:
+        harness.close()
+
+
 def test_registration_read_scope_reuses_only_current_read_and_restores_after_failure():
     from product.backend.application.checks.registry import CheckRuntimeRegistry
     registry=CheckRuntimeRegistry();reads=[]
@@ -169,6 +210,9 @@ def test_selected_scope_freezes_exact_references_and_keeps_old_full_encoding(tmp
         submitted = core.checks.submit(project, expected_plan_fingerprint=preview.plan_fingerprint,
             idempotency_key='selected', selected_permissions=selected)
         assert submitted.created
+        repeated=core.checks.submit(project, expected_plan_fingerprint=preview.plan_fingerprint,
+            idempotency_key='selected', selected_permissions=selected+selected)
+        assert not repeated.created and repeated.job.job_id==submitted.job.job_id
         stale = (selected[0].model_copy(update={'intent_hash': 'f'*64}),)
         with pytest.raises(JiejianError, match='所选权限规则已变化'):
             core.checks.preview(project, selected_permissions=stale)

@@ -10,6 +10,7 @@ from mcp import MCPError
 from mcp.server.mcpserver import Context
 from pydantic import BaseModel, ValidationError
 from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.failures import failure_recovery
 from product.backend.application.agent_access.service import MCPAccessController, MCPAccessLevel
 
 _T = TypeVar("_T")
@@ -26,8 +27,8 @@ def _recovery_for(code: str) -> str:
         ErrorCode.MCP_AUTH_REQUIRED.value: "请在界鉴的连接与授权页核对连接是否暂停或失效，并按所选客户端指引恢复；无需复制凭据。",
         ErrorCode.MCP_PERMISSION_REQUIRED.value: "请打开界鉴“连接与授权”，选择本应用并调整允许范围。所需级别见 required_level；保存候选和建议需要 PREPARE。不得代替用户授权。",
         ErrorCode.INPUT_INVALID.value: "读取当前工具上下文，按字段提示修正输入；不改变原业务要求或绕过人工批准。",
-        ErrorCode.STORAGE_STATE.value: "界鉴内部记录未能读取。保留业务要求与材料，提供诊断编号，并在界鉴系统状态页核对实际版本与前端构建；不要通过改权限或删除候选重试。",
-    }.get(code, "请回到界鉴查看当前应用状态并按页面提示恢复。")
+        ErrorCode.STORAGE_STATE.value: "界鉴内部记录未能读取。保留业务要求与材料，先查询原操作回执；无法读取时提供诊断编号，并在界鉴系统状态页核对实际版本与前端构建；不要通过改权限或删除候选重试。",
+    }.get(code, failure_recovery(code) or "请回到界鉴查看当前应用状态并按页面提示恢复。")
 
 def _as_mcp_error(exc: JiejianError) -> MCPError:
     payload = exc.to_dict()
@@ -156,6 +157,6 @@ def _invoke(operation: Callable[[], _T], *, input_model: type[BaseModel] | None 
             if key in {'project_id', 'candidate_id', 'tool', 'revision'} and
             (type(value) is int and value >= 0 or isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_]{1,96}', value))}
         details = {'diagnostic_id':diagnostic_id, 'version':__version__, 'validation_error_count':exc.error_count(), **safe}
-        logging.getLogger(__name__).error('MCP internal record validation: %s', details)
+        logging.getLogger("jiejian.interfaces.http.mcp.errors").error('MCP internal record validation: %s', details)
         raise _as_mcp_error(JiejianError(ErrorCode.STORAGE_STATE,
             '界鉴内部记录校验失败，尚未完成本次读取；请保留现有业务要求并提交诊断编号', details=details)) from None
