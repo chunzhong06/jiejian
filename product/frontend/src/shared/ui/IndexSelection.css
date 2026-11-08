@@ -1,7 +1,7 @@
 .jj-index-selection { position:relative; isolation:isolate; min-width:0; background:transparent; }
 .jj-index-surface { position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; list-style:none; background:var(--selected); pointer-events:none; transition:none; }
 .jj-index-surface::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--selection-mark); }
-.jj-index-selection .jj-index-item { position:relative; z-index:1; width:100%; min-height:56px; padding:14px 20px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ink); text-align:left; font-size:var(--text-body); font-weight:550; cursor:pointer; --state-fill:var(--hover); }
+.jj-index-selection .jj-index-item { position:relative; z-index:1; width:100%; min-height:56px; padding:14px 20px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ink); text-align:left; font-size:var(--text-object); line-height:22px; font-weight:500; cursor:pointer; --state-fill:var(--hover); }
 .jj-index-item :is(small,time,code) { font-weight:400; }
 .jj-index-item > .anticon:first-child { display:inline-flex; align-items:center; justify-content:center; flex:none; width:28px; height:28px; }
 .jj-index-selection .jj-index-item > .jj-result-symbol { width:28px; height:28px; align-self:center; margin:0; }
@@ -15,7 +15,7 @@
 .jj-index-selection .jj-index-item:disabled { cursor:default; }
 
 .jj-step-select { display:grid; grid-template-columns:28px minmax(0,1fr) 14px; gap:14px; align-items:center; }
-.jj-step-select strong { font-weight: 500; font-size: var(--text-meta); }
+.jj-step-select strong { font-weight:500; font-size:var(--text-body); }
 .jj-step-select:hover { color: var(--ink); }
 .jj-step-select > .anticon { opacity: 0; font-size: var(--text-meta); }
 .jj-step-select[aria-current=step] > .anticon { opacity: 1; }

@@ -1,6 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react'
 import {afterEach, expect, it, vi} from 'vitest'
 import {Collaboration} from './Collaboration'
+import {CollaborationArtifactReview} from './CollaborationArtifactReview'
 import {CollaborationEntry} from '../../entities/runtime/ui/CollaborationEntry'
 import {requestCollaboration,useHandoffContext} from '../../entities/runtime/model/handoff'
 
@@ -29,9 +30,9 @@ it('通过产品接口展示同一任务，区分请求回执和后台完成',as
   fireEvent.click(await screen.findByRole('button',{name:'确认并执行'}))
   expect(await screen.findByText('本次范围符合规则')).toBeVisible()
   expect(screen.getByRole('link',{name:'查看检查报告'})).toHaveAttribute('href',expect.stringContaining('run_id=run'))
-  fireEvent.click(screen.getByRole('tab',{name:'处理记录'}))
+  fireEvent.click(screen.getByRole('tab',{name:'操作记录'}))
   expect(await screen.findByText('执行已完成')).toBeVisible()
-  expect(screen.getByRole('heading',{name:'处理记录'})).toBeVisible()
+  expect(screen.getByRole('heading',{name:'操作记录'})).toBeVisible()
   expect(screen.getByText('已取得回执')).toBeVisible()
 })
 
@@ -106,7 +107,7 @@ it('等待接续时突出实际启动入口，打开确认前不调用本地模�
   expect(screen.getByText('执行 1 个模型回合')).toBeVisible();
   fireEvent.click(screen.getByRole('checkbox',{name:'持续推进当前任务'}));
   expect(screen.getByText(/最多 8 个模型回合/)).toBeVisible();
-  expect(screen.queryByRole('heading',{name:'处理记录'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'操作记录'})).not.toBeInTheDocument();
 });
 
 it.each([['整理权限要求','RULES'],['补齐检查准备','SETUP'],['调查权限问题','CHECK']])('目标示例%s采用自己的完成判据',async(label,purpose)=>{
@@ -185,7 +186,7 @@ it('多项待办一次只展开一项，跨事项和页签保留回答，提交�
   fireEvent.click(screen.getByRole('button',{name:/审阅产物 审阅流程候选/}))
   expect(screen.getByRole('link',{name:'比较并审阅流程'})).toHaveAttribute('href',expect.stringContaining('revision=2'))
   expect(screen.queryByLabelText('你的回答或补充说明')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('tab',{name:'处理记录'}))
+  fireEvent.click(screen.getByRole('tab',{name:'操作记录'}))
   expect(screen.getByText('已经读取应用')).toBeVisible()
   fireEvent.click(screen.getByRole('tab',{name:'当前工作'}))
   fireEvent.click(screen.getByRole('button',{name:/补充说明 归档后谁可以修改/}))
@@ -194,4 +195,39 @@ it('多项待办一次只展开一项，跨事项和页签保留回答，提交�
   fireEvent.click(screen.getByRole('button',{name:'提交回答并继续'}))
   expect(await screen.findByRole('link',{name:'比较并审阅流程'})).toBeVisible()
   expect(writes).toEqual(['/api/projects/app/collaboration/task/questions/question'])
+})
+
+it('协作事项就地比较准确流程修订，只读查看不保存或采用',async()=>{
+  const base={id:'flow_review',revision:1,business_action_id:'review_action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',provenance:'MANUAL',source_recording_id:null,source_fingerprint:null,actual_resource_id:'campus',recovery:null,workflow:{target_step_id:'read',steps:[{id:'read',identity_id:'CASE_SUBJECT',purpose:'TARGET',request_template:{method:'GET',path:'/before',body:{kind:'JSON',value:{private_value:'literal-not-for-review'}}},classifier:{accepted:[],denied:[]},depends_on_step_ids:[]}]}}
+  const candidate={...base,revision:2,workflow:{...base.workflow,steps:base.workflow.steps.map(step=>({...step,request_template:{...step.request_template,path:'/after'}}))}}
+  const review={id:'flow_review@2',title:'核对执行与恢复步骤',destination:'/testing?action_id=review_action&flow_id=flow_review&revision=2&review=1',action_label:'比较并审阅流程'}
+  const task={task_id:'review_task',goal:'补全读取流程',editor:{kind:'FLOW',flow_id:'flow_review',revision:1,action_id:'review_action'},operations:[{capability:'flows.save',state:'SUCCEEDED',result:{id:'flow_review',revision:2}}]}
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}),{headers:{'content-type':'application/json'}})
+  const requests:string[]=[]
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    expect(init?.method??'GET').toBe('GET');const path=String(input);requests.push(path)
+    if(path.endsWith('/operation-flows/flow_review/2'))return response(candidate)
+    if(path.endsWith('/operation-flows/flow_review/1'))return response(base)
+    if(path.endsWith('/test-identities'))return response([{identity_id:'owner',label:'负责人'}])
+    throw new Error('unexpected '+path)
+  }))
+  render(<CollaborationArtifactReview projectId="review-app" task={task as never} review={review}/>)
+  expect(await screen.findByText('GET /after')).toBeVisible()
+  expect(screen.getByText('GET /before')).toBeVisible()
+  expect(screen.queryByText('literal-not-for-review')).not.toBeInTheDocument()
+  expect(screen.getByText(/与交接时保存的流程比较/)).toBeVisible()
+  expect(screen.getByRole('link',{name:'进入流程继续核对'})).toHaveAttribute('href',expect.stringContaining('revision=2'))
+  expect(screen.getByRole('link',{name:'进入流程继续核对'})).toHaveAttribute('href',expect.stringContaining('return_to='))
+  expect(requests).toHaveLength(3)
+  expect(screen.queryByRole('rowheader',{name:'恢复请求'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'完整流程'}))
+  expect(screen.getByRole('rowheader',{name:'恢复请求'})).toBeVisible()
+})
+
+it('产物链接与成功回执不相符时不读取任意流程',()=>{
+  const fetch=vi.fn();vi.stubGlobal('fetch',fetch)
+  render(<CollaborationArtifactReview projectId="app" task={{goal:'核对产物',task_id:'task',operations:[]} as never} review={{id:'other@2',title:'产物',destination:'/testing?flow_id=other&revision=2&action_id=action',action_label:'审阅产物'}}/>)
+  expect(screen.getByRole('link',{name:'审阅产物'})).toBeVisible()
+  expect(fetch).not.toHaveBeenCalled()
+  expect(screen.queryByRole('region',{name:'流程结构对照'})).not.toBeInTheDocument()
 })

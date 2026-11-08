@@ -1,0 +1,11 @@
+/* 导航按语义共用三档表达：页内文字、集合条目、主要推进；命令按钮保持原有尺度。 */
+.jj-button[data-navigation=inline].is-quiet { min-height:32px; padding:4px 0; border:0; border-radius:0; box-shadow:none; white-space:normal; text-align:start; justify-content:flex-start; }
+.jj-button[data-navigation=inline].is-quiet::before { display:none; }
+.jj-button[data-navigation=inline].is-quiet:hover { color:var(--accent-ink); text-decoration:underline; text-underline-offset:4px; }
+.jj-button[data-navigation=inline].is-quiet:active { transform:none; }
+.jj-button[data-navigation=row].is-quiet { display:flex; justify-content:space-between; text-align:start; width:100%; min-height:52px; padding:14px 16px; border:0; border-bottom:1px solid var(--line); border-radius:0; white-space:normal; }
+.jj-button[data-navigation]:focus-visible { outline:2px solid var(--focus); outline-offset:4px; }
+.jj-button[data-navigation=row] > span { min-width:0; overflow-wrap:anywhere; }
+.jj-inspector-actions > .jj-button[data-navigation=inline] { padding-inline:8px; }
+.jj-inspector-actions:has(> [data-navigation=inline]):not(:has(> .is-primary)) { flex-direction:column; align-items:stretch; gap:0; }
+.jj-inspector-actions:has(> [data-navigation=inline]):not(:has(> .is-primary)) > [data-navigation=inline] { min-height:44px; }

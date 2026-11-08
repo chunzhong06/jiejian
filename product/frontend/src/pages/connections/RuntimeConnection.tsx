@@ -5,7 +5,7 @@ import { useRead } from '../../shared/lib/useRead';
 import { ApiError } from '../../shared/api/http';
 import { operationId, readPending, savePending } from '../../shared/lib/operations';
 import { Button } from '../../shared/ui/actions';
-import { Field } from '../../shared/ui/layout';
+import {Field,ObjectIdentity} from '../../shared/ui/layout'
 import { Badge, ErrorNote, Loading, Notice } from '../../shared/ui/feedback';
 
 type ConnectionMethod = 'existing' | 'managed';
@@ -93,7 +93,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
     };
 
     return <section className="jj-application-runtime" aria-label="应用运行">
-        <header><div><h3>让应用可以访问</h3><p className="jj-small jj-muted">连接你已启动的应用，或交给界鉴启动一个测试实例。</p></div></header>
+        <header><div><h3>选择应用的运行方式</h3><p className="jj-small jj-muted">应用已经运行时，填写它的访问地址；需要由界鉴启动时，再核对源码、启动文件与测试数据。</p></div></header>
         {canStart && <fieldset className="jj-runtime-methods" aria-label="应用运行方式">
             <legend className="jj-sr-only">应用运行方式</legend>
             <label className="jj-runtime-method"><input type="radio" name={'runtime-method-' + projectId} aria-label="连接已有应用" aria-controls={panelId} checked={currentMethod === 'existing'} disabled={busy || Boolean(pending)} onChange={() => setMethod('existing')}/><span><strong>连接已有应用</strong><small>使用你已启动的应用地址</small></span></label>
@@ -106,8 +106,8 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                 {state.data?.running && <div className="jj-runtime-retained"><span>界鉴启动的实例仍在运行</span><Button kind="quiet" onClick={() => setMethod('managed')}>管理运行实例</Button></div>}
             </> : <>
                 {state.loading ? <Loading>正在读取运行实例</Loading> : state.error ? <ErrorNote error={state.error}/> : !pending && state.data?.running ? <div className="jj-runtime-instance">
-                    <header><strong>界鉴启动的应用</strong><Badge tone={state.data.source_matches ? 'positive' : 'caution'}>{state.data.source_matches ? '正在运行' : '源码已有变化'}</Badge></header>
-                    <dl><div><dt>访问地址</dt><dd>{runtimeAddress}</dd></div><div><dt>入口文件</dt><dd>{state.data.configuration?.entry}</dd></div></dl>
+                    <header><ObjectIdentity name={<strong>界鉴启动的应用</strong>} status={<Badge tone={state.data.source_matches ? 'positive' : 'caution'}>{state.data.source_matches ? '正在运行' : '源码已有变化'}</Badge>}/></header>
+                    <dl className="jj-facts" data-layout="columns"><div><dt>访问地址</dt><dd>{runtimeAddress}</dd></div><div><dt>入口文件</dt><dd>{state.data.configuration?.entry}</dd></div></dl>
                     <footer>{usingRuntime ? <Badge tone="positive">已用于检查</Badge> : <div className="jj-small jj-muted">{confirmedEndpoint ? <>当前检查地址：<span className="jj-path">{confirmedEndpoint}</span></> : '尚未设置检查地址'}</div>}<div className="jj-inline-actions"><Button kind="quiet" busy={busy} onClick={() => void act(async () => { await api.runtimeStop(projectId, state.data!.operation!.instance_id); setMethod('managed'); state.reload(); onChanged(); })}>停止应用</Button>{!usingRuntime && <Button kind="primary" busy={busy} onClick={() => void act(() => confirmAddress(runtimeAddress!))}>使用此应用</Button>}</div></footer>
                 </div> : !pending && !preview && <>
                     <div className="jj-runtime-setup"><Field label="启动文件"><input value={entry ?? state.data?.configuration?.entry ?? capabilities.data?.entries[0]??''} placeholder="例如 app.mjs 或 server.cjs" disabled={busy} onChange={event => { setEntry(event.target.value); setPreview(undefined); }}/></Field><Field label="本地端口"><input type="number" min={1024} max={65535} value={port ?? state.data?.configuration?.port ?? 3000} disabled={busy} onChange={event => { setPort(event.target.value); setPreview(undefined); }}/></Field><Button disabled={busy || !(entry ?? state.data?.configuration?.entry??capabilities.data?.entries[0])} onClick={() => void act(async () => { setAck(false); setOutcome(undefined); setPreview(await api.runtimePreview(projectId, { entry: entry ?? state.data?.configuration?.entry??capabilities.data!.entries[0], port: Number(port ?? state.data?.configuration?.port ?? 3000), revision,...configuration })); })}>核对启动设置</Button></div>
@@ -115,7 +115,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                     {!preview && <p className="jj-small jj-muted">选择启动文件和端口，下一步核对运行范围。</p>}
                 </>}
                 {preview && !pending && !state.data?.running && <section className="jj-runtime-review">
-                    <header><Badge tone="accent">等待启动确认</Badge><h3>将启动这份源码的测试实例</h3></header>
+                    <header><div className="jj-object-line"><h3>将启动这份源码的测试实例</h3><Badge tone="accent">等待启动确认</Badge></div></header>
                     <dl className="jj-facts"><div><dt>启动文件</dt><dd>{preview.entry}</dd></div><div><dt>访问地址</dt><dd>http://127.0.0.1:{preview.port}</dd></div><div><dt>依赖准备</dt><dd>{preview.package?'按项目锁文件安装依赖':'无需安装 npm 依赖'}</dd></div><div><dt>测试数据库</dt><dd>{preview.sqlite?.length?preview.sqlite.length+' 个数据库使用独立副本':'未设置 SQLite 副本'}</dd></div>{Boolean(preview.databases?.length)&&<div><dt>服务数据库</dt><dd>{preview.databases!.map(item=>(item.engine==='POSTGRESQL'?'PostgreSQL':'MySQL')+' · '+item.database+' / '+item.table).join('；')}；连接已声明的本机测试库，审计安装需单独确认</dd></div>}</dl>
                     <details><summary>查看允许执行的文件（{preview.files.length} 个）</summary><ul>{preview.files.map(file=><li key={file.relative_path}>{file.relative_path}</li>)}</ul></details>
                     <label className="jj-checkbox"><input type="checkbox" checked={ack} onChange={event => setAck(event.target.checked)}/><span>允许按上述设置安装依赖、建立测试副本并启动应用</span></label>
@@ -127,6 +127,6 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
         </div>
         {currentMethod === 'existing' && state.error && <ErrorNote error={state.error}/>}
         {operation.error && <ErrorNote error={operation.error}/>}
-        {pending && <Notice tone={operation.data?'accent':'caution'}>{state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'}。离开页面后仍可查询结果。<Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>恢复原启动请求</Button>}</Notice>}
+        {pending && <Notice tone={operation.data?'accent':'caution'}>{state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'}。离开页面后仍可查询结果。<Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>继续上次启动请求</Button>}</Notice>}
     </section>;
 }

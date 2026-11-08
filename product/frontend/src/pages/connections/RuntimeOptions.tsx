@@ -3,7 +3,7 @@ import {Choice} from '../../shared/ui/Choice'
 import type {RuntimeCapabilities,RuntimeSettings,SqliteCapture} from '../../entities/application/api/projects'
 import {Button} from '../../shared/ui/actions'
 import {Badge} from '../../shared/ui/feedback'
-import {Field,FormColumns,SectionHeading} from '../../shared/ui/layout'
+import {Field,FormColumns,SectionHeading,ObjectIdentity} from '../../shared/ui/layout'
 import {ServiceDatabaseOptions} from './ServiceDatabaseOptions'
 
 export function RuntimeOptions({projectId,capabilities,value,onChange,disabled}:{projectId?:string;capabilities?:RuntimeCapabilities;value:RuntimeSettings;onChange:(next:RuntimeSettings)=>void;disabled:boolean}) {
@@ -19,7 +19,7 @@ export function RuntimeOptions({projectId,capabilities,value,onChange,disabled}:
     return <details className="jj-runtime-options">
         <summary>依赖与测试数据 <span>{databases.length?databases.length+' 个数据库':'选择用于检查的测试数据'}</span></summary>
         <div className="jj-runtime-options-body">
-            <div className="jj-runtime-dependencies"><div><strong>{capabilities?.package??'Node 应用'}</strong><Badge tone={capabilities?.dependencies==='LOCKED'?'positive':'neutral'}>{capabilities?.dependencies==='LOCKED'?'npm 依赖已锁定':capabilities?.dependencies==='NEEDS_CONFIGURATION'?'需要 npm 锁文件':'无需 npm 安装'}</Badge></div>
+            <div className="jj-runtime-dependencies"><div><ObjectIdentity name={<strong>{capabilities?.package??'Node 应用'}</strong>} status={<Badge tone={capabilities?.dependencies==='LOCKED'?'positive':'neutral'}>{capabilities?.dependencies==='LOCKED'?'npm 依赖已锁定':capabilities?.dependencies==='NEEDS_CONFIGURATION'?'需要 npm 锁文件':'无需 npm 安装'}</Badge>}/></div>
                 {Boolean(capabilities?.build_scripts.length)&&<Field label="构建步骤"><Choice value={value.build_script??''} disabled={disabled} onValueChange={script=>onChange({...value,build_script:script||null})}><option value="">直接运行 JavaScript</option>{capabilities?.build_scripts.map(name=><option key={name} value={name}>{name}</option>)}</Choice></Field>}
                 <label className="jj-checkbox"><input type="checkbox" checked={value.allow_install_scripts??false} disabled={disabled} onChange={event=>onChange({...value,allow_install_scripts:event.target.checked})}/><span>允许依赖安装脚本</span></label>
             </div>

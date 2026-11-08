@@ -44,7 +44,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     <Heading title="调整访问要求"/>
     <section className="jj-panel jj-rule-editor">
       <header className="jj-rule-editor-heading"><h2>当前生效的访问规则</h2><span className="jj-small jj-muted">{value.permissions.filter(item => item.effective_state === 'ACTIVE').length} 条</span></header>
-      <div className="jj-scroll-table"><table className="jj-rule-editor-table">
+      <div className="jj-scroll-table"><table data-density="compact" className="jj-content-table jj-rule-editor-table">
         <colgroup><col className="jj-rule-object-column"/><col className="jj-rule-condition-column"/><col className="jj-rule-current-column"/><col className="jj-rule-edit-column"/></colgroup>
         <thead><tr><th scope="col">访问规则</th><th scope="col">适用条件</th><th scope="col">当前要求</th><th scope="col">调整后的要求</th></tr></thead>
         <tbody>{value.permissions.filter(item => item.effective_state === 'ACTIVE').map(item => {
@@ -68,7 +68,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
             </section>
           </td></tr>}</Fragment>;
         })}</tbody>
-      </table></div>{!value.permissions.length && <Empty title="当前没有可调整的访问规则"/>}<label className="jj-field jj-rule-editor-reason"><span>变更理由</span><textarea value={reason} disabled={busy || uncertain} onChange={event => setReason(event.target.value)} placeholder="说明访问要求发生了什么变化"/></label><div className="jj-confirmation-actions jj-form-actions"><Button disabled={busy} onClick={onBack}>返回</Button><Button kind="primary" busy={busy} disabled={!changed || !reason.trim() || uncertain} onClick={() => void act(async () => { const key = 'jiejian.studio.maintenance:' + projectId; sessionStorage.setItem(key, 'pending'); try {
+      </table></div>{!value.permissions.length && <Empty title="当前没有可调整的访问规则"/>}<label className="jj-field jj-rule-editor-reason"><span>变更理由</span><textarea value={reason} disabled={busy || uncertain} onChange={event => setReason(event.target.value)} placeholder="说明访问要求发生了什么变化"/></label><div className="jj-task-actions jj-form-actions"><Button disabled={busy} onClick={onBack}>返回</Button><Button kind="primary" busy={busy} disabled={!changed || !reason.trim() || uncertain} onClick={() => void act(async () => { const key = 'jiejian.studio.maintenance:' + projectId; sessionStorage.setItem(key, 'pending'); try {
         const proposal = await api.createMaintenanceProposal(projectId, { expected_boundary_state_fingerprint: value.boundary_state_fingerprint, actors: value.actors, actions: value.actions, permissions: value.permissions.map(item => ({ ...item, expectation: changes[item.item_id] ?? item.expectation, ...(item.item_id in conditionChanges ? {conditions:conditionChanges[item.item_id]} : {}) })), provenance: reason.trim() });
         assertProject(proposal.proposal.project_id, projectId);
         sessionStorage.removeItem(key);

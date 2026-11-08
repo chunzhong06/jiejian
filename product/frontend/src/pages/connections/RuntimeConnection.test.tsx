@@ -18,7 +18,7 @@ it('数据库配置按连接和记录分组，取消填写不保存凭据或配�
     render(<ServiceDatabaseOptions projectId="app" value={[]} onChange={change} disabled={false}/>);
     fireEvent.click(screen.getByRole('button',{name:'添加连接'}));
     expect(screen.getByRole('heading',{name:'连接位置'})).toBeVisible();
-    expect(screen.getByRole('heading',{name:'业务记录投影'})).toBeVisible();
+    expect(screen.getByRole('heading',{name:'用于判断结果的业务字段'})).toBeVisible();
     fireEvent.change(screen.getByLabelText('数据库密码'),{target:{value:'temporary-test-value'}});
     fireEvent.click(screen.getByRole('button',{name:'取消'}));
     expect(credential).not.toHaveBeenCalled();expect(change).not.toHaveBeenCalled();

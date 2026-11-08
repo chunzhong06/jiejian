@@ -24,7 +24,7 @@ export function AccountAuthentication({identity,onClose,onSaved}:{identity:TestI
     const ready = !options.loading&&Boolean(value.verification.expected_subject.trim()&&(value.principal_kind==='SERVICE'||value.verification.expected_role?.trim())&&value.verification.path.trim())
     return <Dialog title="设置账号登录" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button><Button kind="primary" disabled={!ready} busy={busy} onClick={async()=>{setBusy(true);try{await testIdentitiesApi.configureAuthentication(identity,value);onSaved();dismiss()}catch(e){setError(e)}finally{setBusy(false)}}}>保存配置</Button></>}>
         {options.loading?<Loading>正在读取这个应用的登录设置</Loading>:<div className="jj-auth-configuration">
-            <div className="jj-item-heading"><h3>{identity.label}</h3><span className="jj-muted">{identity.actor_display_name}</span></div>
+            <div className="jj-object-line"><h3>{identity.label}</h3><span className="jj-muted">{identity.actor_display_name}</span></div>
             {!!templates.length&&<Field label="登录设置"><Choice value={selected} onValueChange={id=>{
                 setTemplateId(id)
                 const chosen=templates.find(item=>item.identity_id===id)

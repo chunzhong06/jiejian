@@ -4,7 +4,7 @@ import {collaborationApi} from '../../runtime/api/collaboration'
 import {Button} from '../../../shared/ui/actions'
 import {ErrorNote} from '../../../shared/ui/feedback'
 import {Dialog} from '../../../shared/ui/Dialog'
-import {go} from '../../../shared/lib/navigation'
+import {go,readRoute,returnDestination} from '../../../shared/lib/navigation'
 
 export function AgentHandoff({projectId,runId,caseId,targets=[],repair=false,onClose}:{
   projectId:string;runId:string;caseId?:string|null;targets?:RepairReference[];repair?:boolean;onClose:()=>void
@@ -14,6 +14,8 @@ export function AgentHandoff({projectId,runId,caseId,targets=[],repair=false,onC
   const operation=useRef(crypto.randomUUID().replaceAll('-',''))
   const start=async()=>{setBusy(true);setError(undefined);try{
     const references:Record<string,string>={run_id:runId}
+    const route=readRoute(),origin=returnDestination(route.path+'?'+route.query)
+    if(origin)references.return_to=origin
     if(caseId)references.case_id=caseId
     if(targets.length)references.repair_references=JSON.stringify(targets)
     const active=(await collaborationApi.list(projectId)).find(item=>!['COMPLETED','CANCELLED'].includes(item.state)&&(

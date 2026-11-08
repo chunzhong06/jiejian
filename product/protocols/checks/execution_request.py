@@ -9,6 +9,7 @@ from product.protocols.codec import content_hash, encode_json, decode_document, 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from product.protocols.checks.conditions import PermissionConditions
 from product.protocols.web.environment import FrozenEnvironment
+from product.protocols.checks.routine_reference import FrozenRoutineReference
 from product.protocols.checks.scenarios import FrozenBusinessScenario, validate_scenario_cases
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
@@ -387,6 +388,7 @@ class FrozenCheckSelection(WireModel):
 
 
 class ExecutionRequest(WireModel):
+    routine: FrozenRoutineReference | None = Field(default=None, exclude_if=lambda value:value is None)
     document_type: Literal["jiejian.execution-request"] = "jiejian.execution-request"
     schema_version: Literal["1", "2"] = "1"
     environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value: value is None)

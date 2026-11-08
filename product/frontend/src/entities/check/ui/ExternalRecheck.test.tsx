@@ -28,7 +28,7 @@ it('恢复未知提交时先查询原回执，未查到不会自动重发',async
   const receipt=vi.spyOn(api,'receipt').mockResolvedValue(null),submit=vi.spyOn(api,'submit')
   mount()
   expect(screen.getByLabelText('本次部署或处理说明')).toBeDisabled()
-  fireEvent.click(screen.getByRole('button',{name:'查询原检查'}))
+  fireEvent.click(screen.getByRole('button',{name:'查看上次提交结果'}))
   expect(await screen.findByRole('button',{name:'恢复原提交'})).toBeEnabled()
   await waitFor(()=>expect(receipt).toHaveBeenCalledWith('app','original-operation'))
   expect(submit).not.toHaveBeenCalled()

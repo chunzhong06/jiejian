@@ -14,13 +14,14 @@ from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.runtime.serve_lock import ServeLock
 
 
-def test_current_cli_help_excludes_deferred_product_commands() -> None:
+def test_current_cli_help_exposes_check_client_and_excludes_deferred_commands() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
     assert "serve" in result.stdout
     assert "system" in result.stdout
-    for deferred in ("application", "change", "check", "result", "history", "status"):
+    assert "check" in result.stdout
+    for deferred in ("application", "change", "result", "history", "status"):
         assert deferred not in result.stdout
 
 

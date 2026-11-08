@@ -210,6 +210,27 @@ def test_category_priority_applies_across_actions(harness, higher, lower):
     assert (task.task_kind, task.business_action_id) == (higher, later.action_id)
 
 
+def test_scoped_preparation_does_not_take_over_unrelated_work(harness):
+    preparation = harness.core.preparation.get(harness.project_id)
+    complete = _complete_projection(preparation.actions[0])
+    unrelated = _gap(complete.model_copy(update={"action_id": "bac_" + "0" * 32}), "PREPARE_TEST_IDENTITY")
+    selected = _gap(complete, "COMPLETE_EFFECT_EVIDENCE")
+    harness.core.workspace._preparation = SimpleNamespace(get=lambda _: preparation.model_copy(update={"actions": (unrelated, selected)}))
+    assert _task(harness).business_action_id == unrelated.action_id
+    scoped = harness.core.workspace.preparation_work(harness.project_id, (selected.action_id,))
+    assert scoped.primary_task.task_kind == 'COMPLETE_EFFECT_EVIDENCE'
+    assert scoped.primary_task.business_action_id == selected.action_id
+    assert [item.action_id for item in scoped.actions] == [selected.action_id]
+    assert not scoped.preparation_complete
+
+
+@pytest.mark.parametrize('scope', [(), ('missing',), ('same', 'same')])
+def test_invalid_scoped_preparation_never_falls_back_to_all_actions(harness, scope):
+    from product.backend.domain.errors import JiejianError
+    with pytest.raises(JiejianError):
+        harness.core.workspace.preparation_work(harness.project_id, scope)
+
+
 def test_recording_review_precedes_other_action_identity_and_source_review_still_wins(harness):
     preparation = harness.core.preparation.get(harness.project_id)
     extra = _gap(preparation.actions[0].model_copy(update={"action_id": "bac_" + "0" * 32}), "PREPARE_TEST_IDENTITY")

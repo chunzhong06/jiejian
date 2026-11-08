@@ -125,6 +125,7 @@ export type WorkspaceViewDto = {
 }
 
 export const workspaceApi = {
+  preparation:(projectId:string,actionIds:string[],signal?:AbortSignal)=>request<{project_id:string;actions:Array<{action_id:string;label:string;preparation_complete:boolean}>;primary_task:PrimaryTaskDto|null;preparation_complete:boolean}>(`/api/projects/${projectId}/workspace/preparation?`+new URLSearchParams(actionIds.map(id=>['action_id',id])),{signal}),
   revision:(projectId:string,signal?:AbortSignal)=>request<{revision:string}>(`/api/projects/${projectId}/workspace/revision`,{signal}),
   current: (projectId: string, signal?:AbortSignal) => request<WorkspaceViewDto>(
     `/api/projects/${projectId}/workspace`,{signal},

@@ -1,4 +1,5 @@
 import {flushSync} from 'react-dom'
+import {motionMilliseconds} from './motionTiming'
 
 let active:ViewTransition|null=null
 let appearanceAnimation:Animation|null=null
@@ -36,6 +37,8 @@ export function commitThemeTransition(update:()=>void){
   delete document.documentElement.dataset.pageDirection
   flushSync(update)
   // 整页快照会暂停真实控件的命中；主题淡入保留导航与业务操作的点击能力。
-  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&document.documentElement.animate)
-    appearanceAnimation=document.documentElement.animate([{opacity:.96},{opacity:1}],{duration:100,easing:'ease-out'})
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&document.documentElement.animate){
+    const style=getComputedStyle(document.documentElement)
+    appearanceAnimation=document.documentElement.animate([{opacity:.98},{opacity:1}],{duration:motionMilliseconds(style.getPropertyValue('--motion-content'),220),easing:'ease-out'})
+  }
 }

@@ -9,6 +9,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -41,7 +42,8 @@ def read_root(path: Path, model):
 
 
 def package_files(root: Path) -> list[Path]:
-    files = [root / '界鉴.exe']
+    release=read_root(root/'app/release.json',PortableReleaseManifest)
+    files = [root / ('界鉴.exe' if release.platform=='windows' else 'start.sh')]
     for name in ('app', 'runtime'):
         if (root / name).is_symlink() or (root / name).is_junction():
             raise ValueError('linked release tree')
@@ -74,7 +76,7 @@ def verify_package(root: Path, workspace: Path) -> tuple[PortableUpdateManifest,
     required = {'界鉴.exe', 'app/start.ps1', 'app/release.json', 'runtime/python/python.exe', 'runtime/node/node.exe',
                 'app/product/frontend/dist/index.html', 'app/product/backend/__init__.py',
                 'runtime/python/Lib/site-packages/jiejian-app.pth'}
-    if (manifest.version != release.version or not required.issubset(names) or len({name.casefold() for name in names}) != len(names)
+    if (release.platform!='windows' or manifest.version != release.version or not required.issubset(names) or len({name.casefold() for name in names}) != len(names)
             or not any(name.startswith('runtime/playwright/chromium-') and name.endswith('/chrome.exe') for name in names)):
         raise ValueError('incomplete release')
     # 清单必须覆盖实际可执行树，未登记模块同样会影响新程序的运行身份。
@@ -113,6 +115,7 @@ class PortableUpdateService:
     def info(self) -> dict:
         release = self.environment.get('JIEJIAN_RELEASE_ROOT')
         return {'version': __version__, 'portable': self.environment.get('JIEJIAN_RUNTIME_MODE') == 'portable',
+                'platform':'windows' if sys.platform=='win32' else 'linux' if sys.platform=='linux' else 'unsupported', 'update_supported':sys.platform=='win32',
                 'release_root': release, 'workspace': str(self.paths.root), 'operation': self.latest(), 'last_exit': self.last_exit()}
 
     def last_exit(self) -> dict | None:
@@ -146,6 +149,8 @@ class PortableUpdateService:
             os.replace(temporary, path)
 
     def preview(self, directory: str, return_path: str = '/workspace') -> dict:
+        if sys.platform!='win32':
+            raise JiejianError(ErrorCode.INPUT_INVALID,'当前平台请解压新包并使用原工作区启动，界面内自动交接尚未支持')
         if not self.info()['portable']:
             raise JiejianError(ErrorCode.INPUT_INVALID, '源码运行不执行发行更新，请从便携版打开此功能')
         root = Path(directory).expanduser().resolve()

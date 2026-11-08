@@ -13,6 +13,7 @@ _NAMESPACE_DEPTHS = {
     "mcp-control": 1,
     "test-identity": 3,
     "database": 2,
+    "github": 1,
 }
 
 

@@ -1,3 +1,4 @@
+import {ObjectHeading} from './layout'
 import {useId,type ReactNode} from 'react'
 import CloseOutlined from '@ant-design/icons/CloseOutlined'
 import {useContentTransition} from '../lib/contentTransition'
@@ -9,7 +10,7 @@ export function Inspector({identity,title,caption,status,onClose,children,action
   return <aside className="jj-inspector" ref={content} aria-labelledby={id} onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();onClose()}}}>
     <header className="jj-inspector-heading">
       <div className="jj-inspector-caption"><p className="jj-eyebrow">{caption}</p><Button kind="quiet" aria-label="收起详情" icon={<CloseOutlined aria-hidden="true"/>} onClick={onClose}/></div>
-      <div className="jj-collection-title"><h2 id={id}>{title}</h2>{status}</div>
+      <ObjectHeading id={id} title={title} status={status}/>
     </header>
     {children}
     {actions&&<footer className="jj-inspector-actions">{actions}</footer>}

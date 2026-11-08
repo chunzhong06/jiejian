@@ -1,43 +1,32 @@
-.jj-tools-layout { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:32px; align-items:stretch; container:tools-workspace / inline-size; }
-.jj-tools-connection,.jj-tools-access { min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-surface); padding-inline:24px; }
-.jj-tools-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:24px 0 0; }
-.jj-tools-heading > .jj-button { flex:none; width:36px; min-height:36px; padding:0; }
-.jj-tools-body { display:grid; gap:24px; padding:24px 0; }
-.jj-tool-selector { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:20px; }
-.jj-tool-selector > .jj-button { justify-self:end; }
-.jj-tool-object { display:flex; align-items:end; gap:10px; min-width:0; }
-.jj-tool-object > .jj-field { flex:1; min-width:0; max-width:280px; }
-.jj-tool-state { display:flex; flex-wrap:wrap; align-items:center; align-self:end; gap:6px 8px; min-height:40px; max-width:40%; }
+.jj-tools-layout { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:24px; align-items:stretch; max-width:1120px; }
+.jj-tools-connection, .jj-tools-access { display:flex; flex-direction:column; min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-surface); padding:24px; }
+.jj-tools-heading, .jj-tools-access > header { display:flex; align-items:center; gap:16px; min-height:28px; }
+.jj-tools-body { display:grid; gap:20px; padding:24px 0; }
+.jj-tool-selector, .jj-tool-detail { min-width:0; }
+.jj-tool-object { display:flex; align-items:end; gap:12px; }
+.jj-tool-object > .jj-field { flex:1 1 180px; min-width:0; max-width:280px; }
+.jj-tool-state { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-height:var(--control-height); }
 .jj-tool-state .jj-badge { white-space:nowrap; }
-.jj-tool-detail { display:grid; gap:16px; min-width:0; }
+.jj-tool-detail { display:grid; gap:16px; }
+.jj-tool-detail .jj-field { max-width:440px; }
 .jj-tool-message { color:var(--muted); }
-.jj-tools-service { margin-top:auto; padding:0 0 24px; display:flex; flex-wrap:wrap; align-items:center; gap:16px; }
-/* 接入状态保持为一个整体，窄窗先让旁边的管理动作换行。 */
-.jj-tools-service-state { display:flex; flex:none; align-items:center; gap:8px; font-size:var(--text-meta); }
+.jj-tools-service { display:grid; gap:20px; min-width:0; padding-top:20px; border-top:1px solid var(--line); }
+.jj-tools-service-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; }
+.jj-tools-service-state { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:var(--text-meta); }
 .jj-tools-service strong { font-weight:500; }
-.jj-tools-service > .jj-button { margin-left:auto; font-size:var(--text-meta); min-height:30px; padding:4px 8px; }
-/* 连接管理属于接入服务组，覆盖通用details自带的独立分隔线。 */
+.jj-tools-service .jj-switch { flex-direction:row-reverse; gap:12px; }
+/* 维护内容只在当前连接组展开，不另铺一层表面。 */
 .jj-tool-management { width:100%; border:0; padding:0; }
 .jj-tool-management-content { display:grid; gap:16px; padding-top:16px; }
-.jj-tool-management dl { display:grid; gap:8px; }
-.jj-tool-management dt { font-size:var(--text-meta); color:var(--muted); }
-.jj-tool-management dd { margin:0; }
-.jj-tool-management .jj-inline-actions { flex-wrap:wrap; justify-content:flex-end; align-content:start; }
-.jj-tools-access { display:flex; flex-direction:column; padding:24px; }
-.jj-current-grant { display:flex; align-items:center; gap:8px; margin:24px 0; }
+.jj-tool-management .jj-inline-actions { flex-wrap:wrap; justify-content:flex-end; }
+.jj-tools-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:auto; padding-top:24px; }
+.jj-current-grant { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:24px 0; }
 .jj-current-grant h3 { margin:0; min-width:0; overflow-wrap:anywhere; }
 .jj-current-grant > .jj-badge { flex:none; }
-.jj-access-explanation,.jj-access-current { font-size:var(--text-meta); color:var(--muted); margin-top:12px; }
-.jj-tools-access > .jj-button { align-self:flex-end; margin-top:24px; }
-@media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); } }
-@media(max-width:600px) { .jj-tools-connection { padding-inline:20px; } .jj-tools-heading { padding:20px 0 0; } .jj-tools-body { padding:20px 0; } .jj-tools-access { padding:20px; } .jj-tool-selector { grid-template-columns:minmax(0,1fr); gap:16px; } }
-@media(prefers-reduced-motion:no-preference) { .jj-tool-detail { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }
-
-.jj-tools-connection { display:flex; flex-direction:column; }
-.jj-tools-access > header { min-height:36px; display:flex; align-items:center; }
-.jj-tool-management-content { grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:16px 24px; }
-.jj-tool-management-content > p { grid-column:1; }
-.jj-tool-management-content > .jj-inline-actions { grid-column:2; grid-row:1/3; max-width:210px; }
-@container tools-workspace (max-width:900px) { .jj-tool-management-content { grid-template-columns:minmax(0,1fr); } .jj-tool-management-content > .jj-inline-actions { grid-column:1; grid-row:auto; max-width:none; } }
-
+.jj-access-explanation, .jj-access-current { font-size:var(--text-meta); color:var(--muted); margin-top:12px; }
+.jj-tools-access > .jj-button { align-self:flex-end; margin-top:auto; }
+.jj-tools-access > .jj-field { margin-bottom:24px; }
 .jj-tools-access > :is(.jj-notice,.jj-loading) { margin-top:24px; }
+@media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); max-width:680px; } .jj-tools-access > .jj-button { margin-top:24px; } }
+@media(max-width:600px) { .jj-tools-connection, .jj-tools-access { padding:20px; } .jj-tool-object > .jj-field { max-width:none; } }
+@media(prefers-reduced-motion:no-preference) { .jj-tool-detail { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }

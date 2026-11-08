@@ -36,7 +36,7 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
     <a className="jj-skip" href="#jj-content" onClick={event=>{event.preventDefault();document.getElementById('jj-content')?.focus()}}>跳到正文</a>
     <aside className="jj-sidebar">{!mobile&&navigation}</aside>
     {mobile&&<Dialog title="界鉴导航" onClose={close}><div className="jj-mobile-nav">{navigation}</div></Dialog>}
-    {project&&<CollaborationEntry key={project.project_id} projectId={project.project_id} route={route.path+'?'+route.query.toString()} viewedTaskId={collaborationPage?route.query.get('task_id'):null} portalHost={collaborationHost} onNavigate={close}/>}
+    {project&&<CollaborationEntry key={project.project_id} projectId={project.project_id} route={route.path+'?'+route.query.toString()} selected={collaborationPage} viewedTaskId={collaborationPage?route.query.get('task_id'):null} portalHost={collaborationHost} onNavigate={close}/>}
     <div className="jj-main">
       <header className="jj-topbar">
         <Button kind="quiet" className="jj-mobile-toggle" aria-label="打开导航" icon={<MenuOutlined aria-hidden="true"/>} onClick={()=>setMobile(true)}/>

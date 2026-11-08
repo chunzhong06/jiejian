@@ -919,6 +919,45 @@
       "title": "FrozenRequirementScope",
       "type": "object"
     },
+    "FrozenRoutineReference": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "binding_id": {
+          "pattern": "^crb_[0-9a-f]{32}$",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "routine_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Routine Fingerprint",
+          "type": "string"
+        },
+        "routine_id": {
+          "pattern": "^csp_[0-9a-f]{32}$",
+          "title": "Routine Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "routine_id",
+        "revision",
+        "binding_id",
+        "routine_fingerprint",
+        "binding_fingerprint"
+      ],
+      "title": "FrozenRoutineReference",
+      "type": "object"
+    },
     "FrozenScenarioInvocation": {
       "additionalProperties": false,
       "properties": {
@@ -1822,6 +1861,17 @@
       "maxItems": 200,
       "title": "Requirement Scope",
       "type": "array"
+    },
+    "routine": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FrozenRoutineReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "scenario": {
       "anyOf": [

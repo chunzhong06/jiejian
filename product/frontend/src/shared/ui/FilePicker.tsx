@@ -11,8 +11,8 @@ function accepts(file:File,accept:string){return !accept||accept.split(',').some
 })}
 
 /** 只选择本地文件；解析、预览、上传及采用仍由所属任务发起。 */
-export function FilePicker({label,file,onFileChange,accept='',formats='任意文件',maxBytes,disabled=false,id,'aria-labelledby':labelledBy}:{
-  label:string;file?:File;onFileChange:(file:File|undefined)=>void|Promise<unknown>;accept?:string;formats?:string;maxBytes:number;disabled?:boolean;id?:string;'aria-labelledby'?:string
+export function FilePicker({label,file,onFileChange,accept='',formats='任意文件',maxBytes,disabled=false,id,'aria-labelledby':labelledBy,'aria-describedby':describedBy}:{
+  label:string;file?:File;onFileChange:(file:File|undefined)=>void|Promise<unknown>;accept?:string;formats?:string;maxBytes:number;disabled?:boolean;id?:string;'aria-labelledby'?:string;'aria-describedby'?:string
 }){
   const input=useRef<HTMLInputElement>(null),choose=useRef<HTMLButtonElement>(null),locked=useRef(false),depth=useRef(0),restoreFocus=useRef(false)
   const [reading,setReading]=useState(false),[dragging,setDragging]=useState(false),[error,setError]=useState('')
@@ -39,7 +39,7 @@ export function FilePicker({label,file,onFileChange,accept='',formats='任意文
   }
   const fileDrag=(types:readonly string[])=>types.includes('Files')
   return <div className="jj-file-picker-wrap" role="group" aria-labelledby={labelledBy} aria-label={labelledBy?undefined:label}>
-    <div className="jj-file-picker" data-dragging={dragging||undefined} data-disabled={unavailable||undefined}
+    <div className="jj-file-picker" data-dragging={dragging||undefined} data-disabled={unavailable||undefined} data-invalid={Boolean(error)||undefined} aria-busy={reading||undefined}
       onDragEnter={event=>{if(!unavailable&&fileDrag(event.dataTransfer.types)){event.preventDefault();depth.current++;setDragging(true)}}}
       onDragOver={event=>{if(fileDrag(event.dataTransfer.types)){event.preventDefault();event.dataTransfer.dropEffect=unavailable?'none':'copy'}}}
       onDragLeave={()=>{depth.current=Math.max(0,depth.current-1);if(!depth.current)setDragging(false)}}
@@ -48,7 +48,7 @@ export function FilePicker({label,file,onFileChange,accept='',formats='任意文
       <div className="jj-file-information"><span className="jj-file-name" role="status">{file?file.name:'拖放文件到这里'}</span><small id={description}>{file?fileSize(file.size)+' · ':''}{formats} · 最多 {fileSize(maxBytes)}</small></div>
       <div className="jj-file-actions">
         {file&&<Button kind="quiet" aria-label={'移除'+label} disabled={unavailable} icon={<CloseOutlined aria-hidden="true"/>} onClick={()=>void clear()}/>}
-        <Button ref={choose} id={id} aria-label={(file?'更换':'选择')+label} aria-describedby={description+(error?' '+errorId:'')} aria-invalid={Boolean(error)||undefined} busy={reading} disabled={disabled} onClick={()=>input.current?.click()}>{file?'更换文件':'选择文件'}</Button>
+        <Button ref={choose} id={id} aria-label={(file?'更换':'选择')+label} aria-describedby={[describedBy,description,error?errorId:undefined].filter(Boolean).join(' ')} aria-invalid={Boolean(error)||undefined} busy={reading} disabled={disabled} onClick={()=>input.current?.click()}>{file?'更换文件':'选择文件'}</Button>
       </div>
       <input ref={input} hidden type="file" accept={accept||undefined} disabled={unavailable} onChange={event=>{const files=Array.from(event.target.files??[]);event.target.value='';void receive(files)}}/>
     </div>

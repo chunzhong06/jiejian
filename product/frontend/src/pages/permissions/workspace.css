@@ -6,11 +6,12 @@
 .jj-rule-condition-column { width:33%; }
 .jj-rule-current-column { width:12%; }
 .jj-rule-edit-column { width:20%; }
-.jj-rule-editor-table th,.jj-rule-editor-table td { text-align:left; padding:18px 24px; border-top:1px solid var(--line); vertical-align:middle; }
-.jj-rule-editor-table th { color:var(--muted); background:var(--surface-heading); font-size:var(--text-meta); font-weight:500; }
+.jj-rule-editor-table th { text-align:left; border-top:1px solid var(--line); vertical-align:middle; }
+.jj-rule-editor-table td { text-align:left; border-top:1px solid var(--line); vertical-align:middle; }
+.jj-rule-editor-table th { color:var(--muted); }
 .jj-rule-editor-table p { margin-top:6px; }
 .jj-rule-condition-summary { display:grid; justify-items:start; gap:8px; }
-.jj-rule-condition-summary>.jj-button { min-height:32px; padding:6px 10px; }
+.jj-rule-condition-summary>.jj-button { min-height:var(--control-compact); padding:6px 10px; }
 .jj-rule-condition-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:20px 40px; }
 .jj-rule-condition-editor>h3 { grid-column:1/-1; }
 .jj-rule-condition-editor>.jj-condition-fields { grid-template-columns:minmax(0,1fr); padding:0; }
@@ -32,9 +33,9 @@
 
 .jj-rule-directory-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:var(--text-meta); }
 .jj-rule-directory-summary > div { display:flex; gap:8px; flex-wrap:wrap; }
-.jj-rule-directory-summary .jj-button { font-size:var(--text-meta); min-height:32px; padding:5px 10px; }
+.jj-rule-directory-summary .jj-button { font-size:var(--text-body); min-height:var(--control-compact); padding:5px 10px; }
 .jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
 .jj-rule-inspector-links { display:grid; gap:6px; }
-.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 16px; background:transparent; font-size:var(--text-meta); white-space:normal; text-align:left; }
+.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 16px; background:transparent; font-size:var(--text-body); white-space:normal; text-align:left; }
 .jj-rule-directory .jj-object-table th:first-child { width:58%; }
 @media(max-width:600px) { .jj-rule-directory .jj-object-table :is(th,td):last-child { display:none; } }

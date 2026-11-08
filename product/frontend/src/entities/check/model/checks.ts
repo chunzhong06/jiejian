@@ -8,7 +8,7 @@ const published:Record<string,Tone>={
   '现有证据不足以完成判断':'caution','证据或检查条件不足，尚不能确定':'caution',
 }
 export function judgement(action:ActionResultStory){return published[action.judgement]??'neutral'}
-export const judgementLabels={positive:'符合规则',negative:'不符合规则',caution:'尚未确认',neutral:'其他结果'}
+export const judgementLabels={positive:'符合规则',negative:'不符合规则',caution:'证据不足',neutral:'其他结果'}
 export function subject(action:ActionResultStory){return text(action.fact_comparison.planned_identity.actor_label??action.fact_comparison.planned_identity.label??'测试账号')}
 export function owner(action:ActionResultStory){const identity=action.fact_comparison.planned_resource_owner;return action.permission.relation==='OWNS'?'操作账号本人':action.permission.relation==='SAME_ROLE_OTHER_ACCOUNT'?`另一个${text(identity?.actor_label??'同角色')}账号`:text(identity?.actor_label??identity?.label??'其他账号')}
 export function requirement(action:ActionResultStory){return action.scenario_context?.expected_effect==='ABSENT'&&action.permission.expectation==='ALLOW'?`整批应当拒绝：不得${text(action.display_name)}`:`${subject(action)}${action.permission.expectation==='ALLOW'?'可以':'不得'}${text(action.display_name)}`}
@@ -31,7 +31,7 @@ export function repairGap(reasons:string[]){
     REPAIR_STANDARD_CHANGED:'本次采用的证明要求与原检查不同。请核对参照文件和采集方式，再复验原问题。',
     REPAIR_RUNTIME_NOT_CONFIRMED:'尚未确认本次检查实际运行的代码，暂时无法验收修复。',
     EXTERNAL_RECHECK_CONTEXT_MISMATCH:'本次环境、范围或原问题引用无法对应，请重新核对。',
-    REPAIR_CONTEXT_MISMATCH:'本次检查未对应原问题的修改记录，请从该规则下重新预览复验。',
+    REPAIR_CONTEXT_MISMATCH:'本次检查未关联原问题的修改记录，请从该规则下重新预览复验。',
     REPAIR_CASE_NOT_UNIQUELY_MATCHED:'未能完整对应原检查场景，请核对账号、资源和检查范围。',
     REPAIR_REQUIRED_CASE_NOT_SAFE:'原问题、正常操作或相关功能中，仍有场景未通过检查。',
     REPAIR_EVIDENCE_UNAVAILABLE:'缺少可读取的完整证明记录，暂时无法验收修复。',
@@ -48,7 +48,7 @@ const businessSentences:Record<string,[string,string,string]>={
   '公开作品说明可见':['读到了公开作品说明','未读到公开作品说明','公开说明是否可读尚未确认'],
 }
 export function actual(effect:ActionResultStory['fact_comparison']['effects'][number]){
-  // “没有发生”须同时具备闭合观察的发布判断，不能只翻译 ABSENT 字段。
+  // “没有发生”须同时具备闭合观察的发布判断；下列文字是后端匹配值，不能作为界面文案改写。
   const state=effect.observed_state==='ABSENT'&&!['在已闭合的观察范围内未发生这项业务结果','本次观察已完成，未发现这项结果'].includes(effect.judgement)?'UNKNOWN':effect.observed_state
   const known=businessSentences[effect.business_label]
   return known?known[state==='CONFIRMED'?0:state==='ABSENT'?1:2]:state==='CONFIRMED'?`已确认：${text(effect.business_label)}`:state==='ABSENT'?`本次未观察到“${text(effect.business_label)}”`:`尚不能确认“${text(effect.business_label)}”`

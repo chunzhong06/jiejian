@@ -13,10 +13,12 @@
 | [product/protocols/checks/check_result.py](../../../product/protocols/checks/check_result.py) | 311 | check_request_marker、CheckAssetReference、CheckRunnerInput、CheckRunnerProgress、CheckObservation、ScenarioResourceBinding、CheckCaseOutcome、CheckEvidence等 |
 | [product/protocols/checks/check_runtime.py](../../../product/protocols/checks/check_runtime.py) | 449 | CheckBudget、CheckFlowStep、CheckAuxiliarySource、CheckProofConfig、CheckRecoveryConfig、CheckActionConfig、async_completion_candidates、ExternalWebRuntime等 |
 | [product/protocols/checks/conditions.py](../../../product/protocols/checks/conditions.py) | 107 | ConditionModel、PermissionConditions、ObservedPermissionConditions、match_permission_conditions、collected_conditions_status、permission_conditions_overlap |
-| [product/protocols/checks/execution_request.py](../../../product/protocols/checks/execution_request.py) | 532 | WireModel、PermissionReference、FrozenPermission、ExecutionAssetReference、RecordedProofReference、ObserverProofReference、OperationProofReference、EffectProofRequirement等 |
+| [product/protocols/checks/execution_request.py](../../../product/protocols/checks/execution_request.py) | 534 | WireModel、PermissionReference、FrozenPermission、ExecutionAssetReference、RecordedProofReference、ObserverProofReference、OperationProofReference、EffectProofRequirement等 |
 | [product/protocols/checks/field_mutation.py](../../../product/protocols/checks/field_mutation.py) | 55 | FieldMutationRequirement、same_scalar、mutation_happened |
 | [product/protocols/checks/identity.py](../../../product/protocols/checks/identity.py) | 44 | CheckIdentityVerification、CheckIdentity |
 | [product/protocols/checks/relationships.py](../../../product/protocols/checks/relationships.py) | 221 | RelationshipModel、RelationshipRequirement、RelationshipEdge、RelationshipGrant、RelationshipSnapshot、ObservedRelationship、observe_relationship |
+| [product/protocols/checks/routine_reference.py](../../../product/protocols/checks/routine_reference.py) | 15 | RoutineReference、FrozenRoutineReference |
+| [product/protocols/checks/routines.py](../../../product/protocols/checks/routines.py) | 128 | RoutineValue、RoutineScope、RoutineLimits、RoutineActor、RoutineAction、RoutineRequirement、CheckRoutineDocument、RoutineBoundAsset等 |
 | [product/protocols/checks/scenario_execution.py](../../../product/protocols/checks/scenario_execution.py) | 58 | ScenarioNodeProgress、ScenarioExecutionJournal |
 | [product/protocols/checks/scenarios.py](../../../product/protocols/checks/scenarios.py) | 218 | ScenarioModel、ScenarioPermission、ScenarioItem、BatchInvocation、ScenarioInvocation、ScenarioExperiment、BusinessScenarioRevision、FrozenScenarioInvocation等 |
 | [product/protocols/codec.py](../../../product/protocols/codec.py) | 64 | encode_json、content_hash、decode_json、decode_document |
@@ -58,7 +60,7 @@
 | [product/protocols/runtime/request_activity.py](../../../product/protocols/runtime/request_activity.py) | 69 | ActivityEvent、RequestActivity |
 | [product/protocols/runtime/runtime_identity.py](../../../product/protocols/runtime/runtime_identity.py) | 109 | RuntimeModel、RuntimeFile、runtime_source_fingerprint、RuntimeLaunchManifest、runtime_manifest_fingerprint、RuntimeLaunchReceipt、ControlledRuntimeReference、RuntimeCorrespondence等 |
 | [product/protocols/runtime/transaction_records.py](../../../product/protocols/runtime/transaction_records.py) | 190 | bounded_record_data、RecordChange、RecordSeed、RecordSnapshot、RecordTransition、RecordProviderReference、RecordProofRequest、RecordRequestScope等 |
-| [product/protocols/schema.py](../../../product/protocols/schema.py) | 176 | SchemaEntry、render_schema、synchronize_schemas、main |
+| [product/protocols/schema.py](../../../product/protocols/schema.py) | 178 | SchemaEntry、render_schema、synchronize_schemas、main |
 | [product/protocols/web/__init__.py](../../../product/protocols/web/__init__.py) | 93 | 包、内部机制或样式 |
 | [product/protocols/web/base.py](../../../product/protocols/web/base.py) | 6 | ProtocolModel |
 | [product/protocols/web/environment.py](../../../product/protocols/web/environment.py) | 47 | FrozenEnvironment、EnvironmentDocument、parse_environment_document |

@@ -1,4 +1,4 @@
-"""真实工作面校准：两主题、窄窗、键盘与共享控件；只输出三个修改工作面的重点截图。"""
+"""真实工作面校准：两主题、窄窗、键盘、任务往返与共享控件；只输出重点修改截图。"""
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -12,7 +12,7 @@ def test_complex_workbenches_use_shared_controls_and_preserve_theme():
     from tests.support.official import OfficialScenario
     from tests.support.browser_review import navigate,settled
     root=Path(__file__).resolve().parents[3]
-    receipt=json.loads((root/'var/audit/phase-b/build/runtime/source/receipt.json').read_text(encoding='utf-8'))
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text(encoding='utf-8'))
     output=root/'var/audit/phase-b/review'/uuid4().hex
     errors=[];metrics=[]
     with launch(output,Path(receipt['frontend']['dist'])) as server,sync_playwright() as engine:
@@ -58,7 +58,7 @@ def test_complex_workbenches_use_shared_controls_and_preserve_theme():
                 # 全页截图前归零文档滚动，避免固定导航按当前滚动位置出现在图中间。
                 page.mouse.move(220,80)
                 page.evaluate("document.activeElement?.blur();scrollTo({top:0,left:0,behavior:'instant'})");settled(page)
-                page.screenshot(path=str(output/name),full_page=True)
+                page.screenshot(path=str(output/name),full_page=False)
             navigate(page,server.origin,'/testing?scenario='+document['id']+'&project_id='+scenario.project_id)
             expect(page.get_by_role('heading',name='组合业务场景',exact=True)).to_be_visible()
             tabs=page.get_by_role('tablist',name='业务实验',exact=True)
@@ -185,7 +185,7 @@ def test_complex_workbenches_use_shared_controls_and_preserve_theme():
             page.get_by_role('tab',name='操作与结果 0',exact=True).click()
             page.get_by_role('button',name='添加操作',exact=True).click()
             operations=page.get_by_role('region',name='业务操作',exact=True)
-            operation_heading=operations.locator(':scope > header')
+            operation_heading=operations.locator('.jj-initial-operation > header').first
             expect(operation_heading.get_by_role('heading',name='业务操作',exact=True)).to_be_visible()
             expect(operation_heading.get_by_role('button',name='添加操作',exact=True)).to_be_visible()
             results=page.get_by_role('region',name='业务操作 1的业务结果',exact=True)
@@ -224,7 +224,7 @@ def test_scenario_node_trial_uses_adopted_flow_and_keeps_history():
     from tests.support.official import until
     from tests.support.browser_review import navigate,settled
     root=Path(__file__).resolve().parents[3]
-    receipt=json.loads((root/'var/audit/phase-b/build/runtime/source/receipt.json').read_text(encoding='utf-8'))
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text(encoding='utf-8'))
     output=root/'var/audit/phase-b/node-trial'/uuid4().hex
     instance=output/'instance'
     with socket.socket() as probe:
@@ -280,3 +280,126 @@ def test_scenario_node_trial_uses_adopted_flow_and_keeps_history():
 
 
 pytestmark=[pytest.mark.level4,pytest.mark.process,pytest.mark.slow]
+
+
+def test_plan_flow_maintenance_and_agent_review_keep_context():
+    """跨工作面验证精确范围、草稿、准确候选和只读审阅，不执行受检业务请求。"""
+    import socket
+    from threading import Thread
+    from urllib.parse import parse_qs, urlsplit
+    import uvicorn
+    from playwright.sync_api import sync_playwright, expect
+    from product.backend.interfaces.http.app import create_app
+    from product.backend.application.agent_access.tasks import CreateCollaboration, CollaborationAction
+    from product.protocols.preparation.operation_flow import OperationFlowDraft
+    from tests.support.builders.preparation.external_application import external_application
+    from tests.support.builders.runtime.runtime_environment import runtime_identity_environment
+    from tests.support.secrets import MemorySecrets
+    from tests.support.official import until
+    from tests.support.browser_review import navigate, settled
+
+    root=Path(__file__).resolve().parents[3]
+    receipt=json.loads((root/'var/runtime/source/receipt.json').read_text('utf-8'))
+    output=root/'var/maintenance/workflow-redesign'/uuid4().hex
+    output.mkdir(parents=True)
+    instance=output/'instance'
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
+    origin=f'http://127.0.0.1:{port}'
+    web=create_app(instance,control_origin=origin,control_session_token=uuid4().hex*2,
+        frontend_dir=Path(receipt['frontend']['dist']),secret_store=MemorySecrets(),environ=runtime_identity_environment(instance))
+    core=web.state.context
+    server=uvicorn.Server(uvicorn.Config(web,host='127.0.0.1',port=port,log_level='error'))
+    thread=Thread(target=server.run,daemon=True)
+    errors=[];writes=[];metrics=[]
+    try:
+        with external_application(output/'ordinary',core=core) as app:
+            raw=app.flow.model_dump(mode='json')
+            payload={key:raw[key] for key in ('id','business_action_id','action_revision','subject_test_identity_id','resource_owner_test_identity_id','source_fingerprint','entity_evidence','recovery')}
+            payload.update(revision=2,actual_resource_id='order-2',steps=raw['workflow']['steps'],target_step_id=raw['workflow']['target_step_id'])
+            candidate=core.operation_flows.candidate(app.project_id,OperationFlowDraft.model_validate_json(json.dumps(payload)))
+            task=core.collaboration.create(app.project_id,CreateCollaboration(operation_id=uuid4().hex,goal='补全读取订单的流程，保留原草稿供我核对。',purpose='SETUP'))
+            core.collaboration.act(app.project_id,task['task_id'],CollaborationAction(operation_id=uuid4().hex,capability='flows.save',arguments=candidate.model_dump(mode='json')))
+            thread.start();until(lambda:server.started,bool,seconds=30)
+            with sync_playwright() as engine:
+                browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+                try:
+                    page=browser.new_page(viewport=dict(width=1512,height=980))
+                    page.set_default_timeout(20000)
+                    page.on('pageerror',lambda error:errors.append(str(error)))
+                    page.on('request',lambda request:writes.append(request.url) if request.method not in ('GET','HEAD','OPTIONS') else None)
+                    def visit(path):navigate(page,origin,path+('&' if '?' in path else '?')+'project_id='+app.project_id)
+                    def theme(value):
+                        if page.locator('html').get_attribute('data-studio-theme')!=value:
+                            page.get_by_role('button',name='切换雾蓝深色' if value=='dark' else '切换浅色',exact=True).click()
+                        settled(page)
+                    def inspect(name):
+                        for value in ('dark','light'):
+                            theme(value)
+                            for width in (1512,1040,760,420):
+                                page.set_viewport_size(dict(width=width,height=980));settled(page)
+                                assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1'),name
+                                metrics.append(dict(page=name,theme=value,width=width))
+                        page.emulate_media(reduced_motion='reduce')
+                        for detail in page.locator('.jj-plan-detail,.jj-flow-step,.jj-collaboration-detail').all():
+                            assert detail.evaluate('node=>getComputedStyle(node).animationName')=='none'
+                        page.emulate_media(reduced_motion='no-preference')
+                        page.set_viewport_size(dict(width=1512,height=980));theme('dark')
+                        page.mouse.move(220,80);page.evaluate("document.activeElement?.blur();scrollTo({top:0,left:0,behavior:'instant'})");settled(page)
+                        page.screenshot(path=str(output/(name+'.png')),full_page=True)
+
+                    visit('/reports?view=plan')
+                    expect(page.get_by_role('tab',name='准备与缺口',exact=False)).to_have_attribute('aria-selected','true')
+                    current=page.get_by_role('region',name='当前准备事项',exact=True)
+                    expect(current).to_be_visible()
+                    inspect('check-preparation')
+                    current.get_by_role('button').last.click()
+                    query=parse_qs(urlsplit(page.url.split('#',1)[1]).query)
+                    back=query['return_to'][0]
+                    assert 'plan_tab=prepare' in back and 'plan_item=' in back
+                    navigate(page,origin,back+'&project_id='+app.project_id)
+                    expect(page.get_by_role('region',name='当前准备事项',exact=True)).to_be_visible()
+                    page.get_by_role('tab',name='检查范围',exact=True).focus();page.keyboard.press('End')
+                    expect(page.get_by_role('tab',name='执行预览',exact=True)).to_have_attribute('aria-selected','true')
+                    visit('/reports?view=plan&scope_id=missing')
+                    expect(page.get_by_role('tab',name='检查范围',exact=True)).to_have_attribute('aria-selected','true')
+                    expect(page.get_by_role('button',name='开始检查',exact=True)).to_be_disabled()
+
+                    visit('/testing?action_id='+app.flow.business_action_id+'&flow_id='+app.flow.id+'&revision=1')
+                    tabs=page.get_by_role('tablist',name='流程维护',exact=True)
+                    expect(tabs).to_be_visible()
+                    tabs.get_by_role('tab',name='执行请求',exact=True).click()
+                    path=page.get_by_role('textbox',name='接口路径',exact=True)
+                    path.fill('/orders/unsaved/{case_resource_id}')
+                    expect(page.get_by_role('button',name='保存修改',exact=True)).to_be_enabled()
+                    inspect('flow-maintenance')
+                    tabs.get_by_role('tab',name='核对与试运行',exact=True).click()
+                    expect(page.get_by_role('button',name='预览试运行',exact=True)).to_have_count(0)
+                    expect(page.get_by_role('button',name='确认用于检查',exact=True)).to_have_count(0)
+
+                    visit('/workspace?view=collaboration&task_id='+task['task_id'])
+                    expect(page.get_by_role('region',name='流程结构对照',exact=True)).to_be_visible()
+                    expect(page.get_by_text('GET /orders/unsaved/{case_resource_id}',exact=True)).to_be_visible()
+                    expect(page.get_by_text('order-2',exact=True)).to_be_visible()
+                    expect(page.get_by_role('rowheader',name='恢复请求',exact=True)).to_have_count(0)
+                    inspect('agent-artifact-review')
+                    page.get_by_role('button',name='完整流程',exact=True).focus();page.keyboard.press('Home')
+                    expect(page.get_by_role('button',name='只看变化',exact=False)).to_have_attribute('aria-pressed','true')
+                    page.get_by_role('link',name='进入流程确认采用',exact=True).click()
+                    dialog=page.get_by_role('dialog',name='审阅流程候选 · 第 2 修订',exact=True)
+                    expect(dialog).to_be_visible()
+                    dialog.get_by_role('button',name='保留当前草稿',exact=True).click()
+                    expect(page.get_by_role('button',name='保存操作设置',exact=True)).to_be_visible()
+                    assert core.operation_flows.read(app.project_id,app.flow.id,1)==app.flow
+                    assert core.operation_flows.read(app.project_id,app.flow.id,2)==candidate
+                    assert core.collaboration.show(app.project_id,task['task_id'])['reviews']
+                    assert not writes,writes
+                    assert not errors,errors
+                    assert app.state['target_calls']==0
+                    (output/'result.json').write_text(json.dumps(dict(metrics=metrics,writes=writes,errors=errors,target_calls=0),ensure_ascii=False,indent=2),encoding='utf-8')
+                finally:browser.close()
+    finally:
+        server.should_exit=True
+        if thread.ident is not None:thread.join(timeout=30)
+        assert not thread.is_alive()
+        if not thread.ident:core.close()

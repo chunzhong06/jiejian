@@ -6,7 +6,7 @@ import { Choice } from "../../shared/ui/Choice";
 import { Badge, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
 import { Button } from "../../shared/ui/actions";
 import { Dialog } from "../../shared/ui/Dialog";
-import { Field } from "../../shared/ui/layout";
+import {Field,ObjectIdentity} from "../../shared/ui/layout"
 import { assertProject } from '../../shared/model/page';
 import { go } from '../../shared/lib/navigation';
 import { useRead } from '../../shared/lib/useRead';
@@ -40,9 +40,9 @@ export function ExampleLab({ projectId, onError, onChanged }: {
         lock.current = false;
         setBusy(false);
     } };
-    return <details className="jj-example-lab"><summary>切换示例实现</summary>{state.loading ? <Loading>正在读取当前实现</Loading> : state.error ? <ErrorNote error={state.error}/> : <><div className="jj-example-current"><span>当前运行</span><strong>{versions.find(item => item.id === state.data?.scenario_version)?.label ?? '本地修改的实现'}</strong><Badge tone={state.data?.active ? 'positive' : 'neutral'}>{state.data?.active ? '运行中' : '已停止'}</Badge></div><div className="jj-example-lab-content">
+    return <details className="jj-example-lab"><summary>切换示例实现</summary>{state.loading ? <Loading>正在读取当前实现</Loading> : state.error ? <ErrorNote error={state.error}/> : <><div className="jj-example-current"><span>当前运行</span><ObjectIdentity name={<strong>{versions.find(item => item.id === state.data?.scenario_version)?.label ?? '本地修改的实现'}</strong>} status={<Badge tone={state.data?.active ? 'positive' : 'neutral'}>{state.data?.active ? '运行中' : '已停止'}</Badge>}/></div><div className="jj-example-lab-content">
     <Field label="选择要加载的实现"><Choice value={selected} onValueChange={value => setSelected(value as OfficialScenarioVersion)} disabled={busy || uncertain}>{versions.filter(item => state.data?.runtime_kind !== 'NODE_ESM' || item.id !== 'BASELINE').map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</Choice></Field>
-    <div><h3>{value.label}</h3><p className="jj-example-meaning">{value.meaning}</p><div className="jj-confirmation-actions">{state.data?.runtime_kind !== 'NODE_ESM' && <Button disabled={!state.data?.active || busy || uncertain} onClick={() => void (async () => { lock.current = true; setBusy(true); try {
+    <div><h3>{value.label}</h3><p className="jj-example-meaning">{value.meaning}</p><div className="jj-task-actions">{state.data?.runtime_kind !== 'NODE_ESM' && <Button disabled={!state.data?.active || busy || uncertain} onClick={() => void (async () => { lock.current = true; setBusy(true); try {
             await experienceApi.observation(state.data?.evidence_limited === true);
             state.reload();
             onChanged();
@@ -57,6 +57,6 @@ export function ExampleLab({ projectId, onError, onChanged }: {
             setBusy(false);
         } })()}>{state.data?.evidence_limited ? '恢复业务记录采集' : '暂停业务记录采集'}</Button>}<Button disabled={busy || uncertain || !state.data?.active || selected === 'FIXED' && !contract} onClick={() => setConfirm(true)}>加载这份示例源码</Button></div></div>
     {uncertain && <Notice tone="caution">修改结果尚未确认，先读取当前实现状态。<Button onClick={() => { state.reload(); onChanged(); }}>读取当前状态</Button></Notice>}
-    {selected === 'FIXED' && !contract && <p className="jj-small jj-muted">从问题报告发起原题修复后，可加载修复实现。</p>}
+    {selected === 'FIXED' && !contract && <p className="jj-small jj-muted">从问题报告发起原问题修复后，可加载修复实现。</p>}
   </div></>}{confirm && <Dialog title="加载示例源码" onClose={() => setConfirm(false)} actions={dismiss => <><Button disabled={busy} onClick={dismiss}>取消</Button><Button kind="primary" busy={busy} onClick={() => void switchVersion()}>确认加载</Button></>}><p>{value.meaning}</p><p>这会替换独立示例的运行实现。已有权限和报告保留，受影响的登录与材料需要重新核对。</p></Dialog>}</details>;
 }

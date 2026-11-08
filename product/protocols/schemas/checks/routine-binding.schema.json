@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "RoutineBoundAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "ACCOUNT",
+            "RESOURCE",
+            "FLOW",
+            "PROOF"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 768,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "owner_reference": {
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Reference"
+        },
+        "reference": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "requirement_slot": {
+          "anyOf": [
+            {
+              "maxLength": 192,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requirement Slot"
+        },
+        "slot": {
+          "maxLength": 192,
+          "minLength": 1,
+          "title": "Slot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "slot",
+        "reference",
+        "fingerprint"
+      ],
+      "title": "RoutineBoundAsset",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/RoutineBoundAsset"
+      },
+      "maxItems": 32768,
+      "minItems": 1,
+      "title": "Assets",
+      "type": "array"
+    },
+    "binding_id": {
+      "pattern": "^crb_[0-9a-f]{32}$",
+      "title": "Binding Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "document_type": {
+      "const": "jiejian.check-routine-binding",
+      "default": "jiejian.check-routine-binding",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "environment_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Environment Fingerprint",
+      "type": "string"
+    },
+    "environment_id": {
+      "pattern": "^env_[0-9a-f]{32}$",
+      "title": "Environment Id",
+      "type": "string"
+    },
+    "environment_revision": {
+      "minimum": 1,
+      "title": "Environment Revision",
+      "type": "integer"
+    },
+    "material_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Material Fingerprint",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "routine_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Routine Fingerprint",
+      "type": "string"
+    },
+    "routine_id": {
+      "pattern": "^csp_[0-9a-f]{32}$",
+      "title": "Routine Id",
+      "type": "string"
+    },
+    "routine_revision": {
+      "minimum": 1,
+      "title": "Routine Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "binding_id",
+    "project_id",
+    "routine_id",
+    "routine_revision",
+    "routine_fingerprint",
+    "environment_id",
+    "environment_revision",
+    "environment_fingerprint",
+    "material_fingerprint",
+    "assets",
+    "created_at_us"
+  ],
+  "title": "RoutineBindingDocument",
+  "type": "object"
+}

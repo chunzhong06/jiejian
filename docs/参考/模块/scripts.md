@@ -10,8 +10,9 @@
 | [scripts/build/common.py](../../../scripts/build/common.py) | 82 | excluded_from_release、inside、reset_directory、run、sha256 |
 | [scripts/build/hatch_build.py](../../../scripts/build/hatch_build.py) | 30 | CustomBuildHook |
 | [scripts/build/launcher.py](../../../scripts/build/launcher.py) | 77 | launcher_icon、compile_launcher |
+| [scripts/build/linux.py](../../../scripts/build/linux.py) | 114 | run、copy_tree、build、assemble、main |
 | [scripts/build/portable.py](../../../scripts/build/portable.py) | 139 | build、main |
-| [scripts/build/resources.py](../../../scripts/build/resources.py) | 85 | write_update_manifest、write_runtime_files |
+| [scripts/build/resources.py](../../../scripts/build/resources.py) | 86 | write_update_manifest、write_runtime_files |
 | [scripts/build/runtime.py](../../../scripts/build/runtime.py) | 201 | runtime_environment、copy_runtime、install_product、copy_node_runtime、prune_installed_runtime、metadata、place_product、portable_environment |
 | [scripts/build/validation.py](../../../scripts/build/validation.py) | 62 | validate_tree_content、validate_base |
 | [scripts/dev.ps1](../../../scripts/dev.ps1) | 84 | 包、内部机制或样式 |

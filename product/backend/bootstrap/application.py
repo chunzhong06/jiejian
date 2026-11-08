@@ -45,6 +45,7 @@ from product.backend.application.checks.service import CheckService
 from product.backend.application.checks.reading.results import CheckResultReader
 from product.backend.application.checks.history import CheckHistoryService
 from product.backend.application.checks.reading.story import CheckStoryBuilder
+from product.backend.application.checks.reading.comparison import CheckComparisonService
 from product.backend.application.test_identities.execution import TestIdentityExecutionCredentials
 from product.backend import __version__
 
@@ -181,6 +182,7 @@ class ApplicationCore:
         self.business_scenarios=BusinessScenarioService(factory,self.checks,clock_us=clock_us)
         self.check_history = CheckHistoryService(self.check_results,factory)
         self.check_story = CheckStoryBuilder(self.check_results)
+        self.check_comparison = CheckComparisonService(self.check_results, self.check_story)
         from product.backend.application.changes import CurrentSourceChangeService
         from product.backend.application.checks.repairs.repair import CurrentRepairService
         self.source_changes = CurrentSourceChangeService(uow_factory=factory,understanding=self.application_understanding,
@@ -341,9 +343,12 @@ class ApplicationCore:
             results=self.check_results, uow_factory=factory)
         from product.backend.application.agent_access.capabilities import ProductCapabilities
         from product.backend.application.agent_access.tasks import CollaborationTasks
+        from product.backend.application.agent_access.github_issues import IssueCollaboration
+        self.github_issues = IssueCollaboration(self.check_story,self.secret_store,projects=self.projects)
         self.agent_capabilities = ProductCapabilities(self)
         from product.backend.application.checks.routines import CheckRoutines
-        self.check_routines = CheckRoutines(factory, self.business_boundaries)
+        self.check_routines = CheckRoutines(factory, self.business_boundaries, self.checks)
+        self.checks.bind_routines(self.check_routines.revisions)
         self.collaboration = CollaborationTasks(factory, self.projects, self.agent_capabilities, clock_us=clock_us)
 
     def _validate_connections(self) -> None:

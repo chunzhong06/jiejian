@@ -27,7 +27,7 @@ export type MaintenanceEntry = { path: string; bytes: number; files: number; cat
 export type ExitReceipt = {state:'STOPPED'|'NEEDS_REVIEW';finished_at:number;exit_code:number}
 export type RuntimeDiagnostics = SystemStatus & {checked_at:string;runtime_mode:string;components:Array<{key:string;label:string;ready:boolean}>;summary_text:string;last_exit?:ExitReceipt|null}
 export type UpdateOperation = {operation_id:string;phase:'PREVIEWED'|'WAITING_FOR_EXIT'|'STARTING'|'READY'|'FAILED';target_version:string;target_release:string;workspace:string;reason:string;return_path:string;workspace_upgrade?:boolean}
-export type UpdateInfo = {version:string;portable:boolean;release_root:string|null;workspace:string;operation:UpdateOperation|null;last_exit?:ExitReceipt|null}
+export type UpdateInfo = {version:string;portable:boolean;platform?:'windows'|'linux'|'unsupported';update_supported?:boolean;release_root:string|null;workspace:string;operation:UpdateOperation|null;last_exit?:ExitReceipt|null}
 export type MaintenanceStatus = {
   schema_version: '1'
   entries: { assistant: MaintenanceEntry; logs: MaintenanceEntry; temporary: MaintenanceEntry }

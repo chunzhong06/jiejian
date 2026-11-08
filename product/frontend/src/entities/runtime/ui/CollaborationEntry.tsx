@@ -14,7 +14,7 @@ import {Loading} from '../../../shared/ui/feedback'
 const Composer=lazy(()=>import('./CollaborationComposer').then(module=>({default:module.CollaborationComposer})))
 type Submission={goal:string;purpose:CollaborationPurpose;references:Record<string,string>;editor?:CollaborationEditor;target:string}
 
-export function CollaborationEntry({projectId,route,viewedTaskId,portalHost,onNavigate}:{projectId:string;route:string;viewedTaskId?:string|null;portalHost?:HTMLElement|null;onNavigate?:()=>void}){
+export function CollaborationEntry({projectId,route,viewedTaskId,selected,portalHost,onNavigate}:{projectId:string;route:string;viewedTaskId?:string|null;selected?:boolean;portalHost?:HTMLElement|null;onNavigate?:()=>void}){
   const state=useRead('collaboration:'+projectId,signal=>collaborationApi.current(projectId,signal),4000)
   const context=useCurrentHandoff(projectId)
   const [open,setOpen]=useState(false),[goal,setGoal]=useState(''),[purpose,setPurpose]=useState<CollaborationPurpose>('CHECK')
@@ -46,7 +46,7 @@ export function CollaborationEntry({projectId,route,viewedTaskId,portalHost,onNa
       if(value instanceof ApiError&&['INPUT_INVALID','STATE_PRECONDITION','MCP_PERMISSION_REQUIRED','RECORD_NOT_FOUND'].includes(value.code)){pending.current=undefined;setUncertain(false)}else setUncertain(true)
     }finally{setBusy(false)}
   }
-  const trigger=<Button kind="quiet" className="jj-nav-item jj-collaboration-entry" icon={<CommentOutlined aria-hidden="true"/>} aria-label={state.error?'Agent 协作，状态读取失败':current?'Agent 协作，继续任务':'Agent 协作，开始任务'} aria-description={current?`${current.goal}，${collaborationLabels[current.state]}`:'让 Agent 整理权限要求、准备场景并协助检查与复验'} tip={current?`${current.goal}，${collaborationLabels[current.state]}`:'交代目标，让 Agent 接续当前应用的准备与验证'} aria-current={viewedTaskId?'page':undefined} disabled={state.loading} onClick={()=>current?visit(current.task_id):setOpen(true)}><span className="jj-collaboration-entry-copy"><span className="jj-collaboration-entry-label jj-nav-label">Agent 协作</span>{status&&<span className="jj-collaboration-entry-status">{status}</span>}</span></Button>
+  const trigger=<Button kind="quiet" className="jj-nav-item jj-collaboration-entry" icon={<CommentOutlined aria-hidden="true"/>} aria-label={state.error?'Agent 协作，状态读取失败':current?'Agent 协作，继续任务':'Agent 协作，开始任务'} aria-description={current?`${current.goal}，${collaborationLabels[current.state]}`:'让 Agent 整理权限要求、准备场景并协助检查与复验'} tip={current?`${current.goal}，${collaborationLabels[current.state]}`:'交代目标，让 Agent 接续当前应用的准备与验证'} aria-current={selected||viewedTaskId?'page':undefined} disabled={state.loading} onClick={()=>current?visit(current.task_id):setOpen(true)}><span className="jj-collaboration-entry-copy"><span className="jj-collaboration-entry-label jj-nav-label">Agent 协作</span>{status&&<span className="jj-collaboration-entry-status">{status}</span>}</span></Button>
   return <>
     {portalHost===undefined?trigger:portalHost?createPortal(trigger,portalHost):null}
     {open&&createPortal(<Suspense fallback={<Dialog title="与 Agent 协作" onClose={()=>setOpen(false)}><Loading/></Dialog>}><Composer goal={goal} setGoal={setGoal} purpose={purpose} setPurpose={setPurpose} target={target} setTarget={setTarget} current={current??undefined} context={context} busy={busy} uncertain={uncertain} error={error} onClose={()=>setOpen(false)} onSubmit={()=>void create()}/></Suspense>,document.body)}

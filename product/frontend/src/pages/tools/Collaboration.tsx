@@ -1,4 +1,4 @@
-import {useRef,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined'
 import DownOutlined from '@ant-design/icons/DownOutlined'
@@ -9,7 +9,7 @@ import SyncOutlined from '@ant-design/icons/SyncOutlined'
 import {CommandMenu} from '../../shared/ui/CommandMenu'
 import {collaborationApi,collaborationLabels,collaborationTone,purposeLabels,type CollaborationOperation,type CollaborationPurpose} from '../../entities/runtime/api/collaboration'
 import {useRead} from '../../shared/lib/useRead'
-import {go,scopedPath,returnDestination} from '../../shared/lib/navigation'
+import {scopedPath,returnDestination,withReturnDestination} from '../../shared/lib/navigation'
 import {Button,ActionLink} from '../../shared/ui/actions'
 import {Heading,Field} from '../../shared/ui/layout'
 import {ErrorNote, PageError,Loading,Notice} from '../../shared/ui/feedback'
@@ -20,6 +20,7 @@ import {IndexSelection} from '../../shared/ui/IndexSelection'
 import {ApiError} from '../../shared/api/http'
 import type {CollaborationTask} from '../../entities/runtime/api/collaboration'
 import './collaboration.css'
+import {CollaborationArtifactReview} from './CollaborationArtifactReview'
 
 const ended=(state:string)=>['COMPLETED','CANCELLED'].includes(state)
 const jobEnded=(state:string)=>['SUCCEEDED','FAILED','CANCELLED'].includes(state)
@@ -67,6 +68,7 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
   const followupRequest=useRef(crypto.randomUUID().replaceAll('-',''))
   const followupPayload=useRef<Pick<CollaborationTask,'goal'|'purpose'|'references'|'editor'>|undefined>(undefined)
   const [busy,setBusy]=useState(false),[error,setError]=useState<unknown>(),[copied,setCopied]=useState(false),[answers,setAnswers]=useState<Record<string,string>>({})
+  useEffect(()=>{if(!copied)return;const timer=setTimeout(()=>setCopied(false),2200);return()=>clearTimeout(timer)},[copied])
   const act=async(work:()=>Promise<unknown>)=>{
     setBusy(true);setError(undefined)
     try{await work();state.reload();window.dispatchEvent(new Event('jiejian:collaboration-changed'))}
@@ -101,13 +103,14 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
   const reportPath=check?'/reports?run_id='+encodeURIComponent(check.run_id):null
   const recent=task.operations.slice(-4).reverse()
   const visibleEvents=task.events.filter(event=>event.title!=='已建立协作任务'&&!task.operations.some(operation=>event.title===operation.title||event.title.startsWith(operation.title+'：'))&&!questions.some(question=>event.title===question.question))
-  const href=(path:string)=>'#'+scopedPath(path,projectId)
+  const taskPath='/workspace?'+new URLSearchParams({view:'collaboration',task_id:taskId})
+  const href=(path:string)=>'#'+scopedPath(withReturnDestination(path,taskPath),projectId)
   const copy=()=>act(async()=>{
     await navigator.clipboard.writeText(`请继续界鉴协作任务。project_id=${projectId}\ntask_id=${taskId}\n先调用 jiejian_collaboration_context，按需读取 jiejian_collaboration_capability，再通过 jiejian_collaboration_action 处理当前目标。复用现有有效配置；业务不明确时用 jiejian_collaboration_question 提问。需要人的决定时等待同一任务回复。不能批准正式规则、读取秘密或决定检查结论。未知操作只查询原回执，不换键重发。`)
     setCopied(true)
   })
   return <>
-    <div className="jj-back-link"><Button kind="quiet" onClick={()=>go('/workspace?view=collaboration',projectId)}><ArrowLeftOutlined aria-hidden="true"/>全部协作任务</Button></div>
+    <div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath('/workspace?view=collaboration',projectId)} kind="quiet"><ArrowLeftOutlined aria-hidden="true"/>全部协作任务</ActionLink></div>
     <Heading title="Agent 协作" actions={!finished&&<CommandMenu className="jj-example-menu" menu={{selectable:false,items:[
       {key:task.state==='PAUSED'?'resume':'pause',label:task.state==='PAUSED'?'继续任务':'暂停任务'},
       ...(!decisions&&!activeJobs.length&&task.execution?.state!=='RUNNING'?[{key:'finish',label:'结束本次协作'}]:[]),
@@ -134,16 +137,16 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
       <p className="jj-collaboration-goal">{task.goal}</p>
       {!finished&&<Button kind="quiet" disabled={busy} onClick={()=>{if(!followupPayload.current){setGoal(task.goal);setPurpose(task.purpose);setError(undefined)}setSupplement(true)}}>补充目标与说明</Button>}
     </section>
-    <Tabs label="协作内容" value={view} onValueChange={setView} items={[{value:'work',label:'当前工作'},{value:'context',label:'产物与上下文'},{value:'history',label:'处理记录'}]} panelId="collaboration-panel" idPrefix="collaboration-view"/>
+    <Tabs label="协作内容" value={view} onValueChange={setView} items={[{value:'work',label:'当前工作'},{value:'context',label:'产物与相关资料'},{value:'history',label:'操作记录'}]} panelId="collaboration-panel" idPrefix="collaboration-view"/>
     {copied&&<Notice tone="positive">任务已复制，尚未发送；在开发工具中继续这项任务即可。</Notice>}
     <div id="collaboration-panel" role="tabpanel" aria-labelledby={'collaboration-view-'+view} className="jj-collaboration-panel">
       {view==='work'&&<>
         {selected&&task.state==='PAUSED'&&<div className="jj-collaboration-paused"><p>继续任务后可回答或确认待办。</p><Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button></div>}
-        {selected?<div className="jj-collaboration-workbench">
-          <nav className="jj-collaboration-queue" aria-label="待处理事项">
+        {selected?<div className="jj-collaboration-workbench" data-single={items.length===1||undefined}>
+          {items.length>1&&<nav className="jj-collaboration-queue" aria-label="待处理事项">
             <header><h2 className="jj-title-group">需要你处理</h2><span>{decisions} 项</span></header>
             <IndexSelection identity={selected.id} label="事项选择">{items.map(item=>{const Icon=workIcons[item.kind];return <button key={item.id} className="jj-index-item jj-collaboration-item" aria-current={selected.id===item.id?'true':undefined} onClick={()=>setSelectedId(item.id)}><Icon aria-hidden="true"/><span><small>{item.label}</small><strong>{item.title}</strong></span></button>})}</IndexSelection>
-          </nav>
+          </nav>}
           <section key={selected.id} className="jj-collaboration-detail" aria-label="当前事项">
             <header><p className="jj-eyebrow">{selected.label}</p><h2>{selected.title}</h2></header>
             {selected.kind==='question'&&<>
@@ -152,42 +155,50 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
               <Field label="你的回答或补充说明"><textarea rows={4} maxLength={2000} disabled={stopped||busy} value={answers[selected.data.question_id]??''} onChange={event=>setAnswers({...answers,[selected.data.question_id]:event.target.value})}/></Field>
               <footer><Button kind="primary" disabled={stopped||!answers[selected.data.question_id]?.trim()} busy={busy} onClick={()=>void act(()=>collaborationApi.answer(projectId,taskId,selected.data.question_id,answers[selected.data.question_id].trim()))}>提交回答并继续<ArrowRightOutlined aria-hidden="true"/></Button></footer>
             </>}
-            {selected.kind==='review'&&<><p className="jj-collaboration-hint">打开对应产物，核对内容与影响范围后再决定是否采用。</p><footer><ActionLink kind="primary" href={href(selected.data.destination)}>{selected.data.action_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer></>}
-            {selected.kind==='pending'&&<><OperationSummary operation={selected.data}/><footer><Button disabled={busy||stopped} onClick={()=>void act(()=>collaborationApi.decide(projectId,taskId,selected.data.operation_id,false))}>暂不执行</Button><Button kind="primary" disabled={stopped} busy={busy} onClick={()=>void act(()=>collaborationApi.decide(projectId,taskId,selected.data.operation_id,true))}>确认并执行<ArrowRightOutlined aria-hidden="true"/></Button></footer></>}
-            {selected.kind==='uncertain'&&<><p className="jj-collaboration-hint">这项操作的执行结果尚未确认。先查询原回执，再决定后续工作。</p><footer><Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.reconcile(projectId,taskId,selected.data.operation_id))}>核对原操作<ArrowRightOutlined aria-hidden="true"/></Button></footer></>}
+            {selected.kind==='review'&&<CollaborationArtifactReview projectId={projectId} task={task} review={selected.data}/>}
+            {selected.kind==='pending'&&<><OperationSummary operation={selected.data}/><footer><Button disabled={busy||stopped} onClick={()=>void act(()=>collaborationApi.decide(projectId,taskId,selected.data.operation_id,false))}>{selected.data.capability==='github.issue_create'?'暂不创建':'暂不执行'}</Button><Button kind="primary" disabled={stopped} busy={busy} onClick={()=>void act(()=>collaborationApi.decide(projectId,taskId,selected.data.operation_id,true))}>{selected.data.capability==='github.issue_create'?'创建这张工单':'确认并执行'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></>}
+            {selected.kind==='uncertain'&&<><p className="jj-collaboration-hint">这项操作的结果还未确认。先查看上次操作结果，再决定后续工作。</p><footer><Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.reconcile(projectId,taskId,selected.data.operation_id))}>核对原操作<ArrowRightOutlined aria-hidden="true"/></Button></footer></>}
           </section>
         </div>:<section className="jj-collaboration-current" aria-label="当前进展" aria-live="polite">
           <header><p className="jj-eyebrow">{finished?'本次协作':task.state==='PAUSED'?'任务已暂停':continuing?'Agent 正在接续':'接下来'}</p><h2>{check?(check.verdict?checkLabels[check.verdict]:check.lifecycle==='FAILED'?'检查未完成':check.lifecycle==='CANCELLED'?'检查已停止':'检查尚未结束'):task.outcome?.title??(activeJobs.length?'正在处理已确认的操作':finished?'协作已结束，产物与记录已保留':task.state==='PAUSED'?'可以从当前进度继续':'继续推进当前目标')}</h2></header>
           {task.execution?.message&&<p className="jj-collaboration-hint">{task.execution.message}</p>}
           {task.execution?.continuous&&<p className="jj-small jj-muted">已使用 {task.execution.turn_count??1} / {task.execution.max_turns??8} 个模型回合</p>}
           {activeJobs.map(item=><div key={item.id} className="jj-collaboration-live"><strong>{item.label}</strong><span>{executionLabels[item.phase]}</span><ActionLink href={href(item.destination)}>查看执行进度<ArrowRightOutlined aria-hidden="true"/></ActionLink></div>)}
-          <footer>{task.state==='PAUSED'?<Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button>:readyForAgent&&(executor.data?.available?(executor.data.ready===false?<ActionLink kind="primary" href={href(executor.data.setup_path)}>{executor.data.setup_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink>:<Button kind="primary" busy={busy} onClick={()=>setLaunch(true)}>继续本地 Agent<ArrowRightOutlined aria-hidden="true"/></Button>):<Button kind="primary" busy={busy} onClick={()=>void copy()}>复制任务到开发工具<ArrowRightOutlined aria-hidden="true"/></Button>)}{check&&<ActionLink kind={readyForAgent?'quiet':'primary'} href={href(reportPath!)}>{check.revalidation?'查看复验结果':'查看检查报告'}<ArrowRightOutlined aria-hidden="true"/></ActionLink>}</footer>
+          <footer>
+            {check&&<ActionLink kind={task.state==='PAUSED'||readyForAgent?'quiet':'primary'} href={href(reportPath!)}>{check.revalidation?'查看复验结果':'查看检查报告'}<ArrowRightOutlined aria-hidden="true"/></ActionLink>}
+            {task.state==='PAUSED'?<Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button>:readyForAgent&&(executor.data?.available?(executor.data.ready===false?<ActionLink kind="primary" href={href(executor.data.setup_path)}>{executor.data.setup_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink>:<Button kind="primary" busy={busy} onClick={()=>setLaunch(true)}>继续本地 Agent<ArrowRightOutlined aria-hidden="true"/></Button>):<Button kind="primary" busy={busy} complete={copied} onClick={()=>void copy()}>复制任务到开发工具<ArrowRightOutlined aria-hidden="true"/></Button>)}
+          </footer>
         </section>}
-        {selected&&activeJobs.length>0&&<p className="jj-collaboration-background">另有 {activeJobs.length} 项已确认操作正在后台执行，可在处理记录中查看进展。</p>}
+        {selected&&activeJobs.length>0&&<p className="jj-collaboration-background">另有 {activeJobs.length} 项已确认操作正在后台执行，可在操作记录中查看进展。</p>}
       </>}
       {view==='context'&&<div className="jj-collaboration-context-grid">
         <section className="jj-collaboration-artifacts"><h2>任务产物</h2>{task.outcome&&<p>{task.outcome.title}<span className="jj-small jj-muted">{task.outcome.fulfilled?' · 已取得依据':finished?' · 仍有未完成项':''}</span></p>}
-          {reviews.map(item=><ActionLink key={item.id} href={href(item.destination)}><span>{item.title}<small>待审阅</small></span><ArrowRightOutlined aria-hidden="true"/></ActionLink>)}
-          {artifacts.map(({label,path})=><ActionLink key={path} href={href(path)}>{label}<ArrowRightOutlined aria-hidden="true"/></ActionLink>)}
+          {reviews.map(item=><ActionLink presentation="row" key={item.id} href={href(item.destination)}><span>{item.title}<small>待审阅</small></span><ArrowRightOutlined aria-hidden="true"/></ActionLink>)}
+          {artifacts.map(({label,path})=><ActionLink presentation="row" key={path} href={href(path)}>{label}<ArrowRightOutlined aria-hidden="true"/></ActionLink>)}
           {!artifacts.length&&!reviews.length&&<p className="jj-collaboration-hint">尚未形成产物。后续保存的规则、材料和报告会保留在这里。</p>}
         </section>
         <section className="jj-collaboration-handoff"><h2>交接上下文</h2>{task.editor?.kind==='FLOW'?<><p>{task.editor.steps.length} 个请求 · {task.editor.evidence_effect_ids.length} 项结果查询</p><ul>{task.editor.steps.map(step=><li key={step.id}><code>{step.method} {step.path??'路径待补全'}</code></li>)}</ul></>:<p className="jj-collaboration-hint">沿用此任务所属应用和已交接的对象。</p>}
-          {returnDestination(task.references.return_to??null)&&<footer><ActionLink href={href(returnDestination(task.references.return_to??null)!)}>{task.editor?.kind==='FLOW'?'返回接口流程草稿':task.editor?.kind==='PROOF'?'返回判断方式草稿':'返回交接位置'}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>}
+          {returnDestination(task.references.return_to??null)&&<footer><ActionLink href={'#'+scopedPath(returnDestination(task.references.return_to??null)!,projectId)}>{task.editor?.kind==='FLOW'?'返回接口流程草稿':task.editor?.kind==='PROOF'?'返回判断方式草稿':'返回交接位置'}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>}
         </section>
-        {!finished&&<section className="jj-collaboration-methods"><h2>协作连接</h2><p className="jj-collaboration-hint">在已连接的开发工具中接续同一任务。</p><footer><ActionLink href={href('/tools')}>管理开发工具连接</ActionLink>{!readyForAgent&&<Button busy={busy} onClick={()=>void copy()}>复制任务到开发工具<ArrowRightOutlined aria-hidden="true"/></Button>}</footer></section>}
+        {!finished&&<section className="jj-collaboration-methods"><h2>协作连接</h2><p className="jj-collaboration-hint">在已连接的开发工具中接续同一任务。</p><footer><ActionLink href={href('/tools')}>管理开发工具连接</ActionLink>{!readyForAgent&&<Button busy={busy} complete={copied} onClick={()=>void copy()}>复制任务到开发工具<ArrowRightOutlined aria-hidden="true"/></Button>}</footer></section>}
       </div>}
-      {view==='history'&&<section className="jj-collaboration-progress" aria-label="处理记录"><h2>处理记录</h2>
+      {view==='history'&&<section className="jj-collaboration-progress" aria-label="操作记录"><h2>操作记录</h2>
         {recent.length>0&&<section><h3>最近操作</h3><ul className="jj-collaboration-receipts">{recent.map(item=><li key={item.operation_id}><strong>{item.title}</strong><span>{collaborationLabels[item.state]??item.state}</span></li>)}</ul></section>}
         {activity.data&&activity.data.length>0&&<section><h3>后台执行</h3>{[...activeJobs,...completedJobs].map(item=><div key={item.id} className="jj-collaboration-live"><strong>{item.label}</strong><span>{executionLabels[item.phase]}</span><ActionLink href={href(item.destination)}>{jobEnded(item.phase)?'查看执行结果':'查看执行进度'}<ArrowRightOutlined aria-hidden="true"/></ActionLink></div>)}</section>}
         {visibleEvents.length>0&&<section><h3>任务进展</h3><ol>{visibleEvents.slice().reverse().map(event=><li key={event.id}><div><strong>{event.title}</strong><small>{event.actor==='USER'?'你的决定':event.actor==='AGENT'?'Agent':'界鉴'}　{new Date(event.at_us/1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</small></div></li>)}</ol></section>}
-        {!recent.length&&!activity.data?.length&&!visibleEvents.length&&<p className="jj-collaboration-hint">还没有处理记录。</p>}
+        {!recent.length&&!activity.data?.length&&!visibleEvents.length&&<p className="jj-collaboration-hint">还没有操作记录。</p>}
       </section>}
     </div>
   </>
 }
 
 function OperationSummary({operation}:{operation:CollaborationOperation}){
+  if(operation.capability==='github.issue_create'){
+    const content=Object.fromEntries((operation.summary??[]).map(item=>[item.label,String(item.value)]))
+    return <div className="jj-github-issue-review"><p>确认后，会在 <strong>{String(operation.arguments.repository)}</strong> 新建一张工单，把当前问题交给协作者继续处理。</p><article aria-label="将要创建的工单"><h3>{content['工单标题']??'当前问题的检查结果'}</h3>{(content['将发送的正文']??'请先核对原报告中的问题。').split('\n\n').map((paragraph,index)=><p key={index}>{paragraph}</p>)}</article><details><summary>工单关联的检查记录</summary><p>工单会保留原报告和问题的准确引用，便于后续回到同一次检查。</p><dl className="jj-facts"><div><dt>原报告</dt><dd><code>{String(operation.arguments.run_id)}</code></dd></div><div><dt>原问题</dt><dd><code>{String(operation.arguments.case_id)}</code></dd></div></dl></details><p className="jj-small jj-muted">发送结果不明确时，界鉴会先查找原工单，避免重复创建。</p></div>
+  }
+
   const labels:Record<string,string>={entry:'运行入口',port:'本地端口',revision:'当前修订',build_script:'构建步骤',allow_install_scripts:'依赖安装脚本',identity_id:'测试账号',flow_id:'操作流程',source_id:'证明来源',run_id:'检查记录',change_id:'关联修改'}
   const rows=operation.summary?.length?operation.summary.map(item=>[item.label,item.value]):Object.entries(operation.arguments).filter(([key,value])=>key in labels&&value!==null).map(([key,value])=>[labels[key],value])
-  return <><dl className="jj-collaboration-summary">{rows.map(([key,value],index)=><div key={index}><dt>{String(key)}</dt><dd>{typeof value==='boolean'?value?'允许':'不执行':String(value)}</dd></div>)}</dl><details><summary>核对本次具体设置</summary><pre>{JSON.stringify(operation.arguments,null,2)}</pre></details></>
+  return <><dl className="jj-facts jj-collaboration-summary" data-layout="columns">{rows.map(([key,value],index)=><div key={index}><dt>{String(key)}</dt><dd>{typeof value==='boolean'?value?'允许':'不执行':String(value)}</dd></div>)}</dl><details><summary>核对本次具体设置</summary><pre>{JSON.stringify(operation.arguments,null,2)}</pre></details></>
 }

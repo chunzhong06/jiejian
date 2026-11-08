@@ -73,6 +73,19 @@ def test_windows_force_termination_targets_only_owned_process_tree(monkeypatch) 
     assert process.wait_timeout is None
 
 
+@pytest.mark.parametrize('live_descendant',[False,True])
+def test_posix_reaps_owned_root_before_checking_remaining_group(monkeypatch,live_descendant):
+    reaped = []
+    process = SimpleNamespace(pid=4321,poll=lambda:reaped.append(True) or 0)
+    controller = tree.ProcessTreeController(process,process_group_id=4321)
+    monkeypatch.setattr(tree,'os',SimpleNamespace(name='posix'))
+    def group_exists(group):
+        assert group == 4321 and reaped
+        return live_descendant
+    monkeypatch.setattr(tree,'_process_group_exists',group_exists)
+    assert controller.has_exited() is (not live_descendant)
+
+
 @pytest.mark.process
 def test_managed_tree_reclaims_descendant_after_root_exits() -> None:
     command = [

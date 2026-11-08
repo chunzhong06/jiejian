@@ -19,7 +19,7 @@ export function Dialog({title,children,onClose,actions,closeDisabled=false,size=
     // 退出动画结束前仍保留原生模态层，先禁用内部命中，防止重复提交或点击穿透到背景。
     const node=ref.current
     if(node)node.inert=true
-    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),100)
+    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),160)
     const timer=setTimeout(()=>close.current(),duration+32)
     return()=>clearTimeout(timer)
   },[exiting])

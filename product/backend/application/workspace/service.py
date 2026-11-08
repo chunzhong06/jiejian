@@ -1,7 +1,8 @@
 # 按原阶段读取工作区事实，再调用纯选择与展示；不持久化页面状态或另算安全结论。
 from __future__ import annotations
 from product.backend.application.reading import projection_read
-from product.backend.application.workspace.models import WorkspaceConnectionView, WorkspaceProjectView, WorkspaceView
+from product.backend.application.workspace.models import WorkspaceConnectionView, WorkspaceProjectView, WorkspaceView, PreparationWorkView, PreparationWorkAction
+from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.workspace.reading import WorkspaceReader, WorkspaceCheckReaders
 from product.backend.application.workspace.presentation import boundary_views, endpoint_status, source_status, area_views, journey_view, development_view
 from product.backend.application.workspace.tasks import boundary_task, allow_control_task, PreparationTaskSelection, current_check_task, development_task, CheckPreviewRequired
@@ -56,6 +57,24 @@ class WorkspaceService:
             latest_result=latest_result, source_change=source_change, repair=repair, active_check=active_check,
             development=development, journey=journey_view(connection, boundary_attention, preparation.preparation_complete,
                 primary_task, latest_result, source_change, active_check))
+
+    @projection_read
+    def preparation_work(self, project_id: str, action_ids: tuple[str, ...]) -> PreparationWorkView:
+        """只组织显式范围中的准备任务，失效对象拒绝；读取不触发目标或持久化另一份进度。"""
+        if not action_ids or len(action_ids) > 256 or len(set(action_ids)) != len(action_ids):
+            raise JiejianError(ErrorCode.INPUT_INVALID, "请提供本次检查的明确业务操作范围。")
+        _, understanding = self._reader.project(project_id)
+        boundary = self._business_boundaries.view(project_id)
+        preparation = self._preparation.get(project_id)
+        selected = tuple(item for item in preparation.actions if item.action_id in action_ids)
+        if {item.action_id for item in selected} != set(action_ids):
+            raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "本次范围中的业务操作已变化，请返回原检查重新核对。")
+        scoped = preparation.model_copy(update={"actions": selected})
+        return PreparationWorkView(project_id=project_id,
+            actions=tuple(PreparationWorkAction(action_id=item.action_id, label=item.display_name,
+                preparation_complete=item.preparation_complete) for item in selected),
+            primary_task=self._preparation_task(boundary, scoped, understanding),
+            preparation_complete=all(item.preparation_complete for item in selected))
 
     def _preparation_task(self, boundary, preparation, understanding):
         selected = allow_control_task(preparation)

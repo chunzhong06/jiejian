@@ -9,17 +9,17 @@ it('没有浏览器本地记录时仍可找回服务端登录，入口保留精�
     sessionStorage.clear();
     const read=vi.spyOn(projectsApi,'activity').mockResolvedValue({project_id:'app',revision:3,items:[{id:'login',kind:'IDENTITY_PREPARATION',label:'继续账号登录',phase:'WAITING_FOR_LOGIN',destination:'/preparation?identities=1&preparation_id=original',updated_at_us:1}]});
     render(<Activity projectId="app"/>);
-    fireEvent.click(await screen.findByRole('button',{name:/^继续账号登录/}));
+    fireEvent.click(await screen.findByRole('link',{name:/^继续账号登录/}));
     expect(location.hash).toContain('preparation_id=original');
     read.mockResolvedValue({project_id:'app',revision:3,items:[]});
     fireEvent(window,new Event('jiejian:activity-changed'));
-    await waitFor(()=>expect(screen.queryByRole('button',{name:/^继续账号登录/})).not.toBeInTheDocument());
+    await waitFor(()=>expect(screen.queryByRole('link',{name:/^继续账号登录/})).not.toBeInTheDocument());
 });
 
 it('中断任务仍能打开原位置，并显示待处理状态',async()=>{
     vi.spyOn(projectsApi,'activity').mockResolvedValue({project_id:'app',revision:3,items:[{id:'failed',kind:'IDENTITY_PREPARATION',label:'查看登录中断',phase:'FAILED',destination:'/preparation?identities=1&preparation_id=failed',updated_at_us:2}]});
     render(<Activity projectId="app"/>);
-    const entry=await screen.findByRole('button',{name:/^查看登录中断/});
+    const entry=await screen.findByRole('link',{name:/^查看登录中断/});
     fireEvent.click(entry);
     expect(location.hash).toContain('preparation_id=failed');
     expect(within(entry).getByText('未完成')).toBeVisible();
@@ -28,8 +28,8 @@ it('中断任务仍能打开原位置，并显示待处理状态',async()=>{
 it('排队与重试等待显示静态时钟，真实运行继续显示活动图标',async()=>{
     vi.spyOn(projectsApi,'activity').mockResolvedValue({project_id:'app',revision:3,items:['PENDING','RETRY_WAIT','RUNNING'].map((phase,index)=>({id:String(index),kind:'IDENTITY_PREPARATION',label:'任务 '+index,phase,destination:'/preparation',updated_at_us:1}))});
     render(<Activity projectId="app"/>);
-    const pending=await screen.findByRole('button',{name:/^任务 0/});
+    const pending=await screen.findByRole('link',{name:/^任务 0/});
     expect(pending.querySelector('.anticon-clock-circle')).not.toBeNull();
-    expect(screen.getByRole('button',{name:/^任务 1/}).querySelector('.anticon-spin')).toBeNull();
-    expect(screen.getByRole('button',{name:/^任务 2/}).querySelector('.anticon-spin')).not.toBeNull();
+    expect(screen.getByRole('link',{name:/^任务 1/}).querySelector('.anticon-spin')).toBeNull();
+    expect(screen.getByRole('link',{name:/^任务 2/}).querySelector('.anticon-spin')).not.toBeNull();
 });

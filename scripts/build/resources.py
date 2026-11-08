@@ -35,8 +35,9 @@ def write_update_manifest(base: Path) -> None:
             finally:
                 engine.dispose()
     files = package_files(base)
+    release = PortableReleaseManifest.model_validate_json((base / 'app/release.json').read_bytes())
     manifest = PortableUpdateManifest.model_validate({
-        'schema_version': '2', 'document_type': 'jiejian.portable-update', 'version': RELEASE_VERSION,
+        'schema_version': '2', 'document_type': 'jiejian.portable-update', 'version': release.version,
         'workspace_generation': WORKSPACE_GENERATION, 'workspace_revision': history.head,
         'workspace_digest': current_schema_digest(),
         'supported_workspaces': supported,

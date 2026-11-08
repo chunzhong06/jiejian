@@ -27,7 +27,9 @@ export function useSelectionIndicator(root:RefObject<HTMLElement|null>,selector:
     const place=()=>{
       const item=node.querySelector<HTMLElement>(selector)
       if(!item){setBounds(undefined);return}
-      const next={x:item.offsetLeft,y:item.offsetTop+(kind==='underline'?item.offsetHeight-2:0),width:item.offsetWidth,height:kind==='underline'?2:item.offsetHeight}
+      // 分组索引和原生表格的 offsetParent 不一定是标记容器，统一换算到容器的滚动坐标。
+      const area=node.getBoundingClientRect(),target=item.getBoundingClientRect()
+      const next={x:target.left-area.left-node.clientLeft+node.scrollLeft,y:target.top-area.top-node.clientTop+node.scrollTop+(kind==='underline'?target.height-2:0),width:target.width,height:kind==='underline'?2:target.height}
       setBounds(previous=>previous&&previous.x===next.x&&previous.y===next.y&&previous.width===next.width&&previous.height===next.height?previous:next)
     }
     place()

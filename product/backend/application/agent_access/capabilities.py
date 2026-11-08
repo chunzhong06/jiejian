@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field, ValidationError, create_model
 from pydantic_core import to_jsonable_python
 
 from product.backend.application.agent_access.tasks import TaskInput
+from product.backend.application.agent_access.github_issues import IssueSource, IssueDelivery
 from product.backend.application.checks.routines import SaveCheckRoutine
+from product.backend.application.checks.routine_execution import SaveRoutineRevision, BindRoutine
+from product.protocols.checks.routine_reference import RoutineReference
 from product.backend.application.checks.service import ExternalRecheckCommand
 from product.backend.application.preparation.materials.models import MaterialChange
 from product.backend.application.preparation.proofs.commands import (
@@ -94,6 +97,7 @@ IdentityCreate = parameters('IdentityCreate', actor_id=(str, ...), actor_revisio
 IdentityConfigure = parameters('IdentityConfigure', identity_id=(str, ...),
     profile=(AuthenticationProfile, ...), expected_updated_at_us=(int, Field(ge=0)))
 CheckScope = parameters('CheckScope', change_id=(str | None, None), external_recheck=(ExternalRecheckCommand | None,None),
+    routine=(RoutineReference|None,None),
     scenario=(ScenarioReference|None,None),
     selected_permissions=(tuple[PermissionReference, ...] | None, Field(default=None, min_length=1, max_length=4096)))
 CheckStart = create_model('CheckStart', __base__=CheckScope, expected_plan_fingerprint=(str, Field(pattern=r'^[0-9a-f]{64}$')))
@@ -262,7 +266,21 @@ class ProductCapabilities:
         add('proofs.adopt', '采用已核对的结果证明', '结果证明', 'EXECUTE', AdoptProofSource,
             lambda p, a, o: core.proof_preparation.adopt(p, a)['result'], approval=True)
         add('checks.preview', '核对本次检查范围', '检查与结果', 'READ', CheckScope,
-            lambda p, a, o: core.checks.preview(p, change_id=a.change_id, selected_permissions=a.selected_permissions, external_recheck=a.external_recheck,scenario_reference=a.scenario))
+            lambda p, a, o: core.checks.preview(p, change_id=a.change_id, selected_permissions=a.selected_permissions, external_recheck=a.external_recheck,scenario_reference=a.scenario,routine_reference=a.routine))
+        add('checks.plans', '读取完整检查方案目录与旧保存范围', '检查与结果', 'READ',
+            parameters('RoutineCatalog',after=(str|None,Field(default=None,pattern=r'^csp_[0-9a-f]{32}$')),limit=(int,Field(default=50,ge=1,le=50))),
+            lambda p,a,o:core.check_routines.revisions.catalog(p,a.after,a.limit))
+        add('checks.plan_save', '保存完整检查方案的新修订', '检查与结果', 'PREPARE', SaveRoutineRevision,
+            lambda p,a,o:core.check_routines.revisions.save(p,a))
+        add('checks.plan_read', '读取准确的检查方案修订', '检查与结果', 'READ',
+            parameters('RoutineRevision',routine_id=(str,Field(pattern=r'^csp_[0-9a-f]{32}$')),revision=(int,Field(ge=1))),
+            lambda p,a,o:core.check_routines.revisions.read(p,a.routine_id,a.revision))
+        add('checks.plan_binding_preview', '核对方案在当前环境的材料与变化', '检查与结果', 'READ',
+            parameters('RoutineBindingPreview',routine_id=(str,Field(pattern=r'^csp_[0-9a-f]{32}$')),revision=(int,Field(ge=1))),
+            lambda p,a,o:core.check_routines.revisions.binding_preview(p,a.routine_id,a.revision))
+        add('checks.plan_bind', '确认方案在当前环境的公开绑定', '检查与结果', 'PREPARE',
+            create_model('BindRoutineRequest',__base__=BindRoutine,routine_id=(str,Field(pattern=r'^csp_[0-9a-f]{32}$'))),
+            lambda p,a,o:core.check_routines.revisions.bind(p,a.routine_id,BindRoutine(**a.model_dump(exclude={'routine_id'}))))
         add('checks.routines', '读取保存的检查范围及变化', '检查与结果', 'READ', Empty,
             lambda p, a, o: core.check_routines.list(p))
         add('checks.remember', '保存本次规则选择供以后使用', '检查与结果', 'PREPARE', SaveCheckRoutine,
@@ -273,6 +291,11 @@ class ProductCapabilities:
             describe=self._describe_check)
         add('checks.status', '读取本次检查与结果状态', '检查与结果', 'READ', RunReference,
             lambda p, a, o: core.check_results.status(a.run_id, project_id=p))
+        add('checks.compare', '比较准确检查记录的变化与限制', '检查与结果', 'READ',
+            parameters('CompareRuns',baseline=(str,Field(pattern=r'^run_[0-9a-f]{32}$')),current=(str,Field(pattern=r'^run_[0-9a-f]{32}$')),
+                earlier=(str|None,Field(default=None,pattern=r'^run_[0-9a-f]{32}$')),after=(str|None,Field(default=None,pattern=r'^[0-9a-f]{64}$')),
+                limit=(int,Field(default=25,ge=1,le=50))),
+            lambda p,a,o:core.check_comparison.compare(p,a.baseline,a.current,earlier=a.earlier,after=a.after,limit=a.limit))
         add('results.report', '理解检查要求和实际结果', '检查与结果', 'READ', RunReference,
             lambda p, a, o: core.check_story.build(a.run_id, project_id=p))
         add('results.evidence', '读取具体场景的证明记录', '检查与结果', 'READ',
@@ -312,6 +335,11 @@ class ProductCapabilities:
         add('updates.preview', '核对本地更新包兼容性', '恢复与维护', 'PREPARE',
             parameters('UpdatePreview', directory=(str, Field(min_length=1, max_length=32768)), return_path=(str, '/')),
             lambda p, a, o: core.updates.preview(a.directory, a.return_path), approval=True)
+
+        add('github.issue_draft','准备当前问题的GitHub工单正文','协作交付','READ',IssueSource,
+            lambda p,a,o:core.github_issues.draft(p,a))
+        add('github.issue_create','在 GitHub 中跟进这个问题','协作交付','EXECUTE',IssueDelivery,
+            lambda p,a,o:core.github_issues.send(p,a,o),approval=True)
 
     def _add(self, key, title, domain, level, model, handler, approval=False, **lifecycle):
         self.items[key] = Capability(key, title, domain, level, model, handler, approval, **lifecycle)
@@ -564,7 +592,7 @@ class ProductCapabilities:
         return items[-limit:] if limit else items
 
     def _start_check(self, project, arguments, operation):
-        result = self.core.checks.submit(project, **arguments.model_dump(exclude={'selected_permissions','external_recheck','scenario'}), selected_permissions=arguments.selected_permissions, external_recheck=arguments.external_recheck,scenario_reference=arguments.scenario, idempotency_key=operation)
+        result = self.core.checks.submit(project, **arguments.model_dump(exclude={'selected_permissions','external_recheck','scenario','routine'}), selected_permissions=arguments.selected_permissions, external_recheck=arguments.external_recheck,scenario_reference=arguments.scenario,routine_reference=arguments.routine, idempotency_key=operation)
         return dict(run_id=result.run.run_id, job_id=result.job.job_id, state=result.job.state.value)
 
     def cancel_owned(self, project, operations):
@@ -594,6 +622,7 @@ class ProductCapabilities:
     def receipt(self, project, operation):
         """适配各业务所有者的原请求查询；这里不以当前资源状态猜测写入是否成功。"""
         key, identifier, args = operation['capability'], operation['operation_id'], operation['arguments']
+        if key=='github.issue_create':return self.core.github_issues.reconcile(project,operation)
         capability = self.items.get(key)
         if capability is not None and capability.recover is not None:
             return capability.recover(project, operation)
@@ -619,6 +648,7 @@ class ProductCapabilities:
         capability = self.items.get(key)
         if capability is not None and capability.describe is not None:
             return capability.describe(project, arguments)
+        if key=='github.issue_create':return self.core.github_issues.describe(project,arguments)
         if key.startswith('runtime.'):
             rows += [dict(label='运行入口', value=values['entry']), dict(label='本地端口', value=str(values['port']))]
             for database in values.get('sqlite', []):
@@ -688,17 +718,42 @@ class ProductCapabilities:
         rows = []
         values = arguments.model_dump(mode='json')
         scope = arguments
-        plan = self.core.checks.preview(project, change_id=scope.change_id, selected_permissions=scope.selected_permissions, external_recheck=scope.external_recheck,scenario_reference=scope.scenario)
+        plan = self.core.checks.preview(project, change_id=scope.change_id, selected_permissions=scope.selected_permissions, external_recheck=scope.external_recheck,scenario_reference=scope.scenario,routine_reference=scope.routine)
         if plan.plan_fingerprint != values['expected_plan_fingerprint']:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, '检查范围已变化，请读取新的检查预览')
         if scope.external_recheck is not None:
             rows.append(dict(label='原问题',value=scope.external_recheck.reference.source_run_id))
             rows.append(dict(label='本次部署声明',value=scope.external_recheck.deployment_statement+'；部署版本未核对'))
+        if scope.routine is not None:
+            document=self.core.check_routines.revisions.read(project,scope.routine.routine_id,scope.routine.revision)
+            rows.append(dict(label='检查方案',value=document.name+' · 第 '+str(document.revision)+' 修订'))
+            rows.append(dict(label='环境绑定',value=scope.routine.binding_id))
         rows.append(dict(label='本次范围', value=f'{plan.action_count} 项业务操作，{plan.case_count} 个场景'))
         rows.append(dict(label='检查依据', value='已批准的权限要求及必需正常对照'))
         if plan.selection is not None:
             rows.append(dict(label='本次未检查', value=f'{len(plan.selection.omitted)} 条规则；未决要求保持未覆盖'))
         return rows
+
+    def routine_context(self, project, references):
+        keys={'routine_id','routine_revision','binding_id'}
+        if not keys.intersection(references):
+            return None
+        import re
+        from pydantic import ValidationError
+        routine,revision=references.get('routine_id',''),references.get('routine_revision','')
+        if re.fullmatch(r'csp_[0-9a-f]{32}',routine) is None or re.fullmatch(r'[1-9][0-9]{0,8}',revision) is None:
+            raise JiejianError(ErrorCode.INPUT_INVALID,'方案交接需要准确方案标识与修订')
+        binding=None
+        if 'binding_id' in references:
+            try:
+                reference=RoutineReference(routine_id=routine,revision=int(revision),binding_id=references['binding_id'])
+            except ValidationError as exc:
+                raise JiejianError(ErrorCode.INPUT_INVALID,'方案交接的环境绑定引用无效') from exc
+            with self.core.uow_factory() as work:
+                document,binding=self.core.check_routines.revisions.resolve(project,reference,work)
+        else:
+            document=self.core.check_routines.revisions.read(project,routine,int(revision))
+        return dict(document=document.model_dump(mode='json'),binding=None if binding is None else binding.model_dump(mode='json'))
 
     def _check_receipt(self, project, operation):
         with self.core.uow_factory() as work:

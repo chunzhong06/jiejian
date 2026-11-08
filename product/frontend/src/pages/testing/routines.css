@@ -1,0 +1,66 @@
+.jj-routine-editor { display:grid; gap:24px; min-width:0; }
+.jj-routine-directory .jj-collection-layout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.jj-routine-directory .jj-collection-layout:not(:has(> .jj-inspector)) { grid-template-columns:minmax(0,1fr); }
+.jj-routine-directory .jj-inspector { padding:24px 28px; }
+.jj-routine-overview { display:grid; gap:24px; padding-top:4px; min-width:0; }
+.jj-routine-overview section > h3 { margin:20px 0 12px; }
+.jj-routine-overview p { color:var(--muted); line-height:var(--leading-reading); }
+.jj-routine-scope-list { padding-left:20px; display:grid; gap:10px; line-height:var(--leading-reading); }
+.jj-routine-overview details { margin-top:16px; }
+.jj-routine-overview details > ul { margin-top:12px; }
+.jj-routine-single { border-block:1px solid var(--line); padding:24px 0; }
+.jj-routine-single > header { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 20px; }
+.jj-routine-single > .jj-routine-overview { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px 48px; margin-top:16px; }
+.jj-routine-single .jj-routine-overview > p, .jj-routine-single .jj-routine-overview > .jj-notice { grid-column:1/-1; }
+.jj-routine-single > footer { justify-content:flex-end; }
+.jj-routine-single > footer > .jj-button { margin-left:0; }
+.jj-routine-definition { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:40px; align-items:start; }
+.jj-routine-definition-scope, .jj-routine-definition-limits { display:grid; gap:24px; min-width:0; }
+.jj-routine-definition-scope > .jj-field { width:min(400px,100%); }
+.jj-routine-definition-limits { border-left:1px solid var(--line); padding-left:40px; }
+.jj-routine-definition-limits input { width:min(200px,100%); }
+.jj-routine-history { border-top:1px solid var(--line); padding-top:20px; }
+.jj-routine-history > summary { cursor:pointer; color:var(--accent-ink); }
+.jj-routine-history > h2 { margin:24px 0 12px; }
+.jj-routine-directory th > small { display:block; margin-top:6px; color:var(--muted); font-size:var(--text-meta); font-weight:400; }
+.jj-routine-explanation, .jj-routine-preparation-intro > p { max-width:68ch; color:var(--muted); line-height:var(--leading-reading); }
+.jj-routine-preparation-intro { display:grid; gap:12px; }
+.jj-routine-rules { max-width:760px; }
+.jj-routine-editor > .jj-field { width:min(400px,100%); }
+.jj-routine-rules { display:grid; gap:0; margin:0; padding:0; border:0; }
+.jj-routine-rules > legend { margin-bottom:12px; font-size:var(--text-group); font-weight:500; }
+.jj-routine-rules > label { align-items:center; padding:16px 0; border-bottom:1px solid var(--line); }
+.jj-routine-rules small { display:block; margin-top:5px; color:var(--muted); font-size:var(--text-meta); }
+.jj-routine-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
+.jj-routine-actions > .jj-button, .jj-routine-actions > div:last-child { margin-left:auto; }
+.jj-routine-actions > div { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.jj-routine-binding-layout { display:grid; grid-template-columns:280px minmax(0,1fr); border-block:1px solid var(--line); }
+.jj-routine-binding-layout > nav { min-width:0; max-height:520px; overflow:auto; padding-block:12px; }
+.jj-routine-binding-layout .jj-index-item { display:grid; gap:6px; }
+.jj-routine-binding-layout .jj-index-item small { color:var(--muted); font-size:var(--text-meta); }
+/* 详情占满自己的轨道；说明与当前材料成组，操作在自然行高的右下收口。 */
+.jj-routine-binding-reading { display:flex; flex-direction:column; min-width:0; gap:24px; border-left:1px solid var(--line); padding:24px 28px; container:binding-detail / inline-size; }
+.jj-routine-binding-heading { display:grid; gap:10px; }
+.jj-routine-binding-body { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:32px; }
+.jj-routine-binding-body > section { display:grid; align-content:start; gap:12px; min-width:0; }
+.jj-routine-binding-body p { margin:0; line-height:var(--leading-reading); }
+.jj-routine-bound-items { display:grid; gap:16px; min-width:0; }
+.jj-routine-bound-items > div { display:grid; gap:8px; min-width:0; }
+.jj-routine-bound-items strong { overflow-wrap:anywhere; font-weight:500; }
+.jj-routine-bound-items summary { color:var(--muted); font-size:var(--text-meta); cursor:pointer; }
+.jj-routine-binding-footer { display:flex; justify-content:flex-end; margin-top:auto; padding-top:20px; border-top:1px solid var(--line); }
+@container binding-detail (max-width:560px) { .jj-routine-binding-body { grid-template-columns:minmax(0,1fr); gap:24px; } }
+.jj-routine-binding-reading code { display:block; margin-top:12px; overflow-wrap:anywhere; }
+.jj-routine-legacy { margin-top:24px; }
+.jj-routine-legacy > p { margin-block:16px; }
+.jj-routine-legacy > div, .jj-routine-history-row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); }
+@media(max-width:800px) { .jj-routine-binding-layout { grid-template-columns:minmax(0,1fr); } .jj-routine-binding-layout > nav { max-height:240px; } .jj-routine-binding-reading { border-left:0; border-top:1px solid var(--line); padding:24px 20px; } }
+@media(max-width:1000px) { .jj-routine-definition { grid-template-columns:minmax(0,1fr); gap:28px; } .jj-routine-definition-limits { border-left:0; padding:24px 0 0; border-top:1px solid var(--line); } }
+@media(max-width:900px) { .jj-routine-directory .jj-collection-layout { grid-template-columns:minmax(0,1fr); } .jj-routine-directory[data-detail-open=true] .jj-collection-main { display:none; } .jj-routine-directory .jj-inspector { border-top:0; padding:24px 20px; } }
+@media(max-width:800px) { .jj-routine-single > .jj-routine-overview { grid-template-columns:minmax(0,1fr); } }
+
+.jj-routine-binding-layout[data-single=true] { grid-template-columns:minmax(0,1fr); }
+.jj-routine-binding-layout[data-single=true] > .jj-routine-binding-reading { border-left:0; }
+
+.jj-routine-retained { margin-top:20px; padding:16px; border-top:1px solid var(--line); }
+.jj-routine-retained[open] > summary { margin-bottom:16px; }

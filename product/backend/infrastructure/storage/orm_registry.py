@@ -10,6 +10,7 @@ _STORAGE_ORM_MODULES = (
     "product.backend.infrastructure.storage.applications.api_sources",
     "product.backend.infrastructure.storage.applications.environments",
     "product.backend.infrastructure.storage.execution.check_routines",
+    "product.backend.infrastructure.storage.execution.routine_revisions",
     "product.backend.infrastructure.storage.runtime.collaboration",
     "product.backend.infrastructure.storage.preparation.operation_flows",
     "product.backend.infrastructure.storage.preparation.flow_trials",

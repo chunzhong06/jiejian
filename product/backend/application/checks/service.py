@@ -127,17 +127,25 @@ class CheckService:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND,"本项目检查不存在")
         return self._queue.request_cancellation(RequestCancellation(job_id=job.job_id,now_us=self._clock()))
 
-    def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None) -> CheckPreview:
+    def bind_routines(self, routines):
+        self._routines = routines
+
+    def routine_receipt(self, project_id, reference, fingerprint, operation):
+        """只回读并核对原方案请求；找不到时不创建或执行检查。"""
+        return self._accepted_submission(project_id, expected_plan_fingerprint=fingerprint, idempotency_key=operation,
+            change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=reference)
+
+    def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None) -> CheckPreview:
         # 预览只反映本次读取的现场；提交会重新冻结，页面不能直接复用旧请求作为执行授权。
-        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
+        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
         return preview
 
-    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
+    def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
         # 本地锁只避免同实例交错；跨进程的请求唯一性和事务前置条件仍由 JobQueue 核对。
         with self._submission_lock:
             arguments = dict(expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,
                 change_id=change_id, selected_permissions=selected_permissions,
-                external_recheck=external_recheck, scenario_reference=scenario_reference)
+                external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
             previous = self._accepted_submission(project_id, **arguments)
             if previous is not None:
                 return previous
@@ -151,7 +159,7 @@ class CheckService:
                 raise
 
     def _accepted_submission(self, project_id, *, expected_plan_fingerprint, idempotency_key,
-                             change_id, selected_permissions, external_recheck, scenario_reference):
+                             change_id, selected_permissions, external_recheck, scenario_reference, routine_reference):
         with self._uow_factory() as work:
             job = work.jobs.get_by_idempotency(project_id, 'CHECK', idempotency_key)
             if job is None:
@@ -160,6 +168,12 @@ class CheckService:
             fingerprint = _preview_fingerprint(request.plan_fingerprint, request.requirement_scope, request.selection)
             original_change = request.change_context.change_id if request.change_context else None
             matches = original_change == change_id
+            if routine_reference is not None:
+                matches = matches and request.routine is not None and all(
+                    getattr(request.routine, name) == getattr(routine_reference, name)
+                    for name in ('routine_id', 'revision', 'binding_id'))
+            else:
+                matches = matches and request.routine is None
             if external_recheck is not None:
                 # 合同 reader 核对原 Run/Case/hash；不读取当前材料或执行环境。
                 contract = self._repairs.resolve(project_id, external_recheck.reference)
@@ -173,7 +187,11 @@ class CheckService:
                 fingerprint = content_hash('ExternalRecheckPreview', dict(preview=fingerprint,
                     repair=request.repair_context.repair_reference,
                     context=request.external_recheck.model_dump(mode='json')))
-            if change_id is not None or external_recheck is not None:
+            if request.routine is not None:
+                fingerprint = content_hash('RoutinePreview', dict(preview=fingerprint, routine=request.routine.model_dump(mode='json')))
+            if routine_reference is not None:
+                matches = matches and change_id is None and external_recheck is None and selected_permissions is None and scenario_reference is None
+            elif change_id is not None or external_recheck is not None:
                 matches = matches and selected_permissions is None and scenario_reference is None
             elif scenario_reference is not None:
                 document = request.scenario.document if request.scenario else None
@@ -194,8 +212,8 @@ class CheckService:
                 raise JiejianError(ErrorCode.STORAGE_STATE, '原检查回执关联不完整')
             return JobSubmissionResult(created=False, job=job, run=run)
 
-    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
-        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
+    def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
+        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
         if not preview.can_execute or request is None or preview.plan_fingerprint != expected_plan_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化",
                 details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint})
@@ -212,7 +230,7 @@ class CheckService:
             job_id=job_id, run_id=run_id)
         def checkpoint(work):
             # 文件准备期间材料仍可能变化；在创建 Run/Job 的同一工作单元内重建计划并比较完整输入。
-            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
+            current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
             if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
@@ -242,15 +260,22 @@ class CheckService:
                 except (JiejianError, OSError):
                     logging.getLogger("jiejian.application.checks.service").warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
 
-    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
+    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
         # 同次读取共享注册快照，防止计划与运行配置取到两代事实；作用域结束后不缓存授权。
         if work is None:
             with self._uow_factory() as current:
-                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
+                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
         with self._registry.read_scope(project_id):
-            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference)
+            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
 
-    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None):
+    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
+        routine_document = routine_binding = None
+        if routine_reference is not None:
+            if any(value is not None for value in (change_id, selected_permissions, external_recheck, scenario_reference)):
+                raise JiejianError(ErrorCode.INPUT_INVALID, '方案有自己的准确范围，不能混入其他检查或复验范围')
+            routine_document, routine_binding = self._routines.resolve(project_id, routine_reference, work)
+            selected_permissions = routine_document.scope.permissions or None
+            scenario_reference = routine_document.scope.scenario
         if (change_id is not None or external_recheck is not None) and selected_permissions is not None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "原题复验须保留原问题与正常对照，不能缩小范围。")
         if work.projects.get(project_id) is None:
@@ -286,6 +311,8 @@ class CheckService:
         bundle, runtime_reason = None, None
         try:
             bundle = self._builder.build(project_id, work=work, **({} if selected_permissions is None else {"selected_permissions": selected_permissions}))
+            if routine_document is not None:
+                bundle = self._routines.constrain(routine_document, routine_binding, bundle)
             config_hash = check_runtime_fingerprint(bundle)
         except (JiejianError, ValueError, OSError) as exc:
             runtime_reason = exc.to_dict()["details"].get("reason", "CHECK_RUNTIME_UNAVAILABLE") if isinstance(exc, JiejianError) else "CHECK_RUNTIME_INVALID"
@@ -307,6 +334,9 @@ class CheckService:
             gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
                 reason=runtime_reason) for action in plan.actions)
         count = sum(len(action.cases) for action in plan.actions)
+        if routine_document is not None and count > routine_document.limits.max_cases:
+            gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
+                reason='ROUTINE_CASE_BUDGET_INSUFFICIENT') for action in plan.actions)
         budget_reason = check_publication_budget_reason(plan.actions, bundle) if bundle is not None else None
         if budget_reason is not None:
             gaps.extend(CheckPlanGap(action_id=action.action_id, action_revision=action.action_revision,
@@ -405,6 +435,11 @@ class CheckService:
                     or request.environment.target!=source_environment.target or bundle.runtime.kind!='EXTERNAL_WEB'):
                     raise JiejianError(ErrorCode.STATE_PRECONDITION,'外部原题复验要求同一环境与目标范围，且没有源码版本核验')
                 request=request.model_copy(update=dict(repair_context=repair_context(contract),external_recheck=context))
+        if routine_document is not None:
+            context = self._routines.frozen_reference(routine_document, routine_binding)
+            preview_fingerprint = content_hash('RoutinePreview', dict(preview=preview_fingerprint, routine=context.model_dump(mode='json')))
+            if request is not None:
+                request = request.model_copy(update=dict(routine=context))
         if request is not None:
             validate_check_inputs(request, bundle)
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),

@@ -24,5 +24,5 @@ export function RuleCheckScope({ projectId, changeId }: {
         return null;
     const { workspace, change } = state.data;
     const rules = workspace.rules.filter(rule => change.rule_targets?.some(target => target.permission.intent_id === rule.permission.intent_id && target.permission.revision === rule.permission.revision && target.permission.intent_hash === rule.permission.intent_hash) || rule.issues.some(issue => issue.contract.repair_fingerprint === change.manifest.repair_reference?.repair_fingerprint));
-    return rules.length > 0 ? <section className="jj-rule-check-scope"><header><Badge tone="accent">修复复验</Badge><h2>本次修改针对的规则</h2></header><div>{rules.map(rule => <article key={rule.permission.intent_id}><strong>{text(rule.title)}</strong><span>{text(rule.resource_scope)}</span></article>)}</div><footer><span>复查原违规场景</span><span>确认正常功能保留</span><span>检查相关权限是否退化</span></footer></section> : null;
+    return rules.length > 0 ? <section className="jj-rule-check-scope"><header><h2>本次修改针对的规则</h2><Badge tone="accent">修复复验</Badge></header><div>{rules.map(rule => <article key={rule.permission.intent_id}><strong>{text(rule.title)}</strong><span>{text(rule.resource_scope)}</span></article>)}</div><footer><span>复查原违规场景</span><span>确认正常功能保留</span><span>检查相关权限是否退化</span></footer></section> : null;
 }

@@ -1,0 +1,13 @@
+.jj-run-status { display:grid; gap:24px; container:run-status / inline-size; }
+.jj-run-status-content { display:grid; grid-template-columns:minmax(0,1fr); gap:28px 32px; align-items:start; }
+.jj-run-status-content[data-has-failure=true] { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.jj-run-status-progress { display:grid; gap:16px; min-width:0; }
+.jj-run-status-progress > header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.jj-run-status-progress > :is(.jj-plan-summary,.jj-progress-note) { margin:0; }
+.jj-run-status-progress > p { max-width:70ch; line-height:var(--leading-reading); }
+.jj-run-status .jj-run-failure { min-width:0; border-left:1px solid var(--line); padding-left:32px; }
+.jj-run-status .jj-run-failure > p { margin-top:12px; line-height:var(--leading-reading); }
+.jj-run-status .jj-run-failure > details { margin-top:20px; }
+.jj-run-status > footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:12px; padding-top:20px; border-top:1px solid var(--line); }
+.jj-run-status > footer:empty { display:none; }
+@container run-status (max-width:660px) { .jj-run-status-content[data-has-failure=true] { grid-template-columns:minmax(0,1fr); } .jj-run-status .jj-run-failure { border-left:0; border-top:1px solid var(--line); padding:24px 0 0; } }

@@ -62,7 +62,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
     },'write');
     return <>
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>全部权限规则</Button></div>
-        <Heading title="编写权限要求"><p>定义业务角色和操作，再明确每条访问要求。</p></Heading>
+        <Heading title="编写权限要求"><p>先填写业务角色和操作，再说明谁可以访问哪些数据，以及怎样确认操作结果。</p></Heading>
         {changed && <Notice tone="caution">正式规则已变化，草稿保留。请返回核对当前规则后再整理。</Notice>}
         <div className="jj-rule-authoring" data-preview={draft.permissions.length>0}>
             <div className="jj-rule-authoring-editor">
@@ -152,7 +152,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 </div>
             </div>
             {draft.permissions.length>0&&<aside className="jj-initial-preview" data-section={section} aria-label="权限草稿预览">
-                <header><span className="jj-initial-preview-symbol"><SafetyOutlined aria-hidden="true" /></span><h2 className="jj-title-group">权限预览</h2><Badge>尚未生效</Badge></header>
+                <header><span className="jj-initial-preview-symbol"><SafetyOutlined aria-hidden="true" /></span><div className="jj-object-line"><h2 className="jj-title-group">权限预览</h2><Badge>尚未生效</Badge></div></header>
                 <div className="jj-initial-preview-rules">{draft.permissions.map((rule, index) => {
                     const actor = draft.actors.find(item => item.item_id === rule.subject_actor_item_id), owner = draft.actors.find(item => item.item_id === rule.resource_owner_actor_item_id), action = draft.actions.find(item => item.item_id === rule.business_action_item_id);
                     const relation = rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '同角色其他账号的资源' : (owner?.display_name || '指定角色') + '的资源';
@@ -164,7 +164,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 {section === 'permissions' && <details className="jj-initial-provenance"><summary>补充规则依据（选填）</summary><Field label="权限要求的依据"><textarea disabled={disabled} rows={3} maxLength={512} value={draft.provenance} onChange={event => edit({ provenance: event.target.value })} /></Field></details>}
                 <div className="jj-initial-submit">
                     {!!missing.length && <details className="jj-initial-missing"><summary>仍需填写 {missing.length} 项</summary><div>{missing.map(item => <Button kind="quiet" key={item.label} onClick={() => setSection(item.section)}>{item.label}<ArrowRightOutlined aria-hidden="true" /></Button>)}</div></details>}
-                    <p>生成提案后，审阅并批准才会生效。</p>
+                    <p>生成提案后，审阅并批准这些规则，后续检查才会使用它们。</p>
                     <Button kind="primary" busy={busy} disabled={!valid || disabled} onClick={submit}>生成完整提案<ArrowRightOutlined aria-hidden="true" /></Button>
                 </div>
             </aside>}

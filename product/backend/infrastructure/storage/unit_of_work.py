@@ -43,6 +43,7 @@ from product.backend.infrastructure.storage.preparation.business_scenarios impor
 from product.backend.infrastructure.storage.preparation.flow_trials import FlowTrialRepository
 from product.backend.infrastructure.storage.runtime.collaboration import CollaborationRepository
 from product.backend.infrastructure.storage.execution.check_routines import CheckRoutineRepository
+from product.backend.infrastructure.storage.execution.routine_revisions import RoutineRevisionRepository
 from product.backend.infrastructure.storage.applications.environments import EnvironmentRepository
 from product.backend.infrastructure.storage.applications.api_sources import ApiSourceRepository
 
@@ -99,6 +100,7 @@ class StorageUnitOfWork:
         self.api_sources = ApiSourceRepository(session, self._known_secrets)
         self.collaboration = CollaborationRepository(session, self._known_secrets)
         self.check_routines = CheckRoutineRepository(session, self._known_secrets)
+        self.routine_revisions = RoutineRevisionRepository(session, self._known_secrets)
         self.preparation_batches = PreparationBatchRepository(session, self._known_secrets)
         self.application_understanding = ApplicationUnderstandingRepository(
             session,

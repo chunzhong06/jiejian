@@ -22,9 +22,12 @@ export function requestCollaboration(projectId:string,purpose:CollaborationPurpo
 export function routeReferences(route:string){
   const [path,search]=route.split('?'),query=new URLSearchParams(search),references:Record<string,string>={}
   // 只交接已知对象与回程，URL 中的任意查询字段不进入协作历史。
-  for(const key of ['action_id','rule_id','candidate_id','run_id','case_id','change_id','source_id','recording_id','flow_id','revision','material_kind','request_id']){
+  for(const key of ['action_id','rule_id','candidate_id','run_id','case_id','change_id','source_id','recording_id','flow_id','revision','material_kind','request_id','scope_id','scenario_id','scenario_revision','routine_id','routine_revision','binding_id','repair_reference','issue','section','effect_id']){
     const value=query.get(key);if(value)references[key]=value
   }
+  if(['plan','compare','plans','repair','collaboration','environment','source','sources','business','register'].includes(query.get('view')??''))references.view=query.get('view')!
+  for(const key of ['identities','proof_sources','resume_draft'])if(query.get(key)==='1')references[key]='1'
+  if(['new','edit'].includes(query.get('configure')??''))references.configure=query.get('configure')!
   const safe=new URLSearchParams(references)
   references.return_to=path+(safe.size?'?'+safe:'')
   return references

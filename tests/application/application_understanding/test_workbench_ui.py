@@ -105,7 +105,7 @@ def test_shared_corner_profile_and_fallback_in_browser(readonly_official_review)
                 page.get_by_role('button', name='导入接口资料或请求', exact=True).click()
                 dialog = page.get_by_role('dialog', name='导入接口资料', exact=True)
                 settled(page)
-                expect(dialog).to_have_css('border-radius', '16px')
+                expect(dialog).to_have_css('border-radius', '20px')
                 assert page.evaluate("CSS.supports('corner-shape','superellipse(1.5)')")
                 for selector in ('.jj-dialog', '.jj-dialog input', '.jj-dialog .jj-button', '.jj-dialog .ant-select-selector'):
                     assert '1.5' in page.locator(selector).first.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')"), selector
@@ -121,7 +121,7 @@ def test_shared_corner_profile_and_fallback_in_browser(readonly_official_review)
                     # 移除渐进增强，直接检查浏览器仍保有原轮廓与可操作的布局。
                     removed = page.evaluate('''()=>{let count=0;for(const sheet of document.styleSheets){for(let i=sheet.cssRules.length-1;i>=0;i--){const rule=sheet.cssRules[i];if(rule instanceof CSSSupportsRule&&rule.conditionText.includes('corner-shape')){sheet.deleteRule(i);count++}}}return count}''')
                     assert removed > 0
-                    expect(dialog).to_have_css('border-radius', '16px')
+                    expect(dialog).to_have_css('border-radius', '20px')
                     assert dialog.evaluate("node=>getComputedStyle(node).getPropertyValue('corner-shape')") == 'round'
                     assert dialog.bounding_box() == before
                 button.click()
@@ -356,19 +356,17 @@ def test_application_sources_and_continuous_navigation_in_browser():
             page.keyboard.press('Escape');expect(mobile_navigation).not_to_be_visible()
             page.set_viewport_size({'width':1512,'height':980})
             settled(page)
-            # 摘要共享阅读起点；当前任务与相邻环境顶部对齐，不强迫少量内容等高。
-            layout=page.locator('.jj-home-metrics').evaluate('''element=>[...element.children].map(card=>{
-                return {title:card.querySelector('span').getBoundingClientRect().top};
-            })''')
-            assert max(item['title'] for item in layout)-min(item['title'] for item in layout)<1
+            # 当前动作、对象目录和历史分层；摘要不再复制成三个可点击的统计入口。
+            expect(page.locator('.jj-home-metrics > div')).to_have_count(3)
+            expect(page.locator('.jj-home-metrics button')).to_have_count(0)
             focus=page.locator('.jj-home-current-task').bounding_box()
-            action=page.get_by_role('button',name='设置权限规则',exact=True).bounding_box()
+            action=page.get_by_role('link',name='设置权限规则',exact=True).bounding_box()
             assert action['x']>focus['x']+focus['width']/2
             assert action['y']>focus['y']+focus['height']/2
             assert focus['x']+focus['width']-action['x']-action['width']>=20
             assert focus['y']+focus['height']-action['y']-action['height']>=20
             expect(page.locator('.jj-heading').get_by_role('button')).to_have_count(0)
-            expect(page.get_by_role('button',name='管理运行环境',exact=True)).to_be_visible()
+            expect(page.get_by_role('link',name='核对应用连接',exact=True)).to_be_visible()
             expect(page.locator('.jj-home-context')).to_contain_text('http://127.0.0.1:18081')
             expect(page.locator('.jj-home-context')).to_contain_text('64 个请求')
             expect(page.locator('.jj-home-task-description')).to_contain_text('后续验证')
@@ -603,7 +601,7 @@ def test_delayed_misans_keeps_fallback_glyphs_stable():
 
 
 def test_registered_repair_heading_and_timestamp_in_browser():
-    """使用真实原问题与登记修改，核对标题行不继承独立标题的段落间距。"""
+    """使用真实原问题与登记修改，核对修改和问题详情的标题状态对齐。"""
     from playwright.sync_api import sync_playwright,expect
     from tests.support.runtime_server import launch
     from tests.support.official import OfficialScenario
@@ -642,6 +640,19 @@ def test_registered_repair_heading_and_timestamp_in_browser():
                     # 窄窗口可换行；处于同一行时必须共享中心轴。
                     assert not geometry['sameRow'] or abs(geometry['title']-geometry['status'])<1
                     page.screenshot(path=str(output/f'registered-repair-{theme}-{width}.png'),full_page=True)
+            page.goto(server.origin+'/#/issues?project_id='+scenario.project_id)
+            expect(page.locator('.jj-issue-reading')).to_be_visible()
+            for theme in ('light','dark'):
+                if page.locator('html').get_attribute('data-studio-theme')!=theme:
+                    page.get_by_role('button',name='切换'+('雾蓝深色' if theme=='dark' else '浅色'),exact=True).click()
+                for width in (1512,800,375):
+                    page.set_viewport_size({'width':width,'height':980});settled(page)
+                    geometry=page.locator('.jj-issue-reading .jj-collection-title').evaluate('''node=>{
+                        const title=node.children[0].getBoundingClientRect(),status=node.children[1].getBoundingClientRect();
+                        return {title:title.y+title.height/2,status:status.y+status.height/2,sameRow:status.x>=title.right};
+                    }''')
+                    assert not geometry['sameRow'] or abs(geometry['title']-geometry['status'])<1,geometry
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth'),(theme,width,'issues')
         finally:
             browser.close()
             (output/'alignment.json').write_text(json.dumps(dict(schema_version='1',observations=observations),ensure_ascii=False,indent=2),encoding='utf-8')
@@ -700,6 +711,11 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
                         navigate(page,server.origin,path+separator+'project_id='+scenario.project_id)
                         expect(page.locator('main h1').first).to_be_visible()
                         expect(page.locator('main h1')).to_have_count(1)
+                        expect(page.locator('main h1')).to_have_css('font-size','28px')
+                        expect(page.locator('main h1')).to_have_css('line-height','36px')
+                        # 页内操作不能自行缩小为辅助文字；选中也不改变字号或字重。
+                        invalid=page.locator('main .jj-button:not(.jj-index-item)').evaluate_all('''nodes=>nodes.filter(node=>node.getClientRects().length).flatMap(node=>{const s=getComputedStyle(node),r=node.getBoundingClientRect();return r.height<35.5||s.fontSize!=='14px'?[{name:node.textContent?.trim().slice(0,40),height:r.height,size:s.fontSize}]:[]})''')
+                        assert not invalid,(theme,width,name,invalid)
                         expect(page.locator('[data-page-pending=true]')).to_have_count(0)
                         expect(page.locator('main .jj-loading')).to_have_count(0)
                         if name=='flow':
@@ -729,7 +745,7 @@ def test_populated_routes_and_shared_control_layout_in_browser(readonly_official
 
                         if name=='sample' and width==1512:
                             page.get_by_role('button',name='管理示例',exact=True).click()
-                            expect(page.get_by_role('menu')).to_have_css('border-radius','10px')
+                            expect(page.get_by_role('menu')).to_have_css('border-radius','16px')
                             settled(page)
                             page.keyboard.press('Escape')
                         if name in {'permissions','testing'}:

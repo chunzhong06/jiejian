@@ -122,6 +122,20 @@ class PrimaryTaskView(WorkspaceModel):
     stale_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
 
+class PreparationWorkAction(WorkspaceModel):
+    action_id: str
+    label: str
+    preparation_complete: bool
+
+
+class PreparationWorkView(WorkspaceModel):
+    """当前范围的准备建议；完成状态来自 Preparation，不代表可执行或权限结论。"""
+    project_id: str
+    actions: tuple[PreparationWorkAction, ...]
+    primary_task: PrimaryTaskView | None
+    preparation_complete: bool
+
+
 class WorkspaceAreaView(WorkspaceModel):
     key: Literal["overview", "permissions", "changes", "tests"]
     label: str

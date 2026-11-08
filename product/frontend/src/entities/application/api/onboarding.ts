@@ -31,3 +31,11 @@ export const onboardingApi = {
   selectFolder: (signal?: AbortSignal) => request<{ status: 'selected' | 'cancelled' | 'unavailable'; path?: string; message?: string }>('/api/onboarding/select-folder', { method: 'POST', signal }),
   inspect: (path: string) => request<DiscoveryResult>('/api/onboarding/inspect', { method: 'POST', body: JSON.stringify({ schema_version: '1', path }) }),
 }
+
+/** 取消选择保留原输入；不可用时由当前工作面说明手工路径回退。 */
+export async function selectFolderPath():Promise<string|null>{
+  const value=await onboardingApi.selectFolder()
+  if(value.status==='selected'&&value.path)return value.path
+  if(value.status==='unavailable')throw new Error(value.message??'系统目录选择暂时不可用，请粘贴完整路径。')
+  return null
+}

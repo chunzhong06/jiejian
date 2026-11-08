@@ -1,3 +1,4 @@
+import {useWorkflow} from '../../shared/lib/workflow'
 import {IndexSelection} from '../../shared/ui/IndexSelection'
 import {useState} from 'react'
 import './workbench.css'
@@ -39,7 +40,7 @@ export function SourceLibrary({projectId}:{projectId:string}) {
   const [importSource,setImportSource]=useState<string>(),[drafts,setDrafts]=useState<Record<string,SourceDraft>>({})
   const [lastSelected,setLastSelected]=useState('')
   const [recovery,setRecovery]=useState(()=>pendingImport(projectId))
-  const query=readRoute().query
+  const workflow=useWorkflow(),query=(workflow?.route??readRoute()).query
   const selectedSource=query.get('source_id'),selectedItem=query.get('request_id')
   const sources=state.data?.sources??[]
   const rows=sources.flatMap(source=>source.requests.map(request=>({source,request,annotation:state.data?.annotations.find(item=>item.source_id===source.source_id&&item.item_id===request.item_id)})))
@@ -49,8 +50,8 @@ export function SourceLibrary({projectId}:{projectId:string}) {
   const requestOpen=selected?.source.source_id===selectedSource&&selected?.request.item_id===selectedItem
   const openImport=(source?:string)=>{setImportSource(source);setImporting(true)}
   return <section className="jj-source-library" aria-label="接口来源工作面" data-page-pending={state.loading&&!state.data||business.loading&&!business.data||undefined}>
-    <header className="jj-source-toolbar"><p><strong>{rows.length}</strong> 个请求 <span>来自 {sources.length} 份来源</span></p>{rows.length>0&&!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入资料</Button>}</header>
-    {recovery&&!importing&&<Notice tone="caution">有一份来源修订的保存结果需要核对。<Button onClick={()=>openImport()}>核对原保存</Button></Notice>}
+    {rows.length>0&&<header className="jj-source-toolbar"><p><strong>{rows.length}</strong> 个请求 <span>来自 {sources.length} 份来源</span></p>{!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入资料</Button>}</header>}
+    {recovery&&!importing&&<Notice tone="caution">有一份来源修订的保存结果需要核对。<Button onClick={()=>openImport()}>查看上次保存结果</Button></Notice>}
     {business.error&&<ErrorNote error={business.error}/>}
     {state.error&&state.data&&<ErrorNote error={state.error}/>}
     {Boolean(error)&&<ErrorNote error={error}/>}
@@ -61,7 +62,7 @@ export function SourceLibrary({projectId}:{projectId:string}) {
           <IndexSelection className="jj-source-requests" label="请求列表" identity={selectedKey+search}>
             {visible.length?sources.map(source=>{const items=visible.filter(item=>item.source.source_id===source.source_id);return items.length>0&&<section className="jj-source-group" key={source.source_id}>
               <header><strong>{source.name}</strong><span>{sources.length>1?items.length+' 项 · ':''}修订 {source.revision}</span></header>
-              {items.map(({source,request,annotation})=><button type="button" className="jj-request-item jj-index-item" key={request.item_id} aria-label={'查看请求：'+(annotation?.label??request.label)} aria-current={selectedKey===source.source_id+':'+request.item_id?'true':undefined} onClick={()=>{setLastSelected(source.source_id+':'+request.item_id);go('/application?view=sources&source_id='+source.source_id+'&request_id='+request.item_id)}}>
+              {items.map(({source,request,annotation})=><button type="button" className="jj-request-item jj-index-item" key={request.item_id} aria-label={'查看请求：'+(annotation?.label??request.label)} aria-current={selectedKey===source.source_id+':'+request.item_id?'true':undefined} onClick={()=>{setLastSelected(source.source_id+':'+request.item_id);(workflow?.open??go)('/application?view=sources&source_id='+source.source_id+'&request_id='+request.item_id)}}>
                 <span className="jj-request-item-line"><span className="jj-request-method">{request.method}</span><strong title={annotation?.label??request.label}>{annotation?.label??request.label}</strong></span>
                 <code title={request.path}>{request.path}</code>
               </button>)}
@@ -69,7 +70,7 @@ export function SourceLibrary({projectId}:{projectId:string}) {
           </IndexSelection>
         </aside>
         {selected?<SourceRequestDetails key={selectedKey} projectId={projectId} {...selected} actions={actions} businessReady={Boolean(business.data)&&!business.error} draft={drafts[selectedKey]} onDraft={value=>setDrafts(current=>{const next={...current};if(value)next[selectedKey]=value;else delete next[selectedKey];return next})} onSaved={()=>state.reload()} onUpdate={()=>openImport(selected.source.source_id)} act={act} busy={busy}/>:<div className="jj-source-no-selection"><p>调整搜索条件，查看已有请求。</p></div>}
-      </div>:<Empty title="从已有资料继续调查" action={!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入接口资料或请求</Button>}>接受 OpenAPI 3.0/3.1、HAR 和 Postman Collection 2.1 JSON；可以随时补充和更新。</Empty>}
+      </div>:<Empty title="从已有接口资料开始" action={!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入接口资料或请求</Button>}>导入接口资料或浏览器导出的请求，再从中选择一项业务操作，整理为可执行的接口流程。支持 OpenAPI 3.0/3.1、HAR 和 Postman Collection 2.1 JSON。</Empty>}
     {importing&&<SourceImport projectId={projectId} sources={sources} initialSource={importSource} onClose={()=>{setRecovery(pendingImport(projectId));setImporting(false)}} onAccepted={()=>{setRecovery(undefined);setImporting(false);state.reload()}}/>}
   </section>
 }
@@ -81,7 +82,7 @@ function SourceImport({projectId,sources,initialSource,onClose,onAccepted}:{proj
   const [name,setName]=useState(pending?.name??sources.find(item=>item.source_id===initialSource)?.name??''),[raw,setRaw]=useState('')
   const [preview,setPreview]=useState<ImportPreview|undefined>(pending?.preview),[file,setFile]=useState<File>()
   const {busy,error,run:act}=useCommand('source-import:'+projectId)
-  return <Dialog closeDisabled={busy} title="导入接口资料" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button>{preview?<Button kind="primary" busy={busy} disabled={!name.trim()} onClick={()=>void act(async()=>{const input=pending??{sourceId:sourceId||newId,name:name.trim(),preview};if(pending){const actual=await api.sourceRevision(projectId,input.sourceId,input.preview.previous_revision+1);if(actual){if(actual.name!==input.name||JSON.stringify(actual.requests)!==JSON.stringify(input.preview.requests))throw new Error('此修订已有其他内容，请查看来源历史后处理。');savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted();return}}savePending(pendingImportKey(projectId),input);setPending(input);await api.accept(projectId,input.sourceId,input.name,input.preview);savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted()},'write')}>{pending?'核对原保存':'接受本次修订'}</Button>:<Button kind="primary" busy={busy} disabled={!raw} onClick={()=>void act(async()=>setPreview(await api.preview(projectId,raw,kind,sourceId||undefined)))}>预览并净化</Button>}</>}>
+  return <Dialog closeDisabled={busy} title="导入接口资料" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button>{preview?<Button kind="primary" busy={busy} disabled={!name.trim()} onClick={()=>void act(async()=>{const input=pending??{sourceId:sourceId||newId,name:name.trim(),preview};if(pending){const actual=await api.sourceRevision(projectId,input.sourceId,input.preview.previous_revision+1);if(actual){if(actual.name!==input.name||JSON.stringify(actual.requests)!==JSON.stringify(input.preview.requests))throw new Error('此修订已有其他内容，请查看来源历史后处理。');savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted();return}}savePending(pendingImportKey(projectId),input);setPending(input);await api.accept(projectId,input.sourceId,input.name,input.preview);savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted()},'write')}>{pending?'查看上次保存结果':'保存这次导入'}</Button>:<Button kind="primary" busy={busy} disabled={!raw} onClick={()=>void act(async()=>setPreview(await api.preview(projectId,raw,kind,sourceId||undefined)))}>预览导入内容</Button>}</>}>
     <Field label="资料类型"><Choice disabled={Boolean(pending)||busy} value={kind} onValueChange={value=>{setKind(value as ApiSource['kind']);setPreview(undefined)}}><option value="OPENAPI">OpenAPI 3.0 / 3.1</option><option value="HAR">HAR 网络请求</option><option value="POSTMAN">Postman Collection 2.1</option></Choice></Field><Field label="保存到"><Choice disabled={Boolean(pending)||busy} value={sourceId} onValueChange={value=>{setSourceId(value);const item=sources.find(item=>item.source_id===value);if(item){setName(item.name);setKind(item.kind)}setPreview(undefined)}}><option value="">新的来源</option>{sources.map(item=><option key={item.source_id} value={item.source_id}>更新 {item.name}</option>)}</Choice></Field><Field label="来源名称"><input disabled={Boolean(pending)||busy} value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="JSON 文件" hint="原始内容只用于本次解析，不写入来源资产。"><FilePicker label="JSON 文件" file={file} disabled={Boolean(pending)||busy} accept=".json,.har,application/json" formats="JSON / HAR" maxBytes={4194304} onFileChange={next=>act(async()=>{const content=next?await next.text():'';setRaw(content);setFile(next);setPreview(undefined);if(next&&!name)setName(next.name.slice(0,128))})}/></Field>
     {preview&&<section className="jj-source-preview"><h3>本次变化</h3><p>新增 {preview.added.length} · 改变 {preview.changed.length} · 来源中缺失 {preview.removed.length}</p><p className="jj-small">已有人工说明和业务关联会保留；缺失项不会删除已确认的业务要求。</p>{preview.warnings.map(warning=><Notice tone="caution" key={warning}>{warning}</Notice>)}<details><summary>查看 {preview.requests.length} 个请求定义</summary>{preview.requests.map(item=><p className="jj-small jj-mono" key={item.item_id}>{item.method} {item.path}</p>)}</details></section>}
     {Boolean(error)&&<ErrorNote error={error}/>}

@@ -90,6 +90,8 @@ class ProcessTreeController:
         if os.name == "nt" and self._job_handle is not None:
             return _active_job_processes(self._job_handle) == 0
         if self._process_group_id is not None:
+            # 回收自己拥有的根进程；未wait的僵尸仍让killpg(0)成功，但已不能继续执行。
+            self.process.poll()
             return not _process_group_exists(self._process_group_id)
         return self.process.poll() is not None
 
@@ -137,9 +139,9 @@ class ProcessTreeController:
             except ProcessLookupError:
                 return
         grace_deadline = min(deadline, time.monotonic() + 1.0)
-        while _process_group_exists(group_id) and time.monotonic() < grace_deadline:
+        while not self.has_exited() and time.monotonic() < grace_deadline:
             time.sleep(0.01)
-        if _process_group_exists(group_id):
+        if not self.has_exited():
             try:
                 os.killpg(group_id, signal.SIGKILL)
             except ProcessLookupError:

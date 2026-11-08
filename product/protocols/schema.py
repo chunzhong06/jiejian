@@ -30,6 +30,8 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("boundaries/rule-candidate-decision.schema.json", "product.backend.domain.boundaries.candidate_scenarios:RuleCandidateDecision"),
     SchemaEntry("boundaries/rule-candidate-revision.schema.json", "product.backend.domain.boundaries.rule_candidates:rule_candidate_revision_schema", "function"),
     SchemaEntry('checks/business-scenario.schema.json','product.protocols.checks.scenarios:BusinessScenarioRevision'),
+    SchemaEntry("checks/routine-binding.schema.json", "product.protocols.checks.routines:RoutineBindingDocument"),
+    SchemaEntry("checks/routine.schema.json", "product.protocols.checks.routines:CheckRoutineDocument"),
     SchemaEntry('checks/scenario-execution.schema.json','product.protocols.checks.scenario_execution:ScenarioExecutionJournal'),
     SchemaEntry("contracts/differential-experiment-plan.schema.json", "product.backend.domain.verification.differential:DifferentialExperimentPlan"),
     SchemaEntry("contracts/normalized-permission-plan.schema.json", "product.backend.domain.verification.permissions.contract:NormalizedPermissionPlan"),

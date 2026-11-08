@@ -15,6 +15,7 @@ from product.backend.application.checks.history import MaintainHistory
 from product.protocols.checks.execution_request import PermissionReference
 from product.backend.application.checks.service import ExternalRecheckCommand
 from product.protocols.checks.scenarios import ScenarioReference
+from product.protocols.checks.routine_reference import RoutineReference
 from product.backend.application.checks.reading.results import CheckRunStatus, CheckRunView, CheckJobView, CheckHistoryPage
 
 
@@ -36,6 +37,7 @@ class RunCreateRequest(ApiModel):
     selected_permissions: list[PermissionReference] | None = Field(default=None, min_length=1, max_length=4096)
     external_recheck: ExternalRecheckCommand | None = None
     scenario: ScenarioReference | None = None
+    routine: RoutineReference | None = None
 
 
 def build_runs_router(context: ApplicationCore) -> APIRouter:
@@ -46,7 +48,7 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
         submitted = context.checks.submit(project_id, expected_plan_fingerprint=body.expected_plan_fingerprint,
             idempotency_key=body.idempotency_key,change_id=body.change_id,
             selected_permissions=None if body.selected_permissions is None else tuple(body.selected_permissions),external_recheck=body.external_recheck,
-            scenario_reference=body.scenario)
+            scenario_reference=body.scenario, routine_reference=body.routine)
         status = context.check_results.status(submitted.run.run_id, project_id=project_id)
         return data_response(RunSubmissionProjection(run=status.run, job=status.job),
             projection=RunSubmissionProjection, status_code=202)

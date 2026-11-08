@@ -1,0 +1,4 @@
+.jj-recheck-context { display:grid; gap:20px; padding-top:24px; border-top:1px solid var(--line); }
+.jj-recheck-cases { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:24px 32px; }
+.jj-recheck-cases > article { display:grid; gap:10px; min-width:0; }
+.jj-recheck-cases p { overflow-wrap:anywhere; line-height:var(--leading-reading); }

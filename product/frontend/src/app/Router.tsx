@@ -6,8 +6,8 @@ import type { OfficialExperienceDto } from '../entities/application/api/experien
 import type { WorkspaceViewDto } from '../entities/workspace/api/workspace';
 import type { PageProps } from '../shared/model/page';
 import type { Route } from '../shared/lib/navigation';
-import { go } from '../shared/lib/navigation';
-import { Button } from "../shared/ui/actions";
+import {scopedPath} from '../shared/lib/navigation'
+import {ActionLink} from '../shared/ui/actions'
 import { Empty } from "../shared/ui/feedback";
 import { Heading } from "../shared/ui/layout";
 import {SettingsWorkspace} from './shell/SettingsWorkspace'
@@ -20,9 +20,11 @@ const Testing = routePage(() => import('../pages/testing/Testing').then(module=>
 const Issues = routePage(() => import('../pages/issues/Issues').then(module=>({default:module.Issues})),'/issues');
 const Collaboration = routePage(() => import('../pages/tools/Collaboration').then(module=>({default:module.Collaboration})),'/workspace');
 const CollaborationHub = routePage(() => import('../pages/tools/CollaborationHub').then(module=>({default:module.CollaborationHub})),'/workspace');
+const CheckWorkspace=routePage(()=>import('./CheckWorkspace').then(module=>({default:module.CheckWorkspace})),'/reports');
 const loaders: Record<RouteDefinition['preload'], () => Promise<unknown>> = {system:System.preload,home:Home.preload,permissions:Permissions.preload,preparation:Preparation.preload,reports:Reports.preload,application:ApplicationWorkbench.preload,testing:Testing.preload,issues:Issues.preload,environment:Connect.preload,changes:Changes.preload,tools:Agent.preload,storage:Storage.preload,archive:ArchivedExample.preload};
 export function preloadRoute(path: string) {
     const [pathname,search]=path.split('?'),route={path:routeAliases[pathname]??pathname,query:new URLSearchParams(search)}
+    if(route.path==='/reports'&&route.query.get('view')==='plan'){void CheckWorkspace.preload();return;}
     const key=settingsSection(route)??routeDefinition(route.path)?.preload
     if(key)void loaders[key]?.().catch(()=>{})
 }
@@ -47,7 +49,7 @@ export function RouteContent({ current, route, context, project, loading, worksp
     if (current === '/archive')
         return <ArchivedExample route={route} onError={onError}/>;
     if (current === '/application' && (project || route.query.get('view') !== 'source'))
-        return <ApplicationWorkbench key={route.query.get('view')==='create'?'create':project?.project_id} selected={route.query.get('view')==='create'?undefined:project} onChanged={onConnected}/>;
+        return <ApplicationWorkbench key={route.query.get('view')==='create'?'create':project?.project_id} selected={route.query.get('view')==='create'?undefined:project} existingProjectId={project?.project_id} onChanged={onConnected}/>;
     if (current === '/application' || current === '/environment')
         return <Connect key={project?.project_id} mode={current === '/environment' ? 'environment' : 'application'} selected={project} environment={environment} onChanged={onConnected} onError={onError}/>;
     if (loading && !project)
@@ -62,10 +64,12 @@ export function RouteContent({ current, route, context, project, loading, worksp
     if (current === '/issues') return <Issues key={context.projectId} {...context}/>;
     if (current === '/preparation')
         return <Preparation key={context.projectId} {...context}/>;
+    if (current === '/reports' && route.query.get('view')==='plan' && project)
+        return <CheckWorkspace {...context} project={project}/>;
     if (current === '/reports')
         return <Reports key={context.projectId} {...context}/>;
     if (current === '/changes')
         return <Changes key={context.projectId} {...context} workspace={workspace}/>;
-    return <Empty title="从当前应用继续" action={<Button onClick={() => go('/workspace')}>打开应用概览</Button>}/>;
+    return <Empty title="从当前应用继续" action={<ActionLink navigationScope="page" href={'#'+scopedPath('/workspace')}  kind="default">打开应用概览</ActionLink>}/>;
 }
-function Welcome() { return <><Heading eyebrow="界鉴" title="检查应用的访问权限"/><div className="jj-welcome-grid"><section className="jj-welcome-main"><span className="jj-line-symbol" aria-hidden="true">[ ]</span><h2>从你的应用开始</h2><p>连接应用，约定访问规则，再用真实操作验证业务结果。</p><Button kind="primary" onClick={() => go('/application')}>连接应用</Button></section><section className="jj-welcome-example"><p className="jj-eyebrow">首次使用</p><h2>先试一次完整检查</h2><p>用独立数字展馆体验权限审阅、材料准备和结果核对。</p><Button onClick={() => go('/environment')}>打开示例</Button></section></div></>; }
+function Welcome() { return <><Heading eyebrow="界鉴" title="检查应用的访问权限"/><div className="jj-welcome-grid"><section className="jj-welcome-main"><span className="jj-line-symbol" aria-hidden="true">[ ]</span><h2>从你的应用开始</h2><p>先明确谁可以操作哪些数据，再用测试账号验证实际行为。每次检查都会保留结果与判断依据。</p><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/application')} kind="primary">连接应用</ActionLink></footer></section><section className="jj-welcome-example"><p className="jj-eyebrow">首次使用</p><h2>先试一次完整检查</h2><p>使用内置数字展馆走完一次权限检查，无需准备自己的应用。</p><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/environment')}  kind="default">打开示例</ActionLink></footer></section></div></>; }

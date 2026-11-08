@@ -35,6 +35,7 @@
 | [product/backend/infrastructure/identity/browser.py](../../../product/backend/infrastructure/identity/browser.py) | 500 | IdentityPreparationBrowserAdapter |
 | [product/backend/infrastructure/identity/control.py](../../../product/backend/infrastructure/identity/control.py) | 79 | IdentityPreparationControlPaths、identity_preparation_control_paths、write_identity_preparation_marker、valid_identity_preparation_marker |
 | [product/backend/infrastructure/identity/process.py](../../../product/backend/infrastructure/identity/process.py) | 124 | execute_identity_preparation、main |
+| [product/backend/infrastructure/integrations/github.py](../../../product/backend/infrastructure/integrations/github.py) | 67 | GitHubIssues |
 | [product/backend/infrastructure/maintenance/__init__.py](../../../product/backend/infrastructure/maintenance/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/infrastructure/maintenance/inventory.py](../../../product/backend/infrastructure/maintenance/inventory.py) | 314 | linked、safe_tree、read_record、children、overlaps、component_in_use、exclusive_file、Asset等 |
 | [product/backend/infrastructure/maintenance/models.py](../../../product/backend/infrastructure/maintenance/models.py) | 27 | MaintenanceCandidate、MaintenancePlan |
@@ -101,7 +102,7 @@
 | [product/backend/infrastructure/runtime/frontend_assets.py](../../../product/backend/infrastructure/runtime/frontend_assets.py) | 60 | frontend_asset_identity |
 | [product/backend/infrastructure/runtime/generated_files.py](../../../product/backend/infrastructure/runtime/generated_files.py) | 61 | register_generated_file、generated_file_owner、forget_generated_file |
 | [product/backend/infrastructure/runtime/jobs/__init__.py](../../../product/backend/infrastructure/runtime/jobs/__init__.py) | 1 | 包、内部机制或样式 |
-| [product/backend/infrastructure/runtime/jobs/attempts.py](../../../product/backend/infrastructure/runtime/jobs/attempts.py) | 444 | JobAttempts |
+| [product/backend/infrastructure/runtime/jobs/attempts.py](../../../product/backend/infrastructure/runtime/jobs/attempts.py) | 443 | JobAttempts |
 | [product/backend/infrastructure/runtime/jobs/check_requests.py](../../../product/backend/infrastructure/runtime/jobs/check_requests.py) | 104 | CheckRequestStore |
 | [product/backend/infrastructure/runtime/jobs/dispatch.py](../../../product/backend/infrastructure/runtime/jobs/dispatch.py) | 157 | WorkerDispatcher |
 | [product/backend/infrastructure/runtime/jobs/events.py](../../../product/backend/infrastructure/runtime/jobs/events.py) | 37 | append_job_event |
@@ -125,7 +126,7 @@
 | [product/backend/infrastructure/runtime/process/controlled/correspondence.py](../../../product/backend/infrastructure/runtime/process/controlled/correspondence.py) | 41 | runtime_artifact_store、runtime_corresponds |
 | [product/backend/infrastructure/runtime/process/controlled/database_capture.mjs](../../../product/backend/infrastructure/runtime/process/controlled/database_capture.mjs) | 142 | instrumentMysqlPromise、instrumentPgClient、instrumentPgPool |
 | [product/backend/infrastructure/runtime/process/controlled/identity.py](../../../product/backend/infrastructure/runtime/process/controlled/identity.py) | 346 | python_environment_report、require_python_environment |
-| [product/backend/infrastructure/runtime/process/controlled/node_locator.py](../../../product/backend/infrastructure/runtime/process/controlled/node_locator.py) | 32 | controlled_node_executable |
+| [product/backend/infrastructure/runtime/process/controlled/node_locator.py](../../../product/backend/infrastructure/runtime/process/controlled/node_locator.py) | 38 | controlled_node_executable |
 | [product/backend/infrastructure/runtime/process/controlled/node_owned.py](../../../product/backend/infrastructure/runtime/process/controlled/node_owned.py) | 194 | node_artifact_store、read_node_manifest、node_execution_identity、node_reference_matches、node_process_alive、node_corresponds、OwnedNodeProcess、start_owned_node |
 | [product/backend/infrastructure/runtime/process/controlled/node_target.mjs](../../../product/backend/infrastructure/runtime/process/controlled/node_target.mjs) | 424 | openCollection |
 | [product/backend/infrastructure/runtime/process/controlled/npm.py](../../../product/backend/infrastructure/runtime/process/controlled/npm.py) | 189 | npm_plan、dependency_files、prepare_dependencies、execution_fingerprint、verify_dependencies |
@@ -139,7 +140,7 @@
 | [product/backend/infrastructure/runtime/process/records/__init__.py](../../../product/backend/infrastructure/runtime/process/records/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/infrastructure/runtime/process/records/record_capabilities.py](../../../product/backend/infrastructure/runtime/process/records/record_capabilities.py) | 44 | save_record_capability、read_record_capability、discard_record_capability |
 | [product/backend/infrastructure/runtime/process/records/record_server.py](../../../product/backend/infrastructure/runtime/process/records/record_server.py) | 188 | record_store_path、record_provider_fingerprint、OwnedRecordServer |
-| [product/backend/infrastructure/runtime/process/tree.py](../../../product/backend/infrastructure/runtime/process/tree.py) | 461 | ProcessTreeController、spawn_managed_process、controller_for、release_process_tree、terminate_process_tree、process_tree_has_exited、kernel_tree_has_exited、kernel_process_created_at |
+| [product/backend/infrastructure/runtime/process/tree.py](../../../product/backend/infrastructure/runtime/process/tree.py) | 463 | ProcessTreeController、spawn_managed_process、controller_for、release_process_tree、terminate_process_tree、process_tree_has_exited、kernel_tree_has_exited、kernel_process_created_at |
 | [product/backend/infrastructure/runtime/proof_runner/__init__.py](../../../product/backend/infrastructure/runtime/proof_runner/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/infrastructure/runtime/proof_runner/__main__.py](../../../product/backend/infrastructure/runtime/proof_runner/__main__.py) | 42 | main |
 | [product/backend/infrastructure/runtime/proof_runner/executor.py](../../../product/backend/infrastructure/runtime/proof_runner/executor.py) | 112 | execute_preflight |
@@ -153,7 +154,7 @@
 | [product/backend/infrastructure/runtime/trial_runner/__main__.py](../../../product/backend/infrastructure/runtime/trial_runner/__main__.py) | 33 | main |
 | [product/backend/infrastructure/runtime/trial_runner/executor.py](../../../product/backend/infrastructure/runtime/trial_runner/executor.py) | 74 | execute_trial |
 | [product/backend/infrastructure/runtime/trial_runner/supervisor.py](../../../product/backend/infrastructure/runtime/trial_runner/supervisor.py) | 80 | FlowTrialHandler |
-| [product/backend/infrastructure/runtime/updates.py](../../../product/backend/infrastructure/runtime/updates.py) | 283 | file_digest、read_root、package_files、verify_package、PortableUpdateService、finish_after_exit |
+| [product/backend/infrastructure/runtime/updates.py](../../../product/backend/infrastructure/runtime/updates.py) | 288 | file_digest、read_root、package_files、verify_package、PortableUpdateService、finish_after_exit |
 | [product/backend/infrastructure/runtime/worker/__init__.py](../../../product/backend/infrastructure/runtime/worker/__init__.py) | 20 | 包、内部机制或样式 |
 | [product/backend/infrastructure/runtime/worker/lifetime.py](../../../product/backend/infrastructure/runtime/worker/lifetime.py) | 162 | worker_lifetime_path、worker_tree_identity_path、worker_tree_name、write_worker_tree_identity、WorkerLifetimeLock |
 | [product/backend/infrastructure/runtime/worker/runtime_supervisor.py](../../../product/backend/infrastructure/runtime/worker/runtime_supervisor.py) | 172 | LocalRuntimeSupervisor |
@@ -166,7 +167,8 @@
 | [product/backend/infrastructure/samples/official/manager.py](../../../product/backend/infrastructure/samples/official/manager.py) | 482 | OfficialSampleManager |
 | [product/backend/infrastructure/samples/official/models.py](../../../product/backend/infrastructure/samples/official/models.py) | 64 | OfficialSampleInstallation、OfficialSampleRuntime |
 | [product/backend/infrastructure/secrets/__init__.py](../../../product/backend/infrastructure/secrets/__init__.py) | 26 | default_secret_store |
-| [product/backend/infrastructure/secrets/refs.py](../../../product/backend/infrastructure/secrets/refs.py) | 41 | credential_ref、validate_credential_secret_ref |
+| [product/backend/infrastructure/secrets/refs.py](../../../product/backend/infrastructure/secrets/refs.py) | 42 | credential_ref、validate_credential_secret_ref |
+| [product/backend/infrastructure/secrets/session.py](../../../product/backend/infrastructure/secrets/session.py) | 112 | EphemeralSecretStore |
 | [product/backend/infrastructure/secrets/store.py](../../../product/backend/infrastructure/secrets/store.py) | 39 | SecretStore、UnavailableSecretStore |
 | [product/backend/infrastructure/secrets/windows.py](../../../product/backend/infrastructure/secrets/windows.py) | 117 | WindowsCredentialManagerSecretStore |
 | [product/backend/infrastructure/source_identity.py](../../../product/backend/infrastructure/source_identity.py) | 67 | GitSourceContext、inspect_git_source |
@@ -190,8 +192,9 @@
 | [product/backend/infrastructure/storage/execution/check_routines.py](../../../product/backend/infrastructure/storage/execution/check_routines.py) | 40 | CheckRoutineRow、CheckRoutineRepository |
 | [product/backend/infrastructure/storage/execution/job_control.py](../../../product/backend/infrastructure/storage/execution/job_control.py) | 597 | JobControlRepository |
 | [product/backend/infrastructure/storage/execution/jobs.py](../../../product/backend/infrastructure/storage/execution/jobs.py) | 614 | JobRow、JobEventRow、QueueCapacity、JobRecord、JobEventRecord、JobRepository、JobEventRepository |
+| [product/backend/infrastructure/storage/execution/routine_revisions.py](../../../product/backend/infrastructure/storage/execution/routine_revisions.py) | 129 | RoutineRevisionRow、RoutineBindingRow、RoutineRevisionRepository |
 | [product/backend/infrastructure/storage/execution/runs.py](../../../product/backend/infrastructure/storage/execution/runs.py) | 257 | RunRow、RunRecord、RunRepository |
-| [product/backend/infrastructure/storage/orm_registry.py](../../../product/backend/infrastructure/storage/orm_registry.py) | 54 | load_storage_orm_mappings |
+| [product/backend/infrastructure/storage/orm_registry.py](../../../product/backend/infrastructure/storage/orm_registry.py) | 55 | load_storage_orm_mappings |
 | [product/backend/infrastructure/storage/preparation/__init__.py](../../../product/backend/infrastructure/storage/preparation/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/infrastructure/storage/preparation/action_preparation.py](../../../product/backend/infrastructure/storage/preparation/action_preparation.py) | 286 | ActionExecutionBindingRow、ActionResourceBindingRow、ActionEvidenceBindingRow、ActionRecoveryBindingRow、ActionAllowControlBindingRow、ActionPreparationRepository、RuleCaseDataRow |
 | [product/backend/infrastructure/storage/preparation/batches.py](../../../product/backend/infrastructure/storage/preparation/batches.py) | 59 | PreparationBatchRow、PreparationBatchRepository |
@@ -211,12 +214,12 @@
 | [product/backend/infrastructure/storage/results/evidence.py](../../../product/backend/infrastructure/storage/results/evidence.py) | 161 | EvidenceIndexRow、EvidenceIndexRecord、EvidenceIndexRepository |
 | [product/backend/infrastructure/storage/results/rule_history.py](../../../product/backend/infrastructure/storage/results/rule_history.py) | 136 | RuleCheckIndexRow、RuleHistoryRunRow、RuleHistoryCoverageRow、RuleHistoryReceiptRow、RuleHistoryRepository |
 | [product/backend/infrastructure/storage/runtime/__init__.py](../../../product/backend/infrastructure/storage/runtime/__init__.py) | 1 | 包、内部机制或样式 |
-| [product/backend/infrastructure/storage/runtime/collaboration.py](../../../product/backend/infrastructure/storage/runtime/collaboration.py) | 128 | CollaborationRow、CollaborationRepository |
+| [product/backend/infrastructure/storage/runtime/collaboration.py](../../../product/backend/infrastructure/storage/runtime/collaboration.py) | 135 | CollaborationRow、CollaborationRepository |
 | [product/backend/infrastructure/storage/runtime/environment_operations.py](../../../product/backend/infrastructure/storage/runtime/environment_operations.py) | 57 | EnvironmentOperationRow、EnvironmentOperationRepository |
 | [product/backend/infrastructure/storage/runtime/runtime_loads.py](../../../product/backend/infrastructure/storage/runtime/runtime_loads.py) | 91 | RuntimeLoadRow、RuntimeLoadRepository |
 | [product/backend/infrastructure/storage/runtime/sample_workspaces.py](../../../product/backend/infrastructure/storage/runtime/sample_workspaces.py) | 84 | SampleWorkspaceRow、SampleInstanceRow、SampleReconciliationRow、SampleWorkspaceRepository |
 | [product/backend/infrastructure/storage/schema.py](../../../product/backend/infrastructure/storage/schema.py) | 77 | sqlite_schema_signature、normalize_table_sql、normalize_sql |
 | [product/backend/infrastructure/storage/settings/__init__.py](../../../product/backend/infrastructure/storage/settings/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/infrastructure/storage/settings/llm.py](../../../product/backend/infrastructure/storage/settings/llm.py) | 61 | LLMProfileRow、AIAssistanceSettingsRow |
-| [product/backend/infrastructure/storage/unit_of_work.py](../../../product/backend/infrastructure/storage/unit_of_work.py) | 224 | StorageUnitOfWork |
+| [product/backend/infrastructure/storage/unit_of_work.py](../../../product/backend/infrastructure/storage/unit_of_work.py) | 226 | StorageUnitOfWork |
 | [product/backend/infrastructure/storage/workspace.py](../../../product/backend/infrastructure/storage/workspace.py) | 93 | WorkspaceRevision、WorkspaceSchemaRow、current_schema_signature、current_schema_digest、workspace_matches、require_workspace |

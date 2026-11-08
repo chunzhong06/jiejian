@@ -13,10 +13,9 @@
   }
 
   /* 圆形承载单选、进度及编号语义，不随矩形控件改成超椭圆。 */
-  :where(input[type=radio], progress, .jj-trace-order, .jj-working-dot, .jj-capability-marker, .jj-collaboration-state,
-    .jj-flow-phases button > span, .jj-flow-step-index nav > button > span,
-    .jj-flow-trial-outline > li > span, .jj-login-stages > li > span:first-child,
-    .jj-proof-stages > li > span, .jj-repair-task-progress li > span) {
+  :where(input[type=radio], progress, .jj-trace-order, .jj-working-dot, .jj-capability-marker, .jj-collaboration-state, .jj-switch-track, .jj-switch-track > span,
+    .jj-stage-marker, .jj-flow-step-index nav > button > span,
+    .jj-flow-trial-outline > li > span) {
     corner-shape: round;
   }
 }

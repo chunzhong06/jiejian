@@ -1,9 +1,9 @@
 import {normalizedPath} from './Navigation'
-import {scopedPath} from '../shared/lib/navigation'
+import {scopedPath,returnDestination,returnDestinationLabel,checkPlanDestination,withReturnDestination} from '../shared/lib/navigation'
 import {routes,routeAliases} from '../shared/lib/routes'
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
-import {Breadcrumbs,pageTransitionKey} from './Navigation'
+import {Breadcrumbs,pageTransitionKey,NavigationLinks} from './Navigation'
 import {AppShell} from './shell/AppShell'
 import {SettingsWorkspace} from './shell/SettingsWorkspace'
 import {settingsSection} from '../shared/lib/settings'
@@ -15,7 +15,7 @@ const route=(path:string,query=''):Route=>({path,query:new URLSearchParams(query
 it('报告面包屑回到当前应用和对应历史列表',()=>{
   render(<Breadcrumbs route={route('/reports','run_id=run_a')} projectName="数字展馆" projectId="project-a"/>)
   expect(screen.getByRole('link',{name:'数字展馆'})).toHaveAttribute('href','#/workspace?project_id=project-a')
-  expect(screen.getByRole('link',{name:'运行记录'})).toHaveAttribute('href','#/reports?project_id=project-a')
+  expect(screen.getByRole('link',{name:'检查记录'})).toHaveAttribute('href','#/reports?project_id=project-a')
   expect(screen.getByText('报告详情')).toHaveAttribute('aria-current','page')
 })
 
@@ -36,7 +36,7 @@ it('历史返回不接受报告详情或其他页面作为列表地址',()=>{
 
 it('面包屑链接可由键盘聚焦',()=>{
   render(<Breadcrumbs route={route('/preparation','identities=1')} projectName="展馆" projectId="app"/>)
-  const link=screen.getByRole('link',{name:'测试准备'})
+  const link=screen.getByRole('link',{name:'检查准备'})
   fireEvent.focus(link)
   expect(link).toHaveAttribute('href','#/preparation?project_id=app')
 })
@@ -123,4 +123,47 @@ it('路由登记保持唯一，旧链接沿用归属和分类',()=>{
   for(const item of routes.filter(item=>item.scoped))expect(scopedPath(item.path,'project-a')).toContain('project_id=project-a')
   expect(normalizedPath(route('/tests','materials=1'))).toBe('/preparation')
   expect(normalizedPath(route('/tests','run_id=old'))).toBe('/reports')
+})
+
+
+it('返回入口按实际任务命名，拒绝外部位置',()=>{
+  expect(returnDestination('https://example.com')).toBeNull()
+  expect(returnDestinationLabel('/permissions?rule_id=deny')).toBe('返回权限规则')
+  expect(returnDestinationLabel('/reports?view=plan')).toBe('返回检查范围')
+  expect(returnDestinationLabel('/testing?action_id=read')).toBe('返回接口流程')
+})
+
+it('重新核对保留原规则、实验和发起位置，不带入运行详情参数',()=>{
+  const source=new URLSearchParams({run_id:'old',case_id:'case',rule_id:'deny',scope_id:'specific',scenario_id:'scenario',scenario_revision:'2',return_to:'/testing?scenario=scenario'})
+  const target=new URLSearchParams(checkPlanDestination(source).split('?')[1])
+  expect(target.get('view')).toBe('plan')
+  expect(target.get('scope_id')).toBe('specific')
+  expect(target.get('rule_id')).toBe('deny')
+  expect(target.get('scenario_revision')).toBe('2')
+  expect(target.get('return_to')).toBe('/testing?scenario=scenario')
+  expect(target.has('run_id')).toBe(false)
+  expect(target.has('case_id')).toBe(false)
+})
+
+
+it('协作只接受准确任务回程，保留原对象并替换旧的返回参数',()=>{
+  const origin='/workspace?view=collaboration&task_id=task&project_id=app'
+  expect(returnDestination(origin)).toBe(origin)
+  expect(returnDestination('/workspace?project_id=app')).toBe('/workspace?project_id=app')
+  expect(returnDestinationLabel('/workspace')).toBe('返回工作台')
+  for(const path of ['/workspace?view=collaboration','/workspace?view=other&task_id=task','//example.com','/testing\\evil'])expect(returnDestination(path)).toBeNull()
+  expect(returnDestinationLabel(origin)).toBe('返回协作任务')
+  const result=new URLSearchParams(withReturnDestination('/testing?action_id=read&revision=2&return_to=old',origin).split('?')[1])
+  expect(result.get('action_id')).toBe('read')
+  expect(result.get('revision')).toBe('2')
+  expect(result.getAll('return_to')).toEqual([origin])
+})
+
+it('源码修改沿用权限导航，测试子工作面在面包屑中有清楚归属',()=>{
+  const {unmount}=render(<NavigationLinks current="/changes" hasProject projectId="app" onNavigate={()=>{}}/>)
+  expect(screen.getByRole('link',{name:'权限与覆盖'})).toHaveAttribute('aria-current','page')
+  unmount()
+  render(<Breadcrumbs route={route('/testing','action_id=read')} projectName="订单系统" projectId="app"/>)
+  expect(screen.getByRole('link',{name:'测试'})).toHaveAttribute('href','#/testing?project_id=app')
+  expect(screen.getByText('接口流程')).toHaveAttribute('aria-current','page')
 })

@@ -1,4 +1,5 @@
 import type {ScenarioReference,FrozenBusinessScenario} from '../../preparation/api/businessScenarios'
+import type {RoutineReference} from './routines'
 import type {PermissionConditions} from '../../permission/api/businessBoundaries'
 import type { PermissionReference } from '../../preparation/api/preparation'
 // 当前权限实验与只读结果合同；浏览器只提交计划指纹，不创建考题或计算安全结论。
@@ -13,6 +14,8 @@ export type CheckProgressCase = {
   planned_subject_label: string; planned_resource_owner_label: string; resource_id: string; effect_labels: string[]
 }
 export type CheckStatus = {
+  routine?: import('./routines').RoutineReference | null
+  environment?: import('./routines').RunEnvironment | null
   scenario_execution?:Array<{experiment_id:string;invocation_id:string;experiment_label:string;invocation_label:string;case_ids:string[];request:'NOT_STARTED'|'INTENT_SAVED'|'RECEIVED'|'UNCONFIRMED';recovery_intents:string[];recovered_cases:string[];observed_at_us:number}>
   run: { run_id: string; project_id: string; lifecycle: string; verdict: CheckVerdict | null; plan_fingerprint: string; policy_epoch: number; created_at_us: number; finished_at_us: number | null }
   job: { job_id: string; state: string; attempt: number; cancel_requested: boolean; error_code?: string | null; failure_phase?: string | null; cause_code?: string | null } | null
@@ -97,7 +100,7 @@ export type ActionResultStory = {
   activity_error?: string | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { external_recheck?:{deployment_statement:string;source_environment_fingerprint:string}; selection?: CheckSelection | null; run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
+export type ResultStory = { routine?: import('./routines').RoutineReference | null; environment?: import('./routines').RunEnvironment | null; external_recheck?:{deployment_statement:string;source_environment_fingerprint:string}; selection?: CheckSelection | null; run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
   schema_version: '1' | '2' | '3'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
@@ -143,12 +146,12 @@ export const currentChecksApi = {
   historyCoverage:(projectId:string)=>request<HistoryCoverage>(`${projectPath(projectId)}/check-history/index-status`),
   maintainHistory:(projectId:string,body:{operation_id:string;expected_checkpoint:number;limit:number})=>request<HistoryMaintenanceReceipt>(`${projectPath(projectId)}/check-history/index-maintenance`,{method:'POST',body:JSON.stringify(body)}),
   historyReceipt:(projectId:string,operationId:string)=>request<{status:'FOUND'|'NOT_FOUND';receipt?:HistoryMaintenanceReceipt}>(`${projectPath(projectId)}/check-history/index-maintenance/${encodeURIComponent(operationId)}`),
-  preview: (id: string, changeId?: string | null, selected?: PermissionReference[] | null, scenario?:ScenarioReference) => scenario ? request<CheckPreview>(`${projectPath(id)}/check-preview`,{method:'POST',body:JSON.stringify({scenario})}) : selected ? request<CheckPreview>(`${projectPath(id)}/check-preview`, { method: 'POST', body: JSON.stringify({ selected_permissions: selected }) }) : request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
+  preview: (id: string, changeId?: string | null, selected?: PermissionReference[] | null, scenario?:ScenarioReference,routine?:RoutineReference) => routine ? request<CheckPreview>(`${projectPath(id)}/check-preview`,{method:'POST',body:JSON.stringify({routine,...(selected?{selected_permissions:selected}:{}),...(scenario?{scenario}:{})})}) : scenario ? request<CheckPreview>(`${projectPath(id)}/check-preview`,{method:'POST',body:JSON.stringify({scenario})}) : selected ? request<CheckPreview>(`${projectPath(id)}/check-preview`, { method: 'POST', body: JSON.stringify({ selected_permissions: selected }) }) : request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
   receipt: (id: string, operationId: string) => request<CheckStatus | null>(`${projectPath(id)}/check-requests/${encodeURIComponent(operationId)}`),
   externalPreview:(id:string,command:ExternalRecheckCommand)=>request<CheckPreview>(`${projectPath(id)}/external-recheck-preview`,{method:'POST',body:JSON.stringify(command)}),
   list: (id: string, activeOnly = false) => request<CheckStatus[]>(`${projectPath(id)}/runs${activeOnly ? '?active_only=true' : ''}`),
-  submit: (id: string, fingerprint: string, key: string, changeId?: string | null, selected?: PermissionReference[] | null,external?:ExternalRecheckCommand,scenario?:ScenarioReference) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
-    method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}), ...(selected ? { selected_permissions: selected } : {}),...(external?{external_recheck:external}:{}),...(scenario?{scenario}:{}) }),
+  submit: (id: string, fingerprint: string, key: string, changeId?: string | null, selected?: PermissionReference[] | null,external?:ExternalRecheckCommand,scenario?:ScenarioReference,routine?:RoutineReference) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {
+    method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}), ...(selected ? { selected_permissions: selected } : {}),...(external?{external_recheck:external}:{}),...(scenario?{scenario}:{}),...(routine?{routine}:{}) }),
   }),
   cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   status: readStatus,

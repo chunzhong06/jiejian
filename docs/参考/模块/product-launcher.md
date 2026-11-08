@@ -6,5 +6,6 @@
 
 | 文件 | 行数 | 公开声明 |
 | --- | ---: | --- |
+| [product/launcher/linux/start.py](../../../product/launcher/linux/start.py) | 99 | verify_files、parse_arguments、main |
 | [product/launcher/windows/launcher.c](../../../product/launcher/windows/launcher.c) | 351 | 包、内部机制或样式 |
 | [product/launcher/windows/start.ps1](../../../product/launcher/windows/start.ps1) | 100 | 包、内部机制或样式 |

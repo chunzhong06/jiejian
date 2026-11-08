@@ -28,7 +28,7 @@ it('改选目录使旧预览失效，未知提交只查询原操作',async()=>{
   fireEvent.click(screen.getByRole('button',{name:'预览更新'}))
   fireEvent.click(await screen.findByRole('button',{name:'停止并切换版本'}))
   expect(await screen.findByText(/更新请求结果尚未确认/)).toBeVisible()
-  expect(screen.getByRole('heading',{name:'交接状态待确认'})).toBeVisible()
+  expect(screen.getByRole('heading',{name:'版本切换结果待确认'})).toBeVisible()
   expect(confirm).toHaveBeenCalledTimes(1)
   expect(screen.queryByRole('button',{name:'停止并切换版本'})).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'查询更新结果'}))

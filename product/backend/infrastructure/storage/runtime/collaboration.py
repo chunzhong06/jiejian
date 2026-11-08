@@ -104,6 +104,13 @@ class CollaborationRepository:
         return any(item['state'] in ('RUNNING','UNKNOWN')
             for row in rows for item in self._read(row)['operations'])
 
+    def operation_owner(self,project,operation_id):
+        """调用方持有写锁；跨任务重用外部写入标识也只能回到原任务核对。"""
+        rows=self.session.scalars(select(CollaborationRow).where(CollaborationRow.project_id==project)
+            .execution_options(yield_per=1))
+        return next((row.task_id for row in rows if any(item['operation_id']==operation_id
+            for item in self._read(row)['operations'])),None)
+
     @staticmethod
     def _read(row):
         # 持久根只有这一处 reader；未知格式不能由当前环境补成一个可继续执行的任务。

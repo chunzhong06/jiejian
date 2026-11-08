@@ -5,8 +5,19 @@ import {testIdentitiesApi as identities} from '../../../entities/preparation/api
 import {preparationApi,type ActionPreparation} from '../../../entities/preparation/api/preparation';
 import {AccountAuthentication} from './AccountAuthentication';
 import type {TestIdentityDto} from '../../../entities/preparation/api/testIdentities';
+import {WorkflowContext} from '../../../shared/lib/workflow';
 
 afterEach(()=>vi.restoreAllMocks());
+
+it('本次检查补账号只显示范围内操作，刷新读取不会带入其他操作的账号需求',async()=>{
+    const action=(id:string):ActionPreparation=>({action_id:id,action_revision:1,display_name:id,preparation_complete:false,next_material:'identity',permissions:[],assurance_contract:{allow_controls:[]},identity_requirements:{status:'NEEDS_USER',reason_codes:[],allocation_mode:'ROLE',slots:[{requirement:{slot_id:id,actor_id:id,actor_revision:1,ordinal:1},actor_display_name:id==='read'?'成员':'无关角色',test_identity_id:null,status:'NEEDS_USER',reason_codes:[]}]},execution:{status:'NEEDS_USER',reason_codes:[]},resources:[],effect_evidence:[],recovery:{status:'NOT_REQUIRED',reason_codes:[]},reason_codes:[]});
+    const selected=action('read');
+    vi.spyOn(identities,'list').mockResolvedValue([]);vi.spyOn(identities,'preparations').mockResolvedValue([]);
+    vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[selected,action('other')],preparation_complete:false,recommended_action_id:'other',basis_fingerprint:null,policy_epoch:1,source_fingerprint:null,impacts:[]});
+    render(<WorkflowContext.Provider value={{open:vi.fn(),finish:vi.fn(),label:'本次检查'}}><Accounts projectId="app" actions={[selected]} onBack={vi.fn()} onError={vi.fn()}/></WorkflowContext.Provider>);
+    expect(await screen.findByRole('heading',{name:'成员账号'})).toBeVisible();
+    expect(screen.queryByRole('button',{name:/无关角色/})).not.toBeInTheDocument();
+});
 
 it.each(['owner',null])('沿用应用登录结构，当前账号编号独立填写，角色模板为 %s',async(role)=>{
     const identity:TestIdentityDto={identity_id:'second',project_id:'app',actor_id:'owner',actor_revision:1,actor_display_name:'负责人',label:'另一个负责人',auth_method:null,status:'NOT_PREPARED',review_reasons:[],cookie_count:0,prepared_at_us:null,refreshed_at_us:null,created_at_us:1,updated_at_us:1,authentication:null,verification:null};

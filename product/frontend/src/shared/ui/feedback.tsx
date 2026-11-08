@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react'
+import type {HTMLAttributes,ReactNode} from 'react'
 import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
 import ExclamationCircleOutlined from '@ant-design/icons/ExclamationCircleOutlined';
 import {Heading} from './layout'
@@ -6,6 +6,14 @@ import {Heading} from './layout'
 export type FeedbackTone='neutral'|'positive'|'negative'|'caution'|'accent'
 
 export function Badge({children,tone='neutral'}:{children:ReactNode;tone?:FeedbackTone}){return <span className={`jj-badge is-${tone}`}>{children}</span>}
+
+export function Status({children,tone='neutral',className='',...props}:HTMLAttributes<HTMLSpanElement>&{tone?:FeedbackTone}){return <span {...props} data-tone={tone} className={`jj-status is-${tone} ${className}`}>{children}</span>}
+
+/** 一项核验属性与已知状态相邻；业务调用方提供状态，不从说明或请求成败推断结论。 */
+export function ResultSummary({label,status}:{label:ReactNode;status:ReactNode}){return <div className="jj-result-summary"><span className="jj-result-label">{label}</span>{status}</div>}
+
+/** 成组核对结果按可用宽度排列，名称与自身状态保持相邻；状态仍由业务提供。 */
+export function ResultList({items,label}:{items:Array<{label:ReactNode;status:ReactNode}>;label:string}){return <div className="jj-result-overview" role="list" aria-label={label}>{items.map((item,index)=><div role="listitem" key={index}><ResultSummary {...item}/></div>)}</div>}
 
 export function Empty({title,children,action}:{title:string;children?:ReactNode;action?:ReactNode}){return <section className="jj-empty"><div className="jj-empty-copy"><h2>{title}</h2>{children&&<p>{children}</p>}</div>{action&&<div className="jj-empty-actions">{action}</div>}</section>}
 

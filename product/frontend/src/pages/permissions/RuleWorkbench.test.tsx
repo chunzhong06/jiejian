@@ -33,7 +33,7 @@ it('同一角色的多条条件规则分别对应自己的状态和详情，筛�
     const archived=await screen.findByRole('row',{name:/负责人不得完成工单/});
     expect(within(archived).getByText(/数据状态：archived/)).toBeVisible();
     expect(within(archived).getByText('负责人不得完成工单')).toBeVisible();
-    expect(within(archived).getByText('发现违规')).toBeVisible();
+    expect(within(archived).getByText('不符合规则')).toBeVisible();
     fireEvent.click(screen.getByRole('button',{name:'收起详情'}));
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(within(archived).getByRole('button')).toHaveFocus();
@@ -56,8 +56,8 @@ it('从问题进入同一修复任务，登记和返回都保留准确原题', a
     const view = render(<RuleWorkbench {...props}/>);
     await screen.findByRole('heading', { name: '协作者不得完成工单' });
     expect(screen.getByText('禁止', {exact:true})).toHaveClass('is-neutral');
-    expect(screen.getByText('发现违规', {exact:true})).toHaveClass('is-negative');
-    fireEvent.click(screen.getByRole('button', { name: '继续处理问题' }));
+    expect(screen.getByText('不符合规则', {exact:true})).toHaveClass('is-negative');
+    fireEvent.click(screen.getByRole('link', { name: '继续处理问题' }));
     expect(readRoute().query.get('repair_reference')).toBe('repair');
     expect(readRoute().query.get('view')).toBe('repair');
     const update = () => view.rerender(<RuleWorkbench {...props} route={readRoute()}/>);
@@ -70,7 +70,7 @@ it('从问题进入同一修复任务，登记和返回都保留准确原题', a
     fireEvent.click(screen.getByRole('button', {name:'登记已完成的修改'}));
     expect(screen.getByLabelText('修改说明')).toHaveValue('修正协作者的工单权限');
     fireEvent.click(screen.getByRole('button', {name:'返回修复任务'}));
-    fireEvent.click(screen.getByRole('button', {name:'返回这条权限规则'})); update();
+    fireEvent.click(screen.getByRole('link', {name:'返回这条权限规则'})); update();
     fireEvent.click(screen.getByRole('tab', {name:'检查历史'})); update();
     expect(within(screen.getByRole('tabpanel', {name:'检查历史'})).getByRole('heading', {name:'这条规则的检查历史'})).toBeVisible();
     expect(screen.queryByRole('heading', {name:'登记本地修改'})).not.toBeInTheDocument();
@@ -84,8 +84,23 @@ it('检查摘要保留范围与时间，阅读入口指向同一规则的准确�
     expect(screen.getByText('检查范围')).toBeVisible()
     expect(screen.getByText('1 个检查场景')).toBeVisible()
     expect(screen.getByText('检查时间')).toBeVisible()
-    fireEvent.click(screen.getByRole('button',{name:'阅读检查依据'}))
+    fireEvent.click(screen.getByRole('link',{name:'阅读检查依据'}))
     expect(readRoute().query.get('run_id')).toBe('run')
     expect(readRoute().query.get('case_id')).toBe('case')
     expect(readRoute().query.get('project_id')).toBe('app')
+})
+
+
+it.each(['results','history'])('从规则的%s进入报告，保留原规则及分类回程',async(section)=>{
+    location.hash='/permissions?rule_id=rule&project_id=app&section='+section
+    const props={projectId:'app',official:false,boundary:{policy_epoch:1} as BusinessBoundaryViewDto,route:readRoute(),refresh:vi.fn(),onError:vi.fn(),onManage:vi.fn()}
+    const view=render(<RuleWorkbench {...props}/>)
+    await screen.findByRole('heading',{name:rule.title})
+    fireEvent.click(section==='history'?view.container.querySelector('.jj-rule-history > button')!:screen.getByRole('link',{name:'原问题与证据'}))
+    const query=new URLSearchParams(location.hash.split('?')[1])
+    expect(query.get('run_id')).toBe('run')
+    expect(query.get('case_id')).toBe('case')
+    const origin=new URLSearchParams(query.get('return_to')!.split('?')[1])
+    expect(origin.get('rule_id')).toBe('rule')
+    expect(origin.get('section')).toBe(section)
 })

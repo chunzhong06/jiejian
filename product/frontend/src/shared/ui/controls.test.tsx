@@ -12,6 +12,53 @@ import {motionMilliseconds} from '../lib/motionTiming'
 import {SearchField} from './SearchField'
 import {FilePicker} from './FilePicker'
 import {CommandMenu} from './CommandMenu'
+import {Switch} from './Switch'
+import {PasswordInput} from './PasswordInput'
+
+it('字段保留已有说明，并将提示和错误关联到实际输入',()=>{
+  render(<><p id="scope-help">仅用于当前应用</p><Field label="资源名称" hint="输入业务名称" error="名称不能为空"><input aria-describedby="scope-help"/></Field></>)
+  const input=screen.getByRole('textbox',{name:'资源名称'})
+  expect(input).toHaveAccessibleDescription('仅用于当前应用 输入业务名称 名称不能为空')
+  expect(input).toHaveAttribute('aria-invalid','true')
+  expect(screen.getByRole('alert')).toHaveTextContent('名称不能为空')
+})
+
+it('即时开关保留外部确认值，忙碌时不再次改变且不提交表单',()=>{
+  const change=vi.fn(),submit=vi.fn()
+  const view=render(<form onSubmit={submit}><Switch label="允许开发工具接入" checked={false} onCheckedChange={change}/></form>)
+  const input=screen.getByRole('switch',{name:'允许开发工具接入'})
+  fireEvent.click(input)
+  expect(change).toHaveBeenCalledExactlyOnceWith(true)
+  expect(input).not.toBeChecked();expect(submit).not.toHaveBeenCalled()
+  view.rerender(<form onSubmit={submit}><Switch label="允许开发工具接入" checked busy onCheckedChange={change}/></form>)
+  fireEvent.click(input)
+  expect(input).toBeChecked();expect(input).toBeDisabled()
+  expect(input).toHaveAttribute('aria-busy','true');expect(change).toHaveBeenCalledOnce()
+})
+
+it('显示密码不改变内容和提交，离开字段组后自动隐藏',()=>{
+  const changed=vi.fn(),submit=vi.fn()
+  render(<form onSubmit={submit}><Field label="数据库密码"><PasswordInput value="ephemeral-value" onChange={changed}/></Field><button>其他操作</button></form>)
+  const input=screen.getByLabelText('数据库密码')
+  expect(input).toHaveAttribute('type','password')
+  fireEvent.click(screen.getByRole('button',{name:'显示密码'}))
+  expect(input).toHaveAttribute('type','text');expect(input).toHaveValue('ephemeral-value')
+  fireEvent.blur(input,{relatedTarget:screen.getByRole('button',{name:'其他操作'})})
+  expect(input).toHaveAttribute('type','password')
+  expect(changed).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled()
+})
+
+it('忙碌动作保留原图文占位及按钮元素，完成标记由实际回执驱动',()=>{
+  const view=render(<Button icon={<svg data-testid="original-icon"/>}>保存业务要求</Button>)
+  const button=screen.getByRole('button',{name:'保存业务要求'})
+  view.rerender(<Button busy icon={<svg data-testid="original-icon"/>}>保存业务要求</Button>)
+  expect(screen.getByRole('button',{name:'保存业务要求'})).toBe(button)
+  expect(screen.getByTestId('original-icon')).toBeInTheDocument()
+  expect(button.querySelector('.jj-button-progress')).toHaveAttribute('aria-hidden','true')
+  expect(button).not.toHaveAttribute('data-complete')
+  view.rerender(<Button complete>已保存</Button>)
+  expect(button).toHaveAttribute('data-complete','true');expect(button).toBeEnabled()
+})
 
 it('命令菜单统一键盘展开、取消和焦点返回，取消不触发业务动作',async()=>{
   const action=vi.fn()
@@ -217,9 +264,7 @@ it('快速反向选择接续当前运动，减少动效立即停止且不延迟�
   const motions:Array<{frames:Keyframe[];animation:Animation}>=[],listeners=new Set<()=>void>()
   const preference={matches:false,addEventListener:(_type:string,listener:()=>void)=>listeners.add(listener),removeEventListener:(_type:string,listener:()=>void)=>listeners.delete(listener)}
   vi.spyOn(window,'matchMedia').mockReturnValue(preference as unknown as MediaQueryList)
-  vi.spyOn(HTMLElement.prototype,'offsetLeft','get').mockImplementation(function(this:HTMLElement){return this.textContent==='操作经过'?120:0})
-  vi.spyOn(HTMLElement.prototype,'offsetWidth','get').mockReturnValue(100)
-  vi.spyOn(HTMLElement.prototype,'offsetHeight','get').mockReturnValue(40)
+  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){return DOMRect.fromRect({x:this.textContent==='操作经过'?120:0,y:0,width:100,height:40})})
   const nativeStyle=window.getComputedStyle
   vi.spyOn(window,'getComputedStyle').mockImplementation(node=>{const style=nativeStyle(node);style.setProperty('--motion-indicator','.2s');return style})
   const descriptor=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'animate')

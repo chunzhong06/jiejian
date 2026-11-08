@@ -17,9 +17,11 @@ class SaveCheckRoutine(BaseModel):
 
 
 class CheckRoutines:
-    """保存规则选择，不保存就绪或结论；实际提交仍由原检查服务冻结全部条件。"""
-    def __init__(self, uow_factory, boundaries):
+    """承接旧保存范围并拥有完整方案修订；就绪与结论仍由原检查服务计算。"""
+    def __init__(self, uow_factory, boundaries, checks):
         self.uow, self.boundaries = uow_factory, boundaries
+        from product.backend.application.checks.routine_execution import RoutineExecution
+        self.revisions = RoutineExecution(uow_factory, boundaries, checks)
 
     def list(self, project):
         boundary = self.boundaries.view(project)
@@ -59,5 +61,7 @@ class CheckRoutines:
     def delete(self, project, routine):
         with self.uow() as work:
             work.acquire_write_lock()
+            if work.routine_revisions.latest(project, routine) is not None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '完整检查方案保留不可变修订，不能按旧范围删除')
             work.check_routines.delete(project, routine)
             work.commit()

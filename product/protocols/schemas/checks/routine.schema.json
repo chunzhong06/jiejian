@@ -1,0 +1,305 @@
+{
+  "$defs": {
+    "PermissionReference": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "PermissionReference",
+      "type": "object"
+    },
+    "RoutineAction": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "revision"
+      ],
+      "title": "RoutineAction",
+      "type": "object"
+    },
+    "RoutineActor": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actor_id",
+        "revision"
+      ],
+      "title": "RoutineActor",
+      "type": "object"
+    },
+    "RoutineLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cases": {
+          "default": 8192,
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Max Cases",
+          "type": "integer"
+        },
+        "max_duration_us": {
+          "default": 300000000,
+          "maximum": 3600000000,
+          "minimum": 1000000,
+          "title": "Max Duration Us",
+          "type": "integer"
+        }
+      },
+      "title": "RoutineLimits",
+      "type": "object"
+    },
+    "RoutineRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutineAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutineActor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "effect_id": {
+          "anyOf": [
+            {
+              "pattern": "^bef_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Id"
+        },
+        "kind": {
+          "enum": [
+            "ACCOUNT",
+            "RESOURCE",
+            "FLOW",
+            "PROOF"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "minimum_count": {
+          "default": 1,
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Minimum Count",
+          "type": "integer"
+        },
+        "normal_control_required": {
+          "default": false,
+          "title": "Normal Control Required",
+          "type": "boolean"
+        },
+        "recovery_required": {
+          "default": false,
+          "title": "Recovery Required",
+          "type": "boolean"
+        },
+        "slot": {
+          "maxLength": 192,
+          "minLength": 1,
+          "title": "Slot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "slot",
+        "label"
+      ],
+      "title": "RoutineRequirement",
+      "type": "object"
+    },
+    "RoutineScope": {
+      "additionalProperties": false,
+      "properties": {
+        "permissions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PermissionReference"
+          },
+          "maxItems": 4096,
+          "title": "Permissions",
+          "type": "array"
+        },
+        "scenario": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScenarioReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RoutineScope",
+      "type": "object"
+    },
+    "ScenarioReference": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "scenario_id": {
+          "pattern": "^bsc_[0-9a-f]{32}$",
+          "title": "Scenario Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "revision"
+      ],
+      "title": "ScenarioReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "document_type": {
+      "const": "jiejian.check-routine",
+      "default": "jiejian.check-routine",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "limits": {
+      "$ref": "#/$defs/RoutineLimits",
+      "default": {
+        "max_cases": 8192,
+        "max_duration_us": 300000000
+      }
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "requirements": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/RoutineRequirement"
+          },
+          "maxItems": 32768,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requirements"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "routine_id": {
+      "pattern": "^csp_[0-9a-f]{32}$",
+      "title": "Routine Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/RoutineScope"
+    }
+  },
+  "required": [
+    "routine_id",
+    "project_id",
+    "revision",
+    "name",
+    "scope",
+    "created_at_us"
+  ],
+  "title": "CheckRoutineDocument",
+  "type": "object"
+}

@@ -1,7 +1,7 @@
 import type {OperationFlow,ApiSourceReference,EntityEvidence} from '../api/operationFlows'
 import type {EditableStep} from './flowInputs'
 
-export type FlowEditorDraft={phase:number;origin:'existing'|'recording'|'openapi'|'manual';sourceRequest?:ApiSourceReference;entityEvidence:EntityEvidence[];flowId:string;revision:number;steps:EditableStep[];selected:number;target:string;createdPath:string;subject:string;owner:string;resource:string;recovery:string;restoreMethod:string;restoreBody:string;provenance:OperationFlow['provenance'];recordingId:string;saved?:OperationFlow}
+export type FlowEditorDraft={phase:number;maintenance?:boolean;origin:'existing'|'recording'|'openapi'|'manual';sourceRequest?:ApiSourceReference;entityEvidence:EntityEvidence[];flowId:string;revision:number;steps:EditableStep[];selected:number;target:string;createdPath:string;subject:string;owner:string;resource:string;recovery:string;restoreMethod:string;restoreBody:string;provenance:OperationFlow['provenance'];recordingId:string;saved?:OperationFlow}
 
 export type FlowDraftAction = {
   [Key in keyof FlowEditorDraft]-?: {type:'field';key:Key;value:FlowEditorDraft[Key]|((previous:FlowEditorDraft[Key])=>FlowEditorDraft[Key])}

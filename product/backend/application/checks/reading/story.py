@@ -13,6 +13,8 @@ from product.backend.domain.verification.trace import TraceAuthorizationDecision
 from product.backend.application.checks.repairs.repair_presentation import RepairComparisonRow, RepairReview, build_repair_comparison
 from product.backend.application.checks.reading.observation_reading import ObservationReading, observation_reading
 from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
+from product.protocols.checks.routine_reference import FrozenRoutineReference
+from product.protocols.web.environment import FrozenEnvironment
 from product.protocols.runtime.request_activity import RequestActivity
 from product.backend.application.reading import projection_read
 from product.protocols.checks.execution_request import ChangeContext, ExternalRecheckContext, FrozenPermission, FrozenRequirementScope, FrozenCheckSelection, WireModel
@@ -167,6 +169,8 @@ class ActionResultStory(WireModel):
 
 
 class ResultStory(WireModel):
+    routine: FrozenRoutineReference | None = Field(default=None, exclude_if=lambda value:value is None)
+    environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value:value is None)
     external_recheck: ExternalRecheckContext | None = Field(default=None,exclude_if=lambda value:value is None)
     run_id: str
     project_id: str
@@ -347,6 +351,7 @@ class CheckStoryBuilder:
         correspondence = getattr(package.result, "runtime_correspondence", None)
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+            routine=package.request.routine, environment=package.request.environment,
             requirement_scope=getattr(package.request, 'requirement_scope', ()),
             selection=package.request.selection,
             runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.runtime.reference.instance_id,

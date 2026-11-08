@@ -10,7 +10,7 @@ const props=()=>({projectId:'app',name:'测试应用',official:false,route:readR
 it('首次无记录只呈现报告说明和开始动作，不筛选尚不存在的资料',async()=>{
   render(<History {...props()}/>)
   expect(await screen.findByText('这里将保存你的检查报告')).toBeVisible()
-  expect(screen.getByRole('button',{name:'发起检查'})).toBeVisible()
+  expect(screen.getByRole('link',{name:'发起检查'})).toBeVisible()
   expect(screen.queryByLabelText('查找检查记录')).not.toBeInTheDocument()
 })
 
@@ -29,12 +29,12 @@ it('读取失败保留错误原因，不伪装成没有历史记录',async()=>{
   render(<History {...props()}/>)
   expect(await screen.findByRole('alert')).toHaveTextContent('历史记录暂不可读')
   expect(screen.queryByText('这里将保存你的检查报告')).not.toBeInTheDocument()
-  expect(screen.queryByRole('button',{name:'发起检查'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('link',{name:'发起检查'})).not.toBeInTheDocument()
 })
 
 it('归档无记录保留归档上下文，不提供新检查动作',async()=>{
   render(<History {...props()} archive/>)
   expect(await screen.findByText('这份示例没有检查记录')).toBeVisible()
   expect(screen.getByRole('link',{name:'返回官方示例'})).toBeVisible()
-  expect(screen.queryByRole('button',{name:'发起检查'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('link',{name:'发起检查'})).not.toBeInTheDocument()
 })

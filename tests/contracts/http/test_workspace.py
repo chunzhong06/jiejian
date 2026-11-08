@@ -41,5 +41,8 @@ def test_workspace_api_replaces_legacy_project_status(tmp_path: Path) -> None:
         ]
 
         assert client.get(f"/api/projects/{project_id}/status").status_code == 404
+        assert client.get(f'/api/projects/{project_id}/workspace/preparation').status_code == 422
+        missing = client.get(f'/api/projects/{project_id}/workspace/preparation', params={'action_id':'missing'})
+        assert missing.status_code == 404
 
 pytestmark = [pytest.mark.level3]

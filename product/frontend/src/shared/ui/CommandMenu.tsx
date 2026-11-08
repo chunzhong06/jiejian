@@ -31,14 +31,14 @@ export function CommandMenu({children,menu,className='',placement='bottomRight'}
   useEffect(()=>{
     if(phase!=='closing')return
     // 同一所有者完成退场；快速反向不依赖组件库可能缺失的 transitionend。
-    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),100)
+    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),160)
     const timer=setTimeout(()=>setPhase('closed'),duration+32)
     return()=>clearTimeout(timer)
   },[phase])
   const dismiss=()=>{visible.current=false;setPhase(matchMedia('(prefers-reduced-motion: reduce)').matches?'closed':'closing')}
   // 后续命令可能立即打开对话框；先归还焦点，让新任务接管并记住正确的返回位置。
   const close=()=>{dismiss();if(trigger.current?.isConnected)trigger.current.focus({preventScroll:true})}
-  return <Dropdown open={phase!=='closed'&&!disabled} disabled={disabled} onOpenChange={value=>{if(value)setPhase('opening');else dismiss()}} trigger={['click']} placement={placement} autoFocus={false} destroyOnHidden transitionName="" getPopupContainer={popupParent} overlayClassName={'jj-command-menu '+className} popupRender={content=><div inert={!open}>{content}</div>} overlayStyle={{opacity:phase==='open'?1:0,pointerEvents:phase==='closing'?'none':undefined,transitionDuration:phase==='closing'?'var(--motion-exit)':'var(--motion-popup)',transitionTimingFunction:phase==='closing'?'var(--ease-exit)':'var(--ease-enter)'}} menu={{...menu,id, onClick:event=>{close();menu.onClick?.(event)},onKeyDown:event=>{
+  return <Dropdown open={phase!=='closed'&&!disabled} disabled={disabled} onOpenChange={value=>{if(value)setPhase('opening');else dismiss()}} trigger={['click']} placement={placement} autoFocus={false} destroyOnHidden transitionName="" getPopupContainer={popupParent} overlayClassName={'jj-command-menu '+className} popupRender={content=><div className="jj-menu-surface" data-open={phase==='open'} inert={!open}>{content}</div>} overlayStyle={{opacity:phase==='open'?1:0,pointerEvents:phase==='closing'?'none':undefined,transitionDuration:phase==='closing'?'var(--motion-exit)':'var(--motion-popup)',transitionTimingFunction:phase==='closing'?'var(--ease-exit)':'var(--ease-enter)'}} menu={{...menu,id, onClick:event=>{close();menu.onClick?.(event)},onKeyDown:event=>{
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close()}
     else menu.onKeyDown?.(event)
   }}}>{cloneElement(children,{'aria-haspopup':'menu','aria-expanded':open&&!disabled,'aria-controls':open?id:undefined,onClick:event=>{trigger.current=event.currentTarget;children.props.onClick?.(event)},onKeyDown:event=>{

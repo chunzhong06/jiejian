@@ -1,6 +1,7 @@
 import {useState} from 'react'
 import {projectsApi,type DatabaseCapture} from '../../entities/application/api/projects'
 import {Button} from '../../shared/ui/actions'
+import {PasswordInput} from '../../shared/ui/PasswordInput'
 import {Choice} from '../../shared/ui/Choice'
 import {Dialog} from '../../shared/ui/Dialog'
 import {Field,FormColumns,SectionHeading} from '../../shared/ui/layout'
@@ -33,9 +34,9 @@ export function ServiceDatabaseOptions({projectId,value,onChange,disabled}:{proj
           const next={...draft,fields:projection,password_env:name}
           onChange(index<0?[...value,next]:value.map((item,i)=>i===index?next:item));setPassword('');setDraft(undefined)
         }catch(cause){setError(cause)}finally{setBusy(false)}
-      }}>保存连接声明</Button></>}>
-        <FormColumns><section className="jj-field-stack"><SectionHeading title="连接位置" level={3}/><div className="jj-form-grid"><Field label="数据库类型"><Choice disabled={busy} value={draft.engine} onValueChange={engine=>setDraft({...draft,engine:engine as DatabaseCapture['engine'],port:engine==='MYSQL'?3306:5432,namespace:engine==='MYSQL'?draft.database:'public'})}><option value="POSTGRESQL">PostgreSQL 18</option><option value="MYSQL">MySQL 8.4 · InnoDB</option></Choice></Field>{field('连接名称','connection_id')}{field('数据库','database')}{draft.engine==='POSTGRESQL'&&field('Schema','namespace')}<Field label="本机端口"><input type="number" min={1024} max={65535} value={draft.port} disabled={busy} onChange={event=>setDraft({...draft,port:Number(event.target.value)})}/></Field>{field('数据库账号','username')}<Field label={draft.password_env?'更新密码（可选）':'数据库密码'}><input type="password" autoComplete="new-password" value={password} disabled={busy} onChange={event=>setPassword(event.target.value)}/></Field></div></section>
-        <section className="jj-field-stack"><SectionHeading title="业务记录投影" level={3}/><div className="jj-field-stack">{field('普通数据表','table')}{field('唯一资源编号列','resource_column')}{field('资源所有者列','owner_column')}<Field label="需要核对的业务列"><input disabled={busy} value={columns} placeholder="例如 status, visibility" onChange={event=>setColumns(event.target.value)}/></Field></div><p className="jj-small jj-muted">最多 8 列，不包含密码、令牌等秘密。声明不会连接数据库或修改表。</p></section></FormColumns>
+      }}>保存数据库设置</Button></>}>
+        <FormColumns><section className="jj-field-stack"><SectionHeading title="连接位置" level={3}/><div className="jj-form-grid"><Field label="数据库类型"><Choice disabled={busy} value={draft.engine} onValueChange={engine=>setDraft({...draft,engine:engine as DatabaseCapture['engine'],port:engine==='MYSQL'?3306:5432,namespace:engine==='MYSQL'?draft.database:'public'})}><option value="POSTGRESQL">PostgreSQL 18</option><option value="MYSQL">MySQL 8.4 · InnoDB</option></Choice></Field>{field('连接名称','connection_id')}{field('数据库','database')}{draft.engine==='POSTGRESQL'&&field('Schema','namespace')}<Field label="本机端口"><input type="number" min={1024} max={65535} value={draft.port} disabled={busy} onChange={event=>setDraft({...draft,port:Number(event.target.value)})}/></Field>{field('数据库账号','username')}<Field label={draft.password_env?'更新密码（可选）':'数据库密码'}><PasswordInput autoComplete="new-password" value={password} disabled={busy} onChange={event=>setPassword(event.target.value)}/></Field></div></section>
+        <section className="jj-field-stack"><SectionHeading title="用于判断结果的业务字段" level={3}/><div className="jj-field-stack">{field('普通数据表','table')}{field('唯一资源编号列','resource_column')}{field('资源所有者列','owner_column')}<Field label="需要核对的业务列"><input disabled={busy} value={columns} placeholder="例如 status, visibility" onChange={event=>setColumns(event.target.value)}/></Field></div><p className="jj-small jj-muted">最多 8 列，不包含密码、令牌等秘密。声明不会连接数据库或修改表。</p></section></FormColumns>
         {Boolean(error)&&<ErrorNote error={error}/>}
       </Dialog>}
     </section>

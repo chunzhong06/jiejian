@@ -1,0 +1,8 @@
+.jj-dialog:has(.jj-flow-candidate-diff){width:min(900px,calc(100vw - 40px));max-width:900px}
+.jj-flow-candidate-diff{overflow:auto;margin:24px 0}
+.jj-flow-candidate-diff th:first-child{width:18%}
+.jj-flow-comparison { min-width:0; }
+.jj-flow-comparison > header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin:20px 0; }
+.jj-flow-comparison > header > p { margin:0; }
+.jj-flow-comparison > p { line-height:var(--leading-reading); }
+.jj-flow-comparison-unchanged { padding:24px 0; }

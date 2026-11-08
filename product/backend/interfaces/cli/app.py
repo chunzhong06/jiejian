@@ -1,6 +1,6 @@
 # 当前 CLI 组合入口
 # 解析全局展示参数、注册产品命令、统一运行环境失败出口
-# 不注册延期的检查、录制、运行、结果或旧权限命令，不建立后台 daemon。
+# 检查命令连接已启动的本机服务，不建立第二个 ApplicationCore 或后台 daemon。
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from product.backend.interfaces.cli.commands.system import (
     serve_command,
 )
 from product.backend.interfaces.cli.presentation import configure_presentation
+from product.backend.interfaces.cli.commands.checks import checks_group
 from product.backend.domain.errors import JiejianError
 from product.backend.infrastructure.runtime.process.controlled.identity import require_python_environment
 
@@ -31,7 +32,7 @@ configure_cli_localization()
 
 app = typer.Typer(
     name="jiejian",
-    help="界鉴命令行：启动本地 Web 产品并检查或维护运行环境。",
+    help="界鉴命令行：运行检查方案、启动本地 Web 产品或维护运行环境。",
     no_args_is_help=False,
     invoke_without_command=True,
     add_completion=False,
@@ -88,6 +89,7 @@ for group in (system_group, clean_group):
     group.callback()(_group_help)
 
 app.add_typer(system_group, name="system", rich_help_panel="运行与维护")
+app.add_typer(checks_group, name="check", rich_help_panel="检查与自动化")
 app.command("serve", help="打开图形界面", rich_help_panel="图形界面")(serve_command)
 
 system_group.add_typer(clean_group, name="clean")

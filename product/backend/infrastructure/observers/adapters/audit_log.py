@@ -15,7 +15,6 @@ from product.backend.infrastructure.runtime.process.tree import release_process_
 import time
 import ctypes
 import ctypes.wintypes
-import msvcrt
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -179,6 +178,7 @@ def _handle_final_path(handle: Any) -> Path | None:
         except (OSError, ValueError):
             return None
     try:
+        import msvcrt
         kernel32 = ctypes.windll.kernel32
         get_final_path = kernel32.GetFinalPathNameByHandleW
         get_final_path.argtypes = [ctypes.wintypes.HANDLE, ctypes.wintypes.LPWSTR, ctypes.wintypes.DWORD, ctypes.wintypes.DWORD]

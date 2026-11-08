@@ -28,8 +28,11 @@
       "type": "string"
     },
     "platform": {
-      "const": "windows",
       "default": "windows",
+      "enum": [
+        "windows",
+        "linux"
+      ],
       "title": "Platform",
       "type": "string"
     },

@@ -6,7 +6,7 @@ export function ScenarioProgress({nodes}:{nodes:NonNullable<CheckStatus['scenari
   return <section className="jj-scenario-progress" aria-label="业务场景执行进展">
     <h2>实验与恢复进展</h2>
     <p className="jj-small jj-muted">以下是执行记录，权限结论以完整发布报告为准。结果未确认的请求不会自动重发。</p>
-    <div className="jj-scroll-table"><table className="jj-plan-case-table">
+    <div className="jj-scroll-table"><table className="jj-content-table jj-plan-case-table">
       <thead><tr><th scope="col">实验与动作</th><th scope="col">请求</th><th scope="col">恢复核对</th></tr></thead>
       <tbody>{nodes.map(node=><tr key={node.experiment_id+':'+node.invocation_id}>
         <td>{node.invocation_label}<small>{node.experiment_label} · {node.case_ids.length} 项资源</small></td>

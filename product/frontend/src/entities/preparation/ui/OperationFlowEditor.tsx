@@ -1,3 +1,6 @@
+import {TaskSurface} from '../../../shared/ui/TaskSurface'
+import {WorkflowSteps} from '../../../shared/ui/WorkflowSteps'
+import {useWorkflow} from '../../../shared/lib/workflow'
 import {IndexActions,IndexSelection} from '../../../shared/ui/IndexSelection'
 import './operation-flow.css'
 import {EntityEvidenceEditor} from './EntityEvidenceEditor'
@@ -20,15 +23,18 @@ import {operationFlowsApi as api,type FlowStep,type OperationFlow,type ApiCandid
 import {testIdentitiesApi} from '../api/testIdentities'
 import type {SourceRequest} from '../../application/api/workbench'
 import {useRead} from '../../../shared/lib/useRead'
-import {go} from '../../../shared/lib/navigation'
+import {go,readRoute} from '../../../shared/lib/navigation'
 import {Button} from '../../../shared/ui/actions'
 import {Field,Heading} from '../../../shared/ui/layout'
 import {PageError, Badge,ErrorNote,Loading,Notice} from '../../../shared/ui/feedback'
 
 const blank=(index:number):EditableStep=>({id:'step_'+index+'_'+crypto.randomUUID().slice(0,8),method:'GET',path:'/',parameters:[]})
-export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,initialSource,initialFlow,initialTrialId,candidateFlow}:{projectId:string;actionId:string;onBack:()=>void;initialRequest?:SourceRequest;initialSource?:ApiSourceReference;initialFlow?:OperationFlow;initialTrialId?:string;candidateFlow?:OperationFlow}) {
+export function OperationFlowEditor({projectId,actionId,onBack,backLabel,initialRequest,initialSource,initialFlow,initialTrialId,candidateFlow}:{projectId:string;actionId:string;onBack:()=>void;backLabel?:string;initialRequest?:SourceRequest;initialSource?:ApiSourceReference;initialFlow?:OperationFlow;initialTrialId?:string;candidateFlow?:OperationFlow}) {
+    const workflow=useWorkflow(),workRoute=workflow?.route??readRoute();
     const [restored]=useState(()=>initialFlow?undefined:editorDraft<FlowEditorDraft>(flowDraftKey(projectId,actionId),projectId))
     const [candidateReviewed,setCandidateReviewed]=useState(false)
+    // 入口确定工作方式；新建流程保存后不会突然切换导航结构。
+    const [maintenance,setMaintenance]=useState(Boolean(initialFlow||restored?.saved||restored?.maintenance))
     const state=useRead('operation-flow:'+projectId,async(signal)=>{const [context,identities]=await Promise.all([api.context(projectId,signal),testIdentitiesApi.list(projectId,signal)]);return{context,identities}})
     const originPanel=useId()
     const [draft,dispatch]=useReducer(flowDraftReducer,undefined,():FlowEditorDraft=>restored??{
@@ -49,6 +55,7 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
     const [adopted,setAdopted]=useState(false),[trialInteracting,setTrialInteracting]=useState(false)
     const {busy,error,run:act,report:setError}=useCommand('flow:'+projectId+':'+actionId)
     const [csrfOpen,setCsrfOpen]=useState(false)
+    const [task,setTask]=useState<'edit'|'trial'|'history'>(()=>initialTrialId?'history':'edit'),[adoptionOpen,setAdoptionOpen]=useState(false)
     const action=state.data?.context.actions.find(item=>item.action_id===actionId)
     // 结果查询或恢复确有配置时才增加一个阶段；普通只读请求直接进入核对。
     const needsOutcome=Boolean(action?.state_changing||action?.effects.some(item=>item.kind==='DATA_DISCLOSURE'))
@@ -78,12 +85,14 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
     }
     useEffect(()=>{if(initialFlow&&state.data)load(initialFlow,{saved:true,revision:initialFlow.revision,phase:reviewPhase})},[initialFlow?.id,initialFlow?.revision,Boolean(state.data),reviewPhase])
     const effectiveIdentity=state.data?.identities.find(item=>item.auth_method!==null)?.identity_id??''
-    const snapshot:FlowEditorDraft={...draft,subject:subject||effectiveIdentity,owner:owner||effectiveIdentity}
-    useEffect(()=>{if(!adopted)rememberEditorDraft(flowDraftKey(projectId,actionId),snapshot,projectId)},[draft,effectiveIdentity,adopted,projectId,actionId])
+    // 未保存修改会清除 saved，但维护模式仍须随草稿回到原分类。
+    const snapshot:FlowEditorDraft={...draft,maintenance,subject:subject||effectiveIdentity,owner:owner||effectiveIdentity}
+    useEffect(()=>{if(!adopted)rememberEditorDraft(flowDraftKey(projectId,actionId),snapshot,projectId)},[draft,maintenance,effectiveIdentity,adopted,projectId,actionId])
     const safePath=(path:string)=>{const shape=path.split(/[?#]/)[0];return /^\/[A-Za-z0-9_./{}~:@%+\-]*$/.test(shape)?shape:null}
-    useHandoffContext(action?{projectId,label:action.label+' · 接口流程草稿',references:{action_id:actionId,flow_id:flowId,revision:String(revision),return_to:'/testing?action_id='+actionId+'&resume_draft=1'},editor:{kind:'FLOW',flow_id:flowId,revision:saved?Math.max(saved.revision,...state.data!.context.flows.filter(item=>item.document.id===flowId).map(item=>item.document.revision))+1:revision,action_id:actionId,action_revision:action.revision,subject_identity_id:snapshot.subject||null,owner_identity_id:snapshot.owner||null,target_step_id:target,steps:steps.map(item=>({id:item.id,method:item.method,path:safePath(item.path),parameters:item.parameters.map(parameter=>({location:parameter.location,name:parameter.name,source:parameter.source,secret:parameter.secret}))})),recovery_path:recovery?safePath(recovery):null,evidence_effect_ids:entityEvidence.map(item=>item.effect_id),evidence_queries:entityEvidence.map(item=>({effect_id:item.effect_id,request_path:safePath(String(item.query.request.path??'')),resource_path:item.query.resource_path,owner_path:item.query.owner_path,data_path:item.query.data_path}))}}:undefined)
+    useHandoffContext(action?{projectId,label:action.label+' · 接口流程草稿',references:{...workflow?.references,action_id:actionId,flow_id:flowId,revision:String(revision),return_to:workflow?.origin??'/testing?action_id='+actionId+'&resume_draft=1'},editor:{kind:'FLOW',flow_id:flowId,revision:saved?Math.max(saved.revision,...state.data!.context.flows.filter(item=>item.document.id===flowId).map(item=>item.document.revision))+1:revision,action_id:actionId,action_revision:action.revision,subject_identity_id:snapshot.subject||null,owner_identity_id:snapshot.owner||null,target_step_id:target,steps:steps.map(item=>({id:item.id,method:item.method,path:safePath(item.path),parameters:item.parameters.map(parameter=>({location:parameter.location,name:parameter.name,source:parameter.source,secret:parameter.secret}))})),recovery_path:recovery?safePath(recovery):null,evidence_effect_ids:entityEvidence.map(item=>item.effect_id),evidence_queries:entityEvidence.map(item=>({effect_id:item.effect_id,request_path:safePath(String(item.query.request.path??'')),resource_path:item.query.resource_path,owner_path:item.query.owner_path,data_path:item.query.data_path}))}}:undefined)
     if(state.loading)return <Loading page/>
     if(!state.data)return <PageError title="接口流程" error={state.error}/>
+    if(!action)return <><div className="jj-back-link"><Button kind="quiet" onClick={onBack}>{backLabel??'返回检查准备'}</Button></div><PageError title="接口流程" error={new Error('指定的业务操作已不在当前应用中，请返回原位置重新选择。')}/></>
     const {context,identities}=state.data,step=steps[selected]
     const accounts=identities.filter(item=>item.auth_method!==null)
     const subjectId=subject||accounts[0]?.identity_id,ownerId=owner||accounts[0]?.identity_id
@@ -91,17 +100,19 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
     const compile=()=>compileSteps(steps,target,createdPath)
     const matching=context.flows.filter(item=>item.document.business_action_id===actionId)
     const existing=matching.find(item=>item.document.id+'@'+item.document.revision===existingId)??matching.find(item=>item.in_use)??matching[0]
-    const inspectExisting=()=>load(existing!.document,{saved:existing!.configuration_current,phase:reviewPhase,
-        ...(existing!.configuration_current?{revision:existing!.document.revision}:{})})
+    const inspectExisting=()=>{if(load(existing!.document,{saved:existing!.configuration_current,phase:reviewPhase,
+        ...(existing!.configuration_current?{revision:existing!.document.revision}:{})}))setMaintenance(true)}
     const phaseLabels=['选择起点','账号与测试数据','执行请求',...(needsOutcome?[outcomeLabel]:[]),'核对并使用']
     const saveFlow=()=>void act(async()=>{
         const candidate=await api.candidate(projectId,{id:flowId,revision,business_action_id:actionId,action_revision:action!.revision,subject_test_identity_id:subjectId,resource_owner_test_identity_id:ownerId,source_fingerprint:context.source_fingerprint,entity_evidence:entityEvidence,source_request:sourceRequest,provenance,source_recording_id:provenance==='RECORDING'?recordingId:null,actual_resource_id:resource,target_step_id:target,steps:compile(),recovery:action!.state_changing?{method:restoreMethod,relative_path:recovery,json_body:JSON.parse(restoreBody)}:null})
         dispatch({type:'saved',document:await api.save(projectId,candidate)});state.reload()
     })
     return <>
-        <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>返回操作准备</Button></div>
+      <div hidden={task!=='edit'}>
+        <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{backLabel??"返回操作准备"}</Button></div>
         <Heading eyebrow={action?.label} title="接口流程" actions={<Button disabled={busy||trialInteracting} onClick={()=>requestCollaboration(projectId,'SETUP','补全「'+(action?.label??'当前操作')+'」的接口流程，整理执行步骤、结果核对与恢复安排。')}>请 Agent 补全</Button>}/>
-        {error&&<ErrorNote error={error}/>}
+        {Boolean(error)&&<ErrorNote error={error}/>}
+        {trialInteracting&&<Notice tone="caution">试运行仍有待处理的执行或确认。<Button kind="quiet" onClick={()=>setTask('history')}>查看原试运行</Button></Notice>}
         {candidateFlow&&!candidateReviewed&&<FlowCandidateReview candidate={candidateFlow} previous={restored} accounts={accounts} onKeep={()=>setCandidateReviewed(true)} onApply={preserve=>{
             const values=preserve?steps:[]
             let merged:EditableStep[]
@@ -115,11 +126,16 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
             load(candidateFlow,{steps:merged,saved:!changed,phase:reviewPhase,
                 revision:changed?latestRevision(candidateFlow.id,candidateFlow.revision)+1:candidateFlow.revision,
                 ...(preserveRecovery?{restoreBody}:{})})
-            setCandidateReviewed(true)
+            setMaintenance(true);setCandidateReviewed(true)
         }}/>}
-        <section className="jj-flow-workspace" data-phase={phase} data-stages={phaseLabels.length}>
-            <IndexSelection as="ol" className="jj-flow-phases" label="操作设置进度" identity={String(phase)}>{phaseLabels.map((label,index)=><li key={label} data-current={phase===index} data-complete={phase>index}><button className="jj-index-item" disabled={index>phase||busy||trialInteracting} aria-current={phase===index?'step':undefined} onClick={()=>setPhase(index)}><span>{phase>index?'✓':index+1}</span>{label}</button></li>)}</IndexSelection>
-            <div className="jj-flow-body">
+        <section className="jj-flow-workspace" data-mode={maintenance?'maintain':'create'} data-phase={phase} data-stages={phaseLabels.length}>
+            {maintenance?<fieldset className="jj-flow-maintenance-nav" disabled={busy||trialInteracting}>
+                <Tabs label="流程维护" value={String(phase)} onValueChange={value=>setPhase(Number(value))} items={[{value:'1',label:'账号与数据'},{value:'2',label:'执行请求'},...(needsOutcome?[{value:'3',label:outcomeLabel}]:[]),{value:String(reviewPhase),label:'保存与使用'}]} panelId="flow-maintenance-panel" idPrefix="flow-maintenance"/>
+                <p className="jj-small jj-muted">第 {revision} 修订 · {saved?'已保存，可按需修改或试运行':'有未保存修改，试运行前请先保存'}</p>
+            </fieldset>:<>
+            <WorkflowSteps className="jj-flow-phases" label="操作设置进度" steps={phaseLabels.map((label,index)=>({id:index===reviewPhase?'review':['origin','participants','requests','outcome'][index],label,state:phase===index?'current' as const:phase>index?'complete' as const:'pending' as const,disabled:index>phase||busy||trialInteracting}))} onStepChange={id=>setPhase(id==='review'?reviewPhase:['origin','participants','requests','outcome'].indexOf(id))}/>
+            </>}
+            <div className="jj-flow-body" id={maintenance?'flow-maintenance-panel':undefined} role={maintenance?'tabpanel':undefined} aria-labelledby={maintenance?'flow-maintenance-'+phase:undefined}>
             {phase===0&&<section className="jj-flow-start" key="start"><header><h2>从已有操作开始</h2><p>优先使用真实录制。需要串联多个接口时，再补充执行步骤。</p></header>
                 <div className="jj-flow-origins"><Tabs label="流程的来源" value={origin} items={[{value:'existing',label:'沿用已有流程'},{value:'recording',label:'使用操作录制'},{value:'openapi',label:'导入接口文档'},{value:'manual',label:'手动填写接口'}]} idPrefix={originPanel} panelId={originPanel+'-content'} onValueChange={value=>setOrigin(value as typeof origin)}/>
                     <div className="jj-flow-origin-content" key={origin} role="tabpanel" id={originPanel+'-content'} aria-labelledby={originPanel+'-'+origin}>
@@ -130,7 +146,7 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
                     </div>
                 </div>
             </section>}
-            {phase===1&&<section className="jj-flow-participants" key="participants"><header><h2>这次由谁操作哪份数据</h2><p>选择一次正常操作的账号和数据，检查时会按权限规则替换操作人。</p></header><div className="jj-flow-context"><Field label="用于准备操作的账号"><Choice value={subjectId??''} onValueChange={selectedValue=>{dirty();setSubject(selectedValue)}}>{accounts.map(item=><option key={item.identity_id} value={item.identity_id}>{item.label}</option>)}</Choice></Field><Field label="这份数据属于谁"><Choice value={ownerId??''} onValueChange={selectedValue=>{dirty();setOwner(selectedValue)}}>{accounts.map(item=><option key={item.identity_id} value={item.identity_id}>{item.label}</option>)}</Choice></Field><Field label="用于测试的数据编号"><input placeholder="填写应用中已有的数据编号" value={resource} onChange={event=>{dirty();setResource(event.target.value)}}/></Field></div>{!participantsReady&&<Notice tone="caution">请先登录本次操作所需的账号。已保存的流程会保留。<Button kind="quiet" onClick={()=>go('/preparation?identities=1',projectId)}>准备账号</Button></Notice>}</section>}
+            {phase===1&&<section className="jj-flow-participants" key="participants"><header><h2>这次由谁操作哪份数据</h2><p>选择一次正常操作的账号和数据，检查时会按权限规则替换操作人。</p></header><div className="jj-flow-context"><Field label="用于准备操作的账号"><Choice value={subjectId??''} onValueChange={selectedValue=>{dirty();setSubject(selectedValue)}}>{accounts.map(item=><option key={item.identity_id} value={item.identity_id}>{item.label}</option>)}</Choice></Field><Field label="这份数据属于谁"><Choice value={ownerId??''} onValueChange={selectedValue=>{dirty();setOwner(selectedValue)}}>{accounts.map(item=><option key={item.identity_id} value={item.identity_id}>{item.label}</option>)}</Choice></Field><Field label="用于测试的数据编号"><input placeholder="填写应用中已有的数据编号" value={resource} onChange={event=>{dirty();setResource(event.target.value)}}/></Field></div>{!participantsReady&&<Notice tone="caution">请先登录本次操作所需的账号。已保存的流程会保留。<Button kind="quiet" onClick={()=>(workflow?.open??go)('/preparation?'+new URLSearchParams({identities:'1',action_id:actionId,return_to:workRoute.path+'?'+new URLSearchParams({...Object.fromEntries(workRoute.query),resume_draft:'1'})}),projectId)}>准备账号</Button></Notice>}</section>}
             {phase===2&&<section className="jj-flow-execution" key="execution">
                 <header className="jj-flow-section-heading"><h2>设置执行请求</h2><p>先填写要检查的请求。需要提前准备数据时，再添加步骤。</p></header>
                 <div className="jj-flow-editor">
@@ -139,7 +155,7 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
                         <IndexActions><Button kind="quiet" icon={<PlusOutlined aria-hidden="true"/>} disabled={steps.length>=32} onClick={()=>{dirty();setSteps([...steps,blank(steps.length+1)]);setSelected(steps.length)}}>添加步骤</Button><Button kind="quiet" disabled={steps.some(item=>item.id==='csrf_setup')} onClick={()=>setCsrfOpen(true)}>准备动态防伪参数</Button></IndexActions>
                     </aside>
                     <section key={step.id} className="jj-flow-step" aria-label={'第 '+(selected+1)+' 步请求'}>
-                        <header><h3>第 {selected+1} 步</h3>{target===step.id?<Badge tone="accent">受检请求</Badge>:<Button kind="quiet" onClick={()=>{dirty();setTarget(step.id)}}>设为受检请求</Button>}</header>
+                        <header><div className="jj-object-line"><h3>第 {selected+1} 步</h3>{target===step.id&&<Badge tone="accent">受检请求</Badge>}</div>{target!==step.id&&<Button kind="quiet" onClick={()=>{dirty();setTarget(step.id)}}>设为受检请求</Button>}</header>
                         <div className="jj-flow-request"><Field label="请求方式"><Choice value={step.method} onValueChange={selectedValue=>update({...step,method:selectedValue})}>{['GET','POST','PUT','PATCH','DELETE'].map(method=><option key={method}>{method}</option>)}</Choice></Field><Field label="接口路径" hint="用 {case_resource_id} 代表每次检查的数据编号。"><input value={step.path} onChange={event=>update({...step,path:event.target.value})}/></Field></div>
                         <FlowRequestInputs step={step} previous={steps.slice(0,selected)} busy={busy} onChange={update}/>
                         {steps.length>1&&<footer className="jj-flow-step-actions"><Button kind="quiet" disabled={step.id===target} onClick={()=>{dirty();setSteps(steps.filter((_,index)=>index!==selected));setSelected(0)}}>移除此步骤</Button></footer>}
@@ -153,17 +169,20 @@ export function OperationFlowEditor({projectId,actionId,onBack,initialRequest,in
                 {action?.state_changing&&<section className="jj-flow-recovery"><header><h3>检查后恢复原状</h3><p className="jj-small jj-muted">由数据所有者执行应用提供的恢复接口。</p></header><div className="jj-flow-request"><Field label="恢复请求方式"><Choice value={restoreMethod} onValueChange={selectedValue=>{dirty();setRestoreMethod(selectedValue)}}>{['POST','PATCH','PUT','DELETE'].map(method=><option key={method}>{method}</option>)}</Choice></Field><Field label="恢复接口路径"><input value={recovery} onChange={event=>{dirty();setRecovery(event.target.value)}}/></Field></div><Field label="恢复时发送的数据（JSON）"><textarea rows={3} value={restoreBody} onChange={event=>{dirty();setRestoreBody(event.target.value)}}/></Field></section>}
             </section>}
             {phase===reviewPhase&&<div className="jj-flow-review" data-saved={Boolean(saved)}>
-                {saved&&<FlowTrialPanel key={saved.id+'@'+saved.revision} projectId={projectId} flow={saved} accounts={accounts} initialTrialId={initialTrialId} onInteractionChange={setTrialInteracting} onResume={document=>{if(load(document))setPhase(2)}}/>}
-                <aside className="jj-flow-confirm" key="confirm" aria-label="场景核对"><header><h2>{adopted?'操作已准备好':'场景核对'}</h2>{saved&&<Badge tone={adopted?'positive':'accent'}>{adopted?'已用于检查':'已保存'}</Badge>}</header>
-                    <p className="jj-small jj-muted">{adopted?'后续检查使用这份场景，历史报告保持原样。':'确认使用后，后续检查将使用这份保存的场景。'}</p>
-                    <dl className="jj-flow-review-facts"><div><dt>业务操作</dt><dd>{action?.label}</dd></div><div><dt>准备账号</dt><dd>{identities.find(item=>item.identity_id===subjectId)?.label}</dd></div><div><dt>测试数据</dt><dd>{resource}<small>所有者：{identities.find(item=>item.identity_id===ownerId)?.label}</small></dd></div><div><dt>执行步骤</dt><dd>共 {steps.length} 步，第 {steps.findIndex(item=>item.id===target)+1} 步受检</dd></div><div><dt>检查后恢复</dt><dd>{action?.state_changing?recovery:'只读操作，无需恢复'}</dd></div>{entityEvidence.length>0&&<div><dt>结果判断查询</dt><dd>{entityEvidence.map(item=><code key={item.effect_id}>{item.query.request.path as string}</code>)}</dd></div>}</dl>
-                    <div className="jj-flow-review-actions"><Button kind="quiet" disabled={busy||trialInteracting} onClick={()=>setPhase(1)}>修改设置</Button>{adopted?<Button kind={trialInteracting?'default':'primary'} disabled={trialInteracting} onClick={onBack}>返回检查准备</Button>:saved?<Button kind={trialInteracting?'default':'primary'} disabled={trialInteracting} busy={busy} onClick={()=>void act(async()=>{await api.adopt(projectId,saved);rememberEditorDraft(flowDraftKey(projectId,actionId),undefined);setAdopted(true);state.reload()})}>确认用于检查</Button>:<Button kind="primary" busy={busy} disabled={!action||!subjectId||!ownerId||!resource} onClick={saveFlow}>保存操作设置</Button>}</div>
-                </aside>
+
+                <section className="jj-flow-confirm" key="confirm" aria-label="核对接口流程"><header><h2>{adopted?'操作已准备好':'核对接口流程'}</h2>{saved&&<Badge tone={adopted?'positive':'accent'}>{adopted?'已用于检查':'已保存'}</Badge>}</header>
+                    <p className="jj-small jj-muted">{adopted?'后续检查会使用这份接口流程，已有报告保留。':'确认用于检查后，后续检查会使用这份已保存的接口流程。'}</p>
+                    <dl className="jj-facts jj-flow-review-facts" data-layout="columns"><div><dt>业务操作</dt><dd>{action?.label}</dd></div><div><dt>准备账号</dt><dd>{identities.find(item=>item.identity_id===subjectId)?.label}</dd></div><div><dt>测试数据</dt><dd>{resource}<small>所有者：{identities.find(item=>item.identity_id===ownerId)?.label}</small></dd></div><div><dt>执行步骤</dt><dd>共 {steps.length} 步，第 {steps.findIndex(item=>item.id===target)+1} 步受检</dd></div><div><dt>检查后恢复</dt><dd>{action?.state_changing?recovery:'只读操作，无需恢复'}</dd></div>{entityEvidence.length>0&&<div><dt>结果判断查询</dt><dd>{entityEvidence.map(item=><code key={item.effect_id}>{item.query.request.path as string}</code>)}</dd></div>}</dl>
+                    <div className="jj-flow-review-actions">{saved&&<><Button kind="quiet" onClick={()=>setTask('history')}>试运行记录</Button><Button onClick={()=>setTask('trial')}>试运行已保存修订</Button></>}<Button kind="quiet" disabled={busy||trialInteracting} onClick={()=>setPhase(1)}>修改设置</Button>{adopted?<Button kind={trialInteracting?'default':'primary'} disabled={trialInteracting} onClick={onBack}>{workflow?'继续本次检查':'返回检查准备'}</Button>:saved?<Button kind={trialInteracting?'default':'primary'} disabled={trialInteracting} busy={busy} onClick={()=>setAdoptionOpen(true)}>用于后续检查</Button>:<Button kind="primary" busy={busy} disabled={!action||!subjectId||!ownerId||!resource} onClick={saveFlow}>保存操作设置</Button>}</div>
+                </section>
             </div>}
 
             </div>
-            {phase>0&&phase<reviewPhase&&<footer><Button disabled={busy} onClick={()=>setPhase(phase-1)}>上一步</Button><Button kind="primary" disabled={busy||phase===1&&(!participantsReady||!resource)||phase===3&&Boolean(action?.state_changing&&!recovery)} onClick={()=>setPhase(phase+1)}>{phase===1?'下一步：设置执行步骤':phase===2&&needsOutcome?'下一步：'+outcomeLabel:'下一步：核对操作'}</Button></footer>}
+            {maintenance&&phase<reviewPhase?<footer className="jj-flow-maintenance-actions"><p className="jj-small jj-muted">{saved?'当前修订已保存；正式检查前仍需确认使用这份流程。':'未保存内容保留在当前草稿中。'}</p><div className="jj-inline-actions"><Button kind="quiet" disabled={busy||trialInteracting} onClick={()=>setPhase(reviewPhase)}>保存与使用</Button><Button kind="primary" busy={busy} disabled={Boolean(saved)||!action||!participantsReady||!resource||Boolean(action.state_changing&&!recovery)} onClick={saveFlow}>保存修改</Button></div></footer>:phase>0&&phase<reviewPhase&&<footer><Button disabled={busy} onClick={()=>setPhase(phase-1)}>上一步</Button><Button kind="primary" disabled={busy||phase===1&&(!participantsReady||!resource)||phase===3&&Boolean(action?.state_changing&&!recovery)} onClick={()=>setPhase(phase+1)}>{phase===1?'下一步：设置执行步骤':phase===2&&needsOutcome?'下一步：'+outcomeLabel:'下一步：核对操作'}</Button></footer>}
         </section>
+      </div>
+      {saved&&<TaskSurface active={task!=='edit'} title={task==='history'?'试运行记录':'试运行接口流程'} context={<>{action.label}{task==='trial'&&<> · 第 {saved.revision} 修订</>}</>} description={task==='history'?'保留每次实际使用的账号、资源和请求反馈。可读取原修订，或据此继续编辑。':'先核对本次账号、资源和请求，再确认执行。试运行形成请求与恢复反馈。'} onBack={()=>setTask('edit')} backLabel="返回流程编辑"><FlowTrialPanel key={saved.id+'@'+saved.revision} projectId={projectId} flow={saved} accounts={accounts} showHeading={false} onViewChange={view=>{if(task!=='edit')setTask(view==='history'?'history':'trial')}} mode={task==='edit'?undefined:task==='history'?'history':'current'} initialTrialId={initialTrialId} onInteractionChange={setTrialInteracting} onResume={document=>{if(load(document)){setPhase(2);setTask('edit')}}}/></TaskSurface>}
+      {adoptionOpen&&saved&&<Dialog title="将这份流程用于后续检查" onClose={()=>setAdoptionOpen(false)} closeDisabled={busy} actions={<><Button disabled={busy} onClick={()=>setAdoptionOpen(false)}>返回编辑</Button><Button kind="primary" busy={busy} onClick={()=>void act(async()=>{await api.adopt(projectId,saved);rememberEditorDraft(flowDraftKey(projectId,actionId),undefined);setAdopted(true);setAdoptionOpen(false);state.reload()})}>确认用于检查</Button></>}><p>「{action.label}」后续检查将使用第 {saved.revision} 修订。已有检查报告和旧修订保留；本次确认不会发送业务请求。</p><dl className="jj-facts" data-layout="columns"><div><dt>操作账号</dt><dd>{identities.find(item=>item.identity_id===saved.subject_test_identity_id)?.label}</dd></div><div><dt>测试资源</dt><dd>{saved.actual_resource_id}</dd></div><div><dt>执行请求</dt><dd>{saved.workflow.steps.length} 步</dd></div></dl></Dialog>}
         {csrfOpen&&<Dialog title="准备动态防伪参数" onClose={()=>setCsrfOpen(false)} actions={<Button kind="primary" onClick={()=>{
             dirty();const targetStep=steps.find(item=>item.id===target)!;
             const setup:EditableStep={id:'csrf_setup',method:'GET',path:csrfPath,parameters:[],base:{id:'csrf_setup',purpose:'SETUP',identity_id:'CASE_SUBJECT',request_template:{method:'GET',path:csrfPath,body:{kind:'EMPTY'},response_extractors:[{extractor_id:'csrf_value',kind:'JSON_PATH',json_path:csrfField,secret:true}]},classifier:{accepted:[{kind:'STATUS_IN',statuses:[200]}],denied:[]},depends_on_step_ids:[]}};

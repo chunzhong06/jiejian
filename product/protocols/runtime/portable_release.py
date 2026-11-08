@@ -9,7 +9,7 @@ class PortableReleaseManifest(RuntimeModel):
     product:Literal['JieJian Web V1']='JieJian Web V1'
     version:str=Field(pattern=r'^\d+\.\d+\.\d+$')
     package_version:str=Field(pattern=r'^\d+\.\d+\.\d+$')
-    platform:Literal['windows']='windows'
+    platform:Literal['windows','linux']='windows'
     architecture:Literal['x64']='x64'
     runtime_layout_version:Literal['3']='3'
     python_version:str=Field(pattern=r'^\d+\.\d+\.\d+$')

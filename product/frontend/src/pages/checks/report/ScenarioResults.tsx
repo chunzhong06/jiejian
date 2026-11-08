@@ -1,10 +1,11 @@
+import {ObjectTable} from '../../../shared/ui/ObjectTable'
 import type {ActionResultStory} from '../../../entities/check/api/currentChecks'
 import {actual,judgement,judgementLabels,owner,subject} from '../../../entities/check/model/checks'
 import {Badge} from '../../../shared/ui/feedback'
 import {text} from '../../../shared/lib/format'
 
 export function ScenarioResults({actions,selected,onOpen}:{actions:ActionResultStory[];selected:string|null;onOpen:(id:string)=>void}){
-  return <div className="jj-scroll-table"><table className="jj-object-table jj-scenario-result-table" data-compact={Boolean(selected)} aria-label="逐项业务场景结果">
+  return <ObjectTable selection={selected??""} className="jj-scenario-result-table" data-compact={Boolean(selected)} aria-label="逐项业务场景结果">
     <thead><tr><th>实验与资源</th>{!selected&&<><th>操作账号与归属</th><th>本次预期与实际结果</th></>}<th>检查结果</th></tr></thead>
     <tbody>{actions.map(action=>{
       const context=action.scenario_context,resource=action.fact_comparison.resource_id??'未确认编号'
@@ -14,5 +15,5 @@ export function ScenarioResults({actions,selected,onOpen}:{actions:ActionResultS
         <td><Badge tone={judgement(action)}>{judgementLabels[judgement(action)]}</Badge></td>
       </tr>
     })}</tbody>
-  </table></div>
+  </ObjectTable>
 }

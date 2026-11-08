@@ -4,6 +4,8 @@ import {SourceConfiguration} from './SourceConfiguration'
 import {Sources} from './Sources'
 import {projectsApi} from '../../../entities/application/api/projects'
 import {proofSourcesApi,type ProofContext} from '../../../entities/preparation/api/proofSources'
+import {WorkflowContext} from '../../../shared/lib/workflow'
+import {useCurrentHandoff} from '../../../entities/runtime/model/handoff'
 
 const context:ProofContext={project_id:'app',basis_id:'basis',runtime_available:false,runtime_origin:null,sqlite:[],actions:[],identities:[],resources:[],sources:[],read_scopes:[]}
 
@@ -27,6 +29,20 @@ it('文件证明可以直接配置，任务映射分类切换保留草稿并阻�
 })
 afterEach(()=>vi.restoreAllMocks())
 
+it('当前检查内的证明草稿交接携带配置模式与准确结果，不退回全应用材料目录',async()=>{
+ const fileContext:ProofContext={...context,runtime_available:true,actions:[{action_id:'export',revision:1,label:'导出资料',effects:[{effect_id:'file',label:'完整文件已接收',kind:'FILE_CONTENT_DELIVERY'}]}],resources:[{resource_binding_id:'r1',action_id:'export',action_revision:1,resource_id:'document',owner_identity_id:'owner'}]}
+ const resume=vi.fn((value:string)=>'/reports?view=plan&rule_id=exact&work_item='+encodeURIComponent(value))
+ function Current(){const value=useCurrentHandoff('app');return <output>{value?.references.return_to}</output>}
+ render(<WorkflowContext.Provider value={{open:vi.fn(),finish:vi.fn(),label:'本次检查',resume,references:{rule_id:'exact'},route:{path:'/preparation',query:new URLSearchParams('proof_sources=1&action_id=export')}}}><SourceConfiguration projectId="app" context={fileContext} actionId="export" requestedEffect="file" onClose={vi.fn()} onSave={vi.fn()}/><Current/></WorkflowContext.Provider>)
+ await waitFor(()=>expect(resume).toHaveBeenCalled())
+ const destination=screen.getByRole('status').textContent!
+ const query=new URLSearchParams(destination.split('?')[1])
+ expect(query.get('rule_id')).toBe('exact')
+ const child=new URLSearchParams(query.get('work_item')!.split('?')[1])
+ expect(child.get('action_id')).toBe('export');expect(child.get('effect_id')).toBe('file')
+ expect(child.get('proof_sources')).toBe('1');expect(child.get('configure')).toBe('new')
+})
+
 it.each([true,false])('无可用数据库时根据已有配置恢复，并保留返回证明设置的位置：%s',async(configured)=>{
     location.hash='/preparation?project_id=app&proof_sources=1&source_id=source'
     vi.spyOn(projectsApi,'runtime').mockResolvedValue({project_id:'app',running:false,source_matches:false,operation:null,configuration:configured?{entry:'app.mjs',port:9000,sqlite:[{relative_path:'store.sqlite',tables:[{table:'tickets',resource_column:'id',owner_column:'owner',fields:['title']}]} ]}:null})
@@ -38,7 +54,9 @@ it.each([true,false])('无可用数据库时根据已有配置恢复，并保留
     await waitFor(()=>expect(location.hash.startsWith('#/application?')).toBe(true))
     const destination=new URLSearchParams(location.hash.split('?')[1]).get('return_to')
     expect(new URLSearchParams(location.hash.split('?')[1]).get('runtime_method')).toBe('managed')
-    expect(destination).toBe('/preparation?project_id=app&proof_sources=1&source_id=source')
+    expect(new URLSearchParams(destination!.split('?')[1]).get('source_id')).toBe('source')
+    expect(new URLSearchParams(destination!.split('?')[1]).get('configure')).toBe('new')
+    expect(new URLSearchParams(location.hash.split('?')[1]).get('view')).toBe('source')
     expect(closed).toHaveBeenCalledOnce()
     expect(candidate).not.toHaveBeenCalled()
     expect(save).not.toHaveBeenCalled()
@@ -67,15 +85,14 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     const fileInput=filePicker.querySelector('input[type=file]')!
     const file=new File(['reference'],'reference.pdf',{type:'application/pdf'})
     fireEvent.change(fileInput,{target:{files:[file]}})
-    fireEvent.click(screen.getByRole('tab',{name:'核对记录'}))
-    const checks=screen.getByRole('tabpanel',{name:'核对记录'})
+    const checks=await screen.findByRole('list',{name:'来源核对结果'})
     expect(within(checks).getByText('测试身份可以对应')).toBeVisible()
     expect(within(checks).getByText('已确认')).toBeInTheDocument()
     expect(within(checks).getByText('尚未确认')).toBeVisible()
-    expect(screen.getByText('字段映射与技术引用')).not.toBeVisible()
-    expect(filePicker).not.toBeVisible()
-    fireEvent.click(screen.getByRole('tab',{name:'来源与管理'}))
-    const settings=screen.getByRole('tabpanel',{name:'来源与管理'})
+    expect(screen.queryByText('字段映射与技术引用')).not.toBeInTheDocument()
+    expect(filePicker).toBeVisible()
+    fireEvent.click(screen.getByRole('button',{name:'读取位置与管理'}))
+    const settings=screen.getByRole('region',{name:'读取位置与管理'})
     expect(within(settings).getByText('/files/{resource_id}')).toBeVisible()
     expect(within(settings).getByRole('button',{name:'查看读取范围'})).toBeVisible()
     fireEvent.click(within(settings).getByRole('button',{name:'撤销读取授权'}))
@@ -84,8 +101,8 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     expect(write).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button',{name:'保留授权'}))
     await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    fireEvent.click(screen.getByRole('tab',{name:'结果说明'}))
-    expect(screen.getByRole('group',{name:'完整测试参照文件'}).querySelector('input[type=file]')).toBe(fileInput)
+    fireEvent.click(screen.getByRole('button',{name:'返回结果证明'}))
+    expect(screen.getByRole('group',{name:'完整测试参照文件'})).toBeVisible()
     expect(screen.getByText('reference.pdf')).toBeVisible()
     expect(write).not.toHaveBeenCalled()
     expect(back).not.toHaveBeenCalled()

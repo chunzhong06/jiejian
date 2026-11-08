@@ -119,6 +119,8 @@ def serve_command(
     open_browser: bool = typer.Option(False, "--open/--no-open", hidden=True),
     launcher_event: str | None = typer.Option(None, "--launcher-event", hidden=True),
     browser: GuiBrowser = typer.Option(GuiBrowser.MANAGED, "--browser", help="界面浏览器：managed 使用专用 Chromium，system 使用系统浏览器"),
+    session_secrets_fd: int | None = typer.Option(None, '--session-secrets-fd', min=3, help='Linux/CI：从继承的匿名管道FD读取短期秘密，正文不写入命令参数或磁盘'),
+    session_seconds: int = typer.Option(3600, '--session-seconds', min=60, max=86400, help='短期秘密会话有效秒数；不会因使用自动延长'),
     frontend_dir: Path | None = typer.Option(
         None, "--frontend-dir", hidden=True
     ),
@@ -137,6 +139,7 @@ def serve_command(
 
     import uvicorn
 
+    session_store=None
     try:
         address = ipaddress.ip_address(host)
         if str(address) != "127.0.0.1":
@@ -151,6 +154,9 @@ def serve_command(
         previous_lock_path = os.environ.get("JIEJIAN_SERVE_LOCK_PATH")
         previous_owner_token = os.environ.get("JIEJIAN_SERVE_OWNER_TOKEN")
         try:
+            if session_secrets_fd is not None:
+                from product.backend.infrastructure.secrets.session import EphemeralSecretStore
+                session_store=EphemeralSecretStore.from_fd(session_secrets_fd,lifetime_seconds=session_seconds)
             os.environ["JIEJIAN_SERVE_LOCK_PATH"] = str(serve_lock.path)
             os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = serve_lock.owner_token
             frontend_dir = (frontend_dir or default_frontend_dir()).resolve()
@@ -179,6 +185,7 @@ def serve_command(
                 frontend_dir=frontend_dir,
                 shutdown_callback=request_shutdown,
                 official_sample_root=official_sample_root,
+                secret_store=session_store,
             )
             logger.info("startup stage completed", extra={
                 "component": "serve", "event_code": "STARTUP_STAGE_COMPLETED",
@@ -250,7 +257,11 @@ def serve_command(
                 os.environ.pop("JIEJIAN_SERVE_OWNER_TOKEN", None)
             else:
                 os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = previous_owner_token
-            serve_lock.release()
+            try:
+                serve_lock.release()
+            finally:
+                if session_store is not None:
+                    session_store.close()
     except JiejianError as exc:
         fail(exc)
     except Exception:

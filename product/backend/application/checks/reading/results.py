@@ -16,6 +16,8 @@ from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
 from product.protocols.checks.execution_request import WireModel
 from product.protocols.checks.scenario_execution import ScenarioNodeProgress
+from product.protocols.checks.routine_reference import FrozenRoutineReference
+from product.protocols.web.environment import FrozenEnvironment
 from product.backend.application.reading import accepted_once, projection_read
 
 
@@ -58,6 +60,8 @@ class CheckProgressView(WireModel):
 
 
 class CheckRunStatus(WireModel):
+    routine: FrozenRoutineReference | None = Field(default=None, exclude_if=lambda value:value is None)
+    environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value:value is None)
     run: CheckRunView
     job: CheckJobView | None
     progress: CheckProgressView | None
@@ -234,8 +238,19 @@ class CheckResultReader:
                 if not exc.code.startswith("ARTIFACT_"):
                     raise
                 integrity = "INVALID"
+        request = None if package is None else package.request
+        if request is None and job is not None and job.operation_type == 'CHECK':
+            try:
+                request = CheckRequestStore(self._var_dir).load(job.job_id, expected_hash=run.request_hash)
+                if (request.project_id, request.plan_fingerprint) != (run.project_id, run.plan_fingerprint):
+                    request = None
+            except (OSError, ValueError, JiejianError):
+                # 未发布或已损坏的冻结输入不能补出假的方案和环境；生命周期仍可独立读取。
+                request = None
         # 生命周期是数据库事实；安全结论只在整个发布集合有效时暴露，不修改持久状态。
-        return CheckRunStatus(run=CheckRunView(run_id=run.run_id, project_id=run.project_id,
+        return CheckRunStatus(routine=None if request is None else request.routine,
+            environment=None if request is None else request.environment,
+            run=CheckRunView(run_id=run.run_id, project_id=run.project_id,
             lifecycle=run.lifecycle, verdict=package.result.verdict if package is not None else None,
             plan_fingerprint=run.plan_fingerprint, policy_epoch=run.policy_epoch,
             created_at_us=run.created_at_us, finished_at_us=run.finished_at_us),

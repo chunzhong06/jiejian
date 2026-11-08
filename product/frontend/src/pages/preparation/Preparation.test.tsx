@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { Preparation } from './Preparation';
 import { preparationApi } from '../../entities/preparation/api/preparation';
 import { preparationBatchesApi as batches } from '../../entities/preparation/api/batches';
+import {WorkflowContext} from '../../shared/lib/workflow';
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
@@ -18,4 +19,14 @@ it('准备响应未知时查询原批次，不重新提交或仅刷新材料清�
     expect(await screen.findByText('已经停止准备')).toBeVisible();
     expect(start).not.toHaveBeenCalled();
     expect(materials).toHaveBeenCalledTimes(1);
+});
+
+it.each(['action_id=missing','action_id=current&action_revision=1'])('指定操作或修订失效时保留缺失状态，不回退其他操作 %s',async query=>{
+    vi.spyOn(batches,'latest').mockResolvedValue(null);
+    vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[{action_id:'current',action_revision:2}],preparation_complete:false} as never);
+    const finish=vi.fn();
+    render(<WorkflowContext.Provider value={{open:vi.fn(),finish,label:'本次检查'}}><Preparation projectId="app" name="应用" official={false} route={{path:'/preparation',query:new URLSearchParams(query)}} refresh={()=>{}} onError={()=>{}}/></WorkflowContext.Provider>);
+    expect(await screen.findByText(/指定的业务操作或修订已不在当前准备范围中/)).toBeVisible();
+    expect(screen.queryByRole('button',{name:'核对整批材料'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'返回原事项'}));expect(finish).toHaveBeenCalledOnce();
 });

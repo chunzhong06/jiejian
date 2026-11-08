@@ -1,0 +1,5 @@
+.jj-table-selection > table { position:relative; z-index:1; background:transparent; }
+.jj-table-selection > .jj-object-table tbody tr[data-selected=true] > * { background:transparent; box-shadow:none; }
+@media(hover:hover) and (pointer:fine) {
+  .jj-table-selection > .jj-object-table tbody tr[data-selected=true]:hover > * { background:color-mix(in srgb,var(--selected-hover) 22%,transparent); }
+}

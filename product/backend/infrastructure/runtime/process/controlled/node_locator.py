@@ -1,6 +1,7 @@
 # 只使用启动器已准备的Node路径；不搜索PATH、不安装依赖或执行自选程序。
 import json
 import hashlib
+import sys
 from pathlib import Path
 
 from product.backend.domain.errors import ErrorCode, JiejianError
@@ -9,12 +10,17 @@ from product.backend.infrastructure.runtime.process.controlled.artifact import _
 
 def controlled_node_executable(environ) -> Path:
     try:
+        if sys.platform not in {'win32','linux'}:
+            raise ValueError('unsupported Node platform')
+        platform,filename=('windows','node.exe') if sys.platform=='win32' else ('linux','node')
         if environ.get('JIEJIAN_RUNTIME_MODE') == 'portable':
             root=Path(environ['JIEJIAN_RELEASE_ROOT']).resolve()
-            node=root/'runtime/node/node.exe'
+            node=root/'runtime/node'/filename
             allowed=root/'runtime/node'
             from product.protocols.runtime.portable_release import PortableReleaseManifest
             release=PortableReleaseManifest.model_validate_json(_read_bounded(root/'app/release.json',16384))
+            if release.platform!=platform:
+                raise ValueError('portable Node platform differs from this process')
             with node.open('rb') as stream:
                 if hashlib.file_digest(stream,'sha256').hexdigest()!=release.node_sha256:
                     raise ValueError('portable Node differs from release identity')
@@ -24,7 +30,7 @@ def controlled_node_executable(environ) -> Path:
             node=Path(receipt['node']['executable'])
             allowed=root/'var/development/tools/node'
         if (not node.is_absolute() or not node.is_file() or node.is_symlink()
-                or not node.resolve().is_relative_to(allowed.resolve()) or node.name.casefold()!='node.exe'):
+                or not node.resolve().is_relative_to(allowed.resolve()) or node.name.casefold()!=filename):
             raise ValueError('uncontrolled Node path')
         return node.resolve()
     except (OSError,ValueError,KeyError,TypeError):

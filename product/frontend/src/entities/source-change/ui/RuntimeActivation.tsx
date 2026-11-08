@@ -5,9 +5,9 @@ import { operationId, readPending, savePending } from '../../../shared/lib/opera
 import { useRead } from '../../../shared/lib/useRead';
 import { assertProject } from '../../../shared/model/page';
 import { ApiError } from '../../../shared/api/http';
-import { Button } from '../../../shared/ui/actions';
+import {Button,ActionLink} from '../../../shared/ui/actions'
 import { Badge, ErrorNote, Notice } from '../../../shared/ui/feedback';
-import { go } from '../../../shared/lib/navigation';
+import {readRoute,withReturnDestination,scopedPath} from '../../../shared/lib/navigation'
 
 export function RuntimeActivation({ projectId, details, onError, onChanged, onReady }: { projectId: string; details: DeliveryDetails; onError: (error: unknown) => void; onChanged: () => void; onReady?: (ready:boolean) => void }) {
     const key = 'jiejian.studio.runtime:' + projectId + ':' + details.delivery.delivery_id;
@@ -33,9 +33,9 @@ export function RuntimeActivation({ projectId, details, onError, onChanged, onRe
         }
         finally { lock.current = false; setBusy(false); }
     };
-    return <section className="jj-runtime-activation"><header><h3>运行这批代码</h3><Badge tone={matched ? 'positive' : 'neutral'}>{matched ? '运行版本已对应' : current?.status === 'PENDING' ? '正在载入' : '待核对运行版本'}</Badge></header><p className="jj-small jj-muted">载入后重新核对受影响的材料，再按原要求复验。</p>{task.error && <ErrorNote error={task.error}/>}{status.error && <ErrorNote error={status.error}/>}
-        <div className="jj-inline-actions">{matched ? (onReady ? <span className="jj-small jj-muted">当前运行已使用这次修改。</span> : <Button onClick={() => go('/preparation?change_id=' + encodeURIComponent(details.delivery.change_id))}>核对这次修改的材料</Button>) : !latest ? <span className="jj-small jj-muted">仅最新登记可以载入运行。历史检查保留原有代码对应。</span> : pending && current?.status !== 'FAILED' ? <><Button busy={busy} onClick={() => { status.reload(); task.reload(); }}>查询载入结果</Button>{!current && <Button busy={busy} onClick={() => void load()}>恢复原载入请求</Button>}</> : <Button kind="primary" busy={busy} disabled={!task.data} onClick={() => { if (pending) { savePending(key, undefined); setPending(undefined); } else void load(); }}>{pending ? '重新核对后载入' : '载入这批代码'}</Button>}</div>
-        {!matched && !onReady && <Button kind="quiet" onClick={() => go('/application')}>查看应用运行配置</Button>}
+    return <section className="jj-runtime-activation"><div className="jj-runtime-activation-body"><div className="jj-runtime-activation-copy"><header><div className="jj-object-line"><h3>运行这批代码</h3><Badge tone={matched ? 'positive' : 'neutral'}>{matched ? '运行版本已对应' : current?.status === 'PENDING' ? '正在载入' : '待核对运行版本'}</Badge></div></header><p className="jj-small jj-muted">载入后重新核对受影响的材料，再按原要求复验。</p></div>
+        <footer className="jj-runtime-activation-actions">{!matched && !onReady && <ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/application',readRoute().path+'?'+readRoute().query))} kind="quiet">查看应用运行配置</ActionLink>}{matched ? (onReady ? <span className="jj-small jj-muted">当前运行已使用这次修改。</span> : <ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/preparation?change_id=' + encodeURIComponent(details.delivery.change_id),readRoute().path+'?'+readRoute().query))}  kind="default">核对这次修改的材料</ActionLink>) : !latest ? <span className="jj-small jj-muted">仅最新登记可以载入运行。历史检查保留原有代码对应。</span> : pending && current?.status !== 'FAILED' ? <><Button busy={busy} onClick={() => { status.reload(); task.reload(); }}>查询载入结果</Button>{!current && <Button busy={busy} onClick={() => void load()}>恢复原载入请求</Button>}</> : <Button kind="primary" busy={busy} disabled={!task.data} onClick={() => { if (pending) { savePending(key, undefined); setPending(undefined); } else void load(); }}>{pending ? '重新核对后载入' : '载入这批代码'}</Button>}</footer>
+        </div>{task.error && <ErrorNote error={task.error}/>}{status.error && <ErrorNote error={status.error}/>}
         {current?.status === 'FAILED' && <Notice tone="caution">这次载入未完成，请核对应用地址及受控运行配置。</Notice>}
     </section>;
 }

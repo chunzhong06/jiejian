@@ -28,6 +28,20 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
 
+it('深入证据退出完整报告总览，返回同一业务事项并保留原回程',()=>{
+  const value=story(),p={...props(value),selectedCaseId:'c1',tab:'trace',returnPath:'/issues?issue=original'};
+  const view=render(<Report {...p}/>);
+  expect(view.container.querySelector('.jj-report-hero')).not.toBeInTheDocument();
+  expect(screen.queryByRole('group',{name:'按检查结果筛选'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'返回本项业务结果'}));
+  const query=new URLSearchParams(location.hash.split('?')[1]);
+  expect(query.get('case_id')).toBe('c1');expect(query.get('tab')).toBe('facts');
+  expect(query.get('return_to')).toBe('/issues?issue=original');
+  view.rerender(<Report {...p} tab="facts"/>);
+  expect(view.container.querySelector('.jj-report-hero')).toBeVisible();
+  expect(view.container.querySelector('.jj-report-results')).toBeVisible();
+});
+
 it('业务场景按资源比较，展开依据后索引收敛并保留准确资源与发生位置',()=>{
   const value=story(),first=value.actions[0]
   first.scenario_context={scenario_label:'混合批量',experiment_label:'成员混合处理',experiment_kind:'CHANGE_SUBJECT',invocation_label:'发布资料',item_index:1,item_count:2,same_resource_occurrences:1,batch_strategy:'PER_ITEM',expected_effect:'ABSENT'}
@@ -51,7 +65,7 @@ it('归档状态归入报告信息，保留只读边界与两个明确返回入�
   expect(screen.getByText('展馆历史工作区')).toBeVisible()
   expect(screen.getByRole('link',{name:'返回官方示例'})).toHaveAttribute('href','#/environment')
   expect(screen.queryByRole('button',{name:'处理权限问题'})).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button',{name:'全部报告'}))
+  fireEvent.click(screen.getByRole('link',{name:'全部检查记录'}))
   expect(location.hash).toBe('#/archive?project_id=app')
 })
 
@@ -74,10 +88,10 @@ it('结果筛选保留对应检查项，空筛选可以返回全部结果',()=>{
   value.actions.push(safe)
   render(<Report {...props(value)}/>)
   const filters=screen.getByRole('group',{name:'按检查结果筛选'})
-  fireEvent.click(within(filters).getByRole('button',{name:/符合规则/}))
+  fireEvent.click(within(filters).getByRole('button',{name:/^1 符合规则$/}))
   expect(screen.getByRole('button',{name:'查看成员正常下载的依据'})).toBeVisible()
   expect(screen.queryByRole('button',{name:'查看成员导出资料的依据'})).not.toBeInTheDocument()
-  fireEvent.click(within(filters).getByRole('button',{name:/尚未确认/}))
+  fireEvent.click(within(filters).getByRole('button',{name:/证据不足/}))
   expect(screen.getByText('本次没有这类结果')).toBeVisible()
   fireEvent.click(screen.getByRole('button',{name:'查看全部结果'}))
   expect(screen.getByRole('button',{name:'查看成员导出资料的依据'})).toBeVisible()
@@ -188,7 +202,7 @@ it('复验先比较修改前后，原始依据只在选中项中查阅；缺少�
   const prior=within(inspector).getByText('修改前的结果与原检查').closest('details')!;
   expect(prior).not.toHaveAttribute('open');
   fireEvent.click(within(inspector).getByText('修改前的结果与原检查'));
-  fireEvent.click(within(prior).getByRole('button',{name:'查看原检查依据'}));
+  fireEvent.click(within(prior).getByRole('link',{name:'查看原检查依据'}));
   expect(location.hash).toContain('run_id=before&case_id=old');
   value.repair_comparison[0].match_status='NOT_FOUND';
   view.rerender(<Report {...p}/>);
@@ -208,3 +222,15 @@ it('连续查阅不同检查项后，关闭依据返回最后选中的检查项'
   view.rerender(<Report {...p}/>);
   expect(screen.getByRole('button',{name:'查看成员预览资料的依据'})).toHaveFocus();
 });
+
+
+it('从比较进入报告后，打开依据仍保留准确比较记录及其上级回程',()=>{
+  const value=story()
+  const origin='/reports?'+new URLSearchParams({view:'compare',baseline:'run_'+'1'.repeat(32),current:'run_'+'2'.repeat(32),return_to:'/issues?issue=original'})
+  render(<Report {...props(value)} returnPath={origin}/> )
+  fireEvent.click(screen.getByRole('button',{name:'查看成员导出资料的依据'}))
+  const query=new URLSearchParams(location.hash.split('?')[1])
+  expect(query.get('run_id')).toBe(value.run_id)
+  expect(query.get('case_id')).toBe(value.actions[0].case_id)
+  expect(query.get('return_to')).toBe(origin)
+})

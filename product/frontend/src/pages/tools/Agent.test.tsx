@@ -5,7 +5,7 @@ import {agentConnectionsApi,mcpAccessApi,type AgentConnection,type MCPAccessLeve
 
 vi.mock('../../entities/runtime/api/mcp',async original=>{
   const actual=await original<typeof import('../../entities/runtime/api/mcp')>()
-  return {...actual,agentConnectionsApi:{...actual.agentConnectionsApi,status:vi.fn(),connect:vi.fn()},mcpAccessApi:{...actual.mcpAccessApi,status:vi.fn(),setProjectAccess:vi.fn()}}
+  return {...actual,agentConnectionsApi:{...actual.agentConnectionsApi,status:vi.fn(),connect:vi.fn()},mcpAccessApi:{...actual.mcpAccessApi,status:vi.fn(),setProjectAccess:vi.fn(),pause:vi.fn(),resume:vi.fn()}}
 })
 
 function prepare(state:AgentConnection['state']='NOT_CONFIGURED',grant?:MCPAccessLevel){
@@ -13,6 +13,19 @@ function prepare(state:AgentConnection['state']='NOT_CONFIGURED',grant?:MCPAcces
   vi.mocked(mcpAccessApi.status).mockResolvedValue({schema_version:'1',paired:true,accepting_connections:true,endpoint:'http://127.0.0.1:18081/mcp',default_level:'READ',project_grants:grant?[{project_id:'app',level:grant}]:[],client_connected:false,client_name:null,client_version:null,last_seen_at_us:null,connection_state:'CREDENTIAL_READY',last_authenticated_at_us:null,last_auth_failure_at_us:null})
 }
 beforeEach(()=>{vi.clearAllMocks();prepare()})
+
+it('即时接入开关失败时保留服务器确认值，不连带修改应用授权',async()=>{
+  const error=new Error('连接状态未修改'),onError=vi.fn()
+  vi.mocked(mcpAccessApi.pause).mockRejectedValue(error)
+  render(<Agent projectId="app" name="订单系统" onError={onError} embedded/>)
+  const control=await screen.findByRole('switch',{name:'允许开发工具接入'})
+  expect(control).toBeChecked()
+  fireEvent.click(control)
+  await waitFor(()=>expect(onError).toHaveBeenCalledWith(error))
+  expect(control).toBeChecked();expect(control).not.toBeDisabled()
+  expect(mcpAccessApi.pause).toHaveBeenCalledOnce()
+  expect(mcpAccessApi.resume).not.toHaveBeenCalled();expect(mcpAccessApi.setProjectAccess).not.toHaveBeenCalled()
+})
 
 it('正常未配置不重复解释，选择工具不写配置，确认前保留所选工具身份',async()=>{
   render(<Agent projectId="app" name="订单系统" onError={vi.fn()} embedded/>)

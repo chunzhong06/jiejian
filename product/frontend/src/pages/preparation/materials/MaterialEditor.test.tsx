@@ -31,7 +31,7 @@ it('回执未知时只查询原操作，不再次保存',async()=>{
   const receipt=vi.spyOn(preparationApi,'materialReceipt').mockImplementation(async(_,operation_id)=>({...impact,operation_id,created_at_us:100,result:'SAVED'}))
   const p=props();render(<MaterialEditor {...p}/>);await select()
   fireEvent.click(await screen.findByRole('button',{name:'确认使用这份录制'}))
-  const query=await screen.findByRole('button',{name:'查询本次采用'})
+  const query=await screen.findByRole('button',{name:'查看本次使用结果'})
   expect(save).toHaveBeenCalledOnce()
   expect(receipt).not.toHaveBeenCalled()
   const operation=save.mock.calls[0][1].operation_id
@@ -55,24 +55,24 @@ it.each(['transport','server'])('%s 回执不明后刷新恢复原操作，并�
   const receipt=vi.spyOn(preparationApi,'materialReceipt').mockRejectedValue(new ApiError('RECORD_NOT_FOUND','尚未形成回执'))
   const p=props(),first=render(<MaterialEditor {...p}/>);await select()
   fireEvent.click(await screen.findByRole('button',{name:'确认使用这份录制'}))
-  await screen.findByRole('button',{name:'查询本次采用'})
+  await screen.findByRole('button',{name:'查看本次使用结果'})
   const operation=save.mock.calls[0][1].operation_id
   first.unmount()
   const second=render(<MaterialEditor {...p}/>);
-  fireEvent.click(await screen.findByRole('button',{name:'查询本次采用'}))
+  fireEvent.click(await screen.findByRole('button',{name:'查看本次使用结果'}))
   await waitFor(()=>expect(receipt).toHaveBeenCalledWith('project',operation))
   await waitFor(()=>expect(p.onError).toHaveBeenCalledTimes(2))
   expect(p.onBack).not.toHaveBeenCalled()
   second.rerender(<MaterialEditor {...p} projectId="other-project"/>);
   await screen.findByRole('radio')
-  expect(screen.queryByRole('button',{name:'查询本次采用'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'查看本次使用结果'})).not.toBeInTheDocument()
   second.rerender(<MaterialEditor {...p}/>);
   receipt.mockResolvedValue({...impact,operation_id:'wrong-operation',created_at_us:100,result:'SAVED'})
-  fireEvent.click(await screen.findByRole('button',{name:'查询本次采用'}))
+  fireEvent.click(await screen.findByRole('button',{name:'查看本次使用结果'}))
   await waitFor(()=>expect(p.onError).toHaveBeenCalledTimes(3))
   expect(p.onBack).not.toHaveBeenCalled()
   receipt.mockResolvedValue({...impact,operation_id:operation,created_at_us:100,result:'SAVED'})
-  fireEvent.click(screen.getByRole('button',{name:'查询本次采用'}))
+  fireEvent.click(screen.getByRole('button',{name:'查看本次使用结果'}))
   await waitFor(()=>expect(p.onBack).toHaveBeenCalledOnce())
   expect(save).toHaveBeenCalledOnce()
 })

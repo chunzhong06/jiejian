@@ -9,10 +9,12 @@
 | [product/backend/interfaces/__init__.py](../../../product/backend/interfaces/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/interfaces/cli/__init__.py](../../../product/backend/interfaces/cli/__init__.py) | 5 | 包、内部机制或样式 |
 | [product/backend/interfaces/cli/__main__.py](../../../product/backend/interfaces/cli/__main__.py) | 7 | 包、内部机制或样式 |
-| [product/backend/interfaces/cli/app.py](../../../product/backend/interfaces/cli/app.py) | 115 | root、main |
+| [product/backend/interfaces/cli/app.py](../../../product/backend/interfaces/cli/app.py) | 117 | root、main |
 | [product/backend/interfaces/cli/bootstrap.py](../../../product/backend/interfaces/cli/bootstrap.py) | 72 | CliOptions、runtime_settings、application_scope、default_frontend_dir |
+| [product/backend/interfaces/cli/check_client.py](../../../product/backend/interfaces/cli/check_client.py) | 127 | CheckClient、execution_exit |
 | [product/backend/interfaces/cli/commands/__init__.py](../../../product/backend/interfaces/cli/commands/__init__.py) | 1 | 包、内部机制或样式 |
-| [product/backend/interfaces/cli/commands/system.py](../../../product/backend/interfaces/cli/commands/system.py) | 336 | GuiBrowser、ServeReadinessStatus、serve_command、doctor_command、maintenance_clean_assistant_command、maintenance_clean_logs_command、maintenance_clean_temporary_command、maintenance_clean_all_command等 |
+| [product/backend/interfaces/cli/commands/checks.py](../../../product/backend/interfaces/cli/commands/checks.py) | 141 | preview、run、request、execute、status、wait、cancel |
+| [product/backend/interfaces/cli/commands/system.py](../../../product/backend/interfaces/cli/commands/system.py) | 347 | GuiBrowser、ServeReadinessStatus、serve_command、doctor_command、maintenance_clean_assistant_command、maintenance_clean_logs_command、maintenance_clean_temporary_command、maintenance_clean_all_command等 |
 | [product/backend/interfaces/cli/gui_browser.py](../../../product/backend/interfaces/cli/gui_browser.py) | 142 | GuiBrowserSession、open_gui_browser |
 | [product/backend/interfaces/cli/gui_console.py](../../../product/backend/interfaces/cli/gui_console.py) | 131 | console_key_reader、console_input_mode、launcher_key_reader、run_gui_console |
 | [product/backend/interfaces/cli/localization.py](../../../product/backend/interfaces/cli/localization.py) | 82 | ChineseHelpFormatter、configure_cli_localization |
@@ -43,9 +45,9 @@
 | [product/backend/interfaces/http/routers/changes/development.py](../../../product/backend/interfaces/http/routers/changes/development.py) | 105 | TaskCreateRequest、TaskReviseRequest、TaskFinishRequest、RuntimeLoadRequest、build_development_router |
 | [product/backend/interfaces/http/routers/changes/source_changes.py](../../../product/backend/interfaces/http/routers/changes/source_changes.py) | 105 | SourceChangeCreateRequest、SourceChangeRegistrationRequest、build_source_changes_router |
 | [product/backend/interfaces/http/routers/checks/__init__.py](../../../product/backend/interfaces/http/routers/checks/__init__.py) | 1 | 包、内部机制或样式 |
-| [product/backend/interfaces/http/routers/checks/checks.py](../../../product/backend/interfaces/http/routers/checks/checks.py) | 50 | CheckScopeRequest、build_checks_router |
+| [product/backend/interfaces/http/routers/checks/checks.py](../../../product/backend/interfaces/http/routers/checks/checks.py) | 99 | CheckScopeRequest、build_checks_router |
 | [product/backend/interfaces/http/routers/checks/results.py](../../../product/backend/interfaces/http/routers/checks/results.py) | 41 | build_results_router |
-| [product/backend/interfaces/http/routers/checks/runs.py](../../../product/backend/interfaces/http/routers/checks/runs.py) | 98 | RunSubmissionProjection、require_local_history_session、RunCreateRequest、build_runs_router |
+| [product/backend/interfaces/http/routers/checks/runs.py](../../../product/backend/interfaces/http/routers/checks/runs.py) | 100 | RunSubmissionProjection、require_local_history_session、RunCreateRequest、build_runs_router |
 | [product/backend/interfaces/http/routers/preparation/__init__.py](../../../product/backend/interfaces/http/routers/preparation/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/interfaces/http/routers/preparation/business_scenarios.py](../../../product/backend/interfaces/http/routers/preparation/business_scenarios.py) | 36 | build_business_scenarios_router |
 | [product/backend/interfaces/http/routers/preparation/flow_trials.py](../../../product/backend/interfaces/http/routers/preparation/flow_trials.py) | 34 | build_flow_trials_router |
@@ -59,7 +61,7 @@
 | [product/backend/interfaces/http/routers/system/agent_workflow.py](../../../product/backend/interfaces/http/routers/system/agent_workflow.py) | 93 | TaskDecision、TaskAnswer、TaskControl、build_agent_workflow_router |
 | [product/backend/interfaces/http/routers/system/mcp_access.py](../../../product/backend/interfaces/http/routers/system/mcp_access.py) | 93 | ClientConnectRequest、MCPProjectGrantRequest、build_mcp_access_router |
 | [product/backend/interfaces/http/routers/system/system.py](../../../product/backend/interfaces/http/routers/system/system.py) | 213 | build_system_router、HealthResponse、ReadyResponse、MaintenanceOperationRequest、UpdatePreviewRequest |
-| [product/backend/interfaces/http/routers/workspace.py](../../../product/backend/interfaces/http/routers/workspace.py) | 25 | build_workspace_router |
+| [product/backend/interfaces/http/routers/workspace.py](../../../product/backend/interfaces/http/routers/workspace.py) | 30 | build_workspace_router |
 | [product/backend/interfaces/worker/__init__.py](../../../product/backend/interfaces/worker/__init__.py) | 1 | 包、内部机制或样式 |
 | [product/backend/interfaces/worker/job.py](../../../product/backend/interfaces/worker/job.py) | 190 | main |
 | [product/backend/interfaces/worker/runtime.py](../../../product/backend/interfaces/worker/runtime.py) | 110 | run、main |

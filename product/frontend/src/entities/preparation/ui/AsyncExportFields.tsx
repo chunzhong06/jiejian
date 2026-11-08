@@ -24,7 +24,7 @@ export function AsyncExportFields({value,onChange,disabled=false}:{value:AsyncEx
         onChange({...value,states:next})
     }
     return <section className="jj-async-export-fields">
-      <Tabs label="异步导出配置" value={view} idPrefix={id} panelId={id+'-panel'} onValueChange={setView} items={[{value:'task',label:'任务与文件'},{value:'states',label:'状态映射'},{value:'association',label:'关联字段'},{value:'budget',label:'等待限制'}]}/>
+      <Tabs label="异步导出配置" value={view} idPrefix={id} panelId={id+'-panel'} onValueChange={setView} items={[{value:'task',label:'任务与文件'},{value:'states',label:'状态映射'},{value:'association',label:'关联字段'}]}/>
       <div role="tabpanel" id={id+'-panel'} aria-labelledby={id+'-'+view}>
       {view==='task'&&<><p className="jj-small jj-muted">任务编号取自实际提交响应；状态成功后，使用原操作账号接收完整文件。</p><div className="jj-form-grid">
         <Field label="任务查询路径"><input value={value.status_path_template} disabled={disabled} placeholder="/exports/{task_id}" onChange={event=>onChange({...value,status_path_template:event.target.value})}/></Field>
@@ -34,7 +34,8 @@ export function AsyncExportFields({value,onChange,disabled=false}:{value:AsyncEx
       {view==='states'&&<><p className="jj-small jj-muted">按状态接口的真实取值映射；这里的成功只表示服务声明结束。</p><div className="jj-form-grid">{states.map(([state,label])=><Field key={state} label={label+'的原始状态值'+(['RUNNING','CANCELLED','TIMED_OUT'].includes(state)?'（可选）':'')}><input value={stateText[state]} disabled={disabled} placeholder="按接口真实取值填写，多个值用逗号分隔" onChange={event=>changeState(state,event.target.value)}/></Field>)}
       </div></>}
       {view==='association'&&<><p className="jj-small jj-muted">这些字段必须来自状态响应，并与已核验的账号、资源和原请求一致。无法对应时保留缺口。</p><div className="jj-form-grid">{paths.slice(3).map(([name,label,placeholder])=><Field key={name} label={label}><input value={pathText[name]} placeholder={placeholder} disabled={disabled} onChange={event=>changePath(name,event.target.value)}/></Field>)}</div></>}
-      {view==='budget'&&<><div className="jj-form-grid"><Field label="最多查询次数"><input type="number" min={1} max={32} disabled={disabled} value={value.max_polls} onChange={event=>onChange({...value,max_polls:Number(event.target.value)})}/></Field><Field label="总等待时间（秒）"><input type="number" min={.1} max={5} step={.1} disabled={disabled} value={value.timeout_us/1000000} onChange={event=>onChange({...value,timeout_us:Number(event.target.value)*1000000})}/></Field></div><p className="jj-small jj-muted">采用有限退避并共享本次检查预算。取消后停止采集，后台工作仍需核对；提交请求不会自动重发。</p></>}
+
       </div>
+      <details className="jj-async-export-budget"><summary>等待限制与查询上限</summary><div className="jj-form-grid"><Field label="最多查询次数"><input type="number" min={1} max={32} disabled={disabled} value={value.max_polls} onChange={event=>onChange({...value,max_polls:Number(event.target.value)})}/></Field><Field label="总等待时间（秒）"><input type="number" min={.1} max={5} step={.1} disabled={disabled} value={value.timeout_us/1000000} onChange={event=>onChange({...value,timeout_us:Number(event.target.value)*1000000})}/></Field></div><p className="jj-small jj-muted">按逐渐延长的间隔查询，并计入本次请求上限。取消后停止查询；后台任务是否结束仍需核对，提交请求不会重复发送。</p></details>
     </section>
 }

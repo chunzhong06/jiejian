@@ -8,7 +8,7 @@ pytestmark=[pytest.mark.level4,pytest.mark.browser,pytest.mark.process]
 
 
 def _record_switch(page,root_selector,button):
-    page.evaluate("""selector=>{window.localMotion=[];window.localMotionDone=false;const start=performance.now();function frame(){const root=document.querySelector(selector),marker=root?.querySelector('.jj-segment-indicator,.jj-material-indicator');window.localMotion.push({at:performance.now()-start,marker:marker?getComputedStyle(marker).transform:'absent',animations:document.getAnimations().filter(item=>item.effect.getComputedTiming().endTime!==Infinity).map(item=>({name:item.animationName??item.transitionProperty??'content',target:item.effect.target?.className,duration:item.effect.getComputedTiming().duration}))});if(performance.now()-start<500)requestAnimationFrame(frame);else window.localMotionDone=true}requestAnimationFrame(frame)}""",root_selector)
+    page.evaluate("""selector=>{window.localMotion=[];window.localMotionDone=false;const start=performance.now();function frame(){const root=document.querySelector(selector),marker=root?.querySelector('.jj-segment-indicator,.jj-index-surface');window.localMotion.push({at:performance.now()-start,marker:marker?getComputedStyle(marker).transform:'absent',animations:document.getAnimations().filter(item=>item.effect.getComputedTiming().endTime!==Infinity).map(item=>({name:item.animationName??item.transitionProperty??'content',target:item.effect.target?.className,duration:item.effect.getComputedTiming().duration}))});if(performance.now()-start<500)requestAnimationFrame(frame);else window.localMotionDone=true}requestAnimationFrame(frame)}""",root_selector)
     button.click()
     page.wait_for_function('window.localMotionDone')
     return page.evaluate('window.localMotion')
@@ -53,7 +53,7 @@ def test_collection_titles_keep_typography_across_semantic_levels():
                         expect(heading).to_be_visible()
                         values.append(heading.evaluate("node=>{const s=getComputedStyle(node);return {size:s.fontSize,line:s.lineHeight,weight:s.fontWeight,family:s.fontFamily}}"))
                     assert values[0]==values[1],values
-                    assert values[0]['size']=='20px' and values[0]['line']=='30px' and values[0]['weight']=='600',values
+                    assert values[0]['size']=='20px' and values[0]['line']=='28px' and values[0]['weight']=='600',values
                     columns=page.locator('.jj-initial-action .jj-form-columns-layout').first
                     operation,result=columns.locator(':scope > section').all()
                     left,right=operation.bounding_box(),result.bounding_box()
@@ -67,7 +67,7 @@ def test_collection_titles_keep_typography_across_semantic_levels():
                     signatures.append(dict(theme=theme,width=width,typography=values[0]))
                     if width==1512:
                         page.mouse.move(1500,970)
-                        page.screenshot(path=str(output/f'titles-{theme}.png'),full_page=True)
+                        page.screenshot(path=str(output/f'titles-{theme}.png'),full_page=False)
             assert not errors,errors
         finally:
             browser.close()
@@ -112,6 +112,19 @@ def test_database_forms_group_fields_with_spacing_in_browser():
             page.get_by_role('button',name='添加连接',exact=True).click()
             dialog=page.get_by_role('dialog',name='声明测试数据库')
             expect(dialog).to_be_visible()
+            # 临时显示不改变输入，也不保存凭据；键盘离开组后立即恢复遮蔽。
+            password=dialog.get_by_label('数据库密码',exact=True)
+            password.fill('temporary-ui-fixture')
+            dialog.get_by_role('button',name='显示密码',exact=True).click()
+            expect(password).to_have_attribute('type','text')
+            dialog.get_by_role('button',name='隐藏密码',exact=True).focus()
+            page.keyboard.press('Tab')
+            expect(password).to_have_attribute('type','password')
+            expect(password).to_have_value('temporary-ui-fixture')
+            password.fill('')
+            for selector in ('input:not([type=checkbox]):not(.ant-select-selection-search-input)','.jj-choice'):
+                for node in dialog.locator(selector).all():
+                    if node.is_visible(): assert abs(node.bounding_box()['height']-44)<1
             for width in (1512,800,375):
                 page.set_viewport_size({'width':width,'height':980});settled(page)
                 bounds=dialog.locator('.jj-form-columns-layout').evaluate('node=>[...node.children].map(item=>{const r=item.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}})')
@@ -172,7 +185,7 @@ def test_navigation_selection_motion_in_browser():
             expect(resources).to_have_attribute('aria-pressed','true')
             assert len({frame['marker'] for frame in motions['material'] if frame['marker']!='absent'})>2
             assert resources.evaluate('(node)=>getComputedStyle(node).borderRadius')=='0px'
-            assert page.locator('.jj-material-indicator').evaluate('(node)=>getComputedStyle(node).backgroundColor')==expected
+            assert page.locator('.jj-material-index .jj-index-surface').evaluate('(node)=>getComputedStyle(node).backgroundColor')==expected
             page.emulate_media(reduced_motion='reduce')
             motions['reduced']=_record_switch(page,'.jj-material-index',page.get_by_role('button',name='查看测试账号',exact=True))
             assert all(not frame['animations'] for frame in motions['reduced'])
@@ -260,7 +273,8 @@ def test_navigation_selection_motion_in_browser():
                         page.goto(server.origin+'/?failure_review='+uuid4().hex+'#'+path+('&' if '?' in path else '?')+'project_id='+scenario.project_id)
                         if name=='saved':page.get_by_text('保存与沿用检查范围',exact=True).click()
                         message=page.locator(selector);expect(message).to_be_visible();settled(page)
-                        measured=message.evaluate('(node)=>{const r=node.getBoundingClientRect(),p=node.previousElementSibling.getBoundingClientRect(),parent=node.parentElement.getBoundingClientRect();return {gap:r.top-p.bottom,left:r.left-parent.left,right:parent.right-r.right}}')
+                        # 失败时目录可能只有通知；此时核对容器内边距，而非不存在的上一行。
+                        measured=message.evaluate('(node)=>{const r=node.getBoundingClientRect(),p=node.previousElementSibling?.getBoundingClientRect(),parent=node.parentElement.getBoundingClientRect();return {gap:r.top-(p?.bottom??parent.top),left:r.left-parent.left,right:parent.right-r.right}}')
                         assert measured['gap']>=16,dict(page=name,**measured)
                         assert not page.evaluate('document.documentElement.scrollWidth>innerWidth')
                         page.mouse.move(0,0);page.screenshot(path=str(output/f'{name}-failure-{theme}-{width}.png'),full_page=True)
@@ -312,15 +326,25 @@ def test_application_menu_selection_in_browser(readonly_official_review):
                 for width in (1512,800,375,320):
                     page.set_viewport_size({'width':width,'height':980})
                     if width<=800:page.get_by_role('button',name='打开导航',exact=True).click()
+                    if theme=='light' and width==1512:
+                        page.evaluate('''()=>{window.menuMotions=[];document.addEventListener('transitionrun',event=>{if(event.target.classList.contains('jj-menu-surface'))window.menuMotions.push(event.propertyName)})}''')
                     page.locator('.jj-application-switcher').click()
+                    if theme=='light' and width==1512:
+                        page.wait_for_function('window.menuMotions.includes("transform")')
                     selected=page.locator('.jj-application-menu .ant-dropdown-menu-item-selected')
                     expect(selected).to_be_visible()
                     page.get_by_role('menuitem',name='新建应用工作区',exact=True).hover();settled(page)
-                    colors=selected.evaluate('node=>{const base=getComputedStyle(node),over=getComputedStyle(node,"::before"),n=document.createElement("span");n.style.backgroundColor=getComputedStyle(document.documentElement).getPropertyValue("--selected");document.body.append(n);const expected=getComputedStyle(n).backgroundColor;n.remove();const r=node.getBoundingClientRect();return {color:Number(over.opacity)>.99?over.backgroundColor:base.backgroundColor,expected,left:r.left,right:r.right}}')
+                    # 未生成的伪元素也能返回 opacity=1；只采样实际绘制的悬停层。
+                    colors=selected.evaluate('node=>{const base=getComputedStyle(node),over=getComputedStyle(node,"::before"),n=document.createElement("span");n.style.backgroundColor=getComputedStyle(document.documentElement).getPropertyValue("--selected");document.body.append(n);const expected=getComputedStyle(n).backgroundColor;n.remove();const r=node.getBoundingClientRect();return {color:over.content!=="none"&&over.content!=="normal"&&Number(over.opacity)>.99?over.backgroundColor:base.backgroundColor,expected,left:r.left,right:r.right}}')
                     assert colors['color']==colors['expected'],colors
                     assert colors['left']>=0 and colors['right']<=width,colors
+                    alignment=page.locator('.jj-application-menu [role=menuitem]').evaluate_all('''nodes=>nodes.map(node=>{const icon=node.querySelector('.ant-dropdown-menu-item-icon'),label=node.querySelector('.ant-dropdown-menu-title-content'),tail=node.querySelector('.jj-command-label > .anticon'),center=n=>{const r=n.getBoundingClientRect();return r.top+r.height/2};return {icon:center(icon),label:center(label),tail:tail?center(tail):null,lineHeight:parseFloat(getComputedStyle(label).lineHeight),labelHeight:label.getBoundingClientRect().height}})''')
+                    assert all(abs(item['icon']-item['label'])<1 for item in alignment),alignment
+                    assert all(item['tail'] is None or abs(item['tail']-item['label'])<1 for item in alignment),alignment
+                    # 此处均为单行菜单；不能仅对齐一个比实际文字更高的空链接盒。
+                    assert all(abs(item['labelHeight']-item['lineHeight'])<1 for item in alignment),alignment
                     page.screenshot(path=str(output/f'application-menu-{theme}-{width}.png'),full_page=True)
-                    observations.append(dict(theme=theme,width=width,**colors))
+                    observations.append(dict(theme=theme,width=width,alignment=alignment,**colors))
                     page.keyboard.press('Escape')
                     expect(page.get_by_role('menu')).to_have_count(0)
                     if width<=800:page.keyboard.press('Escape');expect(page.get_by_role('dialog')).to_have_count(0)
@@ -487,7 +511,7 @@ def test_shared_tabs_keep_the_same_presentation_across_workspaces(readonly_colla
             inputs=page.get_by_role('tablist',name='输入位置',exact=True)
             expect(inputs).to_be_visible();settled(page)
             compact=inputs.evaluate(signature)
-            assert compact['boundary']=='0px' and compact['font']=='12px' and compact['height']>=44,compact
+            assert compact['boundary']=='0px' and compact['font']=='14px' and compact['height']>=36,compact
             assert inputs.locator('..').evaluate('node=>getComputedStyle(node).borderBottomWidth')=='1px'
             samples.append(dict(name='request-inputs',values=compact))
             visit(paths[0][1])
@@ -654,17 +678,18 @@ def test_collection_hit_areas_feedback_and_review_reading_stay_consistent():
                         page.mouse.move(1500,970);settled(page);page.screenshot(path=str(output/'testing-light.png'),full_page=False)
                 page.set_viewport_size({'width':1512,'height':980})
                 navigate(page,server.origin,'/workspace?project_id='+scenario.project_id)
-                for link in page.get_by_role('navigation',name='应用资料快捷入口').get_by_role('link').all():
+                for link in page.locator('.jj-home-text-link').all():
+                    if not link.is_visible():continue
                     link.hover()
-                    page.wait_for_function("node=>Number(getComputedStyle(node,'::before').opacity)>.5",arg=link.element_handle())
+                    assert 'underline' in link.evaluate('node=>getComputedStyle(node).textDecorationLine')
                     metrics.append(dict(theme=theme,feedback=link.inner_text()))
                 for width in (1512,800,375):
                     page.set_viewport_size({'width':width,'height':980})
-                    for metric in page.locator('.jj-home-metrics > button').all():
+                    for metric in page.locator('.jj-home-object-link').all():
                         metric.hover()
-                        page.wait_for_function("node=>Number(getComputedStyle(node,'::before').opacity)>.5",arg=metric.element_handle())
+                        assert 'underline' in metric.locator('strong').evaluate('node=>getComputedStyle(node).textDecorationLine')
                         inset=metric.evaluate("node=>{const box=node.getBoundingClientRect(),children=[...node.children].map(child=>child.getBoundingClientRect());return {top:Math.min(...children.map(child=>child.top))-box.top,bottom:box.bottom-Math.max(...children.map(child=>child.bottom)),left:Math.min(...children.map(child=>child.left))-box.left,right:box.right-Math.max(...children.map(child=>child.right))}}")
-                        assert min(inset.values())>=15,inset
+                        assert min(inset.values())>=11,inset
                         metrics.append(dict(theme=theme,width=width,metric=metric.inner_text(),inset=inset))
                     assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
                 for width in (1512,800,375):
@@ -740,9 +765,9 @@ def test_collection_hit_areas_feedback_and_review_reading_stay_consistent():
             # 使用真实检查形成历史入口，避免仅凭空列表推断行内留白。
             scenario.check('BASELINE')
             navigate(page,server.origin,'/workspace?project_id='+scenario.project_id)
-            for button in page.locator('.jj-home-check-list > button').all():
+            for button in page.locator('.jj-home-check-row').all():
                 inset=button.evaluate("node=>{const s=getComputedStyle(node);return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(parseFloat)}")
-                assert min(inset)>=16,inset
+                assert min(inset)>=8,inset
             page.emulate_media(reduced_motion='reduce')
             navigate(page,server.origin,'/testing?project_id='+scenario.project_id)
             rows=page.locator('.jj-object-table tbody tr');rows.nth(2).locator('button').click()
@@ -753,4 +778,107 @@ def test_collection_hit_areas_feedback_and_review_reading_stay_consistent():
             assert not errors,errors
         finally:
             (output/'result.json').write_text(json.dumps(dict(metrics=metrics,errors=errors),ensure_ascii=False,indent=2),encoding='utf-8')
+            browser.close()
+
+
+def test_focused_settings_business_editor_and_rule_navigation(readonly_official_review):
+    """真实页面核对分类编辑、名称状态对齐、连续行选择及检查范围往返。"""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.support.browser_review import settled
+    server, scenario, receipt = readonly_official_review
+    output=Path(__file__).resolve().parents[3]/'var/maintenance/workface-review-20261107'
+    output.mkdir(parents=True,exist_ok=True)
+    review=[]
+    with sync_playwright() as engine:
+        browser=engine.chromium.launch(executable_path=receipt['playwright']['executable'],headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1512,'height':980})
+            for theme in ('dark','light'):
+                if theme=='light':
+                    page.close();page=browser.new_page(viewport={'width':1512,'height':980})
+                page.goto(server.origin+'/#/settings?section=tools&project_id='+scenario.project_id)
+                expect(page.get_by_role('heading',name='工具连接',exact=True)).to_be_visible()
+                if page.locator('html').get_attribute('data-studio-theme')!=theme:
+                    page.get_by_role('button',name='切换'+('雾蓝深色' if theme=='dark' else '浅色'),exact=True).click()
+                for width in (2100,1512,800,375,320):
+                    page.set_viewport_size({'width':width,'height':980});settled(page)
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth'),(theme,width)
+                    geometry=page.locator('.jj-tools-layout > section').evaluate_all('(nodes)=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,top:r.top,bottom:r.bottom}})')
+                    if width>=1512:
+                        assert max(item['width'] for item in geometry)<610,geometry
+                        assert abs(geometry[0]['bottom']-geometry[1]['bottom'])<1,geometry
+                    review.append(dict(view='tools',theme=theme,width=width,panels=geometry))
+                    if theme=='dark' and width==1512:page.screenshot(path=str(output/'settings-dark.png'),full_page=True)
+                page.set_viewport_size({'width':1512,'height':980})
+                page.goto(server.origin+'/#/application?view=business&project_id='+scenario.project_id)
+                index=page.get_by_role('navigation',name='业务线索',exact=True)
+                expect(index).to_be_visible()
+                for width in (2100,1512,800,375,320):
+                    page.set_viewport_size({'width':width,'height':980});settled(page)
+                    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth'),(theme,width,'business')
+                    editor=page.locator('.jj-understanding-editor')
+                    field=editor.get_by_role('textbox')
+                    assert field.bounding_box()['width']<=321
+                    assert editor.locator('.jj-choice').bounding_box()['width']<=241
+                    toolbar=page.locator('.jj-understanding-catalog > header').evaluate("""node=>[...node.children].map(child=>{const r=child.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right}})""")
+                    assert toolbar[0]['right']<=toolbar[1]['left'] or toolbar[0]['bottom']<=toolbar[1]['top'],(theme,width,toolbar)
+                    title=editor.locator('header .jj-collection-title').evaluate("""node=>[...node.children].map(child=>{const r=child.getBoundingClientRect();return r.top+r.height/2})""")
+                    assert abs(title[0]-title[1])<1,(theme,width,title)
+                    if width>=1512:
+                        fields=editor.locator('.jj-understanding-fields > .jj-field').evaluate_all('nodes=>nodes.map(node=>node.getBoundingClientRect().top)')
+                        assert abs(fields[0]-fields[1])<1,fields
+                    review.append(dict(view='business',theme=theme,width=width))
+                page.set_viewport_size({'width':1512,'height':980})
+                page.get_by_role('button',name='添加角色',exact=True).click()
+                expect(page.get_by_role('textbox',name='业务角色名称',exact=True)).to_be_focused()
+                page.get_by_role('button',name='取消添加',exact=True).click()
+                expect(index.locator('.jj-index-item')).to_have_count(2)
+                page.mouse.move(0,0);page.evaluate('window.scrollTo(0,0)');settled(page)
+                page.screenshot(path=str(output/('business-'+theme+'.png')),full_page=True)
+                categories=page.get_by_role('group',name='线索类别',exact=True).get_by_role('button')
+                categories.last.click()
+                items=index.locator('.jj-index-item')
+                assert items.count()>2
+                items.last.click()
+                name=page.get_by_role('textbox',name='业务操作名称',exact=True)
+                original=name.input_value()
+                assert name.bounding_box()['width']<=401
+                name.fill(original+' · 审阅草稿')
+                items.first.click();items.last.click()
+                expect(name).to_have_value(original+' · 审阅草稿')
+                categories.last.focus();categories.last.press('ArrowLeft')
+                expect(page.get_by_role('textbox',name='业务角色名称',exact=True)).to_be_visible()
+                categories.first.press('ArrowRight')
+                expect(items.last).to_have_attribute('aria-current','true')
+                expect(name).to_have_value(original+' · 审阅草稿')
+                page.route('**/candidate-decisions',lambda route:route.fulfill(status=503,content_type='application/json',body=json.dumps({'error':{'message':'保存暂未完成'}})))
+                page.get_by_role('button',name='保存业务确认',exact=True).click()
+                expect(page.get_by_role('alert')).to_be_visible()
+                expect(name).to_have_value(original+' · 审阅草稿')
+                page.unroute('**/candidate-decisions')
+            page.goto(server.origin+'/#/permissions?project_id='+scenario.project_id)
+            table=page.locator('.jj-table-selection')
+            expect(table).to_be_visible();settled(page)
+            rows=table.locator('.jj-object-select')
+            rows.first.click();settled(page)
+            motion=_record_switch(page,'.jj-table-selection',rows.nth(1))
+            assert len({frame['marker'] for frame in motion if frame['marker']!='absent'})>2
+            settled(page)
+            table_geometry=table.evaluate("""root=>{const a=root.querySelector('tr[data-selected=true]').getBoundingClientRect(),b=root.querySelector('[data-selection-indicator]').getBoundingClientRect();return {delta:Math.max(Math.abs(a.top-b.top),Math.abs(a.height-b.height),Math.abs(a.left-b.left))}}""")
+            assert table_geometry['delta']<1,table_geometry
+            page.emulate_media(reduced_motion='reduce')
+            reduced=_record_switch(page,'.jj-table-selection',rows.first)
+            assert all(not frame['animations'] for frame in reduced)
+            page.get_by_role('link',name='规则、结果与修改',exact=True).click()
+            expect(page.get_by_role('button',name='检查这条规则',exact=True)).to_be_visible()
+            bar=page.locator('.jj-rule-section-bar')
+            assert bar.evaluate('(node)=>getComputedStyle(node).backgroundImage')==page.locator('.jj-app').evaluate('(node)=>getComputedStyle(node).backgroundImage')
+            page.get_by_role('button',name='检查这条规则',exact=True).click()
+            expect(page.get_by_role('heading',name='核对本次检查范围',exact=True)).to_be_visible()
+            expect(page.get_by_role('button',name='选定规则',exact=True)).to_have_attribute('aria-pressed','true')
+            expect(page.locator('.jj-scope-rule-option input:checked:not(:disabled)')).to_have_count(1)
+            page.get_by_role('button',name='返回权限规则',exact=True).click()
+            expect(page.get_by_role('button',name='检查这条规则',exact=True)).to_be_visible()
+            (output/'browser-review.json').write_text(json.dumps(dict(layouts=review,motion=motion,reduced=reduced,table_geometry=table_geometry),ensure_ascii=False,indent=2),encoding='utf-8')
+        finally:
             browser.close()

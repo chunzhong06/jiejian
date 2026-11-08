@@ -1,0 +1,14 @@
+import {useEffect,useId,useRef,type ReactNode} from 'react'
+import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
+import {Button} from './actions'
+
+/** 聚焦任务替换原工作面；active 只控制可见与焦点，子任务继续持有草稿和后台请求；返回不表示成功或取消。 */
+export function TaskSurface({title,context,description,onBack,backLabel='返回原工作',children,actions,active=true,level=1}:{title:string;context?:ReactNode;description?:ReactNode;onBack:()=>void;backLabel?:string;children:ReactNode;actions?:ReactNode|((dismiss:()=>void)=>ReactNode);active?:boolean;level?:1|2}){
+  const id=useId(),heading=useRef<HTMLHeadingElement>(null),Title=level===1?'h1':'h2'
+  useEffect(()=>{if(!active)return;const trigger=document.activeElement as HTMLElement|null;heading.current?.focus({preventScroll:true});return()=>{if(trigger?.isConnected)trigger.focus({preventScroll:true})}},[active])
+  return <section className="jj-task-surface" aria-labelledby={id} hidden={!active}>
+    <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{backLabel}</Button></div>
+    <header className="jj-task-surface-heading">{context&&<div className="jj-object-meta">{context}</div>}<Title id={id} ref={heading} tabIndex={-1}>{title}</Title>{description&&<p>{description}</p>}</header>
+    <div className="jj-task-surface-body">{children}</div>{actions&&<footer className="jj-task-actions">{typeof actions==='function'?actions(onBack):actions}</footer>}
+  </section>
+}
