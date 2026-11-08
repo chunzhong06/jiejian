@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 import json
+import base64
 
 import os
 
@@ -19,6 +20,9 @@ DEV = ROOT / "scripts" / "dev.ps1"
 MODULE_ROOT = ROOT / "scripts" / "development"
 
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell") or r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+DOWNLOAD_SHELLS = [POWERSHELL]
+if os.name == 'nt':
+    DOWNLOAD_SHELLS.append(str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'))
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
@@ -298,14 +302,17 @@ def test_browser_download_stops_after_no_progress_and_requests_user_action(tmp_p
     assert result.returncode == 0, result.stdout + result.stderr
     record = json.loads(result.stdout.strip().splitlines()[-1])
     assert record["elapsed"] < 5
-    assert "网络下载连续 1 秒没有写入新数据，已停止本次等待" in record["message"]
+    assert "下载器连续 1 秒没有文件进度或输出，已停止本次等待" in record["message"]
     assert "请检查网络后重试" in record["message"]
 
 @pytest.mark.parametrize('download_fails',[False,True])
-def test_browser_download_restores_temporary_environment(tmp_path, monkeypatch, powershell_record, download_fails):
+@pytest.mark.parametrize('timeout',[None,'240000','0'])
+def test_browser_download_restores_temporary_environment(tmp_path, monkeypatch, powershell_record, download_fails, timeout):
     import sys
     from playwright.sync_api import sync_playwright
     browsers=tmp_path/'browsers';monkeypatch.setenv('PLAYWRIGHT_BROWSERS_PATH',str(browsers))
+    if timeout is None:monkeypatch.delenv('PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT',raising=False)
+    else:monkeypatch.setenv('PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT',timeout)
     with sync_playwright() as runtime:executable=Path(runtime.chromium.executable_path)
     development=tmp_path/'development'
     install="throw 'DOWNLOAD_STOP'" if download_fails else f"New-Item -ItemType Directory -Force -Path {_powershell_literal(executable.parent)}|Out-Null;Set-Content -LiteralPath {_powershell_literal(executable)} -Value 'fixture'"
@@ -313,14 +320,44 @@ def test_browser_download_restores_temporary_environment(tmp_path, monkeypatch, 
         f"$script:DevelopmentRoot={_powershell_literal(development)};$env:TEMP='original-temp';Remove-Item Env:TMP -ErrorAction SilentlyContinue;"
         "function Write-PrepareStatus {};function Fail-Development {param($Stage,$Message,$Recovery) throw $Message};"
         "function Invoke-ExternalWithProgressTimeout {param($Stage,$Invocation,$Root,$Seconds,$Recovery) "
-        f"$script:download=@{{root=$Root;temp=$env:TEMP;tmp=$env:TMP}};{install}}};"
+        f"$script:download=@{{root=$Root;temp=$env:TEMP;tmp=$env:TMP;timeout=$env:PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT;watchdog=$Seconds}};{install}}};"
         "$failed=$false;try{Prepare-Chromium}catch{if($_.Exception.Message -ne 'DOWNLOAD_STOP'){throw};$failed=$true};"
-        "[pscustomobject]@{download=$script:download;temp=$env:TEMP;tmp_absent=(-not [Environment]::GetEnvironmentVariables('Process').Contains('TMP'));failed=$failed}|ConvertTo-Json -Depth 3 -Compress")
+        "[pscustomobject]@{download=$script:download;temp=$env:TEMP;tmp_absent=(-not [Environment]::GetEnvironmentVariables('Process').Contains('TMP'));timeout=$env:PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT;timeout_absent=(-not [Environment]::GetEnvironmentVariables('Process').Contains('PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT'));failed=$failed}|ConvertTo-Json -Depth 3 -Compress")
     result=powershell_record(command)
     assert result['failed'] is download_fails
     assert result['temp']=='original-temp' and result['tmp_absent']
     expected=development/'cache/downloads/playwright'
-    assert all(Path(value)==expected for value in result['download'].values())
+    assert all(Path(result['download'][key])==expected for key in ('root','temp','tmp'))
+    assert result['download']['timeout']==(timeout if timeout is not None else '120000')
+    assert result['download']['watchdog']=={None:180,'240000':300,'0':90}[timeout]
+    assert result['timeout_absent'] is (timeout is None)
+    if timeout is not None:assert result['timeout']==timeout
+
+
+@pytest.mark.parametrize('activity',['output','file'])
+@pytest.mark.parametrize('shell',list(dict.fromkeys(DOWNLOAD_SHELLS)))
+def test_browser_download_keeps_active_child_and_captures_both_streams(tmp_path, activity, shell):
+    progress=tmp_path/'progress';progress.mkdir()
+    # 缩短空闲窗口；真实子进程运行时间更长，证明持续输出或写入不会被当作无进度终止。
+    if activity=='output':
+        body='[Console]::Out.WriteLine("attempt");[Console]::Error.WriteLine("retry");'
+    else:
+        body=f"[IO.File]::AppendAllText({_powershell_literal(progress/'download.zip')},'bytes');"
+    child=f"for($i=0;$i -lt 5;$i++){{{body}Start-Sleep -Milliseconds 450}};exit 7"
+    encoded=base64.b64encode(child.encode('utf-16le')).decode('ascii')
+    command=(f". {_powershell_literal(MODULE_ROOT/'prepare.ps1')};"
+        "function Fail-Development {param($Stage,$Message,$Recovery) throw $Message};$script:lines=@();$message='';"
+        f"$invocation=@({_powershell_literal(shell)},'-NoLogo','-NoProfile','-EncodedCommand','{encoded}');"
+        f"try{{Invoke-ExternalWithProgressTimeout 'browser-download' $invocation {_powershell_literal(progress)} 1 'recover'|ForEach-Object{{$script:lines+=[string]$_}}}}catch{{$message=$_.Exception.Message}};"
+        "[pscustomobject]@{message=$message;lines=$script:lines}|ConvertTo-Json -Compress")
+    completed=subprocess.run([shell,'-NoLogo','-NoProfile','-Command',command],
+        env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},text=True,capture_output=True,timeout=10,check=False)
+    assert completed.returncode==0,completed.stdout+completed.stderr
+    result=json.loads(completed.stdout.strip().splitlines()[-1])
+    assert result['message']=='外部命令返回 7'
+    if activity=='output':
+        assert result['lines'].count('[browser-download] attempt')==5
+        assert result['lines'].count('[browser-download] retry')==5
 
 
 pytestmark = [pytest.mark.level3]

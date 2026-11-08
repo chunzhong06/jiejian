@@ -33,7 +33,7 @@ function Invoke-ExternalWithProgressTimeout(
     [string]$Stage,
     [string[]]$Invocation,
     [string]$ProgressPath,
-    [ValidateRange(1, 3600)][int]$NoProgressTimeoutSeconds,
+    [ValidateRange(1, 2147483647)][int]$NoProgressTimeoutSeconds,
     [string]$Recovery
 ) {
     if ($Invocation.Count -lt 1) { Fail-Development $Stage "缺少外部命令" "检查开发脚本参数" }
@@ -45,21 +45,43 @@ function Invoke-ExternalWithProgressTimeout(
     $startInfo.Arguments = $arguments -join ' '
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
+    # 显式回读两条流：继承控制台句柄的孙进程输出不会经过源码启动器的 PowerShell 日志管道。
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
+    $startInfo.StandardErrorEncoding = New-Object Text.UTF8Encoding($false)
     $process = [Diagnostics.Process]::Start($startInfo)
+    $streams = @(
+        @{ reader = $process.StandardOutput; pending = $process.StandardOutput.ReadLineAsync(); done = $false },
+        @{ reader = $process.StandardError; pending = $process.StandardError.ReadLineAsync(); done = $false }
+    )
     $activity = Get-DownloadActivityToken $ProgressPath
     $idle = [Diagnostics.Stopwatch]::StartNew()
     try {
-        while (-not $process.WaitForExit(1000)) {
+        while ($true) {
+            $reported = $false
+            foreach ($stream in $streams) {
+                while (-not $stream.done -and $stream.pending.IsCompleted) {
+                    $line = $stream.pending.GetAwaiter().GetResult()
+                    if ($null -eq $line) { $stream.done = $true; break }
+                    Write-Output ("[{0}] {1}" -f $Stage, $line)
+                    $reported = $true
+                    $stream.pending = $stream.reader.ReadLineAsync()
+                }
+            }
+            if ($process.HasExited -and $streams[0].done -and $streams[1].done) { break }
             $current = Get-DownloadActivityToken $ProgressPath
-            if ($current -ne $activity) {
+            # 首字节尚未到达时，下载器仍会输出重试和切换地址；不能仅以临时文件判定卡死。
+            if ($reported -or $current -ne $activity) {
                 $activity = $current
                 $idle.Restart()
             } elseif ($idle.Elapsed.TotalSeconds -ge $NoProgressTimeoutSeconds) {
                 Stop-ExternalProcessTree $process
                 Fail-Development $Stage (
-                    "网络下载连续 {0} 秒没有写入新数据，已停止本次等待" -f $NoProgressTimeoutSeconds
+                    "下载器连续 {0} 秒没有文件进度或输出，已停止本次等待" -f $NoProgressTimeoutSeconds
                 ) $Recovery
             }
+            [void]$process.WaitForExit(200)
         }
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) {
@@ -83,17 +105,30 @@ function Prepare-Chromium {
         New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
         $processEnvironment = [Environment]::GetEnvironmentVariables("Process")
         $temporaryEnvironment = @{}
-        foreach ($name in @("TEMP", "TMP")) {
+        foreach ($name in @("TEMP", "TMP", "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT")) {
             $temporaryEnvironment[$name] = [pscustomobject]@{
                 exists = $processEnvironment.Contains($name)
                 value = [Environment]::GetEnvironmentVariable($name, "Process")
             }
-            [Environment]::SetEnvironmentVariable($name, $downloadRoot, "Process")
         }
         try {
-            Invoke-ExternalWithProgressTimeout "browser-download" @($script:Python, "-B", "-m", "playwright", "install", "chromium") $downloadRoot 60 "检查代理和网络后重新运行 start.cmd；已完成的环境准备会继续沿用，无需强制重装全部依赖"
+            [int]$socketTimeout = 120000
+            $configuredTimeout = [Environment]::GetEnvironmentVariable("PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT", "Process")
+            if (-not [string]::IsNullOrWhiteSpace($configuredTimeout)) {
+                if (-not [int]::TryParse($configuredTimeout, [ref]$socketTimeout) -or $socketTimeout -lt 0) {
+                    Fail-Development "browser-download" "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT 应为非负整数，单位为毫秒" "修正当前终端中的下载超时设置后重新运行 start.cmd"
+                }
+            } else {
+                $env:PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT = [string]$socketTimeout
+            }
+            # Playwright 的 0 表示沿用其默认 30 秒；外层多留一分钟供重试输出及安装收尾。
+            $watchdogSeconds = [int][Math]::Ceiling($(if ($socketTimeout -eq 0) { 30000 } else { $socketTimeout }) / 1000.0) + 60
+            $env:TEMP = $downloadRoot
+            $env:TMP = $downloadRoot
+            Write-Output "[browser-download] 下载输出将写入启动日志；慢连接会按下载器的超时和重试策略继续。"
+            Invoke-ExternalWithProgressTimeout "browser-download" @($script:Python, "-B", "-m", "playwright", "install", "chromium") $downloadRoot $watchdogSeconds "查看启动日志中的 [browser-download] 输出；使用代理时核对 cdn.playwright.dev 和 storage.googleapis.com 的连接，必要时为当前终端设置 HTTPS_PROXY 后重新运行 start.cmd。已完成的依赖会继续复用"
         } finally {
-            foreach ($name in @("TEMP", "TMP")) {
+            foreach ($name in @("TEMP", "TMP", "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT")) {
                 $record = $temporaryEnvironment[$name]
                 if ($record.exists) { [Environment]::SetEnvironmentVariable($name, [string]$record.value, "Process") }
                 else { Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue }
