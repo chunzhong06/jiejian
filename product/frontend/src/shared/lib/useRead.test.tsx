@@ -75,3 +75,17 @@ it('统一刷新恢复读取失败的区域，不中断其他区域或在途请�
   await act(async()=>finish('original response'))
   expect(view.result.current.pending.data).toBe('original response')
 })
+
+it('更新失败保留最近成功时间和正文，换对象不借用旧事实',async()=>{
+  const request=vi.fn().mockResolvedValueOnce('known').mockRejectedValueOnce(new Error('offline'))
+  const view=renderHook(({key})=>useRead(key,request),{initialProps:{key:'a'}})
+  await waitFor(()=>expect(view.result.current.status).toBe('ready'))
+  const received=view.result.current.receivedAt
+  act(()=>view.result.current.reload())
+  await waitFor(()=>expect(view.result.current.status).toBe('stale'))
+  expect(view.result.current.data).toBe('known');expect(view.result.current.receivedAt).toBe(received)
+  request.mockResolvedValueOnce('new object')
+  view.rerender({key:'b'})
+  await waitFor(()=>expect(view.result.current.data).toBe('new object'))
+  expect(view.result.current.error).toBeUndefined()
+})

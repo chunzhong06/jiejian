@@ -213,12 +213,16 @@ class CheckService:
             return JobSubmissionResult(created=False, job=job, run=run)
 
     def _submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
-        preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
+        try:
+            preview, request, bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
+        except JiejianError as error:
+            # 此处尚未准备持久任务；submit仍会再读原回执，避免并发已接纳被忽略。
+            raise error.not_accepted() from None
         if not preview.can_execute or request is None or preview.plan_fingerprint != expected_plan_fingerprint:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化",
-                details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint})
+                details={"reason": "CHECK_PLAN_CHANGED", "plan_fingerprint": preview.plan_fingerprint}).not_accepted()
         if self._source_inspector(project_id) != request.source_fingerprint:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已变化，需要重新登记和准备")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已变化，需要重新登记和准备").not_accepted()
         raw = canonical_execution_request_bytes(request)
         request_hash = hashlib.sha256(raw).hexdigest()
         job_id, run_id = "job_" + uuid4().hex, "run_" + uuid4().hex
@@ -232,10 +236,10 @@ class CheckService:
             # 文件准备期间材料仍可能变化；在创建 Run/Job 的同一工作单元内重建计划并比较完整输入。
             current, current_request, _ = self._freeze(project_id, work=work,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
             if not current.can_execute or current.plan_fingerprint != preview.plan_fingerprint or current_request is None or canonical_execution_request_bytes(current_request) != raw:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化").not_accepted()
             # 普通检查同样核现场；写入前再次扫描，不能用无 change_id 绕过源码漂移。
             if self._source_inspector(project_id) != current_request.source_fingerprint:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,"提交期间源码已变化")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"提交期间源码已变化").not_accepted()
         created = False
         try:
             self._store.write_bundle(job_id, bundle)

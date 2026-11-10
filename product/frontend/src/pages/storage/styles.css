@@ -55,3 +55,6 @@
 .jj-storage-selection > label > input { align-self:start; margin-top:max(0px,calc((1lh - 18px)/2)); }
 
 .jj-storage-result > .jj-notice { margin-top:20px; }
+.jj-storage-start { display:grid; gap:24px; width:100%; max-width:780px; }
+.jj-storage-start > p { color:var(--muted); line-height:var(--leading-reading); }
+.jj-storage-start > footer { display:flex; justify-content:flex-end; padding-top:20px; border-top:1px solid var(--line); }

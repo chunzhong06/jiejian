@@ -65,6 +65,7 @@ class StoryEffect(WireModel):
     business_label: str
     resource_concept: str
     observed_state: Literal["CONFIRMED", "ABSENT", "UNKNOWN"]
+    assessment_state: Literal["CONFIRMED", "ABSENT", "UNKNOWN"]
     judgement: str
     evidence_refs: tuple[str, ...]
 
@@ -152,6 +153,7 @@ class ActionResultStory(WireModel):
     display_name: str
     case_id: str
     permission: FrozenPermission
+    case_verdict: CaseVerdict
     judgement: str
     reason_codes: tuple[str, ...] = ()
     fact_comparison: FactComparison
@@ -318,6 +320,7 @@ class CheckStoryBuilder:
                     proof = proofs[requirements[fact.proof_fingerprint].binding_fingerprint]
                     effects.append(StoryEffect(effect_id=fact.effect_id, business_label=proof.business_label,
                         resource_concept=proof.resource_concept, observed_state=fact.state,
+                        assessment_state="UNKNOWN" if fact.state == "ABSENT" and fact.closure != "CLOSED" else fact.state,
                         judgement=CLAIM_BOUNDARIES["unknown"] if fact.state == "ABSENT" and fact.closure != "CLOSED"
                         else EFFECT_LABELS[fact.state], evidence_refs=tuple(document.evidence_id for document in documents
                             if any(item.proof_fingerprint == fact.proof_fingerprint for item in document.observations))))
@@ -325,7 +328,7 @@ class CheckStoryBuilder:
                 stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
                     scenario_context=None if case.case_id not in scenario_context else StoryScenarioContext(
                         **scenario_context[case.case_id],expected_effect='ABSENT' if case.expects_absence else 'PRESENT'),
-                    display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement, reason_codes=result.reason_codes,
+                    display_name=config.display_name, case_id=case.case_id, permission=case.permission, case_verdict=result.verdict, judgement=judgement, reason_codes=result.reason_codes,
                     fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
                         planned_resource_owner=planned_owner, resource_id=(
                             '、'.join(sorted({fact.data.resource_id for document in documents for fact in getattr(document,'business_facts',()) if fact.data.kind=='OBJECT_CREATION'})) or '本次未确认创建对象'

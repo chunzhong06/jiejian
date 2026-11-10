@@ -1,4 +1,5 @@
 import {useEffect,useLayoutEffect,useRef,useState,type RefObject} from 'react'
+import {commitReadingTransition} from './pageTransition'
 
 type Values=Record<string,string|number|boolean>
 type Position={scroll:number;focus:string;resume:boolean}
@@ -27,7 +28,11 @@ export function useDirectoryState<T extends Values>(key:string,initial:T,ready:b
     })
     return()=>cancelAnimationFrame(frame)
   },[key,ready,root])
-  const update=(patch:Partial<T>)=>setValue(current=>({...current,...patch}))
+  const update=(patch:Partial<T>)=>{
+    const apply=()=>setValue(current=>({...current,...patch}))
+    if('query' in patch||'search' in patch)commitReadingTransition(root.current,apply)
+    else apply()
+  }
   const remember=(focus='')=>positions.set(key,{scroll:window.scrollY,focus,resume:true})
   return {value,update,remember}
 }

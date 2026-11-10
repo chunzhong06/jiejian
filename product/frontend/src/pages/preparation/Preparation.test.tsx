@@ -7,6 +7,18 @@ import {WorkflowContext} from '../../shared/lib/workflow';
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
+it('一键示例入口先展示整批范围确认，刷新读取不自动开始准备',async()=>{
+ vi.spyOn(batches,'latest').mockResolvedValue(null)
+ vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[],preparation_complete:false} as never)
+ const preview=vi.spyOn(batches,'preview').mockResolvedValue({schema_version:'1',project_id:'app',mode:'OFFICIAL',basis_id:'basis',runtime_origin:'http://127.0.0.1:8080',guard:'guard',sources:[]})
+ const start=vi.spyOn(batches,'start')
+ render(<WorkflowContext.Provider value={{open:vi.fn(),finish:vi.fn(),label:'本次检查'}}><Preparation projectId="app" name="数字展馆" official route={{path:'/preparation',query:new URLSearchParams({prepare_example:'1'})}} refresh={vi.fn()} onError={vi.fn()}/></WorkflowContext.Provider>)
+ expect(await screen.findByRole('heading',{name:'为数字展馆准备检查材料'})).toBeVisible()
+ expect(preview).toHaveBeenCalledWith('app','OFFICIAL')
+ expect(screen.getByRole('button',{name:'允许并开始准备'})).toBeDisabled()
+ expect(start).not.toHaveBeenCalled()
+})
+
 it('准备响应未知时查询原批次，不重新提交或仅刷新材料清单', async () => {
     sessionStorage.setItem('jiejian.studio.batch:app', 'original');
     const materials = vi.spyOn(preparationApi, 'get').mockResolvedValue({project_id:'app',actions:[],preparation_complete:false,recommended_action_id:null,basis_fingerprint:null,policy_epoch:1,source_fingerprint:null,impacts:[]});

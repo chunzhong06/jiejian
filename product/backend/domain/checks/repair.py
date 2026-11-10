@@ -192,6 +192,11 @@ def current_request_permissions(request) -> tuple[PermissionReference, ...]:
         for identity,revision,digest in sorted(values))
 
 
+def repair_policy_matches(contract, *, policy_epoch, permissions) -> bool:
+    """原题的全部规则必须保持原修订；同一权限版本下的额外检查不使局部原题失效。"""
+    return policy_epoch == contract.original_policy_epoch and all(item in permissions for item in contract.original_intents)
+
+
 class CurrentRepairVerification(WireModel):
     verification_scope: Literal['SOURCE_CHANGE','EXTERNAL_OBSERVATION'] = Field(default='SOURCE_CHANGE',exclude_if=lambda value:value=='SOURCE_CHANGE')
     repair_reference: Hash
@@ -206,7 +211,7 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
     def answer(status, reason):
         return CurrentRepairVerification(repair_reference=contract.repair_fingerprint,
             source_run_id=contract.source_run_id,run_id=result.run_id,status=status,reason_codes=(reason,))
-    if request.policy_epoch != contract.original_policy_epoch or current_request_permissions(request) != contract.original_intents:
+    if not repair_policy_matches(contract,policy_epoch=request.policy_epoch,permissions=current_request_permissions(request)):
         return answer("STALE","REPAIR_POLICY_CHANGED")
     if (result.run_id == contract.source_run_id or request.project_id != contract.project_id
         or (request.repair_context != repair_context(contract) and contract.reference() not in linked_repair_references) or expected_change_context is None
@@ -222,7 +227,7 @@ def verify_external_recheck(contract, *, request, bundle, result, evidence, sour
         return CurrentRepairVerification(repair_reference=contract.repair_fingerprint,
             source_run_id=contract.source_run_id,run_id=result.run_id,status=status,reason_codes=(reason,),
             verification_scope='EXTERNAL_OBSERVATION')
-    if request.policy_epoch != contract.original_policy_epoch or current_request_permissions(request) != contract.original_intents:
+    if not repair_policy_matches(contract,policy_epoch=request.policy_epoch,permissions=current_request_permissions(request)):
         return answer('STALE','REPAIR_POLICY_CHANGED')
     context=request.external_recheck
     if (context is None or source_environment is None or request.environment is None

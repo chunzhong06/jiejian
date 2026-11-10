@@ -8,7 +8,7 @@ import type { PageProps } from '../shared/model/page';
 import type { Route } from '../shared/lib/navigation';
 import {scopedPath} from '../shared/lib/navigation'
 import {ActionLink} from '../shared/ui/actions'
-import { Empty } from "../shared/ui/feedback";
+import { PageError, Empty } from "../shared/ui/feedback";
 import { Heading } from "../shared/ui/layout";
 import {SettingsWorkspace} from './shell/SettingsWorkspace'
 import {settingsSection} from '../shared/lib/settings'
@@ -35,11 +35,12 @@ type Props = {
     project?: ProjectDto;
     loading: boolean;
     workspace: WorkspaceViewDto | null;
+    workspaceError?: Error;
     environment?: OfficialExperienceDto;
     onConnected: (id: string) => void;
     onError: (error: unknown) => void;
 };
-export function RouteContent({ current, route, context, project, loading, workspace, environment, onConnected, onError }: Props) {
+export function RouteContent({ current, route, context, project, loading, workspace, workspaceError, environment, onConnected, onError }: Props) {
     if (current === '/workspace' && route.query.get('view') === 'collaboration' && context && route.query.get('task_id'))
         return <Collaboration key={route.query.get('task_id')} projectId={context.projectId} taskId={route.query.get('task_id')!}/>;
     if (current === '/workspace' && route.query.get('view') === 'collaboration' && context)
@@ -56,12 +57,13 @@ export function RouteContent({ current, route, context, project, loading, worksp
         return <PageSkeleton view={current}/>;
     if (!context)
         return <Welcome />;
+    if (current === '/workspace' && workspaceError && !workspace) return <PageError title="工作台" error={workspaceError}/>;
     if (current === '/workspace')
         return <Home {...context} workspace={workspace} experience={environment ?? null}/>;
     if (current === '/permissions')
         return <Permissions key={context.projectId} {...context}/>;
     if (current === '/testing') return <Testing key={context.projectId} {...context}/>;
-    if (current === '/issues') return <Issues key={context.projectId} {...context}/>;
+    if (current === '/issues') return <Issues key={context.projectId} {...context} archive={project?.status==='ARCHIVED'}/>;
     if (current === '/preparation')
         return <Preparation key={context.projectId} {...context}/>;
     if (current === '/reports' && route.query.get('view')==='plan' && project)

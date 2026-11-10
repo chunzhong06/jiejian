@@ -15,19 +15,26 @@ def without_fences(text):
         else:output.append(line if fence is None else '')
     return '\n'.join(output)
 
-def heading_ids(text):
+def heading_id(title,counts):
+    """按页面顺序分配标题锚点；生成导航与检查重复标题共用同一规则。"""
+    title=re.sub(r'!?\[([^\]]+)\]\([^)]+\)',r'\1',title)
+    title=re.sub(r'<[^>]+>','',title).replace('`','').casefold()
+    base=re.sub(r'\s','-',re.sub(r'[^\w\s-]','',title))
+    number=counts[base]
+    counts[base]+=1
+    return base+('-'+str(number) if number else '')
+
+def heading_rows(text):
+    """返回原行号、层级、标题和锚点，供链接检查及语义章节读取共用。"""
     counts=Counter()
-    result=set()
-    for line in without_fences(text).splitlines():
-        match=re.match(r'^\s{0,3}#{1,6}\s+(.+?)\s*#*$',line)
-        if not match:continue
-        title=re.sub(r'!?\[([^\]]+)\]\([^)]+\)',r'\1',match.group(1))
-        title=re.sub(r'<[^>]+>','',title).replace('`','').casefold()
-        base=re.sub(r'\s','-',re.sub(r'[^\w\s-]','',title))
-        number=counts[base]
-        result.add(base+('-'+str(number) if number else ''))
-        counts[base]+=1
+    result=[]
+    for index,line in enumerate(without_fences(text).splitlines()):
+        match=re.match(r'^\s{0,3}(#{1,6})\s+(.+?)\s*#*$',line)
+        if match:result.append((index,len(match[1]),match[2],heading_id(match[2],counts)))
     return result
+
+def heading_ids(text):
+    return {row[3] for row in heading_rows(text)}
 
 def link_targets(text):
     prose=re.sub(r'(`+).*?\1',lambda m:' '*len(m.group()),without_fences(text))

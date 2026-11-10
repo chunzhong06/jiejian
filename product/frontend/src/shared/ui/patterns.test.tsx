@@ -56,3 +56,14 @@ it('可量化进度保留实际数值，未知进度不生成百分比',()=>{
   view.rerender(<Progress label="检查进度"/>)
   expect(screen.getByRole('progressbar',{name:'检查进度'})).not.toHaveAttribute('value')
 })
+
+it('活动反馈独立于真实完成比例，终态关闭持续动画',()=>{
+  const view=render(<Progress label="检查进度" value={0} max={4} active/>)
+  expect(screen.getByRole('progressbar')).toHaveAttribute('value','0')
+  expect(view.container.querySelector('.jj-progress')).toHaveAttribute('data-active','true')
+  view.rerender(<Progress label="检查进度" value={2} max={4} active/>)
+  expect(view.container.querySelector('.jj-progress-fill')).toHaveStyle({transform:'scaleX(0.5)'})
+  view.rerender(<Progress label="检查进度" value={4} max={4} active={false}/>)
+  expect(view.container.querySelector('.jj-progress')).toHaveAttribute('data-active','false')
+  expect(screen.getByRole('progressbar')).toHaveAttribute('value','4')
+})

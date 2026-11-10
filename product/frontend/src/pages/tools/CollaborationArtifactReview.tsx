@@ -38,11 +38,11 @@ export function CollaborationArtifactReview({projectId,task,review}:{projectId:s
     });
     const destination=review.destination+(review.destination.includes('?')?'&':'?')+new URLSearchParams({return_to:'/workspace?'+new URLSearchParams({view:'collaboration',task_id:task.task_id})});
     return <div className="jj-collaboration-artifact-review">
-        <div className="jj-collaboration-artifact-state"><span>{flowReview?`接口流程 · 第 ${revision} 修订`:'已保存产物 · 待核对配置'}</span><Badge tone="accent">等待你采用</Badge></div>
+        <div data-milestone-part="heading" className="jj-collaboration-artifact-state"><span>{flowReview?`接口流程 · 第 ${revision} 修订`:'已保存产物 · 待核对配置'}</span><Badge tone="accent">待确认使用</Badge></div>
         {flowReview?<>
-            <p className="jj-collaboration-hint">先比较 Agent 提供的接口流程与当前草稿，再到编辑器决定是否带入、修改和用于检查。</p>
+            <p className="jj-collaboration-hint">在编辑器中比较候选与当前草稿，再决定是否带入。</p>
             {data.loading?<Loading/>:data.error?<ErrorNote error={data.error}/>:data.data&&<FlowComparison {...data.data}/>}
-        </>:<><p className="jj-collaboration-hint">这项产物需要在对应配置中核对业务含义与适用范围。保存产物不代表它已经用于检查。</p><dl className="jj-facts jj-collaboration-artifact-facts" data-layout="columns"><div><dt>本次目标</dt><dd>{task.goal}</dd></div><div><dt>审阅动作</dt><dd>{review.action_label}</dd></div></dl></>}
-        <footer><ActionLink kind="primary" href={'#'+scopedPath(destination,projectId)}>{flowReview?'进入流程继续核对':review.action_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>
+        </>:<><p className="jj-collaboration-hint">打开对应配置，核对内容后再确认使用。</p><dl className="jj-facts jj-collaboration-artifact-facts" data-layout="columns"><div><dt>本次目标</dt><dd>{task.goal}</dd></div><div><dt>审阅动作</dt><dd>{review.action_label}</dd></div></dl></>}
+        <footer data-milestone-part="actions"><ActionLink kind="primary" href={'#'+scopedPath(destination,projectId)}>{flowReview?'进入流程继续核对':review.action_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>
     </div>;
 }

@@ -2,6 +2,7 @@
 # 模型不读取数据库或执行写入；页面展示的事实由对应服务提供。
 
 from __future__ import annotations
+from product.backend.domain.checks.repair import CurrentRepairReference
 
 from typing import Literal
 
@@ -114,9 +115,10 @@ class PrimaryTaskView(WorkspaceModel):
     why_now: str = Field(min_length=1, max_length=1024)
     user_responsibility: str = Field(min_length=1, max_length=1024)
     system_will_do: str = Field(min_length=1, max_length=1024)
-    route: Literal["/application", "/permissions", "/tests", "/changes"]
+    route: Literal["/application", "/permissions", "/tests", "/changes", "/issues"]
     change_id: str | None = None
     repair_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    repair: CurrentRepairReference | None = None
     run_id: str | None = None
     can_execute: bool
     stale_fingerprint: str = Field(pattern=SHA256_PATTERN)

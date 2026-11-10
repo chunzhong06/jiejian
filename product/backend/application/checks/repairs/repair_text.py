@@ -11,7 +11,7 @@ REPAIR_STATUS_LABELS = {
 }
 CHANGE_IMPACT_LABELS = {
     "DIRECTLY_AFFECTED": "实现关联的代码发生变化，需要重新验证",
-    "MAPPING_REVIEW_REQUIRED": "实现定位需要人工复核",
+    "MAPPING_REVIEW_REQUIRED": "需要核对业务操作与代码的对应关系",
     "NO_DIRECT_EVIDENCE": "未发现直接实现关联；这不代表不存在其他影响",
 }
 REPAIR_REQUIREMENTS = {
@@ -22,9 +22,9 @@ REPAIR_REQUIREMENTS = {
     "new_run": "登记修改不代表修复完成，需要针对原问题发起新的检查。",
 }
 CURRENT_TASK_TEXT = {
-    "PREPARE_AGENT_REPAIR": ("把已确认的问题交给 Agent 修复", "已有可追溯的权限问题。下一步整理修复要求，随后核对 Agent 的实际修改并独立复验。", "核对原问题与必须保留的正常业务，将修复任务交给你的 Coding Agent。"),
+    "PREPARE_AGENT_REPAIR": ("继续处理已确认的权限问题", "原问题和正常功能要求已经保留。完成应用修改或部署准备后，按原条件再次验证。", "核对原问题，选择适用的处理方式，再确认复验范围。"),
     "REGISTER_SOURCE_CHANGE": ("登记当前代码变化", "代码已变化，需要先重新核对实际修改。", "说明本次修改的目的。"),
-    "VERIFY_REPAIR": ("检查原问题是否修好", "修改和准备条件已就绪，修复仍需新的检查证明。", "确认重新检查原问题，以及要求保留的正常功能。"),
+    "VERIFY_REPAIR": ("检查原问题是否已解决", "修改和准备条件已就绪，修复仍需新的检查证明。", "确认重新检查原问题，以及要求保留的正常功能。"),
     "RUN_CURRENT_CHECK": ("检查当前权限要求", "检查材料已准备好，实际执行后再根据结果判断。", "确认开始本次检查。"),
-    "VIEW_CURRENT_RESULT": ("查看已保存的检查结果", "本次检查已经形成可读取的结果。", "核对判断、证据和下一步。"),
+    "VIEW_CURRENT_RESULT": ("查看已保存的检查结果", "检查结果已发布，可以查看。", "查看结论和依据，决定后续处理。"),
 }

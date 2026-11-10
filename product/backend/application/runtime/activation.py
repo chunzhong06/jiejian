@@ -55,13 +55,16 @@ class RuntimeActivationService:
                 return self.receipt(project_id, operation_id)
             delivery = work.development.delivery(project_id, delivery_id)
             if delivery is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "本应用中未找到这批交付")
-            task = require_active_task_version(work, project_id, delivery.task_id, expected_version)
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "本应用中未找到这批交付").not_accepted()
+            try:
+                task = require_active_task_version(work, project_id, delivery.task_id, expected_version)
+            except JiejianError as error:
+                raise error.not_accepted() from error
             if work.development.deliveries(project_id, task.task_id, limit=1)[0] != delivery or task.context_id != delivery.context_id:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "只有当前任务的最新交付可以加载运行")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "只有当前任务的最新交付可以加载运行").not_accepted()
             snapshot = work.source_changes.snapshot(delivery.current_snapshot_id)
             if snapshot is None or snapshot.project_id != project_id:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "交付源码快照缺失")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "交付源码快照缺失").not_accepted()
             receipt = RuntimeActivationReceipt(project_id=project_id, operation_id=operation_id, request_fingerprint=fingerprint,
                 task_id=task.task_id, delivery_id=delivery_id, source_fingerprint=snapshot.source_fingerprint,
                 status="PENDING", created_at_us=self._clock())
@@ -90,7 +93,8 @@ class RuntimeActivationService:
                 reference = self._reader(project_id)
                 matched = reference is not None and reference.source_fingerprint == receipt.source_fingerprint
             except (JiejianError, OSError, ValueError):
-                matched = False
+                # 查询失败没有提供“未启动”的证据，保留原PENDING意图供同键核对。
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "运行加载与回执尚未确认，请查询原操作") from None
             if not matched:
                 failed = receipt.model_copy(update={"status": "FAILED", "error_code": exc.code if isinstance(exc, JiejianError) else "RUNTIME_LOAD_FAILED"})
                 try:

@@ -1,6 +1,7 @@
+import {editorDraft,rememberEditorDraft,useDraftProtection} from '../../entities/runtime/model/handoff'
 import {prefixedId as id} from '../../shared/lib/id'
 import {RuleConditionsEditor, conditionLabels} from '../../entities/permission/ui/RuleConditions';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
@@ -9,8 +10,7 @@ import SafetyOutlined from '@ant-design/icons/SafetyOutlined';
 import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
 import StopOutlined from '@ant-design/icons/StopOutlined';
 import { businessBoundariesApi as api, type BoundaryMaintenanceDraftDto, type BoundaryMaintenanceCommandDto, type ProposedEffectDto } from '../../entities/permission/api/businessBoundaries';
-import { ApiError } from '../../shared/api/http';
-import { readPending, savePending, useCommand } from '../../shared/lib/operations';
+import { readPending, savePending, useCommand, notAccepted, isRecord } from '../../shared/lib/operations';
 import { Button } from '../../shared/ui/actions';
 import { Choice } from '../../shared/ui/Choice';
 import { Heading, Field, SectionHeading, FormColumns } from '../../shared/ui/layout';
@@ -25,12 +25,16 @@ const newEffect = (): ProposedEffectDto => ({ item_id: id('peff_'), business_lab
 
 export function InitialRules({ projectId, basis, onBack, onProposal, onError }: { projectId: string; basis: BoundaryMaintenanceDraftDto; onBack: () => void; onProposal: (id: string) => Promise<void>; onError: (error: unknown) => void }) {
     const key = 'jiejian.studio.initial-rules:' + projectId;
-    const [draft, setDraft] = useState<Draft>(() => readPending<Draft>(key) ?? { expected_boundary_state_fingerprint: basis.boundary_state_fingerprint, actors: basis.actors, actions: basis.actions, permissions: basis.permissions, provenance: '' });
+    // 旧版本的表单记录只迁入本次文档内存，后续会话缓存仅保留公开提案身份。
+    const recovery=readPending<Partial<Draft>>(key,(value):value is Partial<Draft>=>isRecord(value));
+    const [draft, setDraft] = useState<Draft>(() => editorDraft<Draft>(key,projectId) ?? (recovery&&Array.isArray(recovery.actors)&&Array.isArray(recovery.actions)&&Array.isArray(recovery.permissions)&&typeof recovery.expected_boundary_state_fingerprint==='string'?recovery as Draft:{ expected_boundary_state_fingerprint: basis.boundary_state_fingerprint, actors: basis.actors, actions: basis.actions, permissions: basis.permissions, provenance: '', uncertain:recovery?.uncertain===true, proposal_id:typeof recovery?.proposal_id==='string'?recovery.proposal_id:undefined }));
+    const original=useRef(JSON.stringify(draft)).current;
     const [section, setSection] = useState<Section>('actors');
     const [proposals, setProposals] = useState<string[]>([]);
-    const {busy,run}=useCommand(key,onError,error=>error instanceof ApiError&&['INPUT_INVALID','STATE_PRECONDITION','API_VALIDATION_ERROR'].includes(error.code));
+    const {busy,run}=useCommand(key,onError,error=>notAccepted(error,Boolean(draft.uncertain)));
     const prefix = useId(), panelId = prefix + '-panel';
-    useEffect(() => { savePending(key, draft); }, [key, draft]);
+    useEffect(() => { rememberEditorDraft(key,draft,projectId); savePending(key,{uncertain:Boolean(draft.uncertain),proposal_id:draft.proposal_id}); }, [key, draft]);
+    useDraftProtection(!draft.proposal_id&&JSON.stringify(draft)!==original);
     // 草稿可以继续保留，但不能把旧依据下的编辑自动覆盖到已经变化的正式规则上。
     const changed = basis.boundary_state_fingerprint !== draft.expected_boundary_state_fingerprint;
     const disabled = busy || Boolean(draft.uncertain) || changed;
@@ -56,13 +60,13 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
             edit({ proposal_id: result.proposal.proposal_id, uncertain: false });
             await onProposal(result.proposal.proposal_id);
         } catch (error) {
-            if (error instanceof ApiError && ['INPUT_INVALID', 'STATE_PRECONDITION', 'API_VALIDATION_ERROR'].includes(error.code)) edit({ uncertain: false });
+            if (notAccepted(error,Boolean(draft.uncertain))) edit({ uncertain: false });
             throw error;
         }
     },'write');
     return <>
         <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>全部权限规则</Button></div>
-        <Heading title="编写权限要求"><p>先填写业务角色和操作，再说明谁可以访问哪些数据，以及怎样确认操作结果。</p></Heading>
+        <Heading title="编写权限要求"><p>先确认谁在操作，再定义操作会产生的业务结果，最后约定谁可以对哪些数据完成这些操作。各部分可以随时返回修改，整理完成后统一审阅批准。</p></Heading>
         {changed && <Notice tone="caution">正式规则已变化，草稿保留。请返回核对当前规则后再整理。</Notice>}
         <div className="jj-rule-authoring" data-preview={draft.permissions.length>0}>
             <div className="jj-rule-authoring-editor">
@@ -164,7 +168,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 {section === 'permissions' && <details className="jj-initial-provenance"><summary>补充规则依据（选填）</summary><Field label="权限要求的依据"><textarea disabled={disabled} rows={3} maxLength={512} value={draft.provenance} onChange={event => edit({ provenance: event.target.value })} /></Field></details>}
                 <div className="jj-initial-submit">
                     {!!missing.length && <details className="jj-initial-missing"><summary>仍需填写 {missing.length} 项</summary><div>{missing.map(item => <Button kind="quiet" key={item.label} onClick={() => setSection(item.section)}>{item.label}<ArrowRightOutlined aria-hidden="true" /></Button>)}</div></details>}
-                    <p>生成提案后，审阅并批准这些规则，后续检查才会使用它们。</p>
+                    <p>生成后需审阅批准，规则才会生效。</p>
                     <Button kind="primary" busy={busy} disabled={!valid || disabled} onClick={submit}>生成完整提案<ArrowRightOutlined aria-hidden="true" /></Button>
                 </div>
             </aside>}

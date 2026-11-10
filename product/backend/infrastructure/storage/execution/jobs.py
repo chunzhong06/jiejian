@@ -351,7 +351,7 @@ class JobRepository:
                 raise JiejianError(ErrorCode.JOB_QUEUE_FULL,
                     f'排队任务已达预算：全部 {capacity.queued}/{capacity.global_limit}，'
                     f'本应用 {capacity.project_queued}/{capacity.project_limit}，'
-                    f'此类 {capacity.operation_queued}/{capacity.operation_limit}；请查询已有任务，等待或取消后再决定是否提交')
+                    f'此类 {capacity.operation_queued}/{capacity.operation_limit}；请查询已有任务，等待或取消后再决定是否提交').not_accepted()
         self._session.add(
             JobRow(
                 job_id=record.job_id,

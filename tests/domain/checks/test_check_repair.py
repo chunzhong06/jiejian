@@ -4,6 +4,7 @@ import pytest
 
 from product.backend.domain.checks.repair import repair_case_identity, repair_context, verify_current_repair
 from tests.support.builders.checks.repair import contract_and_new, package
+from product.backend.domain.checks.repair import repair_policy_matches
 
 
 
@@ -52,3 +53,13 @@ def test_case_identity_excludes_recording_source_configuration_but_preserves_bus
     assert repair_case_identity(action,changed) == identity
     changed = changed.model_copy(update={"resource_id":"different-resource"})
     assert repair_case_identity(action,changed).fingerprint() != identity.fingerprint()
+
+
+def test_partial_original_is_not_stale_when_other_unchanged_rules_exist():
+    contract,current,change=contract_and_new()
+    original=contract.original_intents[0]
+    extra=original.model_copy(update={'intent_id':'pin_'+'f'*32})
+    assert repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=(*contract.original_intents,extra))
+    assert not repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=(extra,))
+    changed=tuple(item.model_copy(update={'revision':item.revision+1}) if item==original else item for item in contract.original_intents)
+    assert not repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=changed)

@@ -4,6 +4,21 @@ from uuid import uuid4
 from tests.support.builders.control_plane import TestClient, create_app
 
 
+def test_application_rejection_reports_safe_field_and_does_not_accept(tmp_path):
+    app = create_app(tmp_path / 'instance', start_worker=False)
+    with TestClient(app) as client:
+        operation = uuid4().hex
+        response = client.post('/api/applications', json={'operation_id':operation, 'name':'𠮷'*129})
+        assert response.status_code == 422
+        error = response.json()['error']
+        assert error['details'] == {'request_outcome':'NOT_ACCEPTED', 'field_errors':[{'field':'name','reason':'TOO_LONG'}]}
+        assert '𠮷' not in response.text
+        with app.state.context.uow_factory() as work:
+            assert work.projects.get('app_'+operation) is None
+        accepted = client.post('/api/applications', json={'operation_id':operation, 'name':'𠮷'*128})
+        assert accepted.status_code == 201
+
+
 def test_source_free_environment_and_import_round_trip(tmp_path):
     app = create_app(tmp_path / 'instance', start_worker=False)
     with TestClient(app) as client:
@@ -16,8 +31,9 @@ def test_source_free_environment_and_import_round_trip(tmp_path):
                 allowed_hosts=['127.0.0.1'], allowed_ports=[18081], allow_private_network=True))
         saved = client.post(root + '/environments', json={'configuration':environment, 'expected_revision':0})
         assert saved.status_code == 200, saved.text
+        impact = client.get(root + '/environments/' + environment['environment_id'] + '/activation-preview?revision=1').json()['data']
         active = client.post(root + '/environments/' + environment['environment_id'] + '/activate',
-            json={'revision':1,'expected_revision':0})
+            json={'revision':1,'expected_revision':0,'impact_fingerprint':impact['impact_fingerprint']})
         assert active.status_code == 200, active.text
         assert active.json()['data']['source_root'] is None
         assert active.json()['data']['environment']['deployment_verification'] == 'UNVERIFIED'

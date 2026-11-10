@@ -2,16 +2,43 @@
 import argparse
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 if __package__ in {None,''}:sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from scripts.docs.sources import modules,routes,schemas,migrations
 from scripts.docs.checks import check_documents
+from scripts.docs.markdown import heading_id
 from scripts.quality.catalog import AREAS
+
+def module_page(group,rows):
+    """目录导航只列定位信息；文件事实在对应小节保留一份。"""
+    title=f'{group} 模块'
+    page=[f'# {title}','','<!-- generated:modules -->','','[返回总索引](../模块索引.md)','',
+        '按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。']
+    directories={}
+    for row in rows:
+        directory=Path(row[0]).parent.relative_to(group).as_posix()
+        directories.setdefault(directory,[]).append(row)
+    counts=Counter()
+    heading_id(title,counts)
+    navigation=[]
+    body=[]
+    for directory,files in directories.items():
+        section='根目录' if directory=='.' else directory
+        anchor=heading_id(section,counts)
+        navigation.append(f'[{section}](#{anchor})（{len(files)} 个文件）')
+        body+=['',f'## {section}']
+        for file,lines,names in files:
+            relative=Path(file).relative_to(group).as_posix()
+            heading_id(relative,counts)
+            symbols='、'.join(f'`{name}`' for name in names[:8])+('等' if len(names)>8 else '')
+            body+=['',f'### {relative}','',f'[源码](../../../{file})（{lines} 行）。公开声明：{symbols or "包、内部机制或样式"}。']
+    return '\n'.join(page+['','按目录定位：'+'、'.join(navigation)+'。']+body)+'\n'
 
 def render(root):
     output={}
-    index=['# 模块索引','','本页按源码职责路由至生成分册。分册静态提取文件、行数和公开声明，用于定位所有者，不表示完整调用关系或运行验收。','','[架构说明](../工程/架构.md)','','| 源码范围 | 文件数 | 分册 |','| --- | ---: | --- |']
+    index=['# 模块索引','','本页按源码职责路由至生成分册；进入分册后按目录导航或文件标题定位，只展开当前对象及直接消费者。分册静态提取文件、行数和公开声明，不表示完整调用关系或运行验收。','','[架构说明](../工程/架构.md)','','| 源码范围 | 文件数 | 分册 |','| --- | ---: | --- |']
     groups={}
     for row in modules(root):
         parts=Path(row[0]).parts
@@ -23,11 +50,7 @@ def render(root):
             continue
         name=group.replace('/','-')
         index.append(f'| `{group}` | {len(rows)} | [查看声明](模块/{name}.md) |')
-        page=[f'# {group} 模块','','<!-- generated:modules -->','','[返回总索引](../模块索引.md)','','| 文件 | 行数 | 公开声明 |','| --- | ---: | --- |']
-        for file,lines,names in rows:
-            symbols='、'.join(names[:8])+('等' if len(names)>8 else '')
-            page.append(f'| [{file}](../../../{file}) | {lines} | {symbols or "包、内部机制或样式"} |')
-        output[f'docs/参考/模块/{name}.md']='\n'.join(page)+'\n'
+        output[f'docs/参考/模块/{name}.md']=module_page(group,rows)
     output['docs/参考/模块索引.md']='\n'.join(index)+'\n'
     contract=['# 接口与协议','','本页静态提取 HTTP 声明和 Schema 注册。调用条件见[本地接口](本地接口.md)，迁移另见[数据库修订](数据库修订.md)。HTTP 表不代替鉴权、前置条件和 OpenAPI；声明是否实际装配需沿接口组合入口核对。','','## HTTP 接口','','| 方法 | 路径 | 声明位置 |','| --- | --- | --- |']
     for method,path,owner,name in routes(root):

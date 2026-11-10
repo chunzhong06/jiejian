@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import {cleanup} from '@testing-library/react'
 import {afterEach,vi} from 'vitest'
+import {stopAllMotion} from '../src/shared/lib/motion'
 
-afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear()})
+afterEach(()=>{cleanup();stopAllMotion();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear()})
 Object.defineProperty(window,'matchMedia',{writable:true,value:(query:string)=>({matches:false,media:query,onchange:null,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){},dispatchEvent(){return false}})})
 class ResizeObserverStub{observe(){}unobserve(){}disconnect(){}}
 Object.defineProperty(globalThis,'ResizeObserver',{writable:true,value:ResizeObserverStub})

@@ -47,3 +47,33 @@ def test_each_proof_origin_uses_its_actual_method_identity():
 
 
 pytestmark=[pytest.mark.level3]
+
+
+@pytest.mark.parametrize('linked,normal_safe,whole_run,expected',[
+    (False,True,'PASS','NO_LONGER_OBSERVED'),
+    (True,True,'PASS','FIXED'),
+    (True,True,'BLOCK','FIXED'),
+    (True,False,'INCONCLUSIVE','INSUFFICIENT'),
+])
+def test_comparison_completion_uses_exact_original_verification(linked,normal_safe,whole_run,expected):
+    from product.backend.application.checks.reading.comparison import CheckComparisonService
+    from product.backend.application.checks.repairs.repair import CurrentRepairService
+    from product.backend.domain.lifecycle import RunLifecycle,RunVerdict
+    from tests.support.builders.checks.repair import package,contract_and_new
+    source=package()
+    contract,current,change=contract_and_new(new_safe=normal_safe)
+    if not linked:current.request=current.request.model_copy(update={'repair_context':None,'change_context':None})
+    # 本用例只投影该原题；整轮其他问题的汇总结论不替代其逐题验收。
+    current.result.verdict=RunVerdict(whole_run)
+    packages={source.result.run_id:source,current.result.run_id:current}
+    def inspect(run,**_kwargs):
+        return SimpleNamespace(run=SimpleNamespace(run_id=run,created_at_us=list(packages).index(run),lifecycle=RunLifecycle.COMPLETED),
+            result_integrity='VALID',environment=None),packages[run]
+    reader=SimpleNamespace(inspect=inspect,package=lambda run,**_kwargs:packages[run])
+    repairs=CurrentRepairService(reader=reader,change_context_reader=lambda *_:change if linked else None)
+    service=CheckComparisonService(reader,None);service.bind_repairs(repairs)
+    compared=service.compare(source.request.project_id,source.result.run_id,current.result.run_id)
+    row=next(item for item in compared.items if item.after.expectation=='DENY')
+    assert row.state==expected
+    assert row.verification_scope==('SOURCE_CHANGE' if expected=='FIXED' else None)
+    if not linked:assert 'REPAIR_CONTEXT_MISMATCH' in row.reasons

@@ -1,26 +1,14 @@
 import {useLayoutEffect,useRef} from 'react'
-import {motionMilliseconds} from './motionTiming'
+import {revealContent} from './motion'
 
-/** 只交接阅读内容，不通过重挂载丢弃其中的表单草稿或未知操作。 */
+/** 对象交接保留组件、草稿与原操作；共享场景不再叠加第二层入场。 */
 export function useContentTransition<T extends HTMLElement=HTMLDivElement>(identity:string){
-  const root=useRef<T>(null),interrupted=useRef<number|undefined>(undefined)
+  const root=useRef<T>(null)
   useLayoutEffect(()=>{
     const node=root.current
-    const preference=matchMedia('(prefers-reduced-motion: reduce)')
-    if(!node?.animate||preference.matches)return
-    const style=getComputedStyle(node)
-    const animation=node.animate([
-      {opacity:interrupted.current??.65},
-      {opacity:1},
-    ],{duration:motionMilliseconds(style.getPropertyValue('--motion-content')),easing:style.getPropertyValue('--ease-enter').trim()})
-    interrupted.current=undefined
-    const stop=()=>{if(preference.matches)animation.cancel()}
-    preference.addEventListener('change',stop)
-    return()=>{
-      // 快速切换从当前可读程度继续，不反复将正文打暗；不重挂表单或改写草稿。
-      interrupted.current=animation.playState==='running'?Number(getComputedStyle(node).opacity):undefined
-      preference.removeEventListener('change',stop);animation.cancel()
-    }
+    if(!node)return
+    node.dataset.motionOwner='content'
+    revealContent(node)
   },[identity])
   return root
 }

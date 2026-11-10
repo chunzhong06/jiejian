@@ -14,7 +14,7 @@ export function FieldMutationEditor({value,disabled,onChange}:{value:FieldMutati
   const update=(patch:Partial<FieldMutationRequirement>)=>onChange({...value!,...patch})
   const scalarType=value?.expected_value===null?'null':typeof value?.expected_value
   return <div className="jj-field-stack">
-    <Field label="状态证明范围"><Choice disabled={disabled} value={value?'FIELD':'STATE'} onValueChange={kind=>onChange(kind==='FIELD'?{path:[],operation:'CHANGE',expected_value:null}:null)}><option value="STATE">业务状态</option><option value="FIELD">准确字段的写入</option></Choice></Field>
+    <Field label="状态证明范围"><Choice disabled={disabled} value={value?'FIELD':'STATE'} onValueChange={kind=>onChange(kind==='FIELD'?{path:[],operation:'CHANGE',expected_value:null}:null)}><option value="STATE">业务状态</option><option value="FIELD">指定字段的写入</option></Choice></Field>
     {value&&<>
       <Field label="业务字段路径" hint="例如 owner_id 或 profile.role。读取范围须与这里一致。"><input disabled={disabled} value={value.path.join('.')} onChange={event=>update({path:event.target.value.split('.')})}/></Field>
       <Field label="要观察的写入"><Choice disabled={disabled} value={value.operation} onValueChange={operation=>update({operation:operation as FieldMutationRequirement['operation'],expected_value:null})}>{Object.entries(names).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></Field>

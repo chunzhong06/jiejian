@@ -35,7 +35,13 @@
 .jj-rule-directory-summary > div { display:flex; gap:8px; flex-wrap:wrap; }
 .jj-rule-directory-summary .jj-button { font-size:var(--text-body); min-height:var(--control-compact); padding:5px 10px; }
 .jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
-.jj-rule-inspector-links { display:grid; gap:6px; }
-.jj-rule-inspector-links > .jj-button { justify-content:space-between; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 16px; background:transparent; font-size:var(--text-body); white-space:normal; text-align:left; }
 .jj-rule-directory .jj-object-table th:first-child { width:58%; }
 @media(max-width:600px) { .jj-rule-directory .jj-object-table :is(th,td):last-child { display:none; } }
+.jj-rule-directory .jj-collection-layout{grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr)}
+.jj-rule-directory .jj-collection-layout:not(:has(>.jj-inspector)){grid-template-columns:minmax(0,1fr)}
+.jj-rule-directory .jj-inspector{padding:28px 0 28px 28px}
+.jj-rule-quick-facts{margin:32px 0;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.jj-rule-inspector-links{display:flex;flex-wrap:wrap;gap:16px 24px}
+.jj-rule-inspector-links>.jj-button{padding-inline:0}
+@media(max-width:1180px){.jj-rule-directory .jj-collection-layout{grid-template-columns:minmax(0,1fr)}.jj-rule-directory[data-detail-open=true] .jj-collection-main{display:none}.jj-rule-directory .jj-inspector{border:0;padding:28px 0}}
+@media(max-width:550px){.jj-rule-quick-facts{grid-template-columns:minmax(0,1fr)}}

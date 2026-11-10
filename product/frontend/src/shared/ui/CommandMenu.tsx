@@ -31,9 +31,12 @@ export function CommandMenu({children,menu,className='',placement='bottomRight'}
   useEffect(()=>{
     if(phase!=='closing')return
     // 同一所有者完成退场；快速反向不依赖组件库可能缺失的 transitionend。
-    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),160)
+    const duration=motionMilliseconds(getComputedStyle(document.documentElement).getPropertyValue('--motion-exit'),180)
     const timer=setTimeout(()=>setPhase('closed'),duration+32)
-    return()=>clearTimeout(timer)
+    const preference=matchMedia('(prefers-reduced-motion: reduce)')
+    const finish=()=>{if(preference.matches){clearTimeout(timer);setPhase('closed')}}
+    preference.addEventListener('change',finish);finish()
+    return()=>{clearTimeout(timer);preference.removeEventListener('change',finish)}
   },[phase])
   const dismiss=()=>{visible.current=false;setPhase(matchMedia('(prefers-reduced-motion: reduce)').matches?'closed':'closing')}
   // 后续命令可能立即打开对话框；先归还焦点，让新任务接管并记住正确的返回位置。

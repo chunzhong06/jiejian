@@ -1,8 +1,8 @@
 # 文档必须能独立定位现有行为和源码，不将临时审计材料作为设计说明。
 from pathlib import Path
 from scripts.docs.checks import check_documents
-from scripts.docs.generate import generate
-from scripts.docs.markdown import heading_ids
+from scripts.docs.generate import generate,module_page
+from scripts.docs.markdown import heading_ids,link_targets
 import pytest
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -76,3 +76,56 @@ def test_literal_source_references_follow_actual_owners_but_examples_are_not_dep
     assert check_documents(tmp_path)==[]
     source.rename(source.with_name('renamed.py'))
     assert any('无效源码引用' in value for value in check_documents(tmp_path))
+
+
+@pytest.mark.parametrize('route,valid',[
+    ('[读取章节](target.md#章节)',True),
+    ('[读取章节](target.md#不存在)',False),
+    ('[读取章节](https://example.com/guide.md)',False),
+    ('[读取章节](../README.md)',False),
+    ('[](target.md#章节)',False),
+    ('[   ](target.md#章节)',False),
+    ('[读取章节](target.md#章节',False),
+    ('[读取章节](missing.md#章节)',False),
+    ('[读取章节](target.md#章节)\n[另一章](target.md#章节-1)',True),
+    ('完整读取 → [存在](target.md#章节)、[失效](missing.md)',False),
+    ('读取章节 → [章节](target.md#章节)',True),
+    ('读取章节 → [章节](target.md#%E7%AB%A0%E8%8A%82)',True),
+    ('读取章节 → [重复标题](target.md#章节-1)',True),
+    ('读取章节 → [章节](target.md#不存在)',False),
+    ('读取章节 → docs/target.md#章节',True),
+    ('读取章节 → docs/target.md#不存在',False),
+    ('读取章节 → [外部网页](https://example.com/guide.md)',False),
+    ('读取章节 → [仓库外](../../outside.md)',False),
+    ('读取章节 → [根说明](../README.md)',False),
+    ('读取章节 → [根说明](%2e%2e/README.md)',False),
+    ('读取章节 → [目录](.)',False),
+    ('读取章节 → ',False),
+    (' → [章节](target.md#章节)',False),
+    ('~~~text\n示例 → [不存在](missing.md#不存在)\n~~~',True),
+])
+def test_task_routes_require_local_documents_and_existing_sections(tmp_path,route,valid):
+    (tmp_path/'docs').mkdir()
+    (tmp_path/'README.md').write_text('# 仓库说明',encoding='utf-8')
+    (tmp_path/'docs/llms.txt').write_text(route,encoding='utf-8')
+    (tmp_path/'docs/target.md').write_text('# 章节\n\n## 章节\n',encoding='utf-8')
+    assert (check_documents(tmp_path)==[]) is valid
+
+
+def test_module_reference_navigation_preserves_file_facts_and_distinguishes_heading_collisions():
+    # 目录名去掉标点后可能相同，导航仍须对应各自章节。
+    rows=[
+        ('scripts/docs/__init__.py',1,[]),
+        ('scripts/docs/helpers/a.b/read.py',12,['read']),
+        ('scripts/docs/helpers/ab/write.py',18,['write','publish']),
+    ]
+    page=module_page('scripts',rows)
+    assert '[docs/helpers/a.b](#docshelpersab)' in page
+    assert '[docs/helpers/ab](#docshelpersab-1)' in page
+    targets,missing=link_targets(page)
+    assert not missing
+    assert all(target[1:] in heading_ids(page) for target in targets if target.startswith('#'))
+    for file,lines,names in rows:
+        assert f'### {Path(file).relative_to("scripts").as_posix()}' in page
+        assert page.count(f'[源码](../../../{file})（{lines} 行）')==1
+        assert all(f'`{name}`' in page for name in names)

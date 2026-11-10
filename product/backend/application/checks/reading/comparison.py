@@ -7,6 +7,7 @@ from product.backend.application.reading import projection_read
 from product.protocols.checks.execution_request import WireModel
 from product.protocols.codec import content_hash
 from product.protocols.web.environment import FrozenEnvironment
+from product.backend.domain.checks.repair import CurrentRepairReference
 
 
 ChangeKind = Literal['NEW','PERSISTING','FIXED','NO_LONGER_OBSERVED','RECURRED','UNCHANGED','INSUFFICIENT','INCOMPARABLE']
@@ -41,6 +42,8 @@ class ComparisonItem(WireModel):
     reasons: tuple[str, ...]
     before: ComparisonObservation | None
     after: ComparisonObservation | None
+    verification_scope: Literal['SOURCE_CHANGE','EXTERNAL_OBSERVATION'] | None = None
+    origin_repair: CurrentRepairReference | None = None
 
 
 class RunComparison(WireModel):
@@ -150,6 +153,10 @@ def classify_change(before, after, *, deployment, earlier=None):
 class CheckComparisonService:
     def __init__(self, reader, stories):
         self.reader, self.stories = reader, stories
+        self.repairs = None
+
+    def bind_repairs(self, repairs):
+        self.repairs = repairs
 
     def _runs(self, project, baseline, current, earlier):
         if baseline == current or earlier is not None and earlier in {baseline,current}:
@@ -178,19 +185,35 @@ class CheckComparisonService:
         before_intents = {item['case'].permission.intent_id for item in before.values()}
         current_intents = {item['case'].permission.intent_id for item in current_rows.values()}
         older = {} if old is None else _index(old[1])
+        # 比较候选不等于原题验收；全部原题共享已核验的参照包，不读取今天最新的问题状态。
+        contracts = {} if self.repairs is None or left[1] is None else {
+            item.source_case_id:item for item in self.repairs.contracts_from_verified_package(left[1])}
+        current_contracts = {} if self.repairs is None or right[1] is None else {
+            item.source_case_id:item for item in self.repairs.contracts_from_verified_package(right[1])}
         items = []
         for key in sorted(set(before)|set(current_rows)):
             a, b = before.get(key), current_rows.get(key)
             deployment = 'MATCHED' if all(header.deployment=='MATCHED' for header in headers[:2]) else 'UNKNOWN'
             state, reasons = classify_change(a,b,deployment=deployment,earlier=older.get(key))
+            verification_scope = None
+            if state in ('FIXED','NO_LONGER_OBSERVED') and a is not None and right[1] is not None:
+                contract = contracts.get(a['case'].case_id)
+                verification = None if contract is None else self.repairs.verification_for_contract(right[1], contract)
+                if verification is not None and verification.status == 'VERIFIED':
+                    state, reasons, verification_scope = 'FIXED', (), verification.verification_scope
+                else:
+                    state = 'NO_LONGER_OBSERVED'
+                    reasons = tuple(dict.fromkeys((*reasons, *(verification.reason_codes if verification else ('REPAIR_CONTEXT_NOT_LINKED',)))))
             missing = b or a
             opposite = current_intents if b is None else before_intents
             if a is None or b is None:
                 if missing['case'].permission.intent_id in opposite:
                     state, reasons = 'INCOMPARABLE', ('SUBJECT_OR_RESOURCE_BINDING_CHANGED',)
             row = b or a
+            origin = (None if a is None else contracts.get(a['case'].case_id)) or (None if b is None else current_contracts.get(b['case'].case_id))
             items.append(ComparisonItem(key=key,action_label=row['action_label'],subject_label=row['subject_label'],
-                state=state,reasons=reasons,before=_observation(a),after=_observation(b)))
+                state=state,reasons=reasons,before=_observation(a),after=_observation(b),verification_scope=verification_scope,
+                origin_repair=None if origin is None else origin.reference()))
         counts = dict(Counter(item.state for item in items))
         page = [item for item in items if after is None or item.key>after][:limit+1]
         return RunComparison(project_id=project,baseline=headers[0],current=headers[1],earlier=headers[2],

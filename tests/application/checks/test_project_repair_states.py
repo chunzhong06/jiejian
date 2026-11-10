@@ -123,6 +123,15 @@ def test_problem_history_keeps_failed_attempt_resolution_and_recurrence():
     assert [(item.kind, item.status) for item in task.history] == [
         ('FOUND', 'REPAIR_REQUIRED'), ('CHECKED', 'NOT_VERIFIED'), ('VERIFIED', 'VERIFIED'),
         ('CHECKED', None), ('RECURRED', 'REPAIR_REQUIRED')]
+    historical = service.resolve(source.request.project_id, contract.repair_fingerprint,
+        source_run_id=contract.source_run_id, source_case_id=contract.source_case_id)
+    assert historical.historical and historical.task.contract == contract
+    assert historical.task.status == 'VERIFIED' and historical.task.run_id == fixed.result.run_id
+    assert historical.current_reference == task.contract.reference()
+    # 同一业务问题复发之后，旧链接仍只读旧原题；错误元组不能借用当前题。
+    from product.backend.domain.errors import JiejianError
+    with pytest.raises(JiejianError):
+        service.resolve(source.request.project_id, contract.repair_fingerprint,source_run_id=recurring.result.run_id)
     values.pop()
     task = service.evaluate(source.request.project_id).tasks[0]
     assert task.status == 'VERIFIED' and task.run_id == fixed.result.run_id
@@ -188,3 +197,19 @@ def test_multi_target_review_cannot_accept_one_success_for_the_batch():
     assert [item.verification.status for item in reviews] == ['VERIFIED', 'INCONCLUSIVE']
     assert {item.reference for item in reviews} == {original.reference(), second.reference()}
     assert all(item.comparison[0].match_status == 'MATCHED' for item in reviews)
+
+
+def test_original_handling_survives_later_source_association():
+    source = package()
+    source.request = source.request.model_copy(update={'source_fingerprint':None})
+    source.bundle = source.bundle.model_copy(update={'runtime':source.bundle.runtime.model_copy(update={'kind':'EXTERNAL_WEB'})})
+    current = package(forbidden=False,run_id='run_'+'2'*32)
+    contract = build_current_repair_contract(source,next(item.case_id for item in source.result.case_results if item.verdict=='VULNERABLE'))
+    readings=tuple((N(run=N(run_id=item.result.run_id,created_at_us=index),result_integrity='VALID'),item) for index,item in enumerate((source,current)))
+    service=CurrentProjectRepairService(reader=N(project_readings=lambda _:readings),
+        repairs=N(contracts_from_verified_package=lambda item:(contract,) if item is source else ()),
+        changes=N(targets=lambda *_:(),latest_for_repair=lambda *_:None),
+        boundaries=N(view=lambda _:N(policy_epoch=1,permission_intents=(*contract.original_intents,contract.original_intents[0].model_copy(update={'intent_id':'pin_'+'f'*32})))),pending_request_reader=None)
+    value=service.resolve(source.request.project_id,contract.repair_fingerprint,source_run_id=contract.source_run_id,source_case_id=contract.source_case_id)
+    assert not value.historical and value.task.handling=='EXTERNAL_OBSERVATION'
+    assert value.task.contract==contract and value.task.verification is None

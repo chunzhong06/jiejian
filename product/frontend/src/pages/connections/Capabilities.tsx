@@ -16,10 +16,10 @@ const tasks: Record<string,{title:string;ready:string;pending:string}> = {
 export function Capabilities({projectId, revision}: {projectId:string;revision:number}) {
     const state=useRead('readiness:'+projectId+':'+revision,async signal=>{const value=await projectsApi.readiness(projectId,signal);assertProject(value.project_id,projectId);return value;});
     const connected=state.data?.items.find(item=>item.key==='endpoint')?.state==='READY';
-    return <aside className="jj-application-capabilities" aria-label="检查准备情况">
-      <header><h2 className="jj-title-group">检查准备情况</h2><p className="jj-small jj-muted">按所选检查准备所需内容，无需按顺序逐项完成。</p></header>
+    return <aside className="jj-application-capabilities" aria-label="源码的后续用途">
+      <header><h2 className="jj-title-group">这份源码用于什么</h2></header>
       {state.error&&<ErrorNote error={state.error}/>}
-      {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入状态</p>:<ul>{state.data?.items.map(item=>{
+      {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入状态</p>:<ul>{state.data?.items.filter(item=>['source','runtime'].includes(item.key)).map(item=>{
         const available=['READY','AVAILABLE','CONFIGURED'].includes(item.state),task=tasks[item.key];
         return <li key={item.key} data-ready={item.state==='READY'}>
           <span className="jj-capability-marker" aria-hidden="true">{item.state==='READY'&&<CheckOutlined/>}</span>
@@ -27,6 +27,6 @@ export function Capabilities({projectId, revision}: {projectId:string;revision:n
           <p>{task?(available?task.ready:task.pending):item.detail}</p>
         </li>
       })}</ul>}
-      {connected&&<footer><p>接下来，登录测试账号并准备要检查的业务操作。</p><ActionLink navigationScope="page" href={'#'+scopedPath('/preparation',projectId)} kind="primary">继续准备检查<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>}
+      {connected&&<footer><ActionLink navigationScope="page" href={'#'+scopedPath('/preparation',projectId)}>查看检查材料<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>}
     </aside>;
 }

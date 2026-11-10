@@ -18,10 +18,10 @@ class SaveCheckRoutine(BaseModel):
 
 class CheckRoutines:
     """承接旧保存范围并拥有完整方案修订；就绪与结论仍由原检查服务计算。"""
-    def __init__(self, uow_factory, boundaries, checks):
+    def __init__(self, uow_factory, boundaries, checks, preparation_reader=None):
         self.uow, self.boundaries = uow_factory, boundaries
         from product.backend.application.checks.routine_execution import RoutineExecution
-        self.revisions = RoutineExecution(uow_factory, boundaries, checks)
+        self.revisions = RoutineExecution(uow_factory, boundaries, checks, preparation_reader)
 
     def list(self, project):
         boundary = self.boundaries.view(project)

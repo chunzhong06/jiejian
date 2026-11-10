@@ -88,8 +88,9 @@ def missing_requirements(document,assets):
 
 
 class RoutineExecution:
-    def __init__(self, uow_factory, boundaries, checks):
+    def __init__(self, uow_factory, boundaries, checks, preparation_reader=None):
         self.uow, self.boundaries, self.checks = uow_factory, boundaries, checks
+        self.preparation_reader=preparation_reader
 
     def _declarations(self, project, scope, work):
         """复制已批准含义的公开要求；纯编译合同及其READY状态不持久化。"""
@@ -216,10 +217,15 @@ class RoutineExecution:
                 environment=None if application is None else application.environment
         assets=() if request is None or bundle is None else bound_assets(request,bundle,document)
         missing=missing_requirements(document,assets)
+        from product.backend.application.checks.routine_progress import requirement_progress
+        try:
+            progress=None if self.preparation_reader is None else self.preparation_reader(project)
+        except JiejianError:
+            progress=None
         return dict(project_id=project, routine=document, preview=preview, environment=environment,
             environment_fingerprint=None if environment is None else environment.fingerprint,
             material_fingerprint=None if bundle is None else check_runtime_fingerprint(bundle),
-            assets=assets,missing_requirement_slots=missing,
+            assets=assets,missing_requirement_slots=missing,requirement_progress=requirement_progress(document,assets,progress),
             can_bind=preview.can_execute and environment is not None and not missing)
 
     def bind(self, project, routine, command):

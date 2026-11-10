@@ -85,6 +85,19 @@ class PreparationService:
         if self._interruption_reader is not None and self._interruption_reader!=reader:raise ValueError('准备中断读取者已装配')
         self._interruption_reader=reader
 
+    def connection_review(self, project_id, *, work):
+        """列出切换后要重新核对的现有材料；不模拟新地址已经有效，也不执行目标读取。"""
+        current = self._project_current(project_id, work)
+        return dict(state='RECHECK_REQUIRED', basis=current.basis_fingerprint,
+            items=[dict(action_id=item.action_id, action_label=item.display_name,
+                action_revision=item.action_revision, kind=kind, status=value.status.value,
+                binding_fingerprint=value.binding_fingerprint, reason_codes=list(value.reason_codes))
+                for item in current.actions
+                for kind, value in [('identity', item.identity_requirements), ('execution', item.execution),
+                    *[('resource', member) for member in item.resources],
+                    *[('evidence', member) for member in item.effect_evidence], ('recovery', item.recovery)]
+                if value.status.value != 'NOT_REQUIRED'])
+
     def evidence_details(self, project_id: str, action_id: str):
         """只解释已保存材料及能力声明；不改变准备状态或创建执行计划。"""
         from product.backend.application.preparation.materials.evidence import evidence_details

@@ -13,6 +13,10 @@
 .jj-comparison-inline > header h2 { margin:0; }
 .jj-comparison-inline > header .jj-button { min-height:var(--control-compact); width:var(--control-compact); padding:0; }
 .jj-comparison-inline > footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; margin-top:24px; }
+.jj-comparison-context { margin-bottom:24px; }
+.jj-comparison-context > summary { color:var(--muted);font-size:var(--text-meta); }
+.jj-comparison-context[open] > .jj-comparison-runs { margin-top:20px; }
+.jj-comparison-requirement { margin-bottom:24px;max-width:76ch;line-height:var(--leading-reading); }
 .jj-comparison-setup { border-block:1px solid var(--line); padding:24px 0; margin-bottom:24px; }
 .jj-comparison-setup > div { display:flex; flex-wrap:wrap; gap:20px 24px; }
 .jj-comparison-setup .jj-field { width:min(340px,100%); }

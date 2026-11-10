@@ -36,7 +36,8 @@ def use_memory_sample_login(core):
 
 def prepare_actual_sessions(core,project,origin,*,create=False,identity_id=None):
     import time
-    from product.backend.domain.identities.models import TestIdentityAuthMethod, TestIdentityCookie
+    from product.backend.domain.identities.models import TestIdentityAuthMethod, TestIdentityCookie,IdentityVerificationSnapshot
+    from product.backend.domain.boundaries.entities import boundary_sha256
     from product.backend.application.test_identities.service import PreparedLoginState
     for identity in core.test_identities.list(project):
         if identity_id is not None and identity.identity_id!=identity_id:continue
@@ -48,8 +49,19 @@ def prepare_actual_sessions(core,project,origin,*,create=False,identity_id=None)
                 assert client.post('/api/galleries').status_code==201
             cookie=next(iter(client.cookies.jar));reference=f'cred:jiejian/test-identity/{project}/{identity.identity_id}/session'
             core.secret_store.write(reference,cookie.value)
+            now=time.time_ns()//1000
+            profile=core.test_identities.get_record(identity.identity_id).authentication
+            verification=None
+            if profile is not None:
+                actual=client.get('/api/me')
+                expected=dict(id=profile.verification.expected_subject,role=profile.verification.expected_role)
+                assert actual.status_code==200 and actual.json()==expected
+                # 快照对应本次真实 HTTP 会话，连接归属由原保存用例绑定。
+                verification=IdentityVerificationSnapshot(status='VERIFIED',checked_at_us=now,origin=origin,
+                    profile_fingerprint=boundary_sha256(profile.model_dump(mode='json')),
+                    session_prepared_at_us=now,subject=expected['id'],role=expected['role'])
             core.test_identities.save_prepared_state(identity.identity_id,PreparedLoginState(auth_method=TestIdentityAuthMethod.COOKIE_SESSION,
-                cookies=(TestIdentityCookie(name=cookie.name,domain='127.0.0.1',path='/',secure=False,http_only=True,same_site='STRICT',value_secret_ref=reference),),prepared_at_us=time.time_ns()//1000))
+                cookies=(TestIdentityCookie(name=cookie.name,domain='127.0.0.1',path='/',secure=False,http_only=True,same_site='STRICT',value_secret_ref=reference),),prepared_at_us=now,verification=verification))
 
 
 def prepare_proof_sources(core,project):

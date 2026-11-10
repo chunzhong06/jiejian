@@ -12,7 +12,7 @@ export function IssueHistory({events,origin}:{events:RepairHistoryEvent[];origin
  if(!rows.length)return null
  const row=(event:RepairHistoryEvent,index:number)=>{
   const previous=rows.slice(0,index).reverse().find(item=>observed(item)&&item.run_id!==event.run_id)
-  return <li key={event.run_id+':'+event.kind+':'+event.created_at_us}><div><strong>{labels[event.kind]}</strong><time>{date(event.created_at_us)}</time></div><div>
+  return <li className="jj-record-row" key={event.run_id+':'+event.kind+':'+event.created_at_us}><div><strong>{labels[event.kind]}</strong><time>{date(event.created_at_us)}</time></div><div>
    <ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/reports?run_id='+encodeURIComponent(event.run_id),origin))} kind="quiet">阅读这次记录</ActionLink>
    {previous&&observed(event)&&<ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/reports?'+new URLSearchParams({view:'compare',baseline:previous.run_id,current:event.run_id}),origin))} kind="quiet">与上次观察比较</ActionLink>}
   </div></li>

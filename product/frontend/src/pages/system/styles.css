@@ -1,27 +1,11 @@
-.jj-system-page { display:grid; gap:24px; width:100%; max-width:none; margin-inline:auto; }
-.jj-system-workspace { min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); }
-.jj-system-workspace > header { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); background:var(--surface-heading); }
-.jj-system-workspace header p { margin-top:6px; font-size:var(--text-meta); color:var(--muted); }
-.jj-system-workspace footer { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 28px; border-top:1px solid var(--line); background:var(--inset); }
-.jj-system-workspace footer p { font-size:var(--text-meta); color:var(--muted); max-width:58ch; }
-.jj-system-components { display:grid; grid-template-columns:minmax(0,1fr); padding:4px 24px 28px; }
-
-
-
-
-
 .jj-positive { color:var(--good); }.jj-caution { color:var(--warn); }
-.jj-system-diagnostic { margin:0; padding:20px 28px; border:0; }
-.jj-system-diagnostic[open] > summary { margin-bottom:8px; }
-.jj-system-diagnostic pre { margin:0; padding:12px 16px; }
-.jj-system-exit { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .jj-update-workspace { min-width:0; border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; background:var(--surface); container:update-workspace / inline-size; }
 .jj-update-current { display:grid; grid-template-columns:minmax(0,1fr) minmax(140px,auto); align-items:start; gap:24px; padding:24px 28px; border-bottom:1px solid var(--line); }
 .jj-update-version { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:8px; }
 .jj-update-location { max-width:380px; margin:0; padding:0; border:0; justify-self:end; }
 .jj-update-location summary { width:fit-content; margin-left:auto; font-size:var(--text-meta); }
 .jj-update-location p { color:var(--muted); font-size:var(--text-meta); overflow-wrap:anywhere; }
-.jj-update-result, .jj-update-form { padding:28px; animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-update-result, .jj-update-form { padding:28px; }
 .jj-update-result { display:grid; gap:24px; }
 .jj-update-result-heading { display:grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:center; gap:16px; }
 .jj-update-result-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:var(--radius-control); background:var(--accent-soft); color:var(--accent-ink); font-size:var(--text-section); }
@@ -52,35 +36,41 @@
   .jj-update-footer { grid-template-columns:minmax(0,1fr); gap:8px; }.jj-update-footer > .jj-button { justify-self:end; }
 }
 @media(max-width:760px) {
-  .jj-system-workspace > header, .jj-system-workspace footer { flex-wrap:wrap; padding:20px; gap:16px; }
-
-
-
-  .jj-system-diagnostic, .jj-update-current, .jj-update-form, .jj-update-result { padding:20px; }
   .jj-update-footer { padding:16px 20px; }
 }
-
-.jj-system-columns { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr); gap:24px; align-items:start; }
-.jj-system-workspace > header { background:transparent; border:0; padding:24px; }
-.jj-system-feedback { padding:0 24px 16px; }
-.jj-system-diagnostics { container:system-status / inline-size; }
-
-
-.jj-system-diagnostic-tools { display:flex; flex-wrap:wrap; align-items:start; justify-content:space-between; gap:16px; padding:20px 24px 24px; }
-.jj-system-diagnostic { padding:0; flex:1; min-width:0; }
-.jj-system-diagnostic pre { margin-top:12px; overflow:auto; max-height:320px; }
-.jj-system-diagnostic-tools > .jj-inline-actions { flex:none; }
-.jj-system-exit { padding:0 24px 24px; }
-.jj-system-update { scroll-margin-top:88px; outline:0; }
-.jj-system-update .jj-update-workspace { border:0; border-radius:0; background:transparent; }
-.jj-system-update .jj-update-current { padding:0 24px 24px; grid-template-columns:minmax(0,1fr); gap:16px; border:0; }
 .jj-current-version { font-size:var(--text-section); }
+.jj-system-page { display:grid; gap:24px; width:100%; max-width:780px; }
+.jj-system-columns { display:grid; gap:26px; }
+.jj-system-workspace { min-width:0; }
+.jj-system-diagnostics > header { margin-bottom:28px; }
+.jj-system-diagnostics > header p { margin-top:8px; color:var(--muted); font-size:var(--text-meta); }
+.jj-system-feedback { margin-bottom:20px; }
+.jj-system-components { display:grid; grid-template-columns:minmax(0,1fr); list-style:none; padding:0; margin:0; }
+/* 成对条目共用两条阅读轨道；奇数项保持连续清单，避免留下孤立的末项。 */
+.jj-system-components[data-paired=true] { grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:36px; }
+.jj-system-components > li { min-width:0; padding:20px 0; border-bottom:1px solid var(--line); }
+.jj-system-components .jj-object-identity { gap:10px; }
+.jj-system-component-issue { display:grid;gap:12px;margin-top:12px; }
+.jj-system-component-issue p { color:var(--muted);font-size:var(--text-meta);line-height:var(--leading-reading);overflow-wrap:anywhere; }
+.jj-system-component-issue .jj-button { justify-self:start; }
+.jj-system-attention-note { color:var(--muted); font-size:var(--text-meta); margin-top:20px; max-width:58ch; }
+.jj-system-diagnostic-tools { display:flex; align-items:center; justify-content:flex-end; margin-top:20px; }
+.jj-system-summary { white-space:pre-wrap; overflow-wrap:anywhere; max-height:60dvh; overflow:auto; }
+.jj-system-exit { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:20px; }
+.jj-system-update { padding-top:26px; border-top:1px solid var(--line); scroll-margin-top:88px; outline:0; }
+.jj-system-update .jj-update-workspace { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:24px; border:0; border-radius:0; background:transparent; }
+.jj-system-update .jj-update-current { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:12px 20px; padding:0; border:0; }
+/* 版本与折叠入口使用同一控件行高；位置展开后仍沿首行对齐。 */
+.jj-system-update .jj-update-current > div { display:flex; align-items:center; min-height:var(--control-height); }
+.jj-system-update .jj-update-version { margin:0; }
+.jj-system-update .jj-current-version { font-size:var(--text-body); }
 .jj-system-update .jj-update-location { justify-self:start; }
-.jj-system-update .jj-update-location summary { margin-left:0; }
-.jj-system-update .jj-update-form, .jj-system-update .jj-update-result { padding:0 24px 24px; }
-.jj-system-update .jj-update-form > p { color:var(--muted); }
-.jj-system-update > .jj-loading { padding:24px; }
-
-@media(max-width:1050px) { .jj-system-columns { grid-template-columns:minmax(0,1fr); } }
-
-.jj-system-update .jj-update-workspace > .jj-task-actions { padding:0 24px 24px; }
+.jj-system-update .jj-update-location summary { margin:0; min-height:var(--control-height); align-items:center; }
+.jj-system-update .jj-update-location p { margin-top:12px; }
+.jj-system-update .jj-update-workspace > .jj-task-actions { margin:0; }
+.jj-system-update > .jj-loading { padding-block:12px; }
+@media(max-width:700px) {
+  .jj-system-components[data-paired=true] { grid-template-columns:minmax(0,1fr); }
+  .jj-system-update .jj-update-workspace { grid-template-columns:minmax(0,1fr); gap:20px; }
+  .jj-system-update .jj-update-current { grid-template-columns:minmax(0,1fr); gap:4px; }
+}

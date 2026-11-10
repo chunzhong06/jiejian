@@ -1,8 +1,9 @@
+import {useMilestoneTransition} from '../../shared/lib/milestone'
 import {Dialog} from '../../shared/ui/Dialog'
 import {TaskSurface} from '../../shared/ui/TaskSurface'
-import {Progress} from '../../shared/ui/Progress'
+import {BatchProgress} from './BatchProgress'
 import {Choice} from '../../shared/ui/Choice'
-import {Field,ObjectIdentity,ObjectHeading,FormColumns} from '../../shared/ui/layout'
+import {Field,FormColumns,ObjectIdentity,ObjectHeading} from '../../shared/ui/layout'
 import {useWorkflow} from '../../shared/lib/workflow';
 import {IndexSelection} from '../../shared/ui/IndexSelection'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
@@ -72,6 +73,7 @@ export function Preparation(props: PageProps) {
         return batch;
     }, value => value && ['RUNNING', 'CANCELLING'].includes(value.state) ? 700 : 0);
     const state = useRead('preparation:' + projectId, async (signal) => { const value = await preparationApi.get(projectId, signal); assertProject(value.project_id, projectId); return value; }, batchState.data && ['RUNNING', 'CANCELLING'].includes(batchState.data.state) ? 2000 : 0);
+    const completion=useMilestoneTransition<HTMLElement>('materials:'+projectId+':'+(route.query.get('action_id')??'all'),state.data?Boolean(route.query.get('action_id')?state.data.actions.find(item=>item.action_id===route.query.get('action_id'))?.preparation_complete:state.data.preparation_complete)&&!['RUNNING','CANCELLING'].includes(batchState.data?.state??''):undefined,'materials');
     const navigate = (values: Record<string, string | null>) => { const query = new URLSearchParams(route.query); for (const [key, value] of Object.entries(values)) {
         if (value === null)
             query.delete(key);
@@ -91,6 +93,15 @@ export function Preparation(props: PageProps) {
         setBusy(false);
     } };
     const reload = () => { state.reload(); batchState.reload(); refresh(); };
+    const exampleRequested=route.query.get('prepare_example')==='1',examplePreviewed=useRef(false);
+    // 一键入口只打开原有范围确认；刷新和返回均不自动授权或重放准备批次。
+    useEffect(()=>{
+        if(!official||!exampleRequested||examplePreviewed.current||batchState.loading)return;
+        examplePreviewed.current=true;
+        setOpened(undefined);
+        if(batchState.data&&['RUNNING','CANCELLING'].includes(batchState.data.state))return;
+        void act(async()=>{setAck(false);setPlan(await batches.preview(projectId,'OFFICIAL'));});
+    },[official,exampleRequested,projectId,batchState.loading,batchState.data]);
     if (state.loading)
         return <PageSkeleton view="/preparation"/>;
     if (state.error && !state.data)
@@ -120,8 +131,21 @@ export function Preparation(props: PageProps) {
         return <Accounts projectId={projectId} actions={preparation.actions} requestedIdentity={route.query.get('identity_id')} requestedSlot={route.query.get('account_slot')??(ruleId?action?.identity_requirements.slots.find(slot=>slot.requirement.actor_id===action.permissions.find(item=>item.intent_id===ruleId)?.subject_actor_id)?.requirement.slot_id:null)} requestedPreparation={route.query.get('preparation_id')} onBack={closeMaterial} onError={onError}/>;
     if (opened === 'evidence')
         return <Sources projectId={projectId} actionId={action?.action_id} requestedEffect={route.query.get('effect_id')} requestedSource={route.query.get('source_id')} onLocate={id => navigate({ action_id: action?.action_id ?? null, source_id: id, proof_sources: '1' })} onBack={closeMaterial} onError={onError}/>;
-    const batchBody=plan&&<div className="jj-batch-review-body"><dl className="jj-facts" data-layout="columns"><div><dt>适用应用</dt><dd>{props.name}</dd></div><div><dt>应用地址</dt><dd>{plan.runtime_origin}</dd></div></dl><h2 className="jj-title-group">本次会做什么</h2><ol className="jj-preparation-consent">{official && <><li><h3>准备测试账号</h3><p>登录示例中的负责人和评审账号，使用独立测试数据。</p></li><li><h3>建立操作与测试资料</h3><p>准备校园展馆的下载、预览操作，以及检查后的恢复方式。</p></li></>}<li><h3>核对业务结果证明</h3><p>{official ? '使用负责人和评审测试账号核对身份，读取校园展馆记录及完整测试文件，核对通过后用于本示例检查。' : '仅访问下面列出的来源，核对通过后用于当前应用的检查。'}</p>{official && <dl className="jj-facts"><div><dt>身份核对</dt><dd>/api/me</dd></div><div><dt>展馆记录</dt><dd>{'/collections/galleries/{resource_id}'}</dd></div><div><dt>文件参照</dt><dd>负责人可取得的内部完整包和公开展示版</dd></div></dl>}<ul>{plan.sources.map(source => <li key={source.source_id}>{text(source.label)}<small>版本 {source.revision}</small></li>)}</ul></li></ol><section className="jj-batch-review-consent"><h3>确认后开始准备</h3><p>本次只准备材料。正式检查会在预览范围后另行提交。</p><label className="jj-checkbox"><input type="checkbox" checked={ack} onChange={event=>setAck(event.target.checked)} disabled={busy}/><span>允许上述操作、来源读取及材料采用</span></label></section></div>;
-    const batchActions=plan&&<><Button disabled={busy} onClick={()=>setPlan(undefined)}>返回</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(async () => { const existing = sessionStorage.getItem(key); if (existing) {
+    const batchBody=plan&&<div className="jj-batch-review-body">
+      <dl className="jj-facts" data-layout="columns"><div><dt>适用应用</dt><dd>{props.name}</dd></div><div><dt>应用地址</dt><dd>{plan.runtime_origin}</dd></div></dl>
+      <FormColumns>
+        <section className="jj-batch-review-work"><h2 className="jj-title-group">本次准备内容</h2><ol className="jj-preparation-consent">
+          {official&&<><li><h3>准备测试账号</h3><p>登录示例中的负责人和评审账号，使用独立测试数据。</p></li><li><h3>建立操作与测试资料</h3><p>准备校园展馆的下载、预览操作，以及检查后的恢复方式。</p></li></>}
+          <li><h3>核对业务结果证明</h3><p>{official?'使用负责人和评审测试账号核对身份，按本次读取范围检查展馆记录与完整文件。':'只访问本次列出的证明来源。'}核对通过后，将这些材料用于当前应用的检查。</p></li>
+        </ol></section>
+        <section className="jj-batch-review-sources"><h2 className="jj-title-group">本次读取范围</h2>
+          {official&&<dl className="jj-facts"><div><dt>身份核对</dt><dd>/api/me</dd></div><div><dt>展馆记录</dt><dd>{'/collections/galleries/{resource_id}'}</dd></div><div><dt>文件参照</dt><dd>负责人可取得的内部完整包和公开展示版</dd></div></dl>}
+          <ul>{plan.sources.map(source=><li key={source.source_id}><span>{text(source.label)}</span><small>第 {source.revision} 修订</small></li>)}</ul>
+        </section>
+      </FormColumns>
+      <section className="jj-batch-review-consent"><h3>确认后开始准备</h3><p>本次只准备材料。正式检查会在预览范围后另行提交。</p><label className="jj-checkbox"><input type="checkbox" checked={ack} onChange={event=>setAck(event.target.checked)} disabled={busy}/><span>允许上述操作、来源读取及材料采用</span></label></section>
+    </div>;
+    const batchActions=plan&&((dismiss:()=>void)=><><Button disabled={busy} onClick={dismiss}>返回</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(async () => { const existing = sessionStorage.getItem(key); if (existing) {
             await batches.status(projectId, existing);
             setPlan(undefined);
             reload();
@@ -135,8 +159,8 @@ export function Preparation(props: PageProps) {
             setPlan(undefined);
             reload();
             throw error;
-        } })}>允许并开始准备</Button></>;
-    if(plan&&official)return <TaskSurface title="为数字展馆准备检查材料" context="材料读取与准备" onBack={()=>{if(!busy)setPlan(undefined)}} backLabel="返回检查准备" actions={batchActions}>{batchBody}</TaskSurface>;
+        } })}>允许并开始准备</Button></>);
+    if(plan&&official)return <TaskSurface title="为数字展馆准备检查材料" onBack={()=>{if(!busy)setPlan(undefined)}} backLabel="返回检查准备" actions={batchActions}>{batchBody}</TaskSurface>;
     const groups = action ? groupsFor(action) : [];
     const nextKind: Kind | undefined = action?.next_material ?? undefined;
     const focus = focused ?? route.query.get('focus') ?? nextKind ?? 'identity';
@@ -156,22 +180,23 @@ export function Preparation(props: PageProps) {
     else if (selectedGroup)
         openMaterial(selectedGroup.key); };
     const effectName = (id: string) => action?.effect_evidence.find(item => item.effect_id === id)?.business_label ?? '业务结果';
-    return <>{returnTo && !workflow && <div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(returnTo)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(returnTo)}</ActionLink></div>}<Heading title="检查准备" actions={!workflow&&preparation.actions.length > 0 ? <Button busy={busy} disabled={Boolean(running) || pending || changed} onClick={() => void act(async () => { setAck(false); setPlan(await batches.preview(projectId, official ? 'OFFICIAL' : 'REVIEWED')); })}>{preparation.preparation_complete ? '核对整批材料' : official ? '准备示例材料' : '核对整批材料'}</Button> : undefined}/>{state.error && <ErrorNote error={state.error}/>}{batchState.error && <ErrorNote error={batchState.error}/>}
+    return <>{returnTo && !workflow && <div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(returnTo)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(returnTo)}</ActionLink></div>}<Heading title="检查准备" actions={!running&&(!workflow||official)&&preparation.actions.length > 0 ? <Button busy={busy} disabled={Boolean(running) || pending || changed} onClick={() => void act(async () => { setAck(false); setPlan(await batches.preview(projectId, official ? 'OFFICIAL' : 'REVIEWED')); })}>{preparation.preparation_complete ? '核对整批材料' : official ? '一键准备示例材料' : '核对整批材料'}</Button> : undefined}/>{state.error && <ErrorNote error={state.error}/>}{batchState.error && <ErrorNote error={batchState.error}/>}
     {plan&&!official&&<Dialog title="确认这批材料的使用范围" size="wide" onClose={()=>setPlan(undefined)} closeDisabled={busy} actions={batchActions}>{batchBody}</Dialog>}
-    {running && <section className="jj-panel jj-preparation-batch"><FormColumns><div className="jj-batch-summary"><div className="jj-section-header"><h2 className="jj-title-group">正在准备材料</h2><Badge tone="accent">{batch.completed} / {batch.total}</Badge></div><Progress value={batch.completed} max={batch.total || 1} label="材料准备进度"/></div><div className="jj-batch-items">{batch.identities?.map(item => <div key={item.account}><ObjectIdentity name={item.account === 'curator' ? '负责人账号' : item.account === 'judge' ? '评审账号' : item.account} status={<Status tone={item.state==='PREPARED'?'positive':item.state==='FAILED'?'caution':'accent'}>{item.state === 'PREPARED' ? '已登录' : item.state === 'FAILED' ? '准备中断' : '处理中'}</Status>}/></div>)}{batch.items?.map(item => <div key={item.label}><ObjectIdentity name={text(item.label)} status={<Status tone={item.state==='READY'?'positive':item.state==='BLOCKED'?'caution':item.state==='CHECKING'?'accent':'neutral'}>{({ READY: '已就绪', CHECKING: '正在核对', BLOCKED: '需要处理', WAITING: '等待处理' } as Record<string, string>)[item.state] ?? text(item.state)}</Status>}/></div>)}</div></FormColumns><footer><Button kind="quiet" disabled={batch.cancel_requested} onClick={() => void act(async () => { await batches.cancel(projectId, batch.operation_id); reload(); })}>{batch.cancel_requested ? '正在停止' : '停止准备'}</Button></footer></section>}
+    {running && <BatchProgress batch={batch} onCancel={() => void act(async () => { await batches.cancel(projectId, batch.operation_id); reload(); })}/>}
     {pending && <Notice tone="caution">准备请求的结果尚未确认。<Button onClick={batchState.reload}>查询本次准备</Button></Notice>}{batch?.state === 'BLOCKED' && <Notice tone={batch.error_code === 'PREPARATION_INTERNAL_ERROR' ? 'negative' : 'caution'}>{text(batch.message)}</Notice>}{batch?.state === 'CANCELLED' && <Notice tone="neutral">{text(batch.message)}</Notice>}
-    {preparation.impacts?.some(item=>['STALE','BLOCKED'].includes(item.status)) && <details className="jj-preparation-impact"><summary>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).length} 项材料需要处理，{preparation.impacts.filter(item=>item.status==='SATISFIED').length} 项仍可沿用</summary><div>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).map((item,index)=><article key={item.action_id+item.kind+index}><div><strong>{text(item.action_label)} / {materialNames[item.kind]}{item.member_label ? ' / '+text(item.member_label) : ''}</strong>{materialReasons(item.reason_codes).map(reason=><p className="jj-small jj-muted" key={reason}>{reason}</p>)}</div><span className="jj-small jj-muted">涉及 {item.permission_ids.length} 条规则</span><Button onClick={()=>{setSelected(item.action_id);setFocused(item.kind);navigate({action_id:item.action_id,focus:item.kind,rule_id:null,material_kind:['execution','resource','recovery'].includes(item.kind)?item.kind:null,member_id:item.member_id,identities:item.kind==='identity'?'1':null,proof_sources:item.kind==='evidence'?'1':null});}}>核对材料</Button></article>)}</div></details>}
-    {!preparation.actions.length ? <Empty title="先确认要检查的权限" action={<ActionLink navigationScope="page" href={'#'+scopedPath('/permissions')} kind="primary">打开权限规则</ActionLink>}>先明确谁可以对哪些数据执行什么操作。确认权限要求后，这里会列出所需账号、测试数据、操作步骤和结果证明。</Empty> : <>
+
+    {!preparation.actions.length ? <Empty layout="section" title="先确认要检查的权限" action={<ActionLink navigationScope="page" href={'#'+scopedPath('/permissions')} kind="primary">打开权限规则</ActionLink>}>先明确谁可以对哪些数据执行什么操作。确认权限要求后，这里会列出所需账号、测试数据、操作步骤和结果证明。</Empty> : <>
       {action.assurance_contract.allow_controls.filter(control => !control.resolved_allow_permission && control.candidate_allow_permissions.length > 1).map(control => <section className="jj-panel jj-preparation-decision" key={control.selection_fingerprint}><div className="jj-preparation-decision-body"><header><h2 className="jj-title-group">选择用来确认正常功能的操作</h2><p>选择一项本来允许的操作，与禁止场景一起检查，确认正常功能仍能完成。</p></header><fieldset className="jj-choice-field">{control.candidate_allow_permissions.map(candidate => { const permission = action.permissions.find(item => item.intent_id === candidate.intent_id), actor = actorName(permission?.subject_actor_id), owner = actorName(permission?.resource_owner_actor_id); return <label key={candidate.intent_id}><input type="radio" name={control.selection_fingerprint} checked={controls[control.selection_fingerprint] === candidate.intent_id} onChange={() => setControls(value => ({ ...value, [control.selection_fingerprint]: candidate.intent_id }))}/><span>{text(actor ?? '指定账号')}{text(action.display_name)}<small>{permission?.relation === 'OWNS' ? '使用自己的资源' : `使用${text(owner ?? '对应所有者')}的资源`}</small></span></label>; })}</fieldset></div><footer><Button kind="primary" busy={busy} disabled={!controls[control.selection_fingerprint] || changed} onClick={() => void act(async () => { const selected = control.candidate_allow_permissions.find(item => item.intent_id === controls[control.selection_fingerprint]); if (selected) {
             await preparationApi.selectAllowControl(projectId, control, selected);
             reload();
         } })}>确认这项正常操作</Button></footer></section>)}
-      <section className="jj-preparation-workbench" aria-label="当前业务操作所需材料">
-        <header className="jj-preparation-context">
-          <div className="jj-object-line"><h2>{text(action.display_name)}</h2><Badge tone={action.preparation_complete ? 'positive' : 'neutral'}>{action.preparation_complete ? '材料齐备' : '准备检查材料'}</Badge></div>
+      <section ref={completion} hidden={Boolean(running)} className="jj-preparation-workbench" data-single={groups.length===1||undefined} data-focused={route.query.has('focus')||groups.length===1||undefined} aria-label="当前业务操作所需材料">
+        <header data-milestone-part="heading" className="jj-preparation-context">
+          {preparation.actions.length === 1 && <h2>{text(action.display_name)}</h2>}
           {preparation.actions.length > 1 && <div className="jj-operation-selector"><Field label="当前业务操作"><Choice value={action.action_id} onValueChange={value=>{setSelected(value);setOpened(undefined);setFocused(undefined);navigate({action_id:value,rule_id:null,focus:null,material_kind:null,member_id:null})}}>{preparation.actions.map(item=><option key={item.action_id} value={item.action_id}>{text(item.display_name)}{item.preparation_complete?' · 材料已准备':''}</option>)}</Choice></Field></div>}
+          <Badge tone={action.preparation_complete ? 'positive' : 'neutral'}>{action.preparation_complete ? '材料齐备' : '材料待准备'}</Badge>
         </header>
-        <MaterialIndex identity={action.action_id+selectedGroup?.key}>
+        {groups.length>1&&<MaterialIndex identity={action.action_id+selectedGroup?.key}>
           <div className="jj-material-index-heading"><h2 className="jj-title-group">所需材料</h2></div>
           {materialSections.map(section => <div className="jj-material-section" key={section.title}>
             <h3 className="jj-title-caption">{section.title}</h3>
@@ -184,9 +209,9 @@ export function Preparation(props: PageProps) {
             </button>;
                 })}
           </div>)}
-        </MaterialIndex>
+        </MaterialIndex>}
         {selectedGroup && <div className="jj-material-detail" data-material-kind={selectedGroup.key} key={action.action_id + selectedGroup.key}>
-          <header><h2>{materialNames[selectedGroup.key]}</h2>{selectedGroup.key !== 'identity' && <Badge tone={status(selectedGroup.items).tone}>{status(selectedGroup.items).label}</Badge>}</header>
+          <Button className="jj-material-back" kind="quiet" onClick={()=>{setFocused(undefined);navigate({focus:null})}}>返回材料目录</Button><header><h2>{materialNames[selectedGroup.key]}</h2>{selectedGroup.key !== 'identity' && <Badge tone={status(selectedGroup.items).tone}>{status(selectedGroup.items).label}</Badge>}</header>
           <div className="jj-material-reading"><div className="jj-material-primary">
           <div className="jj-material-requirements">
             {selectedGroup.key === 'identity' ? <div className="jj-account-entities">{action.identity_requirements.slots.map(slot => <article className="jj-account-entity" key={slot.requirement.slot_id}><span className="jj-account-entity-icon"><UserOutlined aria-hidden="true"/></span><ObjectHeading level={3} title={<>{text(slot.actor_display_name)}账号{slot.requirement.ordinal > 1 ? ` ${slot.requirement.ordinal}` : ''}</>} status={<Badge tone={status([slot]).tone}>{status([slot]).label}</Badge>} description={action.resources.some(resource => resource.owner_slot_id === slot.requirement.slot_id) ? '提供本次检查所用资源' : '执行对应角色的业务操作'}/><Button kind="quiet" disabled={busy || changed} onClick={() => openMaterial('identity', slot.requirement.slot_id)}>{slot.test_identity_id ? '核对账号' : '准备账号'}<ArrowRightOutlined aria-hidden="true"/></Button></article>)}</div> :
@@ -198,11 +223,12 @@ export function Preparation(props: PageProps) {
           {selectedGroup.key !== 'identity' && selectedGroup.key !== 'resource' && status(selectedGroup.items).label !== '不需要' && <div className="jj-material-detail-actions"><Button disabled={busy || changed} onClick={() => openMaterial(selectedGroup.key)}>{selectedGroup.key === 'evidence' ? '准备结果判断依据' : selectedGroup.key === 'recovery' ? '核对恢复方式' : '选择或录制操作'}<ArrowRightOutlined aria-hidden="true"/></Button></div>}
           {selectedGroup.items.some(item => item.reason_codes.length > 0) && <details><summary>材料核对信息</summary><ul>{[...new Set(selectedGroup.items.flatMap(item => item.reason_codes))].map(code => <li className="jj-small jj-muted" key={code}>{materialReasons([code])[0]}</li>)}</ul></details>}
           </div>
-          <section className="jj-material-used-by"><h3 className="jj-title-caption">使用这些材料的规则</h3><ul>{action.permissions.map((rule, index) => { const subject = rule.conditions?.principal==='ANONYMOUS'?'未登录访客':actorName(rule.subject_actor_id) ?? '操作人', owner = actorName(rule.resource_owner_actor_id) ?? '资源所有者'; return <li key={rule.intent_id ?? index}><span className="jj-material-rule-mark" data-allowed={rule.expectation === 'ALLOW'} aria-hidden="true">{rule.expectation === 'ALLOW' ? <CheckOutlined /> : '−'}</span><div><p>{text(subject)}{rule.expectation === 'ALLOW' ? '可以' : '不得'}{text(action.display_name)}</p><small>{rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `其他${text(owner)}账号的资源` : `${text(owner)}的资源`}{conditionLabels(rule.conditions).length>0?"，"+conditionLabels(rule.conditions).join("，"):""}</small></div></li>; })}</ul></section>
+          <details className="jj-material-used-by"><summary>关联的权限要求<span>{action.permissions.length} 条</span></summary><ul>{action.permissions.map((rule, index) => { const subject = rule.conditions?.principal==='ANONYMOUS'?'未登录访客':actorName(rule.subject_actor_id) ?? '操作人', owner = actorName(rule.resource_owner_actor_id) ?? '资源所有者'; return <li key={rule.intent_id ?? index}><span className="jj-material-rule-mark" data-allowed={rule.expectation === 'ALLOW'} aria-hidden="true">{rule.expectation === 'ALLOW' ? <CheckOutlined /> : '−'}</span><div><p>{text(subject)}{rule.expectation === 'ALLOW' ? '可以' : '不得'}{text(action.display_name)}</p><small>{rule.relation === 'OWNS' ? '自己的资源' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `其他${text(owner)}账号的资源` : `${text(owner)}的资源`}{conditionLabels(rule.conditions).length>0?"，"+conditionLabels(rule.conditions).join("，"):""}</small></div></li>; })}</ul></details>
           </div>
         </div>}
-        <footer className="jj-preparation-footer"><div className="jj-preparation-progress">{preparation.preparation_complete ? <CheckCircleOutlined aria-hidden="true"/> : <ClockCircleOutlined aria-hidden="true"/>}<strong>{preparation.preparation_complete ? workflow?'当前事项的材料已齐备':'所有业务操作的材料已齐备' : `${preparation.actions.filter(item => item.preparation_complete).length} / ${preparation.actions.length} 项业务操作已准备`}</strong></div><div className="jj-preparation-next"><p>{preparation.preparation_complete ? '材料已经准备好。下一步核对本次规则、账号和测试数据，再确认开始检查。' : nextKind ? `下一步：${materialNames[nextKind]}` : '打开当前材料，查看尚未完成的项目。'}</p><Button kind="primary" onClick={primary} disabled={changed || Boolean(running) || pending}>{preparation.preparation_complete ? workflow?'继续本次检查':'预览检查' : nextKind ? '准备' + materialNames[nextKind].replace(/^测试|^业务/, '') : '查看当前材料'}<ArrowRightOutlined aria-hidden="true"/></Button></div></footer>
+        <footer data-milestone-part="actions" className="jj-preparation-footer"><div className="jj-preparation-progress">{preparation.preparation_complete ? <CheckCircleOutlined aria-hidden="true"/> : <ClockCircleOutlined aria-hidden="true"/>}<strong>{preparation.preparation_complete ? workflow?'当前事项的材料已齐备':'所有业务操作的材料已齐备' : action.preparation_complete?'当前操作的材料已齐备':'正在准备'+text(action.display_name)}</strong></div><div className="jj-preparation-next">{!preparation.preparation_complete&&!nextKind&&<p>选择一项材料查看待处理内容。</p>}{preparation.preparation_complete&&<Button kind="primary" onClick={primary} disabled={changed || Boolean(running) || pending}>{preparation.preparation_complete ? workflow?'继续本次检查':'预览检查' : nextKind ? '准备' + materialNames[nextKind].replace(/^测试|^业务/, '') : '查看当前材料'}<ArrowRightOutlined aria-hidden="true"/></Button>}</div></footer>
       </section>
+    {!running&&preparation.impacts?.some(item=>['STALE','BLOCKED'].includes(item.status)) && <details className="jj-preparation-impact"><summary>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).length} 项材料需要处理，{preparation.impacts.filter(item=>item.status==='SATISFIED').length} 项仍可沿用</summary><div>{preparation.impacts.filter(item=>['NEEDS_USER','STALE','BLOCKED'].includes(item.status)).map((item,index)=><article key={item.action_id+item.kind+index}><div><strong>{text(item.action_label)} / {materialNames[item.kind]}{item.member_label ? ' / '+text(item.member_label) : ''}</strong>{materialReasons(item.reason_codes).map(reason=><p className="jj-small jj-muted" key={reason}>{reason}</p>)}</div><span className="jj-small jj-muted">涉及 {item.permission_ids.length} 条规则</span><Button onClick={()=>{setSelected(item.action_id);setFocused(item.kind);navigate({action_id:item.action_id,focus:item.kind,rule_id:null,material_kind:['execution','resource','recovery'].includes(item.kind)?item.kind:null,member_id:item.member_id,identities:item.kind==='identity'?'1':null,proof_sources:item.kind==='evidence'?'1':null});}}>核对材料</Button></article>)}</div></details>}
     </>}
   </>;
 }

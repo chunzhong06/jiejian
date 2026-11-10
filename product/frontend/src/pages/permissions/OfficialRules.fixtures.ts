@@ -1,0 +1,5 @@
+import type {OfficialBoundaryDraftDto} from '../../entities/application/api/experience'
+export const officialDraft:OfficialBoundaryDraftDto={project_id:'app',runtime_kind:'NODE_ESM',choice_permission_item_id:'permission',command:{
+ proposed_actors:[{item_id:'owner',display_name:'负责人'},{item_id:'reviewer',display_name:'评审'}].map(item=>({...item,write_mode:'CREATE',description:'示例角色',effective_state:'ACTIVE'})),
+ proposed_actions:[{item_id:'download',display_name:'下载展示版',write_mode:'CREATE',description:'下载公开内容',primary_resource_concept:'展馆资料',operation_kind:'EXPORT',state_changing:false,effective_state:'ACTIVE',effect_catalog:[{item_id:'pdf',business_label:'展示版已收到',effect_kind:'FILE_CONTENT_DELIVERY',resource_concept:'公开展示版',description:'实际收到公开文件'}]}],
+ proposed_permissions:[{item_id:'permission',write_mode:'CREATE',effective_state:'ACTIVE',subject_actor_item_id:'reviewer',resource_owner_actor_item_id:'owner',business_action_item_id:'download',relation:'OTHER_ROLE',expectation:'ALLOW',protected_effect_item_ids:['pdf']}],unresolved_questions:[],provenance:'预置规则'}}

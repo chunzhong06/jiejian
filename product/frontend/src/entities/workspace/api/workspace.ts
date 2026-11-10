@@ -78,9 +78,10 @@ export type PrimaryTaskDto = {
   why_now: string
   user_responsibility: string
   system_will_do: string
-  route: '/application' | '/permissions' | '/tests' | '/changes'
+  route: '/application' | '/permissions' | '/tests' | '/changes' | '/issues'
   change_id?: string | null
   repair_fingerprint?: string | null
+  repair?: import('../../check/api/repairs').RepairReference | null
   run_id?: string | null
   can_execute: boolean
   stale_fingerprint: string

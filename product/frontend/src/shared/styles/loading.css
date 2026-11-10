@@ -11,7 +11,4 @@
 .jj-skeleton-row:last-child { border:0; }
 .jj-skeleton-row > span { display:block; width:40%; height:14px; border-radius:4px; background:var(--line); opacity:.65; }
 .jj-skeleton-row > span + span { width:65%; height:12px; opacity:.4; }
-.jj-page-skeleton [aria-hidden=true] { animation:jj-skeleton-breathe calc(var(--motion-activity) / 2) ease-in-out infinite alternate; }
-@keyframes jj-skeleton-breathe { to { opacity:.65; } }
 @media(max-width:800px) { .jj-skeleton-surface.is-preparation { grid-template-columns:150px minmax(0,1fr); } .jj-skeleton-surface aside, .jj-skeleton-reading { padding-inline:16px; } .jj-skeleton-toolbar > span { width:20%; } }
-@media(prefers-reduced-motion:reduce) { .jj-page-skeleton [aria-hidden=true] { animation:none; } }

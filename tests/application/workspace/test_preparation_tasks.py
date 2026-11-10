@@ -384,7 +384,7 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
         assert actual.task_kind == expected, actual.model_dump_json()
         assert actual.change_id == (delivery.change_id if delivery else task.change_id if kind == "VERIFY_REPAIR" else None)
         assert actual.run_id == (run_id if kind == "VIEW_CURRENT_RESULT" else None)
-        assert actual.route == ("/changes" if kind == "REGISTER_SOURCE_CHANGE" else "/tests")
+        assert actual.route == ("/changes" if kind == "REGISTER_SOURCE_CHANGE" else "/issues" if kind == "VERIFY_REPAIR" else "/tests")
         if kind == "VIEW_CURRENT_RESULT":
             assert workspace.latest_result.run_id == run_id
     finally:

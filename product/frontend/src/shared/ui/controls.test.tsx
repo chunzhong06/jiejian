@@ -270,7 +270,7 @@ it('快速反向选择接续当前运动，减少动效立即停止且不延迟�
   const descriptor=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'animate')
   Object.defineProperty(HTMLElement.prototype,'animate',{configurable:true,value:(frames:Keyframe[],options:KeyframeAnimationOptions)=>{
     expect(options.duration).toBe(300)
-    const animation={currentTime:0,cancel:vi.fn(),onfinish:null} as unknown as Animation
+    const animation={currentTime:0,cancel:vi.fn(),onfinish:null,finished:new Promise(()=>{}),playState:'running'} as unknown as Animation
     motions.push({frames,animation});return animation
   }})
   try{

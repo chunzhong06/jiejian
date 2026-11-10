@@ -83,10 +83,22 @@ function editorContext(){
   vi.spyOn(testIdentitiesApi,'list').mockResolvedValue([{identity_id:'owner',label:'负责人',auth_method:'COOKIE'}] as never)
 }
 
+test('保存状态与流程命令分开命名，进入试运行仍需预览和明确确认',async()=>{
+  editorContext();vi.mocked(api.preview).mockResolvedValue({plan,plan_hash:'a'.repeat(64)});
+  render(<OperationFlowEditor projectId="copy-app" actionId="action" initialFlow={flow} onBack={vi.fn()}/>);
+  expect(await screen.findByRole('button',{name:'查看试运行记录'})).toBeVisible();
+  expect(screen.getByRole('button',{name:'编辑流程'})).toBeVisible();
+  expect(screen.getByText('第 2 修订 · 已保存').closest('button')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'试运行第 2 修订'}));
+  fireEvent.click(await screen.findByRole('button',{name:'预览试运行'}));
+  expect(await screen.findByRole('button',{name:'确认执行一次'})).toBeVisible();
+  expect(api.start).not.toHaveBeenCalled();
+})
+
 test('指定记录失效时保留缺失反馈，不回退其他试运行',async()=>{
   const other=receipt('other');other.state='SUCCEEDED';vi.mocked(api.history).mockResolvedValue([other]);
   render(<FlowTrialPanel {...props} initialTrialId="missing-record"/>);
-  expect(await screen.findByText('未找到指定的试运行记录，当前没有改为显示其他记录。')).toBeVisible();
+  expect(await screen.findByText('未找到指定的试运行记录，请重新选择一条记录。')).toBeVisible();
   expect(screen.queryByRole('heading',{name:'负责人 · order-1'})).not.toBeInTheDocument();
   expect(api.start).not.toHaveBeenCalled();
 })
@@ -94,10 +106,10 @@ test('指定记录失效时保留缺失反馈，不回退其他试运行',async(
 test('返回编辑器仍保留后台试运行门禁，不把离开当作执行结束',async()=>{
   editorContext();vi.mocked(api.history).mockResolvedValue([receipt('active')]);
   render(<OperationFlowEditor projectId="gate-app" actionId="action" initialFlow={flow} onBack={vi.fn()}/>);
-  fireEvent.click(await screen.findByRole('button',{name:'试运行记录'}));
+  fireEvent.click(await screen.findByRole('button',{name:'查看试运行记录'}));
   expect(await screen.findByRole('button',{name:'取消原任务'})).toBeVisible();
   fireEvent.click(screen.getByRole('button',{name:'返回流程编辑'}));
-  expect(screen.getByRole('button',{name:'用于后续检查'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'确认用于检查'})).toBeDisabled();
   expect(screen.getByRole('tab',{name:'执行请求'})).toBeDisabled();
   expect(api.cancel).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled();
 })
@@ -131,7 +143,7 @@ test('已有流程直接切换到请求编辑，未保存草稿不能试运行�
   fireEvent.click(screen.getByRole('tab',{name:'保存与使用'}))
   expect(screen.queryByRole('button',{name:'预览试运行'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'确认用于检查'})).not.toBeInTheDocument()
-  expect(screen.getByRole('button',{name:'保存操作设置'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'保存接口流程'})).toBeVisible()
   fireEvent.click(screen.getByRole('tab',{name:'执行请求'}))
   expect(screen.getByRole('textbox',{name:'接口路径'})).toHaveValue('/orders/changed')
 })

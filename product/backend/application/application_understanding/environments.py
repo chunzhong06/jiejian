@@ -4,14 +4,16 @@ from product.backend.application.onboarding.discovery import canonical_folder
 
 from product.backend.domain.applications.models import ApplicationUnderstanding
 from product.backend.domain.errors import ErrorCode, JiejianError
+from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.domain.lifecycle import ProjectStatus
 from product.backend.infrastructure.storage import ProjectRecord
 from product.protocols.web.environment import EnvironmentDocument, FrozenEnvironment
 
 
 class ApplicationEnvironments:
-    def __init__(self, uow_factory, *, control_origin=None, clock_us=None):
+    def __init__(self, uow_factory, *, control_origin=None, clock_us=None, impact_reader=None):
         self._uow, self._control = uow_factory, control_origin
+        self._impact_reader = impact_reader
         self._clock = clock_us or (lambda: time.time_ns() // 1000)
 
     def create_application(self, *, operation_id, name):
@@ -23,6 +25,9 @@ class ApplicationEnvironments:
                 if previous.name != name or previous.status is ProjectStatus.ARCHIVED:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, '此创建操作已对应其他应用配置')
                 return previous
+            if not name.strip() or len(name) > 128:
+                raise JiejianError(ErrorCode.INPUT_INVALID, '应用名称需为 1—128 个字符',
+                    details={'field_errors':[{'field':'name','reason':'INVALID'}]}).not_accepted()
             now = self._clock()
             project = ProjectRecord(project_id=project_id, name=name, status=ProjectStatus.DRAFT,
                 created_at_us=now, updated_at_us=now)
@@ -79,7 +84,25 @@ class ApplicationEnvironments:
             work.commit()
             return document
 
-    def activate(self, project_id, environment_id, *, revision, expected_revision):
+    def activation_preview(self, project_id, environment_id, *, revision):
+        with self._uow() as work:
+            return self._activation_preview(work, project_id, environment_id, revision)
+
+    def _activation_preview(self, work, project_id, environment_id, revision):
+        current = work.application_understanding.get(project_id)
+        document = work.environments.revision(project_id, environment_id, revision)
+        if current is None or document is None:
+            raise JiejianError(ErrorCode.RECORD_NOT_FOUND, '应用或检查连接修订不存在')
+        # 有效性说明来自准备所有者，未知时保留未知；本预览不创建任务或连接目标。
+        materials = dict(state='UNKNOWN', items=None) if self._impact_reader is None else self._impact_reader(project_id, work)
+        result = dict(project_id=project_id, expected_revision=current.revision,
+            previous=None if current.environment is None else current.environment.model_dump(mode='json'), previous_endpoint=current.confirmed_endpoint,
+            chosen=document.configuration.model_dump(mode='json'), changed=current.environment != document.configuration,
+            materials=materials, retained=['已确认的权限要求', '已保存的来源与流程修订', '已有检查报告'],
+            can_activate=not bool(work.jobs.active_for_project(project_id)))
+        return result | dict(impact_fingerprint=boundary_sha256(result))
+
+    def activate(self, project_id, environment_id, *, revision, expected_revision, impact_fingerprint=None):
         with self._uow() as work:
             work.acquire_write_lock()
             current = work.application_understanding.get(project_id)
@@ -93,6 +116,10 @@ class ApplicationEnvironments:
                 return current
             if current.revision != expected_revision or work.jobs.active_for_project(project_id):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '应用已变化或仍有活动任务，请刷新后切换环境')
+            if impact_fingerprint is not None:
+                reviewed = self._activation_preview(work, project_id, environment_id, revision)
+                if reviewed['impact_fingerprint'] != impact_fingerprint:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '连接或材料已变化，请重新查看切换影响').not_accepted()
             values = current.model_dump()
             values.update(environment=chosen, confirmed_endpoint=None, endpoint_source_fingerprint=None,
                 endpoint_confirmed_at_us=None, endpoint_last_checked_at_us=None, endpoint_reachable=None,

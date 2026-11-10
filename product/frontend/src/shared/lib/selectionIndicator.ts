@@ -1,18 +1,18 @@
 import {useLayoutEffect,useRef,useState,type RefObject} from 'react'
 import {motionMilliseconds} from './motionTiming'
+import {animateMotion,springSample,stopMotion} from './motion'
 
 type Bounds={x:number;y:number;width:number;height:number}
 const axes=['x','y','width','height'] as const
 const zero:Bounds={x:0,y:0,width:0,height:0}
 type Motion={from:Bounds;target:Bounds;velocity:Bounds;rate:number;animation:Animation}
 
-// 临界阻尼保留改向瞬间的位置和速度；只采样关键帧，不逐帧更新 React 或常驻 RAF。
+// 选择和布局共用同一弹簧模型；采样关键帧，不逐帧更新React或常驻RAF。
 function sample(motion:Omit<Motion,'animation'>,seconds:number){
-  const position={...zero},velocity={...zero},decay=Math.exp(-motion.rate*seconds)
+  const position={...zero},velocity={...zero}
   for(const axis of axes){
-    const distance=motion.from[axis]-motion.target[axis],impulse=motion.velocity[axis]+motion.rate*distance
-    position[axis]=motion.target[axis]+(distance+impulse*seconds)*decay
-    velocity[axis]=(impulse-motion.rate*(distance+impulse*seconds))*decay
+    const current=springSample(motion.from[axis],motion.target[axis],motion.velocity[axis],seconds,8000/motion.rate)
+    position[axis]=current.position;velocity[axis]=current.velocity
   }
   return {position,velocity}
 }
@@ -40,8 +40,9 @@ export function useSelectionIndicator(root:RefObject<HTMLElement|null>,selector:
   },[root,selector,identity,kind])
   useLayoutEffect(()=>{
     const marker=root.current?.querySelector<HTMLElement>('[data-selection-indicator]'),active=motion.current
-    const current=active?sample(active,Number(active.animation.currentTime??0)/1000):{position:previous.current,velocity:zero}
-    active?.animation.cancel();motion.current=undefined
+    const current=active&&active.animation.playState!=='idle'?sample(active,Number(active.animation.currentTime??0)/1000):{position:previous.current,velocity:zero}
+    if(marker)stopMotion(marker,'selection');else active?.animation.cancel()
+    motion.current=undefined
     previous.current=bounds
     if(!marker?.animate||!bounds||!current.position||matchMedia('(prefers-reduced-motion: reduce)').matches)return
     const duration=motionMilliseconds(getComputedStyle(marker).getPropertyValue('--motion-indicator'))
@@ -50,7 +51,9 @@ export function useSelectionIndicator(root:RefObject<HTMLElement|null>,selector:
     const length=duration*1.5
     const frames=Array.from({length:61},(_,index)=>({...frame(sample(spring,length*index/60/1000).position),offset:index/60}))
     frames[frames.length-1]={...frame(bounds),offset:1}
-    const next:Motion={...spring,animation:marker.animate(frames,{duration:length,easing:'linear'})}
+    const animation=animateMotion(marker,'selection',frames,{duration:length,easing:'linear'})
+    if(!animation)return
+    const next:Motion={...spring,animation}
     motion.current=next
     next.animation.onfinish=()=>{if(motion.current===next)motion.current=undefined}
   },[bounds,root])

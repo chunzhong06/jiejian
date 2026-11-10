@@ -28,7 +28,7 @@
     transition-duration: var(--motion-hover-in);
   }
 }
-.jj-button { transition: transform var(--motion-press) var(--ease-spring), box-shadow var(--motion-press) var(--ease-respond); }
+.jj-button { transition: transform var(--motion-press) var(--ease-spring), box-shadow var(--motion-hover-out) var(--ease-respond), background-color var(--motion-hover-out) var(--ease-respond), color var(--motion-hover-out) var(--ease-respond), border-color var(--motion-hover-out) var(--ease-respond); }
 .jj-button:not(:disabled):active { transform: translateY(1px) scale(.985); transition-duration: 0ms; }
 .jj-nav-item.jj-button:active { transform: none; }
 /* 按实际按钮与链接分开匹配，保留旧组合选择器的按压优先级。 */
@@ -56,77 +56,95 @@ input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border
 .jj-choice-menu.ant-select-dropdown .ant-select-item-option-disabled::before { display: none; }
 .jj-recording-list > label:has(input:disabled)::before { display: none; }
 .jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--control-hover); }
-/* 定位器会测量浮层本体；本体只淡入淡出，缩放会改变它读到的边界。 */
-body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown) { opacity: 1; transform: none; animation: none; transition: opacity var(--motion-popup) var(--ease-enter); }
-body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown):is([class*='-enter'],[class*='-appear']):not([class*='-active']):not([class*='-done']) { opacity: 0; }
-body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown)[class*='-leave-active'] { opacity: 0; transition-duration: var(--motion-exit); transition-timing-function: var(--ease-exit); }
-.jj-hint.ant-tooltip:is([class*='-enter'],[class*='-appear']) { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
-.jj-hint.ant-tooltip[class*='-leave'] { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
-[role=menuitem]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.jj-dialog { animation: jj-dialog-enter var(--motion-dialog) var(--ease-enter) both; }
-.jj-dialog::backdrop { animation: jj-fade-enter var(--motion-popup) var(--ease-enter) both; }
-.jj-dialog[data-closing=true] { animation: jj-dialog-exit var(--motion-exit) var(--ease-exit) both; pointer-events: none; }
-.jj-dialog[data-closing=true]::backdrop { animation: jj-fade-exit var(--motion-exit) var(--ease-exit) both; }
-:is(.jj-application-content, .jj-material-detail, .jj-proof-detail, .jj-proof-view-section, .jj-tool-detail, .jj-change-detail, .jj-material-impact, .jj-rule-inspector, .jj-rule-condition-editor, .jj-change-registration, .jj-rule-authoring-panel, .jj-rule-detail-panel, .jj-step-reading, .jj-inspector-content) { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
-.jj-inspector-content .jj-step-reading, .jj-material-detail, .jj-application-content { animation-name:jj-reader-enter; }
-.jj-notice:not([role=alert]) { animation: jj-fade-enter var(--motion-content) var(--ease-enter) both; }
-.jj-report-layout { transition: grid-template-columns var(--motion-panel) var(--ease-layout), gap var(--motion-panel) var(--ease-layout); }
-.jj-inspector-slot { transition: opacity var(--motion-content) var(--ease-enter), transform var(--motion-panel) var(--ease-enter); }
-.jj-working-dot { animation: jj-working calc(var(--motion-activity) / 2) ease-in-out infinite alternate; }
-.jj-collaboration-state[data-active=true]::before { animation: jj-working calc(var(--motion-activity) / 2) ease-in-out infinite alternate; }
-progress::-webkit-progress-value { transition: width var(--motion-content) var(--ease-layout); }
-::view-transition { pointer-events: none; }
-@supports(interpolate-size:allow-keywords) {
-  details::details-content { transition: height var(--motion-panel) var(--ease-layout), opacity var(--motion-content) var(--ease-enter), content-visibility var(--motion-panel) allow-discrete; }
-}
-@keyframes jj-fade-enter { from { opacity: 0; } to { opacity: 1; } }
-@keyframes jj-fade-exit { to { opacity: 0; } }
-@keyframes jj-dialog-enter { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
-@keyframes jj-dialog-exit { to { opacity: 0; transform: translateY(6px) scale(.99); } }
-@keyframes jj-content-enter { from { opacity: .75; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes jj-reader-enter { from { opacity:.8; transform:translateX(8px); } to { opacity:1; transform:none; } }
-@keyframes jj-working { from { opacity:.55; transform:scale(.84); } to { opacity:1; transform:scale(1); } }
-.jj-button > .anticon-arrow-right { transition: transform var(--motion-disclosure) var(--ease-spring); }
-@media(hover:hover) { .jj-button:not(:disabled):hover > .anticon-arrow-right { transform: translateX(3px); } }
-.jj-nav-item, .jj-index-item, .jj-source-index > button, .jj-case-select, .jj-toggle-group > button { transition: background-color var(--motion-indicator) var(--ease-layout), color var(--motion-hover-in) var(--ease-respond); }
-.jj-inspector-slot:not(:empty) { animation: jj-inspector-enter var(--motion-panel) var(--ease-enter) both; }
-.jj-record-reading { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
-.jj-repair-task-main > section { animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
-.jj-choice-menu.ant-select-dropdown :is(.ant-select-item-option-selected .anticon-check) { animation: jj-check-enter var(--motion-disclosure) var(--ease-spring) both; }
-body :is(.jj-example-menu.ant-dropdown, .jj-command-menu.ant-dropdown, .jj-choice-menu.ant-select-dropdown):is([class*='-enter-active'],[class*='-appear-active']) > :is(.ant-dropdown-menu,.rc-virtual-list) { animation: jj-menu-enter var(--motion-popup) var(--ease-enter) both; }
-@keyframes jj-inspector-enter { from { opacity: .3; transform: translateX(16px); } to { opacity: 1; transform: none; } }
-@keyframes jj-menu-enter { from { opacity: .5; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-@keyframes jj-check-enter { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 
-.jj-menu-surface { transform-origin:top right; transition:transform var(--motion-popup) var(--ease-enter); }
-.jj-menu-surface[data-open=false] { transform:translateY(-4px); transition-duration:var(--motion-exit); }
-.jj-command-menu.ant-dropdown-placement-bottomLeft .jj-menu-surface { transform-origin:top left; }
-.jj-command-menu:is(.ant-dropdown-placement-topLeft,.ant-dropdown-placement-topRight) .jj-menu-surface { transform-origin:bottom right; }
-.jj-switch-track { transition:background-color var(--motion-hover-out) var(--ease-respond),border-color var(--motion-hover-out) var(--ease-respond); }
-.jj-switch-track > span { transition:transform var(--motion-indicator) var(--ease-spring),background-color var(--motion-hover-out) var(--ease-respond); }
-.jj-switch:not([data-disabled=true]):active .jj-switch-track > span { scale:.94; }
-.jj-switch-track > span { transition-property:transform,background-color,scale; }
+/* 所有原生控件与领域组合消费同一反馈；颜色与静态轮廓仍归原组件。 */
+:where(.jj-app,.jj-dialog,.jj-hint,.jj-choice-menu,.jj-command-menu) :is(button,a,summary,input,textarea,select,[role=button]) {
+  transition:color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond),border-color var(--motion-hover-out) var(--ease-respond),box-shadow var(--motion-hover-out) var(--ease-respond);
+}
+.jj-button > .anticon-arrow-right,.jj-home-object-link > .anticon,.jj-home-check-row > .anticon { transition:transform var(--motion-indicator) var(--ease-spring); }
+@media(hover:hover) and (pointer:fine) {
+  .jj-button:not(:disabled):hover > .anticon-arrow-right,.jj-home-object-link:hover > .anticon,.jj-home-check-row:hover > .anticon { transform:translateX(3px); }
+}
+.jj-stage-marker,.jj-status,.jj-badge,.jj-object-identity { transition:color var(--motion-state) var(--ease-respond),background-color var(--motion-state) var(--ease-respond),border-color var(--motion-state) var(--ease-respond); }
+.jj-home-facts > a,.jj-home-check-row,.jj-home-object-link { transition:background-color var(--motion-hover-out) var(--ease-respond),color var(--motion-hover-out) var(--ease-respond); }
+.jj-runtime-method::before,.jj-tabs > :is(button,a)::before { transition:opacity var(--motion-hover-out) var(--ease-respond); }
+.jj-tabs > :is(button,a) { transition:background-color var(--motion-indicator) var(--ease-layout),color var(--motion-hover-in) var(--ease-respond); }
+.jj-file-picker { transition:border-color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond); }
+/* 选择标记测量原控件的边界；这些入口以选中面响应，不能同时缩小测量目标。 */
+:where(.jj-app,.jj-dialog) button:not(.jj-button,.jj-index-item,[role=tab],[aria-pressed]):not(:disabled):active { scale:.99; }
+:where(.jj-app,.jj-dialog) button:not(.jj-button) { transition:scale var(--motion-press) var(--ease-spring),color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond),border-color var(--motion-hover-out) var(--ease-respond); }
+:where(.jj-app,.jj-dialog) :is(input[type=checkbox],input[type=radio]):not(:disabled):active { scale:.94; }
+:where(.jj-app,.jj-dialog) :is(input[type=checkbox],input[type=radio]) { transition:scale var(--motion-press) var(--ease-spring),background-color var(--motion-hover-in) var(--ease-respond),border-color var(--motion-hover-in) var(--ease-respond); }
+:where(.jj-panel,.jj-dialog,.jj-scroll-table,.jj-inspector,.jj-task-surface,.jj-sidebar,.jj-topbar) { transition:background-color var(--motion-page) var(--ease-layout),color var(--motion-state) var(--ease-respond),border-color var(--motion-state) var(--ease-respond); }
 .jj-file-symbol { transition:transform var(--motion-indicator) var(--ease-spring),color var(--motion-hover-out) var(--ease-respond); }
 .jj-file-picker[data-dragging=true] .jj-file-symbol { transform:translateY(-2px) scale(1.08); color:var(--accent-ink); }
-.jj-button-complete { animation:jj-check-enter var(--motion-disclosure) var(--ease-spring) both; }
-.jj-search-clear { animation:jj-check-enter var(--motion-press) var(--ease-enter) both; }
-
-@media(prefers-reduced-motion:reduce) {
-  *, *::before, *::after, *::backdrop, *::details-content { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
-  progress::-webkit-progress-value { transition: none !important; }
+.jj-switch-track { transition:background-color var(--motion-state) var(--ease-respond),border-color var(--motion-state) var(--ease-respond); }
+.jj-switch-track > span { transition:transform var(--motion-indicator) var(--ease-spring),background-color var(--motion-hover-out) var(--ease-respond),scale var(--motion-press) var(--ease-spring); }
+.jj-switch:not([data-disabled=true]):active .jj-switch-track > span { scale:.94; }
+[data-selection-indicator] { transition:none; }
+.jj-disclosure-marker { transition:transform var(--motion-disclosure) var(--ease-spring); }
+summary { transition:color var(--motion-hover-out) var(--ease-respond),margin-bottom var(--motion-disclosure) var(--ease-layout); }
+@supports(interpolate-size:allow-keywords) {
+  details::details-content { transition:height var(--motion-panel) var(--ease-layout),opacity var(--motion-content) var(--ease-enter),content-visibility var(--motion-panel) allow-discrete; }
 }
-:root { view-transition-name:none; --page-offset:8px; }
-:root[data-page-direction=back] { --page-offset:-8px; }
-.jj-page { view-transition-name:jj-workspace; }
-::view-transition-group(jj-workspace) { animation-duration:var(--motion-page); animation-timing-function:var(--ease-layout); }
-::view-transition-old(jj-workspace) { animation:jj-workspace-out var(--motion-exit) var(--ease-exit) both; }
-::view-transition-new(jj-workspace) { animation:jj-workspace-in var(--motion-page) var(--ease-layout) both; }
-@keyframes jj-workspace-in { from { opacity:.75; transform:translateY(var(--page-offset)); } to { opacity:1; transform:none; } }
-@keyframes jj-workspace-out { to { opacity:0; transform:translateY(calc(var(--page-offset) * -.4)); } }
+.jj-report-layout { transition:grid-template-columns var(--motion-panel) var(--ease-layout),gap var(--motion-panel) var(--ease-layout); }
 
+/* 弹层定位外壳只负责锚点，运动留在内部，避免测量反馈与反复缩放。 */
+body :is(.jj-example-menu.ant-dropdown,.jj-command-menu.ant-dropdown,.jj-choice-menu.ant-select-dropdown,.jj-hint.ant-tooltip) { transform:none; animation:none; transition:opacity var(--motion-popup) var(--ease-enter); }
+body :is(.jj-choice-menu.ant-select-dropdown,.jj-hint.ant-tooltip):is([class*="-enter"],[class*="-appear"]):not([class*="-active"]):not([class*="-done"]) { opacity:0; }
+body :is(.jj-choice-menu.ant-select-dropdown,.jj-hint.ant-tooltip)[class*="-leave-active"] { opacity:0; transition-duration:var(--motion-exit); transition-timing-function:var(--ease-exit); }
+.jj-menu-surface { transform-origin:top right; transform:translateY(0); transition:transform var(--motion-popup) var(--ease-spring); }
+.jj-menu-surface[data-open=false] { transform:translateY(-5px); transition-duration:var(--motion-exit); }
+.jj-command-menu.ant-dropdown-placement-bottomLeft .jj-menu-surface { transform-origin:top left; }
+.jj-command-menu:is(.ant-dropdown-placement-topLeft,.ant-dropdown-placement-topRight) .jj-menu-surface { transform-origin:bottom right; }
+body .jj-choice-menu.ant-select-dropdown:is([class*="-enter-active"],[class*="-appear-active"]) > div,body .jj-hint.ant-tooltip:is([class*="-enter-active"],[class*="-appear-active"]) .ant-tooltip-inner { animation:jj-motion-popup var(--motion-popup) var(--ease-enter) both; }
+.jj-choice-menu.ant-select-dropdown .ant-select-item-option-selected .anticon-check { animation:jj-motion-check var(--motion-indicator) var(--ease-spring) both; }
 .jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-selected::before { background:var(--selected-hover); }
-
-/* 键盘候选跟随活动项；指针悬停不能把上一次自动聚焦项也持续染亮。 */
 html[data-input-mode=keyboard] :is(.jj-example-menu,.jj-command-menu).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-active::before,
 html[data-input-mode=keyboard] .jj-choice-menu.ant-select-dropdown .ant-select-item-option-active::before { opacity:1; }
+[role=menuitem]:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.jj-dialog::backdrop { animation:jj-motion-mask-in var(--motion-dialog) var(--ease-enter) both; }
+.jj-dialog[data-closing=true] { pointer-events:none; }
+.jj-dialog[data-closing=true]::backdrop { animation:jj-motion-mask-out var(--motion-exit) var(--ease-exit) both; }
+
+/* 活动、真实完成与确定进度各自有节奏；活动不会增加后台完成数。 */
+.jj-progress-fill { transition:transform var(--motion-panel) var(--ease-layout); }
+.jj-progress[data-active=true] > .jj-progress-activity { animation:jj-motion-progress var(--motion-activity) linear infinite; }
+.jj-working-dot,.jj-collaboration-state[data-active=true]::before { animation:jj-motion-breathe calc(var(--motion-activity) / 2) ease-in-out infinite alternate; }
+.jj-page-skeleton [aria-hidden=true] { animation:jj-motion-skeleton calc(var(--motion-activity) / 2) ease-in-out infinite alternate; }
+html body .anticon-spin { animation:jj-motion-spin 1200ms linear infinite; }
+.jj-button-complete { animation:jj-motion-check var(--motion-complete) var(--ease-spring) both; }
+.jj-search-clear { animation:jj-motion-check var(--motion-indicator) var(--ease-spring) both; }
+[data-milestone-active] { position:relative; }
+[data-milestone-accent] { height:2px; background:var(--accent); transform-origin:left center; opacity:.65; }
+[data-milestone-active=repair] .jj-result-summary,[data-milestone-active=materials] .jj-preparation-progress { animation:jj-motion-settle 680ms var(--ease-spring) both; }
+@keyframes jj-motion-settle { 0% { opacity:.5; scale:.97; } 62% { opacity:1; scale:1.015; } 100% { scale:1; } }
+@keyframes jj-motion-progress { from { transform:translateX(-100%); } to { transform:translateX(334%); } }
+@keyframes jj-motion-breathe { from { opacity:.55; transform:scale(.88); } to { opacity:1; transform:scale(1); } }
+@keyframes jj-motion-skeleton { to { opacity:.42; } }
+@keyframes jj-motion-spin { to { transform:rotate(360deg); } }
+@keyframes jj-motion-check { 0% { opacity:.3; scale:.65; } 65% { opacity:1; scale:1.08; } 100% { opacity:1; scale:1; } }
+@keyframes jj-motion-popup { from { opacity:.6; translate:0 -4px; } to { opacity:1; translate:0 0; } }
+@keyframes jj-motion-mask-in { from { opacity:0; } to { opacity:1; } }
+@keyframes jj-motion-mask-out { from { opacity:1; } to { opacity:0; } }
+
+/* 页面快照保留壳层稳定；局部交接由场景所有者处理，不叠加逐页keyframes。 */
+:root { view-transition-name:none; --page-offset:6px; }
+:root[data-page-direction=back] { --page-offset:-6px; }
+.jj-page { view-transition-name:jj-workspace; }
+::view-transition { pointer-events:none; }
+::view-transition-group(jj-workspace) { animation-duration:var(--motion-page); animation-timing-function:var(--ease-layout); }
+::view-transition-old(jj-workspace) { animation:jj-motion-page-out var(--motion-exit) var(--ease-exit) both; }
+::view-transition-new(jj-workspace) { animation:jj-motion-page-in var(--motion-page) var(--ease-enter) both; }
+:root[data-visual-transition=reading]::view-transition-group(*) { animation-duration:var(--motion-layout); animation-timing-function:var(--ease-layout); }
+:root[data-visual-transition=reading]::view-transition-old(*) { animation:jj-motion-page-out var(--motion-exit) var(--ease-exit) both; }
+:root[data-visual-transition=reading]::view-transition-new(*) { animation:jj-motion-page-in var(--motion-content) var(--ease-enter) both; }
+:root[data-visual-transition=reading]::view-transition-old(jj-reading),:root[data-visual-transition=reading]::view-transition-new(jj-reading) { animation:none; }
+@keyframes jj-motion-page-in { from { opacity:.76; transform:translateY(var(--page-offset)); } to { opacity:1; transform:none; } }
+@keyframes jj-motion-page-out { to { opacity:0; transform:translateY(calc(var(--page-offset) * -.4)); } }
+html[data-motion-paused=true] *,html[data-motion-paused=true] *::before,html[data-motion-paused=true] *::after { animation-play-state:paused !important; }
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after,*::backdrop,*::details-content { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*) { animation:none !important; }
+  .jj-progress-activity { transform:translateX(116%); }
+}

@@ -57,7 +57,7 @@ it.each(['member-slot','missing-slot'])('按被点击的账号需求定位，不
     vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[action],preparation_complete:false,recommended_action_id:'edit',basis_fingerprint:null,policy_epoch:1,source_fingerprint:null,impacts:[]});
     render(<Accounts projectId="app" actions={[action]} requestedSlot={requestedSlot} onBack={()=>{}} onError={()=>{}}/>);
     if(requestedSlot==='member-slot')expect(await screen.findByRole('heading',{name:'成员账号'})).toBeVisible();
-    else expect(await screen.findByText('这项账号需求已发生变化，请从左侧重新选择账号。')).toBeVisible();
+    else expect(await screen.findByText('这项账号需求已发生变化，请返回材料清单重新选择。')).toBeVisible();
     expect(screen.queryByRole('heading',{name:'负责人账号'})).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:/负责人账号/}));
     expect(await screen.findByRole('heading',{name:'负责人账号'})).toBeVisible();

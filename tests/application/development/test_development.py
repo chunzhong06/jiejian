@@ -221,7 +221,8 @@ def test_competing_deliveries_require_new_task_version(development):
         assert len(work.source_changes.current_changes(harness.project_id)) == 1
 
 
-def test_runtime_activation_recovers_saved_process_without_loading_twice(development, monkeypatch):
+@pytest.mark.parametrize('reader_failure', [False, True])
+def test_runtime_activation_recovers_saved_process_without_loading_twice(development, monkeypatch, reader_failure):
     from product.backend.application.runtime.activation import RuntimeActivationService
     from product.protocols.runtime.runtime_identity import ControlledRuntimeReference
     harness, service = development
@@ -235,17 +236,21 @@ def test_runtime_activation_recovers_saved_process_without_loading_twice(develop
             source_fingerprint=source, process_id=123, process_created_at=456, owner_id="exp_" + "2" * 32)
         references.append(value)
         return value
-    activation = RuntimeActivationService(uow_factory=harness.core.uow_factory, loader=load,
-        reader=lambda project: references[-1] if references else None, clock=lambda: 123)
+    def read(project):
+        if reader_failure:
+            raise OSError('runtime-query-unavailable')
+        return references[-1] if references else None
+    activation = RuntimeActivationService(uow_factory=harness.core.uow_factory, loader=load, reader=read, clock=lambda: 123)
     original = DevelopmentRepository.finish_runtime_receipt
     def fail_receipt(*args):
         raise OSError("lost database response")
     monkeypatch.setattr(DevelopmentRepository, "finish_runtime_receipt", fail_receipt)
     key = uuid4().hex
-    with pytest.raises(JiejianError, match="可能已经加载"):
+    with pytest.raises(JiejianError, match="尚未确认" if reader_failure else "可能已经加载"):
         activation.activate(harness.project_id, delivery.delivery_id, operation_id=key, expected_version=delivery.task_version)
     assert activation.receipt(harness.project_id, key).status == "UNKNOWN"
     monkeypatch.setattr(DevelopmentRepository, "finish_runtime_receipt", original)
+    reader_failure = False
     recovered = activation.activate(harness.project_id, delivery.delivery_id, operation_id=key, expected_version=delivery.task_version)
     assert recovered.status == "SUCCEEDED" and len(calls) == 1
     assert activation.activate(harness.project_id, delivery.delivery_id, operation_id=key, expected_version=delivery.task_version) == recovered

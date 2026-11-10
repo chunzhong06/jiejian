@@ -28,7 +28,7 @@ export const collaborationApi={
   executor:(project:string)=>request<CollaborationExecutor>('/api/collaboration/executor?project_id='+encodeURIComponent(project)),
   execute:(project:string,task:string,allowChanges:boolean,operationId:string,continuous=true)=>post(base(project)+'/'+task+'/execute',{operation_id:operationId,allow_changes:allowChanges,continuous,max_turns:8,max_seconds:1800}),
 }
-export const collaborationLabels:Record<string,string>={WAITING_AGENT:'等待 Agent 接续',RUNNING:'正在处理',WAITING_USER:'需要你确认',BLOCKED:'需要处理',PAUSED:'已暂停',COMPLETED:'协作已结束',CANCELLED:'已停止',UNKNOWN:'结果待核对',FAILED:'未完成',SUCCEEDED:'已取得回执',DECLINED:'已取消这项操作'}
+export const collaborationLabels:Record<string,string>={WAITING_AGENT:'等待 Agent 继续处理',RUNNING:'正在处理',WAITING_USER:'需要你确认',BLOCKED:'需要处理',PAUSED:'已暂停',COMPLETED:'协作已结束',CANCELLED:'已停止',UNKNOWN:'结果待核对',FAILED:'未完成',SUCCEEDED:'已取得回执',DECLINED:'已取消这项操作'}
 
 // 生命周期只表达协作进展；业务检查结论继续由各自的 Verdict 呈现。
 export const collaborationTone=(state:string):'neutral'|'accent'|'positive'|'caution'|'negative'=>

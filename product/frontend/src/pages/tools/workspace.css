@@ -29,4 +29,3 @@
 .jj-tools-access > :is(.jj-notice,.jj-loading) { margin-top:24px; }
 @media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); max-width:680px; } .jj-tools-access > .jj-button { margin-top:24px; } }
 @media(max-width:600px) { .jj-tools-connection, .jj-tools-access { padding:20px; } .jj-tool-object > .jj-field { max-width:none; } }
-@media(prefers-reduced-motion:no-preference) { .jj-tool-detail { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }

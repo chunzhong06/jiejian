@@ -58,9 +58,9 @@
 .jj-runtime-method:has(input:checked) strong { color:var(--selected-ink); }
 .jj-runtime-method:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
 .jj-runtime-method:has(input:disabled) { cursor:default; color:var(--disabled-ink); background:var(--disabled-bg); }
-.jj-runtime-method::before { content:''; position:absolute; inset:0; border-radius:inherit; z-index:-1; background:var(--hover); opacity:0; pointer-events:none; transition:opacity var(--motion-hover-out) var(--ease-respond); }
-@media(hover:hover) and (pointer:fine) { .jj-runtime-method:not(:has(input:disabled)):hover::before { opacity:1; transition-duration:var(--motion-hover-in); } }
-.jj-runtime-panel { min-width:0; animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-runtime-method::before { content:''; position:absolute; inset:0; border-radius:inherit; z-index:-1; background:var(--hover); opacity:0; pointer-events:none; }
+@media(hover:hover) and (pointer:fine) { .jj-runtime-method:not(:has(input:disabled)):hover::before { opacity:1; } }
+.jj-runtime-panel { min-width:0; }
 .jj-runtime-panel > .jj-small { margin-top:12px; }
 .jj-runtime-setup { display:grid; grid-template-columns:minmax(0,1fr) 100px auto; gap:12px; align-items:end; }
 .jj-runtime-setup > .jj-button { justify-self:end; }
@@ -105,10 +105,10 @@
 @media(max-width:700px) { .jj-connect-new { grid-template-columns:minmax(0,1fr); } .jj-connect-new > header { padding:22px 20px; border-right:0; border-bottom:1px solid var(--line); } }
 
 .jj-application-workspace > .jj-workspace-header { padding:0 0 24px; background:transparent; }
-.jj-connection-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:start; gap:24px; }
-.jj-connection-layout > .jj-application-capabilities { margin:0; border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--inset); padding:24px; }
+.jj-connection-layout { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(260px,1fr); align-items:start; gap:32px; max-width:1080px; }
+.jj-connection-layout > .jj-application-capabilities { margin:0; border:0; border-left:1px solid var(--line); background:transparent; padding:0 0 0 32px; }
 .jj-connection-layout .jj-application-capabilities > header { padding:0 0 20px; border:0; background:transparent; }
-@container application-workspace (max-width:880px) { .jj-connection-layout { grid-template-columns:minmax(0,1fr); gap:20px; } }
+@container application-workspace (max-width:880px) { .jj-connection-layout { grid-template-columns:minmax(0,1fr); gap:28px; } .jj-connection-layout > .jj-application-capabilities { border-left:0;border-top:1px solid var(--line);padding:24px 0 0; } }
 
 @container application-workspace (min-width:881px) {
   .jj-source-connection { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:0 20px; }
@@ -122,13 +122,12 @@
 .jj-example-workflow > .jj-button[data-navigation=row] { border-radius:0; border-bottom:0; justify-content:center; gap:16px; min-height:64px; padding:20px 24px; font-size:var(--text-body); }
 .jj-example-workflow > .jj-button[data-navigation=row]:focus-visible { outline-offset:-3px; }
 .jj-example-workflow > .jj-button + .jj-button { border-left:1px solid var(--line); }
-.jj-example-archives { border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--surface); overflow:hidden; }
-.jj-example-archives > header { display:flex; align-items:center; gap:16px; padding:20px 24px; background:var(--inset); border-bottom:1px solid var(--line); }
+.jj-example-archives { border-top:1px solid var(--line); padding-top:20px; }
 .jj-example-archives > article { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:24px; padding:20px 24px; }
 .jj-example-archives > article + article { border-top:1px solid var(--line); }
 .jj-example-archives article > div { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; }
 .jj-example-lab { background:var(--surface); }
-@media(max-width:600px) { .jj-example-workflow > .jj-button[data-navigation=row] { gap:8px; padding:18px 12px; } .jj-example-archives > header, .jj-example-archives > article { padding:20px; } .jj-example-archives > header { flex-wrap:wrap; } .jj-example-archives > article { grid-template-columns:minmax(0,1fr); gap:12px; } .jj-example-archives article > .jj-button { justify-self:start; } }
+@media(max-width:600px) { .jj-example-workflow > .jj-button[data-navigation=row] { gap:8px; padding:18px 12px; } .jj-example-archives > article { padding:20px; } .jj-example-archives > article { grid-template-columns:minmax(0,1fr); gap:12px; } .jj-example-archives article > .jj-button { justify-self:start; } }
 
 .jj-application-runtime > header p { margin-top:8px; line-height:1.7; }
 .jj-runtime-review { display:grid; grid-template-columns:minmax(0,1fr); padding:0; margin:0; border:0; background:transparent; gap:22px; }

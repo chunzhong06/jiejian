@@ -9,6 +9,7 @@ import type { BoundaryReviewGap } from '../../permission/api/ruleCandidates'
 
 export type CheckVerdict = 'PASS' | 'BLOCK' | 'INCONCLUSIVE'
 export type ExternalRecheckCommand = {reference:RepairReference;deployment_statement:string}
+export type CheckContinuation={project_id:string;run_id:string;state:'AVAILABLE'|'WAITING'|'UNAVAILABLE';message:string;permissions:PermissionReference[];routine:RoutineReference|null;scenario:ScenarioReference|null;change_id:string|null;repair:RepairReference|null;external_recheck:boolean}
 export type CheckProgressCase = {
   case_id: string; action_label: string; expectation: 'ALLOW' | 'DENY'
   planned_subject_label: string; planned_resource_owner_label: string; resource_id: string; effect_labels: string[]
@@ -85,12 +86,13 @@ export type StoryProofCoverage = {
 export type ActionResultStory = {
   scenario_context?:{scenario_label:string;experiment_label:string;experiment_kind:string;invocation_label:string;item_index:number;item_count:number;same_resource_occurrences:number;batch_strategy:'ATOMIC'|'PER_ITEM'|null;expected_effect:'PRESENT'|'ABSENT'}|null
   reason_codes?: string[]
+  case_verdict?: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   action_id: string; action_revision: number; display_name: string; case_id: string
   permission: { intent_id?: string; revision?: number; intent_hash?: string; expectation: 'ALLOW' | 'DENY'; relation: string; conditions?: PermissionConditions | null }
   judgement: string
   fact_comparison: {
     planned_identity: StoryIdentity; planned_resource_owner?: StoryIdentity | null; resource_id?: string | null; verified_actual_identity: StoryIdentity; http_surface: CheckOutcome; http_explanation: string
-    effects: Array<{ effect_id: string; business_label: string; resource_concept: string; observed_state: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'; judgement: string; evidence_refs: string[] }>
+    effects: Array<{ effect_id: string; business_label: string; resource_concept: string; observed_state: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'; assessment_state?: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'; judgement: string; evidence_refs: string[] }>
     allow_control: { case_id: string; verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'; evidence_refs: string[] } | null
   }
   breakpoint: CheckBreakpoint | null; decisive_proof_chain: EvidenceExplanation[]; evidence_explanations: EvidenceExplanation[]
@@ -133,6 +135,7 @@ function readStatus(id: string, signal?:AbortSignal) {
   return pending
 }
 export const currentChecksApi = {
+  continuation:(project:string,run:string,signal?:AbortSignal)=>request<CheckContinuation>(`${projectPath(project)}/runs/${encodeURIComponent(run)}/continuation`,{signal}),
   history: (id: string, options: CheckHistoryQuery = {}, signal?:AbortSignal) => {
     const query = new URLSearchParams({ limit: '25' })
     if (options.query?.trim()) query.set('query', options.query.trim())

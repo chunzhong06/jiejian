@@ -79,14 +79,67 @@ def test_live_reference_survives_current_receipt_switch(setup):
     assert len(service.preview('clear-all')['targets'])==1
 
 
+def test_removed_instance_registration_does_not_hide_owned_builds(setup):
+    service,root,var,_,_=setup
+    record(root/'state/startup-instances/removed.json',kind='startup-instance',var_dir=str(var.parent/'removed'))
+    preview=service.preview('clear-all')
+    assert [item['relative_path'] for item in preview['targets']]==['共享启动目录/frontend/builds/old']
+
+
+def test_existing_instance_without_receipt_still_blocks_cleanup(setup):
+    service,root,var,_,_=setup
+    other=var.parent/'incomplete';other.mkdir()
+    record(root/'state/startup-instances/incomplete.json',kind='startup-instance',var_dir=str(other))
+    preview=service.preview('clear-all')
+    assert preview['targets']==[]
+    assert any(item['state']=='UNKNOWN' for item in preview['status']['inventory'])
+
+
+def test_inaccessible_instance_is_not_treated_as_removed(setup,monkeypatch):
+    service,root,var,_,_=setup
+    other=var.parent/'inaccessible'
+    record(root/'state/startup-instances/inaccessible.json',kind='startup-instance',var_dir=str(other))
+    original=Path.lstat
+    def guarded(path,*args,**kwargs):
+        if path==other:raise PermissionError('denied')
+        return original(path,*args,**kwargs)
+    monkeypatch.setattr(Path,'lstat',guarded)
+    assert service.preview('clear-all')['targets']==[]
+
+
+def test_live_use_protects_build_even_after_instance_directory_is_removed(setup):
+    import shutil
+    service,root,var,_,old=setup
+    other=var.parent/'temporary'
+    source(other,root,old)
+    record(root/'state/startup-instances/temporary.json',kind='startup-instance',var_dir=str(other))
+    use=LocalMaintenanceService(other,development_root=root)
+    use.assets.retain_live_references()
+    try:
+        shutil.rmtree(other)
+        assert service.preview('clear-all')['targets']==[]
+    finally:
+        use.assets.close()
+    assert len(service.preview('clear-all')['targets'])==1
+
+
 def test_prepare_lock_blocks_cleanup_before_any_deletion(setup):
     service,root,_,_,old=setup
     preview=service.preview('clear-all')
     with exclusive_file(root/'locks/prepare.lock'):
-        with pytest.raises(JiejianError):
+        with pytest.raises(JiejianError) as refused:
             service.execute(preview['plan_id'])
+        assert refused.value.to_dict()['details']=={'execution_started':False,'reason':'ENVIRONMENT_BUSY'}
     assert old.exists()
     assert service.execute(preview['plan_id'])['counts']['DELETED']==1
+
+
+def test_inaccessible_lock_is_not_reported_as_active_preparation(tmp_path,monkeypatch):
+    def denied(*_args,**_kwargs):raise PermissionError('denied')
+    monkeypatch.setattr(Path,'open',denied)
+    with pytest.raises(JiejianError) as refused:
+        with exclusive_file(tmp_path/'prepare.lock'):pytest.fail('不可进入清理')
+    assert refused.value.to_dict()['details']=={'execution_started':False,'reason':'LOCK_UNAVAILABLE'}
 
 
 def test_selected_items_and_receipt_recovery_never_reexecute(setup,monkeypatch):

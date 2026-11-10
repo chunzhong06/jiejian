@@ -10,7 +10,7 @@ import { Dialog } from "../../shared/ui/Dialog";
 import {Field, Heading,ObjectIdentity} from "../../shared/ui/layout"
 import { useRead } from '../../shared/lib/useRead';
 const levels: Record<MCPAccessLevel, string> = { READ: '只读资料与报告', PREPARE: '整理规则候选与检查材料', EXECUTE: '准备材料并提交检查' };
-const levelDetails: Record<MCPAccessLevel, string> = { READ: '', PREPARE: '权限规则仍需你确认后生效。', EXECUTE: '执行受账号、资源与权限门禁约束，权限规则仍需你确认后生效。' };
+const levelDetails: Record<MCPAccessLevel, string> = { READ: '', PREPARE: '权限规则仍需你确认后生效。', EXECUTE: '执行前会核对账号、资源和权限范围；权限规则由你确认后生效。' };
 const connectionLabels: Record<AgentConnection['state'], string> = { NOT_CONFIGURED: '尚未配置', AWAITING_CLIENT: '等待工具确认', STARTED: '连接器已启动', CONNECTED: '连接已建立', TOOLS_READ: '已读取工具', REQUEST_ACCEPTED: '已接收请求', DISCONNECTED: '连接已断开', FAILED: '连接未完成' };
 export function Agent({ projectId, name, onError,embedded=false }: {
     projectId?: string;
@@ -58,7 +58,7 @@ export function Agent({ projectId, name, onError,embedded=false }: {
             </>}
           </section>}
         </div>
-        {state.data&&<section className="jj-tools-service"><div className="jj-tools-service-row"><div className="jj-tools-service-state"><ObjectIdentity name={<strong>本地接入服务</strong>} status={<Badge tone={state.data.paired&&state.data.accepting_connections?'positive':'neutral'}>{state.data.paired?state.data.accepting_connections?'接受连接':'已暂停':'未配对'}</Badge>}/></div>{state.data.paired&&<Switch label="允许开发工具接入" checked={state.data.accepting_connections} busy={busy} onCheckedChange={accepting=>void act(async()=>{await(accepting?mcpAccessApi.resume():mcpAccessApi.pause());})}/>}</div>
+        {state.data&&<section className="jj-tools-service"><div className="jj-tools-service-row"><div className="jj-tools-service-state"><ObjectIdentity name={<strong>本地接入服务</strong>} status={<Badge tone={state.data.paired&&state.data.accepting_connections?'positive':'neutral'}>{state.data.paired?state.data.accepting_connections?'可连接':'已暂停':'未配对'}</Badge>}/></div>{state.data.paired&&<Switch label="允许开发工具接入" checked={state.data.accepting_connections} busy={busy} onCheckedChange={accepting=>void act(async()=>{await(accepting?mcpAccessApi.resume():mcpAccessApi.pause());})}/>}</div>
           <details className="jj-tool-management"><summary>连接管理</summary><div className="jj-tool-management-content"><dl className="jj-facts"><dt>本地接入地址</dt><dd className="jj-path">{state.data.endpoint}</dd></dl>{connected&&connection.data?.message&&<p className="jj-small jj-muted">{connection.data.message}</p>}<div className="jj-inline-actions">{connection.data&&connection.data.state!=='NOT_CONFIGURED'&&<Button disabled={busy} onClick={()=>setConfirm('restore')}>恢复此工具原配置</Button>}{state.data.paired&&<Button kind="danger" disabled={busy} onClick={()=>setConfirm('forget')}>解除全部工具配对</Button>}</div></div></details>
         </section>}
         <footer className="jj-tools-actions"><Button kind={connected?'quiet':'primary'} disabled={busy||connection.loading||Boolean(connection.error)||Boolean(connection.data?.profiles.length&&!profile)} onClick={()=>setConfirm('connect')}>{connection.data?.state==='NOT_CONFIGURED'?'配置连接':'更新连接'}<ArrowRightOutlined aria-hidden="true"/></Button></footer>

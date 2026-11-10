@@ -18,12 +18,21 @@ export class ApiError extends Error {
   traceId?: string
   diagnosis?: ErrorDiagnosis
   executionStarted?: boolean
-  constructor(code: string, message: string, traceId?: string, diagnosis?: ErrorDiagnosis, executionStarted?: boolean) {
+  reason?: string
+  requestOutcome: 'NOT_ACCEPTED'|'UNKNOWN'
+  fieldErrors: Array<{field:string;reason:'REQUIRED'|'TOO_LONG'|'TOO_SHORT'|'INVALID'}>
+  constructor(code: string, message: string, traceId?: string, diagnosis?: ErrorDiagnosis, executionStarted?: boolean, reason?: string, requestOutcome?: unknown, fieldErrors?: unknown) {
     super(message)
     this.code = code
     this.traceId = traceId
     this.diagnosis = diagnosis
     this.executionStarted = typeof executionStarted === 'boolean' ? executionStarted : undefined
+    this.reason = typeof reason==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(reason)?reason:undefined
+    this.requestOutcome=requestOutcome==='NOT_ACCEPTED'?'NOT_ACCEPTED':'UNKNOWN'
+    const fields=new Set(['name','operation_id','expected_plan_fingerprint','expected_version','expected_revision','plan_hash'])
+    this.fieldErrors=Array.isArray(fieldErrors)?fieldErrors.slice(0,16).flatMap(item=>
+      item&&typeof item==='object'&&fields.has(item.field)&&['REQUIRED','TOO_LONG','TOO_SHORT','INVALID'].includes(item.reason)
+        ?[{field:item.field,reason:item.reason}]:[]):[]
   }
 }
 
@@ -85,8 +94,8 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
     )
   }
   if (!response.ok) {
-    // 只读取明确的执行门禁布尔值，不向页面透传任意错误 details。
-    throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis, body.error?.details?.execution_started)
+    // 只读取执行门禁及有界原因码，不向页面透传任意错误 details。
+    throw new ApiError(body.error?.code ?? 'API_ERROR', body.error?.message ?? '请求失败', body.trace_id, body.error?.diagnosis, body.error?.details?.execution_started, body.error?.details?.reason, body.error?.details?.request_outcome, body.error?.details?.field_errors)
   }
   // 这里只识别 envelope 版本；具体字段与项目归属仍由对应 API 和页面消费者核对。
   return body.data as T
@@ -96,6 +105,6 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   } finally { if (timer) clearTimeout(timer); init?.signal?.removeEventListener('abort',cancel) }
 }
 
-function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis; details?:{execution_started?:boolean} }; trace_id?: string } {
+function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis; details?:{execution_started?:boolean;reason?:string;request_outcome?:unknown;field_errors?:unknown} }; trace_id?: string } {
   return typeof body === 'object' && body !== null && (body as { schema_version?: unknown }).schema_version === '1'
 }

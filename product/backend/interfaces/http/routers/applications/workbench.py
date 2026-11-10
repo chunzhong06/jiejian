@@ -25,6 +25,7 @@ class AttachSource(ApiModel):
 
 
 class ActivateEnvironment(ApiModel):
+    impact_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
     revision: int = Field(ge=1)
     expected_revision: int = Field(ge=0)
 
@@ -77,6 +78,10 @@ def build_workbench_router(context):
         except ValidationError:
             raise JiejianError(ErrorCode.INPUT_INVALID, '环境配置格式不正确') from None
         return data_response(await run_in_threadpool(context.application_environments.save, project_id, body.configuration, expected_revision=body.expected_revision))
+
+    @router.get('/api/projects/{project_id}/environments/{environment_id}/activation-preview', response_model=ApiResponse)
+    def activation_preview(project_id: str, environment_id: str, revision: int = Query(ge=1)):
+        return data_response(context.application_environments.activation_preview(project_id, environment_id, revision=revision))
 
     @router.post('/api/projects/{project_id}/environments/{environment_id}/activate', response_model=ApiResponse)
     def activate_environment(project_id: str, environment_id: str, body: ActivateEnvironment):

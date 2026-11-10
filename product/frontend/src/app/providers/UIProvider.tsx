@@ -1,5 +1,6 @@
 import {useLayoutEffect,useState,type ReactNode} from 'react'
 import {ConfigProvider,theme as antTheme,type ThemeConfig} from 'antd'
+import {MotionRoot} from '../../shared/ui/MotionRoot'
 
 function palette(appearance:'light'|'dark'):ThemeConfig{
   const css=getComputedStyle(document.documentElement),tokens:Record<string,string|number>={fontFamily:css.getPropertyValue('--font-ui').trim()||'system-ui, sans-serif',fontSize:14,fontSizeSM:12,fontSizeLG:16}
@@ -13,5 +14,5 @@ function palette(appearance:'light'|'dark'):ThemeConfig{
 export function UIProvider({appearance,children}:{appearance:'light'|'dark';children:ReactNode}){
   const [theme,setTheme]=useState(()=>palette(appearance))
   useLayoutEffect(()=>{document.documentElement.dataset.studioTheme=appearance;setTheme(palette(appearance))},[appearance])
-  return <ConfigProvider theme={theme}>{children}</ConfigProvider>
+  return <ConfigProvider theme={theme}><MotionRoot/>{children}</ConfigProvider>
 }

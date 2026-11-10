@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from product.backend.domain.redaction import redact
 
@@ -198,6 +198,16 @@ class JiejianError(Exception):
     @property
     def code(self) -> str:
         return self._code
+
+    @property
+    def request_outcome(self) -> Literal['NOT_ACCEPTED', 'UNKNOWN']:
+        """只表示当前尝试的接纳事实；没有所属用例的明确证明时保持未知。"""
+        return 'NOT_ACCEPTED' if self._details.get('request_outcome') == 'NOT_ACCEPTED' else 'UNKNOWN'
+
+    def not_accepted(self) -> JiejianError:
+        """供接纳前校验或已确认回滚的用例补事实，不用于推断此前未知尝试。"""
+        return JiejianError(self._code, self._message,
+            details={**self._details, 'request_outcome': 'NOT_ACCEPTED'})
 
     def to_dict(self) -> dict[str, Any]:
         return redact(

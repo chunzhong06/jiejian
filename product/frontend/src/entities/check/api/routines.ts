@@ -13,8 +13,9 @@ export type RoutineSummary={routine_id:string;revision:number;name:string;scope_
 export type LegacySelection={routine_id:string;name:string;selected_permissions:PermissionReference[]|null;created_at_us:number}
 export type RoutineCatalog={project_id:string;routines:RoutineSummary[];legacy_selections:LegacySelection[];next_cursor?:string|null}
 export type RoutineAsset={kind:'ACCOUNT'|'RESOURCE'|'FLOW'|'PROOF';slot:string;label:string;reference:string;fingerprint:string;requirement_slot?:string|null;owner_reference?:string|null}
+export type RoutineRequirementProgress={kind:RoutineAsset['kind'];slot:string;status:'PRESENT'|'PARTIAL'|'NEEDS_REVIEW'|'MISSING'|'UNKNOWN';count:number|null;minimum_count:number;reason_codes:string[]}
 export type RoutineBinding={document_type:'jiejian.check-routine-binding';schema_version:'1';binding_id:string;project_id:string;routine_id:string;routine_revision:number;routine_fingerprint:string;environment_id:string;environment_revision:number;environment_fingerprint:string;material_fingerprint:string;assets:RoutineAsset[];created_at_us:number}
-export type RoutineBindingPreview={project_id:string;routine:CheckRoutine;preview:CheckPreview;environment:{environment_id:string;revision:number;name:string;deployment_label:string|null;target:{base_url:string}}|null;environment_fingerprint:string|null;material_fingerprint:string|null;assets:RoutineAsset[];can_bind:boolean}
+export type RoutineBindingPreview={project_id:string;routine:CheckRoutine;preview:CheckPreview;environment:{environment_id:string;revision:number;name:string;deployment_label:string|null;target:{base_url:string}}|null;environment_fingerprint:string|null;material_fingerprint:string|null;assets:RoutineAsset[];requirement_progress?:RoutineRequirementProgress[];can_bind:boolean}
 export type SaveRoutine={operation_id:string;routine_id?:string;expected_revision:number;name:string;scope:RoutineScope;limits:RoutineLimits}
 export type BindRoutine={operation_id:string;revision:number;expected_material_fingerprint:string;expected_environment_fingerprint:string}
 const root=(project:string)=>'/api/projects/'+encodeURIComponent(project)+'/check-routines'

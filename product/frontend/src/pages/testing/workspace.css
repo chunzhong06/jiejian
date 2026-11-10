@@ -9,7 +9,7 @@
 .jj-scenario-layout>aside { min-width:0; }
 .jj-scenario-layout[data-empty=true] { grid-template-columns:minmax(0,1fr); }
 .jj-scenario-layout[data-empty=true]>.jj-scenario-reading { padding-left:0; border-left:0; }
-.jj-scenario-reading { min-width:0; padding-left:28px; border-left:1px solid var(--line); display:grid; align-content:start; gap:24px; }
+.jj-scenario-reading { min-width:0; padding-left:32px; border-left:1px solid var(--line); display:grid; align-content:start; gap:28px; }
 .jj-scenario-reading>header { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .jj-scenario-reading>header>div { display:flex; gap:8px; }
 .jj-scenario-resources { display:grid; gap:20px; }

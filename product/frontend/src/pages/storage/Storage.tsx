@@ -1,3 +1,4 @@
+import {useMilestoneTransition} from '../../shared/lib/milestone'
 import './styles.css'
 import { useEffect, useRef, useState } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
@@ -11,6 +12,7 @@ import { Badge, Empty, ErrorNote, Loading, Notice } from "../../shared/ui/feedba
 import { ObjectHeading, Heading } from "../../shared/ui/layout";
 const categories: Record<string, string> = { builds: '旧前端构建', build_cache: '下载与构建缓存', components: '闲置运行组件', assistant: 'AI 辅助缓存', logs: '历史日志', temporary: '运行临时文件' };
 const pendingKey = 'jiejian.maintenance.pending';
+const waitingForEnvironment=(value:unknown)=>value instanceof ApiError&&value.executionStarted===false&&['ENVIRONMENT_BUSY','MAINTENANCE_BUSY'].includes(value.reason??'');
 type InventoryItem = NonNullable<MaintenanceStatus['inventory']>[number];
 const size = (bytes: number | null) => { if (bytes === null)
     return '未确认'; const units = ['B', 'KiB', 'MiB', 'GiB']; let value = bytes, index = 0; while (value >= 1024 && index < units.length - 1) {
@@ -20,6 +22,7 @@ const size = (bytes: number | null) => { if (bytes === null)
 export function Storage({embedded=false}:{embedded?:boolean}={}) {
     const [status, setStatus] = useState<MaintenanceStatus>(), [reading, setReading] = useState(false), [failed, setFailed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
     const [review, setReview] = useState(false), [plan, setPlan] = useState<MaintenanceOperationResult>(), [selected, setSelected] = useState<string[]>([]), [pending, setPending] = useState<string>(), [result, setResult] = useState<MaintenanceOperationResult>();
+    const completion=useMilestoneTransition<HTMLElement>('cleanup',Boolean(result&&!result.dry_run&&!result.interrupted),'cleanup');
     const alive = useRef(true), lock = useRef(false), epoch = useRef(0), scanController = useRef<AbortController | undefined>(undefined);
     const scan = async () => {
         scanController.current?.abort();
@@ -124,6 +127,7 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
                 if (reason instanceof ApiError && (reason.executionStarted === false || reason.code === 'INPUT_INVALID')) {
                     sessionStorage.removeItem(pendingKey);
                     setPending(undefined);
+                    if(waitingForEnvironment(reason)){setPlan(undefined);setReview(false);}
                     setError(reason);
                 }
                 else if (submitted) {
@@ -132,7 +136,7 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
                     setError(new Error('清理结果尚未确认，请查看本次清理结果。'));
                 }
                 else
-                    setError(new Error('无法保存清理回执定位，本次未提交。请允许会话存储后重试。'));
+                    setError(new Error('浏览器未能保存清理恢复信息，清理尚未提交。请启用会话存储后重试。'));
             }
         }
         finally {
@@ -152,7 +156,7 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
             if (['COMPLETED','INTERRUPTED'].includes(value.state) && value.result)
                 accept(value.result, pending);
             else if (alive.current)
-                setError(new Error('尚未取得完成回执，已保留本次计划定位。'));
+                setError(new Error('清理结果尚未确认，已保存本次计划，可继续查询。'));
         }
         catch (reason) {
             if (alive.current)
@@ -179,9 +183,9 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
     return <>
     {(review||!embedded)&&<div className="jj-back-link">{review ? <Button kind="quiet" disabled={busy || Boolean(pending)} icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => { setReview(false); setPlan(undefined); setError(undefined); }}>本地存储</Button> : <ActionLink href="#/workspace"><ArrowLeftOutlined aria-hidden="true"/>应用概览</ActionLink>}</div>}
     <Heading title={review ? '核对清理项目' : embedded?'清理闲置文件':'本地存储'} level={embedded?2:1}/>
-    {error && <ErrorNote error={error}/>}
+    {error && (waitingForEnvironment(error)?<Notice tone="caution">运行环境正在准备，清理尚未开始。等待准备或其他清理结束后，点击“预览清理”重试；现有文件已保留。</Notice>:<ErrorNote error={error}/>)}
     {pending && <Notice tone="caution">上次清理的结果还未确认。<Button busy={busy} onClick={() => void recover()}>查看本次清理结果</Button></Notice>}
-    {!status&&!reading&&<Empty title="扫描可以清理的闲置文件" action={<Button kind="primary" busy={busy} onClick={()=>void scan()}>扫描本地存储</Button>}>扫描已登记的构建、缓存和临时文件，再由你核对具体清理范围。应用、权限规则、材料和报告保留。</Empty>}
+    {!status&&!reading&&<section className="jj-storage-start" aria-label="扫描范围"><p>先扫描当前工作区，再核对具体清理项目。</p><dl className="jj-facts"><div><dt>扫描范围</dt><dd>已登记的构建、缓存、历史日志与临时文件</dd></div><div><dt>保留内容</dt><dd>应用、权限规则、材料和报告</dd></div></dl><footer><Button kind="primary" busy={busy} onClick={()=>void scan()}>扫描本地存储</Button></footer></section>}
     {reading && !status ? <Loading page>正在扫描已登记的运行文件</Loading> : status && <>
       {review ? <section className="jj-storage-review" aria-label="确认清理范围">
         {!plan ? <Loading page>正在生成清理计划</Loading> : <>
@@ -205,11 +209,11 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
           {Object.entries(categories).map(([category, name]) => { const items = cleanable.filter(item => item.category === category); if (!items.length)
                 return null; return <div className="jj-storage-summary-row" key={category}><strong>{name}</strong><span>{items.length} 项</span><span>{size(items.reduce((total, item) => total + (item.bytes ?? 0), 0))}</span></div>; })}
           {!cleanable.length && <Empty title="暂未发现可确认清理的文件"/>}
-          <footer><p>先选择要清理的闲置文件，再预览具体范围。显示大小仅供参考，实际释放空间可能不同。</p><Button kind="primary" disabled={!cleanable.length || reading || failed || Boolean(pending)} busy={busy} onClick={() => void preview()}>预览清理</Button></footer>
-        </section><aside className="jj-storage-kept"><h2 className="jj-title-group">保留与排除</h2><p>应用、权限、材料和报告不参与清理。正在使用或归属未明的文件保留。</p><details><summary>当前保留，{retained.length} 项</summary><p className="jj-small jj-muted">当前依赖、在用文件、应用资料、正式证据、报告、凭据和界面偏好均保留。</p><Inventory items={retained}/></details>{unknown.length > 0 && <details><summary>暂无法确认，{unknown.length} 项</summary><Inventory items={unknown}/></details>}</aside></div>}
+          <footer><p>选择文件后预览清理范围。显示大小为估算值。</p><Button kind="primary" disabled={!cleanable.length || reading || failed || Boolean(pending)} busy={busy} onClick={() => void preview()}>预览清理</Button></footer>
+        </section><aside className="jj-storage-kept"><h2 className="jj-title-group">保留与排除</h2><p>应用、权限、材料和报告保留；下列文件也不参与清理。</p><details><summary>当前保留，{retained.length} 项</summary><p className="jj-small jj-muted">当前依赖、在用文件、应用资料、正式证据、报告、凭据和界面偏好均保留。</p><Inventory items={retained}/></details>{unknown.length > 0 && <details><summary>暂无法确认，{unknown.length} 项</summary><Inventory items={unknown}/></details>}</aside></div>}
         {failed && <Notice tone="caution">当前为上次扫描结果，请使用右上角刷新后再清理。</Notice>}
-        {result && <section className="jj-storage-result"><header><ObjectHeading title={result.interrupted?"清理已中断":"本次清理已完成"} icon={<CheckCircleOutlined/>}/></header>
-          <p>已清理 {result.counts.DELETED} 项，跳过 {result.counts.ALREADY_MISSING + result.counts.SKIPPED_CHANGED + result.counts.SKIPPED_IN_USE} 项，失败 {result.counts.FAILED} 项。</p>
+        {result && <section ref={completion} className="jj-storage-result"><header data-milestone-part="heading"><ObjectHeading title={result.interrupted?"清理已中断":"本次清理已完成"} icon={<CheckCircleOutlined/>}/></header>
+          <p data-milestone-part="facts">已清理 {result.counts.DELETED} 项，跳过 {result.counts.ALREADY_MISSING + result.counts.SKIPPED_CHANGED + result.counts.SKIPPED_IN_USE} 项，失败 {result.counts.FAILED} 项。</p>
           {result.interrupted&&<Notice tone="caution">有 {result.unconfirmed} 项结果尚未确认，未自动重试。<Button busy={busy} onClick={()=>void reviewInterruption()}>核对清理中断结果</Button></Notice>}
           {result.requires_restart && <Notice tone="neutral">运行环境调整将在重新启动界鉴后生效。</Notice>}
           <details open={Boolean(result.interrupted||result.counts.FAILED)}><summary>查看处理明细</summary>{result.results.map(item => <div className="jj-storage-file" key={item.item_id}><strong>{item.label}</strong><span>{({ DELETED: '已清理', ALREADY_MISSING: '文件已不存在', SKIPPED_CHANGED: '文件已变化，已保留', SKIPPED_IN_USE: '正在使用，已保留', FAILED: '未能清理' } as const)[item.status]}</span><small>{item.relative_path}</small><small>{item.reason}</small></div>)}</details>

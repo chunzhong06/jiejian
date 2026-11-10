@@ -25,12 +25,15 @@ type Props = {
     proofId?: string | null;
     stepId?: string | null;
     comparison?: ReactNode;
+    /** 原行已给出要求与观察结果时，依据区只补充核对对象及来源。 */
+    summaryPresented?: boolean;
+    standalone?: boolean;
     onClose: () => void;
     onLocate: (tab: string, evidence?: string, record?: string, proof?: string, step?: string) => void;
     onError: (error: unknown) => void;
 };
 type PublishedEvent = StoryTraceEvent | ActivityEvent;
-export function EvidenceInspector({ story, action, tab, evidenceId, recordId, proofId, stepId, comparison, onClose, onLocate }: Props) {
+export function EvidenceInspector({ story, action, tab, evidenceId, recordId, proofId, stepId, comparison, summaryPresented=false, standalone=false, onClose, onLocate }: Props) {
     const heading = useRef<HTMLHeadingElement>(null), tabId = useId();
     const [event, setEvent] = useState<PublishedEvent>();
     useEffect(() => { const node = heading.current; node?.focus({ preventScroll: true }); const panel = node?.closest('.jj-evidence-inspector'), top = panel?.getBoundingClientRect().top; if (top !== undefined && (top < 84 || top > innerHeight - 180))
@@ -40,19 +43,19 @@ export function EvidenceInspector({ story, action, tab, evidenceId, recordId, pr
     const currentTab = ['trace', 'records'].includes(tab ?? '') ? tab : 'facts', tone = judgement(action), missing = gaps(action);
     const openRecord = (id: string, proof?: string) => { setEvent(undefined); onLocate('records', id, undefined, proof, ''); };
     const evidenceSources = action.proof_coverage?.filter(item => item.required_level === 'VERDICT_REQUIRED') ?? [];
-    return <aside className="jj-evidence-inspector" aria-label="检查依据" onKeyDown={e => { if (e.key === 'Escape') {
+    return <aside className={"jj-evidence-inspector"+(summaryPresented?" is-inline":"")} data-standalone={standalone||undefined} aria-label="检查依据" onKeyDown={e => { if (e.key === 'Escape') {
         e.stopPropagation();
         if (evidenceId)
             onLocate('records');
         else
             onClose();
-    } }}><header className="jj-inspector-header"><span>检查依据</span><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></header><div className="jj-inspector-title"><div className="jj-object-line"><h2 ref={heading} tabIndex={-1}>{text(action.display_name)}</h2><Badge tone={tone}>{judgementLabels[tone]}</Badge></div><p>{owner(action)}的资源</p></div><Tabs density="compact" className="jj-inspector-tabs" label="依据视图" value={currentTab ?? 'facts'} idPrefix={tabId} panelId={tabId + '-panel'} items={[{ value: 'facts', label: '业务结果' }, { value: 'trace', label: '操作经过' }, { value: 'records', label: '证明记录' }]} onValueChange={onLocate}/><div className="jj-inspector-content" data-view={currentTab} role="tabpanel" id={tabId + '-panel'} aria-labelledby={tabId + '-' + currentTab} key={currentTab}>
+    } }}><header className="jj-inspector-header" hidden={standalone||summaryPresented}><span>检查依据</span><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></header><div className="jj-inspector-title" hidden={summaryPresented||standalone}><div className="jj-object-line"><h2 ref={heading} tabIndex={-1}>{text(action.display_name)}</h2><Badge tone={tone}>{judgementLabels[tone]}</Badge></div><p>{owner(action)}的资源</p></div>{!standalone&&(summaryPresented?<div className="jj-inline-evidence-actions"><h4 ref={heading} tabIndex={-1}>核对对象与判断依据</h4><Button kind="quiet" onClick={()=>onLocate('trace')}>操作经过<ArrowRightOutlined aria-hidden="true"/></Button><Button kind="quiet" onClick={()=>onLocate('records')}>证明记录<ArrowRightOutlined aria-hidden="true"/></Button><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></div>:<Tabs density="compact" className="jj-inspector-tabs" label="依据视图" value={currentTab ?? 'facts'} idPrefix={tabId} panelId={tabId + '-panel'} items={[{ value: 'facts', label: '业务结果' }, { value: 'trace', label: '操作经过' }, { value: 'records', label: '证明记录' }]} onValueChange={onLocate}/>)}<div className="jj-inspector-content" data-view={currentTab} role={summaryPresented||standalone?undefined:"tabpanel"} id={tabId + '-panel'} aria-labelledby={summaryPresented||standalone?undefined:tabId + '-' + currentTab} key={currentTab}>
     {currentTab === 'facts' && <div className="jj-evidence-reading">
       <div className="jj-evidence-main">
-        <section className="jj-evidence-comparison" aria-label="权限要求与实际结果">
+        {!summaryPresented&&<section className="jj-evidence-comparison" aria-label="权限要求与实际结果">
           <div><h3 className="jj-title-caption">权限要求</h3><p>{requirement(action)}</p><small>{owner(action)}的资源</small>{action.scenario_context&&<p className="jj-small jj-muted">{action.scenario_context.experiment_label} · {action.scenario_context.invocation_label}{action.scenario_context.batch_strategy&&` · ${action.scenario_context.batch_strategy==='ATOMIC'?'整批原子处理':'逐项处理'}，第 ${action.scenario_context.item_index} / ${action.scenario_context.item_count} 项资源`}{action.scenario_context.same_resource_occurrences>1&&`；同一资源出现 ${action.scenario_context.same_resource_occurrences} 次，共同核对该请求内此资源的结果，不区分内部每次处理`}</p>}</div>
           <div data-tone={tone}><h3 className="jj-title-caption">实际结果</h3>{action.fact_comparison.effects.map(effect => <p key={effect.effect_id}>{actual(effect)}</p>)}{!action.fact_comparison.effects.length && <p>{text(action.judgement)}</p>}</div>
-        </section>
+        </section>}
         {tone === 'caution' && missing.length > 0 && <section className="jj-inspector-section is-gap"><h3>还缺哪些依据</h3><ul className="jj-gap-list">{missing.map(item => <li key={item}>{item}</li>)}</ul></section>}
         <section className="jj-inspector-section is-proofs"><h3>判断所用的记录</h3>{evidenceSources.length ? evidenceSources.map((source, index) => <ProofEntry key={source.proof_fingerprint + index} label={text(source.business_label)} source={text(source.source_label)} onRead={source.evidence_refs.length ? () => openRecord(source.evidence_refs[0], source.proof_fingerprint) : undefined}/>) : action.decisive_proof_chain.map((item, index) => <ProofEntry key={index} label={text(item.source_label)} onRead={item.evidence_refs.length ? () => openRecord(item.evidence_refs[0]) : undefined}/>)}</section>
         {comparison}
@@ -64,7 +67,7 @@ export function EvidenceInspector({ story, action, tab, evidenceId, recordId, pr
       </aside>
     </div>}
     {currentTab === 'trace' && <OperationPath action={action} selectedId={stepId} onSelect={id => onLocate('trace', undefined, undefined, undefined, id)} onRead={item => { setEvent(item); onLocate('records', ('parent_event_id' in item ? action.request_activity!.evidence_refs : action.execution_path!.evidence_refs)[0], undefined, undefined, item.event_id); }}/>}
-    {currentTab === 'records' && (evidenceId ? <PublishedRecords story={story} action={action} evidenceId={evidenceId} recordId={recordId} proofId={proofId} selectedEvent={stepId ? action.request_activity?.capture.events.find(item => item.event_id === stepId) ?? action.execution_path?.events.find(item => item.event_id === stepId) : event} onLocate={onLocate}/> : <><h3>业务证明与辅助记录</h3>{[...new Set([...action.decisive_proof_chain.flatMap(item => item.evidence_refs), ...action.evidence_explanations.flatMap(item => item.evidence_refs), ...(action.proof_coverage ?? []).flatMap(item => [...item.evidence_refs, ...item.supporting_evidence_refs])])].map((id, index) => <button className="jj-record-link" key={id} onClick={() => openRecord(id)}><span>已发布记录 {index + 1}</span><span>查看内容</span></button>)}</>)}
+    {currentTab === 'records' && (evidenceId ? <PublishedRecords story={story} action={action} evidenceId={evidenceId} recordId={recordId} proofId={proofId} selectedEvent={stepId ? action.request_activity?.capture.events.find(item => item.event_id === stepId) ?? action.execution_path?.events.find(item => item.event_id === stepId) : event} onLocate={onLocate}/> : <><h3>业务证明与辅助记录</h3><p className="jj-small jj-muted">这些记录用于核对“{text(action.display_name)}”的实际结果及其来源，可逐项打开查看。</p>{[...new Set([...action.decisive_proof_chain.flatMap(item => item.evidence_refs), ...action.evidence_explanations.flatMap(item => item.evidence_refs), ...(action.proof_coverage ?? []).flatMap(item => [...item.evidence_refs, ...item.supporting_evidence_refs])])].map((id, index) => <button className="jj-record-link" key={id} onClick={() => openRecord(id)}><span>已发布记录 {index + 1}</span><span>查看内容</span></button>)}</>)}
   </div></aside>;
 }
 function ProofEntry({label, source, onRead}: {label: string; source?: string; onRead?: () => void}) {
@@ -86,9 +89,9 @@ function ActivityTimeline({action, selectedId, onSelect, onRead}: {action: Actio
     const status = {OK:'调用已结束', ERROR:'调用发生异常', INCOMPLETE:'结束记录未收齐'}[selected.outcome];
     return <section className="jj-operation-path" aria-label="自动采集的调用路径">
       <div className="jj-trace-summary"><Badge tone={capture.complete ? 'neutral' : 'caution'}>{capture.complete ? '本次调用已收齐' : '调用记录不完整'}</Badge><span>{capture.events.length} 个调用</span></div>
-      <p className="jj-small jj-muted">宿主自动采集。技术调用不代表权限决定或业务提交结果。</p>
+      <p className="jj-small jj-muted">这些调用用于解释“{text(action.display_name)}”怎样执行、读取了什么。是否符合权限要求，结合已发布的业务结果判断。</p>
       {!!capture.dropped_count && <p className="jj-small jj-muted">超出本次采集上限，省略 {capture.dropped_count} 个调用。</p>}
-      <div className="jj-step-workspace">
+      <div className="jj-step-workspace" data-single={capture.events.length===1||undefined}>
         <div className="jj-step-mobile"><Choice aria-label="查看采集调用" value={selected.event_id} onValueChange={onSelect}>{capture.events.map((event,index)=><option key={event.event_id} value={event.event_id}>第 {index+1} 项　{callLabel(event)}</option>)}</Choice></div>
         <IndexSelection as="ol" className="jj-operation-steps" label="采集调用" identity={selected.event_id}>{capture.events.map((event,index)=><li key={event.event_id}><button className="jj-step-select jj-index-item" aria-current={event.event_id===selected.event_id?'step':undefined} aria-controls={detailId} onClick={()=>onSelect(event.event_id)}><span className="jj-trace-order" aria-hidden="true">{index+1}</span><strong>{callLabel(event)}</strong><ArrowRightOutlined aria-hidden="true"/></button></li>)}</IndexSelection>
         <article className="jj-step-reading" key={selected.event_id} id={detailId} aria-labelledby={detailId+'-title'}>
@@ -109,7 +112,7 @@ function TraceTimeline({ action, selectedId, onSelect, onRead }: {
 }) {
     const path = action.execution_path, detailId = useId();
     if (!path?.events.length)
-        return <Empty title="本次未采集到操作路径">这份报告没有可还原的执行步骤。可切回“业务结果”阅读已发布事实；需要核对调用过程时，补齐采集条件后重新检查。</Empty>;
+        return <Empty title="本次未采集到操作路径">这份报告没有可还原的执行步骤。可在“业务结果”中查看已发布的事实；如需核对调用过程，请补齐采集条件后重新检查。</Empty>;
     const selected = selectedId ? path.events.find(item => item.event_id === selectedId) : path.events.find(item => item.kind === 'AUTHORIZATION') ?? path.events[0];
     if (!selected)
         return <Empty title="这个步骤不在本次操作路径中" action={<Button onClick={() => onSelect(path.events[0].event_id)}>查看操作路径</Button>}/>;
@@ -118,7 +121,7 @@ function TraceTimeline({ action, selectedId, onSelect, onRead }: {
     return <section className="jj-operation-path" aria-label="操作经过">
     <div className="jj-trace-summary"><Badge tone={path.complete ? 'neutral' : 'caution'}>{path.complete ? '完整路径' : '路径不完整'}</Badge><span>{path.events.length} 个步骤</span></div>
     {!path.complete && <p className="jj-small jj-muted">仅展示已采集的步骤。</p>}
-    <div className="jj-step-workspace">
+    <div className="jj-step-workspace" data-single={path.events.length===1||undefined}>
       <div className="jj-step-mobile"><Choice aria-label="查看执行步骤" value={selected.event_id} onValueChange={onSelect}>{path.events.map((item, position) => <option key={item.event_id} value={item.event_id}>第 {position + 1} 步　{traceLabels[item.kind]}</option>)}</Choice></div>
       <IndexSelection as="ol" className="jj-operation-steps" label="执行步骤" identity={selected.event_id}>{path.events.map((item, position) => <li key={item.event_id}>
         <button className="jj-step-select jj-index-item" aria-current={selected.event_id === item.event_id ? 'step' : undefined} aria-controls={detailId} onClick={() => onSelect(item.event_id)}>

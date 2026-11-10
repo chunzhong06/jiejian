@@ -126,8 +126,11 @@ class ProductCapabilities:
         add('environments.save','整理环境配置','应用与来源','PREPARE',
             parameters('EnvironmentConfiguration',configuration=(FrozenEnvironment,...),expected_revision=(int,Field(ge=0))),
             lambda p,a,o:core.application_environments.save(p,a.configuration,expected_revision=a.expected_revision))
+        add('environments.preview','核对切换连接的影响','应用与来源','READ',
+            parameters('EnvironmentPreview',environment_id=(str,...),revision=(int,Field(ge=1))),
+            lambda p,a,o:core.application_environments.activation_preview(p,**a.model_dump()))
         add('environments.activate','切换当前测试环境','应用与来源','PREPARE',
-            parameters('EnvironmentSelection',environment_id=(str,...),revision=(int,Field(ge=1)),expected_revision=(int,Field(ge=0))),
+            parameters('EnvironmentSelection',environment_id=(str,...),revision=(int,Field(ge=1)),expected_revision=(int,Field(ge=0)),impact_fingerprint=(str,Field(pattern=r'^[0-9a-f]{64}$'))),
             lambda p,a,o:core.application_environments.activate(p,**a.model_dump()),approval=True)
         add('sources.read','读取接口来源与人工关联','应用与来源','READ',Empty,
             lambda p,a,o:core.application_sources.context(p))

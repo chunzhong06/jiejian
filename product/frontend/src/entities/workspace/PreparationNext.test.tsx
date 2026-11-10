@@ -7,6 +7,14 @@ import type {CheckPreview} from '../check/api/currentChecks'
 import {WorkflowContext} from '../../shared/lib/workflow'
 
 afterEach(()=>vi.restoreAllMocks())
+
+it('官方示例在嵌入检查中保留一键准备入口',async()=>{
+ vi.spyOn(workspaceApi,'preparation').mockResolvedValue({project_id:'app',actions:[],preparation_complete:false,primary_task:null})
+ const open=vi.fn()
+ render(<WorkflowContext.Provider value={{open,finish:vi.fn(),label:'本次检查'}}><PreparationNext official preview={{project_id:'app',actions:[],gaps:[]} as unknown as CheckPreview} onReview={vi.fn()}/></WorkflowContext.Provider>)
+ fireEvent.click(await screen.findByRole('button',{name:'一键准备示例材料'}))
+ expect(open).toHaveBeenCalledWith('/preparation?prepare_example=1')
+})
 const task=(values:Partial<PrimaryTaskDto>)=>({task_kind:'PREPARE_TEST_IDENTITY',business_action_id:'read',title:'准备成员账号',user_responsibility:'登录本次检查所需的成员账号。',action_label:'准备账号',...values} as PrimaryTaskDto)
 
 it('下一步仅请求本次动作，账号槽位与修订准确传入原工作面',async()=>{
@@ -33,4 +41,12 @@ it('录制、资源和原问题任务携带各自对象，不借用其他对象'
  query=new URLSearchParams(taskDestination(task({task_kind:'VERIFY_REPAIR',change_id:'change',repair_fingerprint:'original'})).split('?')[1])
  expect(query.get('change_id')).toBe('change');expect(query.get('repair_reference')).toBe('original')
  expect(taskDestination(task({task_kind:'SELECT_ALLOW_CONTROL',route:'/permissions'}))).toMatch(/^\/permissions\?/)
+})
+
+it('原题主任务保留完整合同和修改，不进入普通检查',()=>{
+ const url=taskDestination(task({task_kind:'VERIFY_REPAIR',change_id:'change',repair_fingerprint:'original',repair:{repair_fingerprint:'original',source_run_id:'before',source_case_id:'deny'}}))
+ expect(url.split('?')[0]).toBe('/issues')
+ const query=new URLSearchParams(url.split('?')[1])
+ expect(query.get('source_run_id')).toBe('before');expect(query.get('source_case_id')).toBe('deny')
+ expect(query.get('change_id')).toBe('change');expect(query.get('section')).toBe('repair')
 })

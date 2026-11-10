@@ -1,5 +1,9 @@
 * { box-sizing: border-box; }
 html { scrollbar-gutter: stable; }
+/* 使用原生滚动行为；轨道透明，滑块沿用主题。强制对比模式交还系统绘制。 */
+@media (forced-colors:none) {
+  * { scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--muted) 45%,transparent) transparent; }
+}
 body { margin: 0; background: var(--bg); color: var(--ink); }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; font-size:var(--text-body); line-height:22px; min-height:36px; align-items:center; }
@@ -70,11 +74,11 @@ summary:hover { color: var(--accent-ink); }
 .jj-badge.is-negative { color: var(--bad); background: var(--bad-soft); }
 .jj-badge.is-caution { color: var(--warn); background: var(--warn-soft); }
 .jj-badge.is-accent { color: var(--info); background: var(--accent-soft); }
-.jj-heading { min-width: 0; }
+.jj-heading { min-width:0; }
 .jj-heading > div:first-of-type { display: flex; justify-content: space-between; gap: 24px; align-items: baseline; }
 .jj-heading .jj-eyebrow { margin-bottom: 7px; }
 .jj-heading-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: none; }
-.jj-heading-note { color: var(--muted); font-size:var(--text-object); margin-top: 12px; max-width: 70ch; line-height:var(--leading-reading); font-weight:400; }
+.jj-heading-note { color:var(--muted); font-size:var(--text-body); margin-top:10px; max-width:72ch; line-height:var(--leading-reading); font-weight:400; }
 .jj-eyebrow { font-size: var(--text-meta); color: var(--muted); font-weight: 400; }
 .jj-panel { padding: 24px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); }
 .jj-section-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
@@ -108,10 +112,11 @@ summary:hover { color: var(--accent-ink); }
 .jj-toggle-group > button:not(:disabled):hover { color: var(--ink); }
 .jj-toggle-group > button[aria-pressed=true] { background:transparent; color:var(--selected-ink); box-shadow:none; }
 .jj-sticky { position: sticky; top: 92px; }
-.jj-empty { text-align:left; padding:32px; display:grid; grid-template-columns:minmax(0,1fr) auto; justify-items:start; align-items:center; gap:10px 28px; }
+.jj-empty { text-align:left; padding:28px 24px; display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:20px; width:100%; max-width:760px; margin-inline:auto; }
+.jj-empty[data-layout=section] { margin-inline:0; padding:20px 0; }
 .jj-empty-copy { min-width:0; display:grid; gap:10px; }
-.jj-empty-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; }
-.jj-empty p { color:var(--muted); max-width:88ch; line-height:var(--leading-reading); font-size:var(--text-object); font-weight:400; }
+.jj-empty-actions { display:flex; align-items:center; justify-content:flex-end; justify-self:end; flex-wrap:wrap; gap:10px; }
+.jj-empty p { color:var(--muted); max-width:64ch; line-height:var(--leading-reading); font-size:var(--text-body); font-weight:400; }
 .jj-dialog .jj-empty { padding:24px 16px; gap:12px; text-align:left; justify-items:start; }
 .jj-loading { display: flex; align-items: center; justify-content: center; min-height: 180px; gap: 12px; color: var(--muted); }
 .jj-notice { --notice-action-ink:var(--neutral); display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 18px; background: var(--neutral-soft); color: var(--neutral); border-radius: var(--radius-control); font-size: var(--text-body); }
@@ -147,9 +152,13 @@ summary:hover { color: var(--accent-ink); }
 @media(max-width:1000px) { .jj-sticky { position: static; } }
 @media(max-width:700px) { .jj-heading > div:first-of-type { align-items: flex-start; flex-direction: column; gap: 16px; } .jj-heading-actions { width: 100%; } .jj-panel { padding: 20px; } }
 
-.jj-segment-indicator { position:absolute; top:0; left:0; z-index:0; pointer-events:none; background:var(--selected); border-radius:6px; box-shadow:none; transition:none; }
+.jj-segment-indicator { position:absolute; top:0; left:0; z-index:0; pointer-events:none; background:var(--selected); border-radius:6px; box-shadow:none; }
 
 @media(max-width:700px) { .jj-empty { padding:24px 20px; grid-template-columns:minmax(0,1fr); } .jj-empty-actions { justify-self:end; margin-top:8px; } }
 
 /* 隐藏的任务继续保留状态，但退出布局、键盘与辅助技术的阅读顺序。 */
 [hidden] { display:none !important; }
+
+/* 静态标题承接程序焦点；控件的键盘焦点继续沿用主题描边。 */
+:is(h1,h2,h3)[tabindex="-1"]:focus { outline:2px solid var(--focus); outline-offset:6px; border-radius:2px; }
+html[data-input-mode=pointer] :is(h1,h2,h3)[tabindex="-1"]:focus { outline:none; }

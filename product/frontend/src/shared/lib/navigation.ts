@@ -9,6 +9,8 @@ export function scopedPath(path:string,projectId?:string){
   return pathname+(query.size?'?'+query:'')
 }
 export function go(path:string,projectId?:string){location.hash=scopedPath(path,projectId)}
+/** 范围恢复只是入口解析，替换中转地址，避免后退时再次跳回同一预览。 */
+export function replaceDestination(path:string,projectId?:string){location.replace('#'+scopedPath(path,projectId))}
 export function returnDestination(value:string|null){
   // 协作须有准确任务；工作台只接受项目范围，不因此放行其他工作台视图或外部地址。
   if(!value||/[#\\\u0000-\u0020]/.test(value))return null

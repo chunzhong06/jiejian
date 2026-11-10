@@ -4,7 +4,7 @@ import {PageSurface} from './PageSurface'
 import {PageSkeleton} from './PageSkeleton'
 import {commitPageTransition,commitThemeTransition,pageTransitionActive} from '../lib/pageTransition'
 
-function track(){const animate=vi.fn(()=>({cancel:vi.fn()}));Object.defineProperty(Element.prototype,'animate',{configurable:true,value:animate});return animate}
+function track(){const animate=vi.fn(()=>({cancel:vi.fn(),finished:new Promise(()=>{}),playState:'running'}));Object.defineProperty(Element.prototype,'animate',{configurable:true,value:animate});return animate}
 
 it('首次读取保留标题与内容结构，不生成虚假的业务操作',async()=>{
   const animate=track()
@@ -14,16 +14,16 @@ it('首次读取保留标题与内容结构，不生成虚假的业务操作',as
   expect(screen.queryByRole('button')).not.toBeInTheDocument()
   expect(animate).not.toHaveBeenCalled()
   view.rerender(<PageSurface view="/preparation"><h1>检查准备</h1><p>材料已读取</p></PageSurface>)
-  await waitFor(()=>expect(animate).toHaveBeenCalledTimes(1))
+  await waitFor(()=>expect(animate).toHaveBeenCalledTimes(2))
   view.rerender(<PageSurface view="/preparation"><h1>检查准备</h1><p>材料已刷新</p></PageSurface>)
-  expect(animate).toHaveBeenCalledTimes(1)
+  expect(animate).toHaveBeenCalledTimes(2)
 })
 
 it('快速离开后不播放旧对象迟到的入场',async()=>{
   const animate=track()
   const view=render(<PageSurface view="preparation"><PageSkeleton view="/preparation"/></PageSurface>)
   view.rerender(<PageSurface view="reports"><h1>检查记录</h1></PageSurface>)
-  await waitFor(()=>expect(animate).toHaveBeenCalledTimes(1))
+  await waitFor(()=>expect(animate).toHaveBeenCalledTimes(2))
 })
 
 it('快速切换取消旧快照，旧完成回调不清除新页面的过渡状态',async()=>{
@@ -62,16 +62,16 @@ it('减少动效时立即更新，不等待动画完成',()=>{
   delete (document as unknown as {startViewTransition?:unknown}).startViewTransition
 })
 
-it('主题切换直接提交并使用可取消淡入，不捕获整页交互控件',()=>{
+it('主题切换由共享颜色过渡接续，不叠加整窗淡入或捕获控件',()=>{
   const animate=track(),update=vi.fn(),native=vi.fn()
   vi.spyOn(window,'matchMedia').mockReturnValue({matches:false,addEventListener(){},removeEventListener(){}} as unknown as MediaQueryList)
   Object.defineProperty(document,'startViewTransition',{configurable:true,writable:true,value:native})
   commitThemeTransition(update)
   expect(update).toHaveBeenCalledTimes(1)
   expect(native).not.toHaveBeenCalled()
-  expect(animate).toHaveBeenCalledTimes(1)
-  const animation=animate.mock.results[0].value
+  expect(animate).not.toHaveBeenCalled()
   commitThemeTransition(update)
-  expect(animation.cancel).toHaveBeenCalledTimes(1)
+  expect(update).toHaveBeenCalledTimes(2)
+  expect(animate).not.toHaveBeenCalled()
   delete (document as unknown as {startViewTransition?:unknown}).startViewTransition
 })

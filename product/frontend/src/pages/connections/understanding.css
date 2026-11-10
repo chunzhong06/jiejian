@@ -7,10 +7,10 @@
 .jj-business-table { width:100%; table-layout:fixed; border-collapse:collapse; }
 .jj-business-table th { width:34%; text-align:start; color:var(--muted); }
 .jj-business-table th:nth-child(2) { width:25%; }
-.jj-business-table :is(th,td) { border-block-end:1px solid var(--line); vertical-align:top; }
+.jj-business-table :is(th,td) { border-block-end:1px solid var(--line); vertical-align:middle; }
 .jj-business-table th { border-top:1px solid var(--line); }
-.jj-business-table :is(th,td):first-child { padding-left:0; }
-.jj-business-table :is(th,td):last-child { padding-right:0; }
+.jj-business-table :is(th,td):first-child { padding-left:24px; }
+.jj-business-table :is(th,td):last-child { padding-right:24px; }
 .jj-business-table input { max-width:400px; }
 .jj-understanding-workspace[data-kind=ROLE] .jj-business-table input { max-width:320px; }
 .jj-business-table .jj-choice { max-width:240px; }
@@ -37,3 +37,7 @@
  .jj-business-table td:nth-child(3)::before { content:'来源依据'; }
  .jj-business-source { padding:0; min-height:0; }
 }
+
+.jj-business-table .jj-table-state{text-align:center;vertical-align:middle}
+.jj-business-heading { display:grid; gap:12px; }
+.jj-business-heading .jj-business-introduction { margin:0; }

@@ -1,3 +1,4 @@
+import {issueDestination} from '../check/issueDestination'
 import type {PrimaryTaskDto,PrimaryTaskKind} from './api/workspace'
 
 const destinations:Record<PrimaryTaskKind,string>={
@@ -5,12 +6,13 @@ const destinations:Record<PrimaryTaskKind,string>={
  REVIEW_APPLICATION_CANDIDATES:'/application?view=business',REVIEW_ACTOR_IMPLEMENTATION:'/application?view=business',REVIEW_ACTION_IMPLEMENTATION:'/application?view=business',
  REVIEW_BOUNDARY_PROPOSAL:'/permissions',ESTABLISH_BUSINESS_BOUNDARY:'/permissions',REVIEW_PERMISSION_REVISION:'/permissions',COMPLETE_ALLOW_CONTROL:'/permissions',
  SELECT_ALLOW_CONTROL:'/preparation',REVIEW_RECORDING:'/preparation',PREPARE_TEST_IDENTITY:'/preparation',DEMONSTRATE_ACTION:'/preparation',PREPARE_ACTION_RESOURCE:'/preparation',COMPLETE_EFFECT_EVIDENCE:'/preparation',COMPLETE_RECOVERY:'/preparation',
- REGISTER_SOURCE_CHANGE:'/changes?view=register',PREPARE_AGENT_REPAIR:'/reports',VERIFY_REPAIR:'/permissions?view=repair',RUN_CURRENT_CHECK:'/reports?view=plan',VIEW_CURRENT_RESULT:'/reports',
+ REGISTER_SOURCE_CHANGE:'/changes?view=register',PREPARE_AGENT_REPAIR:'/issues',VERIFY_REPAIR:'/issues',RUN_CURRENT_CHECK:'/reports?view=plan',VIEW_CURRENT_RESULT:'/reports',
  CREATE_DEVELOPMENT_TASK:'/changes',CONTINUE_DEVELOPMENT_TASK:'/changes',LOAD_DELIVERY_RUNTIME:'/changes',
 }
 
 /** 统一承接服务端具名任务，保留对象引用；导航不代表执行授权。 */
 export function taskDestination(task:PrimaryTaskDto){
+ if(['PREPARE_AGENT_REPAIR','VERIFY_REPAIR'].includes(task.task_kind)&&task.repair_fingerprint)return issueDestination(task.repair??{repair_fingerprint:task.repair_fingerprint},undefined,{section:'repair',change_id:task.change_id,run_id:task.run_id})
  const selected=task.route==='/permissions'&&destinations[task.task_kind]==='/preparation'?'/permissions':destinations[task.task_kind]
  const [path,search]=selected.split('?'),query=new URLSearchParams(search)
  const fields={action_id:task.business_action_id,action_revision:task.action_revision,actor_id:task.business_actor_id,change_id:task.change_id,proposal_id:task.proposal_id,run_id:task.run_id,recording_id:task.recording_id,identity_id:task.test_identity_id,account_slot:task.identity_slot_id,effect_id:task.effect_id}

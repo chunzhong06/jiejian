@@ -85,21 +85,24 @@
   --menu-shadow: var(--float-shadow);
   --motion-hover-in: 90ms;
   --motion-hover-out: 140ms;
-  --motion-press: 180ms;
-  --motion-indicator: 240ms;
-  --motion-disclosure: 260ms;
-  --motion-content: 220ms;
-  --motion-page: 320ms;
-  --motion-popup: 240ms;
-  --motion-panel: 300ms;
-  --motion-dialog: 300ms;
-  --motion-exit: 160ms;
+  --motion-press: 210ms;
+  --motion-indicator: 280ms;
+  --motion-disclosure: 300ms;
+  --motion-content: 240ms;
+  --motion-page: 340ms;
+  --motion-popup: 280ms;
+  --motion-panel: 340ms;
+  --motion-dialog: 340ms;
+  --motion-exit: 180ms;
+  --motion-layout: 340ms;
+  --motion-state: 200ms;
+  --motion-complete: 460ms;
   --motion-activity: 2400ms;
-  --ease-respond: cubic-bezier(.4, 1, .6, 1);
+  --ease-respond: cubic-bezier(.2, .8, .3, 1);
   --ease-enter: cubic-bezier(.16, 1, .3, 1);
   --ease-exit: cubic-bezier(.4, 0, 1, 1);
   --ease-layout: cubic-bezier(.2, 0, 0, 1);
-  --ease-spring: cubic-bezier(.2, .8, .3, 1.12);
+  --ease-spring: cubic-bezier(.2, .9, .25, 1.08);
 }
 :root[data-ui-font=misans] { --font-ui: MiSansUI, 'Microsoft YaHei', system-ui, sans-serif; }
 :root[data-studio-theme=dark] {

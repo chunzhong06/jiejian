@@ -34,13 +34,21 @@ export function routeReferences(route:string){
 }
 
 // 原始表单只保留于本次文档内存；导航接续不会将参数值写入数据库或浏览器存储。
-const drafts=new Map<string,{project:string;value:unknown}>()
+const drafts=new Map<string,{project:string;value:unknown;generation:number}>()
+let generation=0
 export function editorDraft<T>(key:string,project:string){const entry=drafts.get(key);return entry?.project===project?entry.value as T:undefined}
 export function rememberEditorDraft<T>(key:string,value:T,project?:string){
   if(value===undefined){drafts.delete(key);return}
   if(!project)throw new Error('编辑草稿必须声明所属应用')
-  drafts.set(key,{project,value})
+  if(drafts.get(key)?.value!==value)drafts.set(key,{project,value,generation:++generation})
 }
 export function discardProjectEditorDrafts(project:string){
   for(const [key,entry] of drafts)if(entry.project===project)drafts.delete(key)
+}
+
+/** 迟到保存只清提交时的草稿；同一对象之后的编辑仍保留。 */
+export function editorDraftGeneration(key:string,project:string){const value=drafts.get(key);return value?.project===project?value.generation:undefined}
+export function clearSubmittedDraft(key:string,project:string,submitted:number|undefined){const entry=drafts.get(key);if(entry?.project===project&&entry.generation===submitted)drafts.delete(key)}
+export function useDraftProtection(dirty:boolean){
+  useEffect(()=>{if(!dirty)return;const protect=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',protect);return()=>window.removeEventListener('beforeunload',protect)},[dirty])
 }

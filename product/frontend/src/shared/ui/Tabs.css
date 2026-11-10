@@ -39,15 +39,13 @@
   white-space:nowrap;
   text-decoration:none;
   cursor:pointer;
-  transition:background-color var(--motion-indicator) var(--ease-layout),color var(--motion-hover-in) var(--ease-respond);
 }
 .jj-tabs[data-density=compact] > :is(button,a) { min-height:var(--control-compact); padding:7px 12px; font-size:var(--text-body); }
 .jj-tabs > :is(button,a):hover { color:var(--ink); }
-.jj-tabs > :is(button,a)::before { content:''; position:absolute; inset:0; z-index:-1; border-radius:inherit; background:var(--state-fill); pointer-events:none; opacity:0; transition:opacity var(--motion-hover-out) var(--ease-respond); }
-@media(hover:hover) and (pointer:fine) { .jj-tabs > :is(button,a):not(:disabled):hover::before { opacity:1; transition-duration:var(--motion-hover-in); } }
+.jj-tabs > :is(button,a)::before { content:''; position:absolute; inset:0; z-index:-1; border-radius:inherit; background:var(--state-fill); pointer-events:none; opacity:0; }
+@media(hover:hover) and (pointer:fine) { .jj-tabs > :is(button,a):not(:disabled):hover::before { opacity:1; } }
 /* 悬停只反馈所在项，不能移动或遮盖当前分类的选中表面和指示线。 */
 .jj-tabs > :is([aria-selected=true],[aria-current=page]) { --state-fill:transparent; background:var(--tab-selected-fill); color:var(--selected-ink); font-weight:500; }
 .jj-tabs > :is(button,a):focus-visible { outline:2px solid var(--focus); outline-offset:-3px; }
 html[data-input-mode=pointer] .jj-tabs > :is(button,a):focus-visible { outline:none; }
-.jj-tab-indicator { position:absolute; left:0; top:0; z-index:3; height:2px; background:var(--accent); pointer-events:none; transition:none; }
-@media(prefers-reduced-motion:reduce) { .jj-tabs > :is(button,a), .jj-tabs > :is(button,a)::before, .jj-tab-indicator { transition:none; } }
+.jj-tab-indicator { position:absolute; left:0; top:0; z-index:3; height:2px; background:var(--accent); pointer-events:none; }

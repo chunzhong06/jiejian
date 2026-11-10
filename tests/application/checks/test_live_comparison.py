@@ -62,7 +62,14 @@ def test_real_source_repair_and_recurrence_preserve_comparison_contract(tmp_path
             assert wait_for(lambda:proofs.status(project,queued))['report']['assessment'] == 'USABLE'
             proofs.adopt(project, AdoptProofSource(operation_id=uuid4().hex, basis_id=basis,
                 source_id=source, revision=1, preflight_id=queued, confirmed=True))
-            run, verdict = _run(core, project, change)
+            # 首轮只查一个禁止要求和必要正常对照；后续完整交付检查保留原题并覆盖额外规则。
+            scope = {}
+            if change is None:
+                from product.protocols.checks.execution_request import PermissionReference
+                boundary = core.business_boundaries.view(project)
+                item = next(item for item in boundary.permission_intents if item.expectation == 'DENY')
+                scope['selected_permissions'] = (PermissionReference(intent_id=item.intent_id,revision=item.revision,intent_hash=item.intent_hash),)
+            run, verdict = _run(core, project, change, **scope)
             assert verdict == expected
             package = core.check_results.package(run, project_id=project)
             correspondence = package.result.runtime_correspondence

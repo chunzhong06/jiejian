@@ -38,8 +38,15 @@ function Invoke-Schema {
 }
 
 function Invoke-Docs {
-    if ($CommandArguments.Count -gt 0) { Fail-Development "docs" "dev.ps1 docs 不接受位置参数" "使用 .\scripts\dev.ps1 docs 或追加 -Update" }
     $docsPython = Resolve-DocsPython
+    if ($CommandArguments.Count -gt 0) {
+        if ($Update -or $CommandArguments[0] -notin @("read", "resume", "check-task")) {
+            Fail-Development "docs" "上下文读取只接受 read、resume、check-task，不能与 -Update 合用" "默认 docs 仍检查文档；使用 docs read --help 查看只读参数"
+        }
+        $arguments = @($docsPython, "-B", (Join-Path $script:ProjectRoot "scripts\docs\context.py"), "--root", $script:ProjectRoot) + $CommandArguments
+        Invoke-External "docs-context" $arguments
+        return
+    }
     $arguments = @($docsPython, "-B", (Join-Path $script:ProjectRoot "scripts\docs\generate.py"), "--root", $script:ProjectRoot)
     if ($Update) { $arguments += "--update" }
     Invoke-External "docs" $arguments

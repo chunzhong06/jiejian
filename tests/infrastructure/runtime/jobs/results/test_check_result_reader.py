@@ -175,3 +175,49 @@ def test_open_absence_never_claims_closed_window_or_decisive_proof(package_parts
                    for item in action.proof_coverage)
 
 pytestmark = [pytest.mark.level3]
+
+
+def test_continuation_uses_published_original_when_job_input_is_gone(package_parts):
+    from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
+    reader,package=published(package_parts)
+    var_dir,_,job,_,_=package_parts
+    assert not CheckRequestStore(var_dir).path_for(job.job_id).exists()
+    restored=reader.continuation(job.project_id,job.run_id)
+    assert restored.state=='AVAILABLE'
+    assert {(ref.intent_id,ref.revision,ref.intent_hash) for ref in restored.permissions}=={
+        (case.permission.intent_id,case.permission.revision,case.permission.intent_hash)
+        for action in package.request.actions for case in action.cases}
+
+
+def test_continuation_rejects_cross_project_and_corrupt_publication(package_parts):
+    reader,package=published(package_parts)
+    with pytest.raises(JiejianError):reader.continuation('prj_'+'f'*32,package.result.run_id)
+    path=package.directory/'request.json';path.write_bytes(path.read_bytes()+b' ')
+    assert reader.continuation(package.request.project_id,package.result.run_id).state=='UNAVAILABLE'
+
+
+def test_continuation_keeps_running_job_in_same_operation(package_parts):
+    var_dir,factory,job,_,_=package_parts
+    reader=CheckResultReader(var_dir=var_dir,uow_factory=factory)
+    assert reader.continuation(job.project_id,job.run_id).state=='WAITING'
+
+
+@pytest.mark.parametrize('damage',[None,'missing','changed'])
+def test_failed_run_continuation_reads_only_verified_frozen_request(tmp_path,damage):
+    from contextlib import nullcontext
+    from types import SimpleNamespace as N
+    from product.backend.domain.lifecycle import RunLifecycle,JobState
+    from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
+    from tests.support.builders.checks.check_execution import execution_pair
+    request,_=execution_pair();run_id='run_'+'a'*32;job_id='job_'+'b'*32
+    store=CheckRequestStore(tmp_path);digest,_=store.write(job_id,request)
+    run=N(run_id=run_id,project_id=request.project_id,lifecycle=RunLifecycle.FAILED,request_hash=digest,
+        plan_fingerprint=request.plan_fingerprint,source_fingerprint=request.source_fingerprint,
+        policy_epoch=request.policy_epoch,engine_version=request.engine_version)
+    job=N(run_id=run_id,project_id=request.project_id,state=JobState.FAILED,operation_type='CHECK',job_id=job_id,request_hash=digest)
+    work=N(runs=N(get=lambda _:run),jobs=N(get_by_run=lambda _:job),check_publications=N(get=lambda _:None))
+    if damage=='missing':store.path_for(job_id).unlink()
+    elif damage=='changed':store.path_for(job_id).write_bytes(b'{}')
+    reader=CheckResultReader(var_dir=tmp_path,uow_factory=lambda:nullcontext(work))
+    restored=reader.continuation(request.project_id,run_id)
+    assert restored.state==('AVAILABLE' if damage is None else 'UNAVAILABLE')

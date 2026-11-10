@@ -24,9 +24,9 @@ export function changeTargetOptions(rules: RuleItem[]): Option[] {
     });
 }
 
-export function ChangeRegistration({ projectId, options, initialTargets = [], closeLabel = '收起', onClose, onSaved, onError }: {
+export function ChangeRegistration({ projectId, options, initialTargets = [], closeLabel = '收起', embedded=false, onClose, onSaved, onError }: {
     projectId: string; options: Option[]; initialTargets?: RuleChangeTarget[];
-    closeLabel?: string;
+    closeLabel?: string; embedded?: boolean;
     onClose: () => void; onSaved: (id: string) => void; onError: (error: unknown) => void;
 }) {
     const key = 'jiejian.change-registration:' + projectId;
@@ -74,8 +74,8 @@ export function ChangeRegistration({ projectId, options, initialTargets = [], cl
         } finally { lock.current = false; setBusy(false); }
     };
     const selected = new Set(targets.map(targetKey)), disabled = busy || Boolean(pending);
-    return <section className="jj-change-registration" aria-label="登记本地修改">
-        <header><div><h2>登记本地修改</h2><p>选择这次修改涉及的权限，再核对实际文件变化。</p></div><Button disabled={busy} onClick={onClose}>{closeLabel}</Button></header>
+    return <section className={embedded?"jj-change-registration is-embedded":"jj-change-registration"} aria-label="登记本地修改">
+        <header hidden={embedded}><div><h2>登记本地修改</h2><p>选择这次修改涉及的权限，再核对实际文件变化。</p></div><Button disabled={busy} onClick={onClose}>{closeLabel}</Button></header>
         <div className="jj-registration-fields"><Field label="修改说明"><textarea rows={4} maxLength={512} disabled={disabled} value={reason} placeholder="说明修复了什么，以及正常功能如何保留" onChange={event => { setReason(event.target.value); sessionStorage.setItem(key + ':draft', event.target.value); }}/></Field>
             <fieldset><legend>涉及的权限与问题 <span>{targets.length} 项</span></legend><div className="jj-registration-targets">{options.map(option => <label key={option.key} data-selected={selected.has(option.key)}><input type="checkbox" disabled={disabled} checked={selected.has(option.key)} onChange={event => { setTargets(values => event.target.checked ? [...values, option.target] : values.filter(target => targetKey(target) !== option.key)); }}/><span><span className="jj-object-line"><strong>{text(option.title)}</strong>{option.problem && <Badge tone="negative">原问题</Badge>}</span><small>{text(option.scope)}</small></span></label>)}</div></fieldset>
         </div>

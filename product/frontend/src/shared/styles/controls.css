@@ -1,6 +1,10 @@
 .jj-choice:where(.ant-select) { width: 100%; min-width: 0; height:var(--control-height); font:inherit; }
 .jj-choice.ant-select .ant-select-selector { min-height:var(--control-height); border-radius: var(--radius-control); border-color: var(--line-strong); background: var(--control-bg); color: var(--ink); padding-inline: 14px 42px; box-shadow: var(--control-shadow); }
 .jj-choice.ant-select .ant-select-selection-item { font-weight:400; line-height:calc(var(--control-height) - 2px); padding-inline-end: 0; }
+/* 短值表格使用对称内缩，让文字对齐控件中心，而非避开箭头后的剩余空间中心。 */
+.jj-choice.ant-select[data-align=center] .ant-select-selector { padding-inline:42px; }
+.jj-choice.ant-select[data-align=center] :is(.ant-select-selection-item,.ant-select-selection-placeholder) { text-align:center; }
+.jj-choice.ant-select[data-align=center] .ant-select-selection-search { inset-inline:42px; }
 .jj-choice.ant-select-open .ant-select-selection-item { color: var(--ink); opacity: 1; }
 .jj-choice.ant-select .ant-select-arrow { inset-inline-end: 15px; color: var(--muted); font-size: var(--text-meta); pointer-events: none; }
 .jj-choice.ant-select .ant-select-selection-search { inset-inline: 14px 42px; }

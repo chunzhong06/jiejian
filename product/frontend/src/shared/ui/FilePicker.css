@@ -1,5 +1,5 @@
 .jj-file-picker-wrap { min-width:0; container-type:inline-size; }
-.jj-file-picker { display:flex; align-items:center; gap:16px; min-width:0; min-height:80px; padding:16px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); transition:border-color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond); }
+.jj-file-picker { display:flex; align-items:center; gap:16px; min-width:0; min-height:80px; padding:16px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); }
 .jj-file-picker[data-dragging=true] { border-color:var(--accent); background:var(--selected); }
 .jj-file-picker[data-disabled=true] { color:var(--disabled-ink); }
 .jj-file-picker[data-invalid=true] { border-color:var(--bad); }

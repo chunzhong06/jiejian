@@ -58,7 +58,7 @@ it('授权草稿保留实际范围，选择高权限不自动保存，确认后�
   fireEvent.mouseDown(screen.getByRole('combobox',{name:'访问范围'}))
   fireEvent.click(await screen.findByRole('option',{name:'准备材料并提交检查'}))
   expect(screen.getByText('当前权限：只读资料与报告，新范围尚未保存。')).toBeInTheDocument()
-  expect(screen.getByText('执行受账号、资源与权限门禁约束，权限规则仍需你确认后生效。')).toBeInTheDocument()
+  expect(screen.getByText('执行前会核对账号、资源和权限范围；权限规则由你确认后生效。')).toBeInTheDocument()
   expect(mcpAccessApi.setProjectAccess).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button',{name:'保存权限'}))
   const dialog=await screen.findByRole('dialog',{name:'更新工具权限'})

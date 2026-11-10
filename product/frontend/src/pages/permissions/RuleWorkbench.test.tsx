@@ -40,40 +40,30 @@ it('同一角色的多条条件规则分别对应自己的状态和详情，筛�
     expect(screen.getByRole('region',{name:'权限规则目录'})).toHaveAttribute('data-detail-open','false');
     fireEvent.click(within(archived).getByRole('button'));
     expect(screen.getByRole('complementary',{name:'负责人不得完成工单'})).toBeVisible();
-    expect(screen.getByRole('link',{name:'规则、结果与修改'})).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
-    expect(screen.getByRole('link',{name:'规则、结果与修改'})).toHaveAttribute('href',expect.stringContaining('project_id=app'));
+    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
+    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('project_id=app'));
     fireEvent.change(screen.getByRole('searchbox',{name:'查找规则'}),{target:{value:'open'}});
     expect(screen.queryByRole('row',{name:/负责人不得完成工单/})).not.toBeInTheDocument();
     const open=screen.getByRole('row',{name:/负责人可以完成工单/});
     expect(within(open).getByText(/数据状态：open/)).toBeVisible();
     expect(within(open).getByText('符合规则')).toBeVisible();
     fireEvent.click(within(open).getByRole('button'));
-    expect(screen.getByRole('link',{name:'规则、结果与修改'})).toHaveAttribute('href',expect.stringContaining('rule_id=open'));
+    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('rule_id=open'));
 });
 
 it('从问题进入同一修复任务，登记和返回都保留准确原题', async () => {
     const props = { projectId: 'app', official: false, boundary: { policy_epoch: 1 } as BusinessBoundaryViewDto, route: readRoute(), refresh: vi.fn(), onError: vi.fn(), onManage: vi.fn() };
-    const view = render(<RuleWorkbench {...props}/>);
+    render(<RuleWorkbench {...props}/>);
     await screen.findByRole('heading', { name: '协作者不得完成工单' });
     expect(screen.getByText('禁止', {exact:true})).toHaveClass('is-neutral');
     expect(screen.getByText('不符合规则', {exact:true})).toHaveClass('is-negative');
     fireEvent.click(screen.getByRole('link', { name: '继续处理问题' }));
     expect(readRoute().query.get('repair_reference')).toBe('repair');
-    expect(readRoute().query.get('view')).toBe('repair');
-    const update = () => view.rerender(<RuleWorkbench {...props} route={readRoute()}/>);
-    update();
-    expect(screen.getByRole('heading', {name:'先完成代码修改'})).toBeVisible();
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', {name:'登记已完成的修改'}));
-    fireEvent.change(screen.getByLabelText('修改说明'), {target:{value:'修正协作者的工单权限'}});
-    fireEvent.click(screen.getByRole('button', {name:'返回修复任务'}));
-    fireEvent.click(screen.getByRole('button', {name:'登记已完成的修改'}));
-    expect(screen.getByLabelText('修改说明')).toHaveValue('修正协作者的工单权限');
-    fireEvent.click(screen.getByRole('button', {name:'返回修复任务'}));
-    fireEvent.click(screen.getByRole('link', {name:'返回这条权限规则'})); update();
-    fireEvent.click(screen.getByRole('tab', {name:'检查历史'})); update();
-    expect(within(screen.getByRole('tabpanel', {name:'检查历史'})).getByRole('heading', {name:'这条规则的检查历史'})).toBeVisible();
-    expect(screen.queryByRole('heading', {name:'登记本地修改'})).not.toBeInTheDocument();
+    expect(readRoute().path).toBe('/issues');
+    expect(readRoute().query.get('section')).toBe('repair');
+    expect(readRoute().query.get('source_run_id')).toBe('run');
+    expect(readRoute().query.get('source_case_id')).toBe('case');
+    expect(readRoute().query.get('return_to')).toContain('rule_id=rule');
 });
 
 it('检查摘要保留范围与时间，阅读入口指向同一规则的准确运行和场景',async()=>{

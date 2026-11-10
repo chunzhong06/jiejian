@@ -9,21 +9,20 @@ import {useCurrentHandoff} from '../../../entities/runtime/model/handoff'
 
 const context:ProofContext={project_id:'app',basis_id:'basis',runtime_available:false,runtime_origin:null,sqlite:[],actions:[],identities:[],resources:[],sources:[],read_scopes:[]}
 
-it('文件证明可以直接配置，任务映射分类切换保留草稿并阻止不完整保存',async()=>{
+it('文件证明可以直接配置，任务映射按段阅读并保留草稿并阻止不完整保存',async()=>{
     const runtime=vi.spyOn(projectsApi,'runtime')
     const fileContext:ProofContext={...context,project_id:'async-app',runtime_available:true,
         actions:[{action_id:'export',revision:1,label:'导出资料',effects:[{effect_id:'entity',label:'完整文件已接收',kind:'FILE_CONTENT_DELIVERY'}]}],
         resources:[{resource_binding_id:'r1',action_id:'export',action_revision:1,resource_id:'document',owner_identity_id:'owner'}]}
     render(<SourceConfiguration projectId="async-app" context={fileContext} onClose={()=>{}} onSave={vi.fn()}/> )
-    fireEvent.change(screen.getByLabelText('资源所在的受控记录集合'),{target:{value:'documents'}})
+    fireEvent.change(screen.getByLabelText('资源所属记录集合'),{target:{value:'documents'}})
     expect(screen.getByRole('button',{name:'保存判断方式'})).toBeEnabled()
     fireEvent.mouseDown(screen.getByRole('combobox',{name:'交付方式'}))
     fireEvent.click(await screen.findByRole('option',{name:'先创建导出任务，再接收文件'}))
     expect(screen.getByRole('button',{name:'保存判断方式'})).toBeDisabled()
     fireEvent.change(screen.getByLabelText('任务查询路径'),{target:{value:'/exports/{task_id}'}})
-    fireEvent.click(screen.getByRole('tab',{name:'关联字段'}))
     expect(screen.getByLabelText('原请求关联标记')).toBeVisible()
-    fireEvent.click(screen.getByRole('tab',{name:'任务与文件'}))
+    fireEvent.change(screen.getByLabelText('原请求关联标记'),{target:{value:'request.nonce'}})
     expect(screen.getByLabelText('任务查询路径')).toHaveValue('/exports/{task_id}')
     expect(runtime).not.toHaveBeenCalled()
 })
@@ -85,7 +84,10 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     const fileInput=filePicker.querySelector('input[type=file]')!
     const file=new File(['reference'],'reference.pdf',{type:'application/pdf'})
     fireEvent.change(fileInput,{target:{files:[file]}})
-    const checks=await screen.findByRole('list',{name:'来源核对结果'})
+    // 往返验证已接纳的文件草稿，不借弹窗退场时长等待FileReader碰巧完成。
+    await waitFor(()=>expect(within(filePicker).getByText('reference.pdf')).toBeVisible())
+    fireEvent.click(await screen.findByText('最近的来源核对'))
+    const checks=within(screen.getByText('最近的来源核对').closest('details')!).getByRole('list',{name:'来源核对结果'})
     expect(within(checks).getByText('测试身份可以对应')).toBeVisible()
     expect(within(checks).getByText('已确认')).toBeInTheDocument()
     expect(within(checks).getByText('尚未确认')).toBeVisible()

@@ -1,3 +1,4 @@
+import {discardProjectEditorDrafts} from '../../entities/runtime/model/handoff'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RuntimeConnection } from './RuntimeConnection';
@@ -11,7 +12,7 @@ const props = { projectId: 'app', revision: 1, confirmedEndpoint: 'http://127.0.
 
 beforeEach(()=>{vi.spyOn(api,'runtimeCapabilities').mockResolvedValue({project_id:'app',source_read_authorized:true,entries:['app.mjs'],package:null,dependencies:'NOT_REQUIRED',build_scripts:[]});});
 
-afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear();discardProjectEditorDrafts('app'); });
 
 it('数据库配置按连接和记录分组，取消填写不保存凭据或配置',()=>{
     const credential=vi.spyOn(api,'databaseCredential'),change=vi.fn();

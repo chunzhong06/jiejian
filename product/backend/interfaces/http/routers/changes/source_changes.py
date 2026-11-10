@@ -12,6 +12,7 @@ from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.development import ContextId, OperationId, TaskId
 from product.protocols.checks.execution_request import Hash
 from product.backend.bootstrap import ApplicationCore
+from product.backend.application.projects.repair import ResolvedRepairTask
 
 
 class SourceChangeCreateRequest(ApiModel):
@@ -74,6 +75,10 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
     @router.get("/api/projects/{project_id}/repair",response_model=ApiResponse)
     def project_repair(project_id: str):
         return data_response(context.project_repair.evaluate(project_id).model_dump(mode="json"))
+
+    @router.get('/api/projects/{project_id}/repair-origin',response_model=ApiResponse[ResolvedRepairTask])
+    def repair_origin(project_id:str,repair_reference:Hash,source_run_id:str|None=Query(default=None,max_length=128),source_case_id:str|None=Query(default=None,max_length=128)):
+        return data_response(context.project_repair.resolve(project_id,repair_reference,source_run_id=source_run_id,source_case_id=source_case_id),projection=ResolvedRepairTask)
 
     @router.get(
         "/api/projects/{project_id}/source-changes",

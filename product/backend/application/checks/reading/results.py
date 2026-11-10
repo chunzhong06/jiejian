@@ -14,7 +14,10 @@ from product.backend.infrastructure.artifacts.checks.check_validation import val
 from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.paths import RuntimePaths
 from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
-from product.protocols.checks.execution_request import WireModel
+from product.protocols.checks.execution_request import WireModel, PermissionReference
+from product.protocols.checks.routine_reference import RoutineReference
+from product.protocols.checks.scenarios import ScenarioReference
+from product.backend.domain.checks.repair import CurrentRepairReference
 from product.protocols.checks.scenario_execution import ScenarioNodeProgress
 from product.protocols.checks.routine_reference import FrozenRoutineReference
 from product.protocols.web.environment import FrozenEnvironment
@@ -69,6 +72,20 @@ class CheckRunStatus(WireModel):
     scenario_execution:tuple[ScenarioNodeProgress,...]=Field(default=(),exclude_if=lambda value:not value)
 
 
+class CheckContinuation(WireModel):
+    """只公开原范围的引用；它不是可重放请求，新的检查仍须重新预览。"""
+    project_id: str
+    run_id: str
+    state: Literal['AVAILABLE', 'WAITING', 'UNAVAILABLE']
+    message: str
+    permissions: tuple[PermissionReference, ...] = ()
+    routine: RoutineReference | None = None
+    scenario: ScenarioReference | None = None
+    change_id: str | None = None
+    repair: CurrentRepairReference | None = None
+    external_recheck: bool = False
+
+
 class CheckHistoryCursor(WireModel):
     created_at_us: int = Field(ge=0)
     run_id: str = Field(pattern=RUN_ID_PATTERN)
@@ -94,6 +111,50 @@ class CheckResultReader:
 
     def __init__(self, *, var_dir, uow_factory):
         self._var_dir, self._uow_factory = var_dir, uow_factory
+
+    @projection_read
+    def continuation(self, project_id, run_id, *, repair_contracts=None):
+        """按需核对原输入；原题解析复用严格合同 reader，不从当前规则猜测检查项。"""
+        with self._uow_factory() as work:
+            run = self._run(work, run_id, project_id)
+            job = work.jobs.get_by_run(run_id)
+            base = dict(project_id=project_id, run_id=run_id)
+            if run.lifecycle in {RunLifecycle.QUEUED, RunLifecycle.RUNNING} or job is not None and job.state in {JobState.PENDING, JobState.RUNNING, JobState.RETRY_WAIT}:
+                return CheckContinuation(**base, state='WAITING', message='原检查仍在执行或收尾，请先查看同一次运行。')
+            try:
+                if job is None or job.operation_type != 'CHECK':
+                    raise ValueError('missing original job')
+                # 已发布包是长期原输入；只有未发布运行才依赖 Job 的冻结文件。
+                if work.check_publications.get(run_id) is not None:
+                    request = self._package(work, run, job).request
+                else:
+                    request = CheckRequestStore(self._var_dir).load(job.job_id, expected_hash=run.request_hash)
+                if (request.project_id, request.plan_fingerprint, request.policy_epoch, request.source_fingerprint, request.engine_version,
+                    job.project_id, job.run_id, job.request_hash) != (project_id, run.plan_fingerprint, run.policy_epoch,
+                    run.source_fingerprint, run.engine_version, project_id, run_id, run.request_hash):
+                    raise ValueError('original request identity mismatch')
+                repair = None
+                if request.repair_context is not None:
+                    context = request.repair_context
+                    contracts = () if repair_contracts is None else repair_contracts(context.source_run_id)
+                    matches = [item for item in contracts if item.project_id == project_id and item.source_run_id == context.source_run_id
+                               and item.repair_fingerprint == context.repair_reference]
+                    if len(matches) != 1:
+                        raise ValueError('original repair contract unavailable')
+                    repair = matches[0].reference()
+            except (OSError, ValueError, JiejianError):
+                return CheckContinuation(**base, state='UNAVAILABLE', message='原检查输入缺失或未通过完整性核对，请从原报告核对范围；不会改为全部规则。')
+        refs = request.selection.selected if request.selection else tuple({
+            (case.permission.intent_id, case.permission.revision, case.permission.intent_hash):
+            PermissionReference(intent_id=case.permission.intent_id, revision=case.permission.revision, intent_hash=case.permission.intent_hash)
+            for action in request.actions for case in action.cases}.values())
+        return CheckContinuation(**base, state='AVAILABLE',
+            message='已找回原检查范围。重新核对当前规则、应用连接和材料后，才会开始新一轮检查。',
+            permissions=refs, change_id=None if request.change_context is None else request.change_context.change_id,
+            routine=None if request.routine is None else RoutineReference(**{key:getattr(request.routine,key) for key in ('routine_id','revision','binding_id')}),
+            scenario=None if request.scenario is None else ScenarioReference(scenario_id=request.scenario.document.id,revision=request.scenario.document.revision),
+            repair=repair,
+            external_recheck=request.external_recheck is not None)
 
     def list_for_project(self, project_id: str) -> tuple[CheckRunStatus, ...]:
         return tuple(status for status, _ in self.project_readings(project_id))

@@ -8,6 +8,6 @@ export const PasswordInput=forwardRef<HTMLInputElement,Omit<InputHTMLAttributes<
   const [shown,setShown]=useState(false)
   return <div className="jj-password-field" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setShown(false)}}>
     <input {...props} ref={ref} type={shown&&!props.disabled?'text':'password'}/>
-    <Button size="compact" kind="quiet" disabled={props.disabled} aria-label={shown?'隐藏密码':'显示密码'} aria-pressed={shown} icon={shown?<EyeInvisibleOutlined aria-hidden="true"/>:<EyeOutlined aria-hidden="true"/>} onMouseDown={event=>event.preventDefault()} onClick={()=>setShown(value=>!value)}/>
+    <Button size="compact" kind="quiet" disabled={props.disabled} aria-label={shown?'隐藏密码':'显示密码'} aria-pressed={shown} icon={shown?<EyeInvisibleOutlined data-motion-icon aria-hidden="true"/>:<EyeOutlined data-motion-icon aria-hidden="true"/>} onMouseDown={event=>event.preventDefault()} onClick={()=>setShown(value=>!value)}/>
   </div>
 })

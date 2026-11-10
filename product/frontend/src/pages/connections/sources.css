@@ -3,7 +3,7 @@
 .jj-source-library > .jj-source-toolbar p { color: var(--muted); font-size: var(--text-meta); }
 .jj-source-toolbar p > strong { color: var(--ink); font-size: var(--text-body); font-variant-numeric: tabular-nums; }
 .jj-source-toolbar p > span { margin-left: 12px; }
-.jj-source-library .jj-source-workspace { grid-template-columns: 300px minmax(0,1fr); margin: 0; align-items: stretch; }
+.jj-source-library .jj-source-workspace { grid-template-columns:minmax(0,1.4fr) minmax(360px,1fr); margin: 0; align-items: stretch; }
 .jj-request-index { min-width: 0; border-right: 1px solid var(--line); }
 .jj-request-search { padding:12px 14px; border-bottom:1px solid var(--line); }
 .jj-source-library .jj-source-requests { border: 0; padding: 0; max-height: clamp(280px,calc(100dvh - 390px),720px); }
@@ -31,7 +31,9 @@
 .jj-request-purpose-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .jj-request-purpose-actions > .is-primary { margin-left: auto; }
 .jj-request-purpose .jj-source-new-action { margin-top: 8px; font-size: var(--text-meta); }
-.jj-source-link-editor { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 16px; }
+.jj-source-link-editor { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:24px; margin-top:24px; max-width:720px; }
+.jj-source-link-editor > .jj-task-actions,.jj-source-link-editor > .jj-notice { grid-column:1/-1; }
+.jj-source-link-editor > .jj-task-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; }
 .jj-source-link-editor .jj-field { min-width: 0; margin: 0; }
 .jj-request-parameters > .jj-small { margin: 12px 0 0; line-height: 1.8; }
 .jj-request-table-wrap { margin-top: 12px; overflow: auto; }
@@ -48,7 +50,7 @@
 .jj-request-origin > .jj-button { margin-top: 12px; }
 .jj-source-no-selection { display: grid; place-items: center; padding: 24px; color: var(--muted); font-size: var(--text-meta); }
 .jj-source-back { display: none; }
-@media(max-width:900px) {
+@media(max-width:1100px) {
   .jj-source-library .jj-source-workspace { grid-template-columns: minmax(0,1fr); }
   .jj-request-index { border-right: 0; }
   .jj-source-library .jj-source-requests { max-height: min(65dvh,580px); }

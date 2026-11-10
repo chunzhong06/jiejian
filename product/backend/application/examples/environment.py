@@ -18,6 +18,7 @@ from product.backend.domain.identities.models import TestIdentityAuthMethod, Tes
 from product.backend.infrastructure.samples import OfficialSampleManager, OfficialSampleRuntime
 from product.backend.infrastructure.secrets import credential_ref
 from product.backend.application.business_boundaries.proposals.official_recipe import official_boundary_recipe
+from product.backend.application.business_boundaries.models import BoundaryProposalCommand
 from product.backend.application.checks.registry import CheckRuntimeRegistration, RegisteredCheckIdentity, RegisteredCheckProof, RegisteredAuxiliarySource
 from product.backend.application.examples.materials import EXPORT_ACTION_KEY, VIEW_ACTION_KEY, SAMPLE_RESOURCE_ID
 from product.backend.application.checks.local_observer_wiring import load_local_observer_wiring
@@ -28,6 +29,14 @@ from product.protocols.observer.config import ObserverSpec
 from product.backend.application.preparation.supplemental.contract import request_uuid
 from product.backend.application.examples.recovery import SampleRecovery
 from product.backend.application.examples.preset_delivery import prepare_preset_task, register_preset_delivery, preset_change_id
+
+
+class OfficialBoundaryDraft(WireModel):
+    """只读预置规则；读取不会创建提案或批准正式权限。"""
+    project_id: str
+    runtime_kind: Literal['PYTHON', 'NODE_ESM']
+    command: BoundaryProposalCommand
+    choice_permission_item_id: str | None = None
 
 
 class OfficialScenarioVersion(StrEnum):
@@ -232,24 +241,32 @@ class OfficialSampleExperience:
                     self._cleanup_uncertain = True
                 raise
 
+    def boundary_draft(self):
+        with self._lock:
+            current=self._require_active()
+            return OfficialBoundaryDraft(project_id=current.project_id,runtime_kind='PYTHON',command=self._boundary_command(current))
+
+    def _boundary_command(self,current):
+        recipe=official_boundary_recipe()
+        understanding=self._understanding.get(current.project_id)
+        # 只推荐已发现的映射；读取预置规则不创建提案、正式修订或批准。
+        role_keys=("project_owner","member")
+        action_keys=(EXPORT_ACTION_KEY,VIEW_ACTION_KEY)
+        roles={item.canonical_key.casefold():item.candidate_id for item in understanding.role_candidates if not item.stale}
+        actions={item.canonical_key:item.candidate_id for item in understanding.action_candidates if not item.stale}
+        command=recipe.proposal_command
+        actors=tuple(item.model_copy(update={"source_candidate_ids":() if key not in roles else (roles[key],)})
+            for item,key in zip(command.proposed_actors,role_keys,strict=True))
+        proposed_actions=tuple(item.model_copy(update={"source_candidate_ids":() if key not in actions else (actions[key],)})
+            for item,key in zip(command.proposed_actions,action_keys,strict=True))
+        return command.model_copy(update={"proposed_actors":actors,"proposed_actions":proposed_actions})
+
     def boundary_proposal(self):
         with self._lock:
             current=self._require_active()
             if current.proposal_id is not None:
                 return self._boundaries.proposal(current.project_id,current.proposal_id)
-            recipe=official_boundary_recipe()
-            understanding=self._understanding.get(current.project_id)
-            # 这里只推荐实际发现的映射；正式 revision 与映射仍由普通 GUI 审阅批准。
-            role_keys=("project_owner","member")
-            action_keys=(EXPORT_ACTION_KEY,VIEW_ACTION_KEY)
-            roles={item.canonical_key.casefold():item.candidate_id for item in understanding.role_candidates if not item.stale}
-            actions={item.canonical_key:item.candidate_id for item in understanding.action_candidates if not item.stale}
-            command=recipe.proposal_command
-            actors=tuple(item.model_copy(update={"source_candidate_ids":() if key not in roles else (roles[key],)})
-                for item,key in zip(command.proposed_actors,role_keys,strict=True))
-            proposed_actions=tuple(item.model_copy(update={"source_candidate_ids":() if key not in actions else (actions[key],)})
-                for item,key in zip(command.proposed_actions,action_keys,strict=True))
-            proposal=self._boundaries.create_proposal(current.project_id,command.model_copy(update={"proposed_actors":actors,"proposed_actions":proposed_actions}))
+            proposal=self._boundaries.create_proposal(current.project_id,self._boundary_command(current))
             current.proposal_id=proposal.proposal.proposal_id
             return proposal
 

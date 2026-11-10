@@ -1,6 +1,20 @@
 import {act,renderHook} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
-import {readPending,useCommand} from './operations'
+import {readPending,useCommand,notAccepted,savePending} from './operations'
+import {ApiError} from '../api/http'
+
+it('只有明确未接纳且没有更早未知时才解除原请求',()=>{
+  const rejected=new ApiError('STATE_PRECONDITION','未接纳',undefined,undefined,false,undefined,'NOT_ACCEPTED')
+  expect(notAccepted(rejected)).toBe(true)
+  expect(notAccepted(rejected,true)).toBe(false)
+  expect(notAccepted(new ApiError('INPUT_INVALID','没有接纳证明'))).toBe(false)
+  expect(notAccepted(new Error('not accepted'))).toBe(false)
+})
+
+it('取得回执后清除本地恢复记录失败不会改写成功结果',()=>{
+  const clear=vi.spyOn(Storage.prototype,'removeItem').mockImplementation(()=>{throw new DOMException('storage unavailable')})
+  try{expect(()=>savePending('finished',undefined)).not.toThrow()}finally{clear.mockRestore()}
+})
 
 it('同一命令在等待中不重复执行，结果未知时不自动重发',async()=>{
   let reject!:(error:Error)=>void
@@ -37,7 +51,8 @@ it('明确拒绝与不合法恢复形状分别处理',async()=>{
   const saved=readPending('malformed-recovery',(value):value is {operation:string}=>
     Boolean(value)&&typeof value==='object'&&typeof (value as {operation?:unknown}).operation==='string')
   expect(saved).toBeUndefined()
-  expect(sessionStorage.getItem('malformed-recovery')).toBeNull()
+  expect(sessionStorage.getItem('malformed-recovery')).toBe('{"operation":[]}')
+  expect(()=>savePending('malformed-recovery',{operation:'new'})).toThrow('原请求可能已经执行')
 })
 
 

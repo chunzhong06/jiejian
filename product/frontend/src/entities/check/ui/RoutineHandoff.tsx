@@ -24,7 +24,7 @@ export function RoutineHandoff({projectId,document,reference,origin,onClose}:{pr
    assertProject(task.project_id,projectId);savePending(key,undefined);setPending(undefined);onClose();go('/workspace?view=collaboration&task_id='+task.task_id,projectId)
   }catch(error){setError(error);if(error instanceof ApiError&&['INPUT_INVALID','RECORD_NOT_FOUND','STATE_PRECONDITION'].includes(error.code)){savePending(key,undefined);setPending(undefined)}}finally{lock.current=false;setBusy(false)}
  }
- return <Dialog title="交接当前检查方案" onClose={()=>{if(!busy)onClose()}} actions={<><Button disabled={busy} onClick={onClose}>返回方案</Button><Button kind="primary" busy={busy} onClick={()=>void start()}>{busy?'正在交接':pending?'核对原交接请求':'建立协作任务'}</Button></>}>
+ return <Dialog title="交接当前检查方案" closeDisabled={busy} onClose={()=>{if(!busy)onClose()}} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>返回方案</Button><Button kind="primary" busy={busy} onClick={()=>void start()}>{busy?'正在交接':pending?'核对原交接请求':'建立协作任务'}</Button></>}>
   <p>会把“{document.name}”的检查内容{reference?'和本次已确认的材料':''}交给 Agent，接着准备和检查。</p><p className="jj-small jj-muted">需要授权的操作会留在任务中供你确认，最终结论仍以正式检查结果为准。</p>
   {pending&&!busy&&<Notice>原交接结果待确认；再次核对沿用同一请求。</Notice>}{Boolean(error)&&<ErrorNote error={error}/>}
  </Dialog>

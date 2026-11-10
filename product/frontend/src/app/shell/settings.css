@@ -1,4 +1,3 @@
-.jj-settings-page { display:grid; gap:24px; min-width:0; }
+.jj-settings-page { display:grid; gap:24px; width:100%; min-width:0; max-width:1080px; margin-inline:auto; }
 .jj-settings-layout { display:grid; gap:28px; min-width:0; }
 .jj-settings-content { display:grid; align-content:start; gap:24px; min-width:0; }
-@media(prefers-reduced-motion:no-preference) { .jj-settings-content { animation:jj-content-enter var(--motion-content) var(--ease-enter) both; } }

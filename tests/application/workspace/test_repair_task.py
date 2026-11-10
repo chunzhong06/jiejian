@@ -48,10 +48,11 @@ def test_repair_primary_task_preserves_exact_reference_and_existing_gates(
         )
         task = service.get(harness.project_id).primary_task
         assert task.task_kind == expected
-        if expected == "PREPARE_AGENT_REPAIR":
-            assert task.route == "/changes"
+        if expected in {"PREPARE_AGENT_REPAIR", "VERIFY_REPAIR"}:
+            assert task.route == "/issues"
             assert task.repair_fingerprint == contract.repair_fingerprint
-            assert task.action_label == "准备 Agent 修复任务"
+            assert task.repair == contract.reference()
+            if expected == 'PREPARE_AGENT_REPAIR':assert task.action_label == "处理原问题"
         else:
             assert task.repair_fingerprint is None
         if expected == "VERIFY_REPAIR":

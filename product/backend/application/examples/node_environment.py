@@ -6,9 +6,11 @@ import time
 from pathlib import Path
 from threading import RLock, Thread
 from uuid import uuid4
+from urllib.parse import urlsplit
 from product.backend.domain.errors import ErrorCode,JiejianError
+from product.backend.domain.identities.models import AuthenticationProfile,IdentityVerificationConfig
 from product.backend.infrastructure.runtime.process.tree import kernel_tree_has_exited
-from product.backend.application.examples.environment import OfficialExperienceView,OfficialScenarioVersion
+from product.backend.application.examples.environment import OfficialBoundaryDraft,OfficialExperienceView,OfficialScenarioVersion
 from product.backend.application.examples.journey import OfficialDevelopmentJourney
 from product.backend.application.preparation.supplemental.contract import request_uuid
 from product.backend.application.examples.gallery_recipe import ACTION_ROUTES,gallery_recipe,BASELINE,VULNERABLE,EXPOSE_REVOKE,PREVIEW_CHANGED
@@ -168,6 +170,11 @@ class NodeOfficialSampleExperience:
                             current.update(update);work.environment_operations.save(current);work.commit()
             return self.status()
 
+    def boundary_draft(self,*,exhibition_download=True):
+        current=self._active()
+        command=gallery_recipe(exhibition_download,self.understanding.get(current.project_id))
+        return OfficialBoundaryDraft(project_id=current.project_id,runtime_kind='NODE_ESM',command=command,choice_permission_item_id=command.proposed_permissions[-1].item_id)
+
     def boundary_proposal(self,*,exhibition_download=None):
         current=self._active()
         if type(exhibition_download) is not bool:raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,'请先选择评审能否下载公开展示版')
@@ -192,6 +199,13 @@ class NodeOfficialSampleExperience:
             if found and found[0].label != label:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前角色使用自定义账号，请在账号页完成登录后准备材料')
             identity=found[0] if found else self.identities.create(project,actor_id=actor.actor_id,actor_revision=actor.revision,label=label)
+            # 官方配方固定核对实际主体；选择具名连接后也必须形成同环境的身份核验。
+            # 已有人工作出的认证配置继续沿用，不以示例默认值覆盖。
+            if self.identities.get_record(identity.identity_id).authentication is None:
+                account,role=('curator','owner') if name=='项目负责人' else ('judge','reviewer')
+                profile=AuthenticationProfile(verification=IdentityVerificationConfig(path='/api/me',
+                    subject_path=('id',),role_path=('role',),expected_subject=account,expected_role=role))
+                identity=self.identities.configure_authentication(identity.identity_id,profile,expected_updated_at_us=identity.updated_at_us)
             # 示例登录会话属于目标进程；通用代码加载也会换进程，不能复用其启动前的登录。
             if load and identity.prepared_at_us is not None and identity.prepared_at_us < load.created_at_us:
                 identity=self.identities.reset(identity.identity_id)
@@ -350,13 +364,28 @@ class NodeOfficialSampleExperience:
         if project is None or project.status.value=='ARCHIVED':
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'已归档项目不能继续示例')
         self._progress(project_id=workspace['project_id'],experience_id='exp_'+workspace['workspace_id'][4:],phase='CHECKING_PREVIOUS')
-        if self.runtime.state(workspace['project_id'])['running']:
+        state=self.runtime.state(workspace['project_id'])
+        if state['running']:
             return
         if not self._exited(workspace):
             raise JiejianError(ErrorCode.STATE_PRECONDITION,'旧示例退出尚未确认')
         self._idle(workspace['project_id'])
+        understanding=self.understanding.get(workspace['project_id'])
+        environment=understanding.environment
         with socket.socket() as sock:
-            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+            # 具名连接是用户确认的检查地址；重开不能先换端口再尝试改写它。
+            saved_port=0
+            if environment is not None:
+                target=urlsplit(environment.target.base_url)
+                if (target.scheme!='http' or target.hostname!='127.0.0.1' or target.port is None
+                    or understanding.confirmed_endpoint!=environment.target.base_url):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前检查连接尚未确认，请先核对连接后再继续示例')
+                # 先前部分启动可能已改写运行配置；确认地址才拥有这次选择的端口。
+                saved_port=target.port
+            try:sock.bind(('127.0.0.1',saved_port))
+            except OSError:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'原检查连接的端口正被占用，请释放端口后再继续示例') from None
+            port=sock.getsockname()[1]
         self._launch(workspace,port,self._key(workspace['workspace_id'],self._operation))
 
     def _progress(self,**updates):

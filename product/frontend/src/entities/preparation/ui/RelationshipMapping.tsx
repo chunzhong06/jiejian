@@ -32,7 +32,7 @@ export function relationshipMappingReady(requirements:RelationshipRequirement[],
 export function RelationshipMapping({requirements,value,fields,onChange}:{requirements:RelationshipRequirement[];value:RelationshipSourceMapping;fields:string[];onChange:(value:RelationshipSourceMapping)=>void}) {
     return <section className="jj-condition-source"><h3>关系事实从哪里取得</h3>
         <div className="jj-form-grid">
-            <Field label="应用中的业务动作标识"><input value={value.application_action} placeholder="与授权记录中的动作保持一致" onChange={event=>onChange({...value,application_action:event.target.value})}/></Field>
+            <Field label="应用中的业务操作标识"><input value={value.application_action} placeholder="与授权记录中的动作保持一致" onChange={event=>onChange({...value,application_action:event.target.value})}/></Field>
             {requirements.some(item=>item.kind==='SHARING'||item.kind==='DELEGATION')&&<Field label="应用时钟误差上限（毫秒）" hint="到期或撤销边界位于误差内时，保留未知。"><input type="number" min={0} max={5000} value={value.clock_uncertainty_us/1000} onChange={event=>onChange({...value,clock_uncertainty_us:Number(event.target.value)*1000})}/></Field>}
             {relationshipMappingFields(requirements).map(item=><Field key={item.key} label={item.label}>
                 {item.resource?<Choice value={value[item.key]?.[0]??''} placeholder="选择已声明的记录字段" onValueChange={column=>onChange({...value,[item.key]:column?[column]:null})}>
@@ -40,6 +40,6 @@ export function RelationshipMapping({requirements,value,fields,onChange}:{requir
                 </Choice>:<input value={value[item.key]?.join('.')??''} placeholder="例如 organizations" onChange={event=>onChange({...value,[item.key]:event.target.value?event.target.value.split('.'):null})}/>}
             </Field>)}
         </div>
-        <p className="jj-small jj-muted">只读取这些已声明字段。组织与角色列表、层级边、授权有效期由实际来源核对，缺少记录时保留待确认。</p>
+        <p className="jj-small jj-muted">只读取这些已声明字段。组织、角色、层级关系和授权有效期均从实际来源核对，缺少记录时标为待确认。</p>
     </section>;
 }

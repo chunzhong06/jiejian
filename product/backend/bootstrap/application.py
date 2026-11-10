@@ -106,7 +106,8 @@ class ApplicationCore:
         self.projects = ProjectCatalog(factory)
         from product.backend.application.application_understanding.environments import ApplicationEnvironments
         from product.backend.application.application_understanding.sources import ApplicationSources
-        self.application_environments = ApplicationEnvironments(factory, control_origin=control_origin, clock_us=clock_us)
+        self.application_environments = ApplicationEnvironments(factory, control_origin=control_origin, clock_us=clock_us,
+            impact_reader=lambda project, work: self.preparation.connection_review(project, work=work))
         self.application_sources = ApplicationSources(factory, clock_us=clock_us)
         self.application_understanding = ApplicationUnderstandingService(
             factory,
@@ -201,6 +202,7 @@ class ApplicationCore:
         self.checks.bind_delivery_recorder(self.development.attach_check_run)
         self.checks.set_revalidation_services(changes=self.source_changes,repairs=self.check_repairs)
         self.check_story.bind_repairs(self.check_repairs)
+        self.check_comparison.bind_repairs(self.check_repairs)
         from product.backend.application.projects.repair import CurrentProjectRepairService
         self.project_repair = CurrentProjectRepairService(reader=self.check_results,repairs=self.check_repairs,
             changes=self.source_changes,boundaries=self.business_boundaries,pending_request_reader=self.checks.pending_request)
@@ -347,7 +349,7 @@ class ApplicationCore:
         self.github_issues = IssueCollaboration(self.check_story,self.secret_store,projects=self.projects)
         self.agent_capabilities = ProductCapabilities(self)
         from product.backend.application.checks.routines import CheckRoutines
-        self.check_routines = CheckRoutines(factory, self.business_boundaries, self.checks)
+        self.check_routines = CheckRoutines(factory, self.business_boundaries, self.checks, self.preparation.get)
         self.checks.bind_routines(self.check_routines.revisions)
         self.collaboration = CollaborationTasks(factory, self.projects, self.agent_capabilities, clock_us=clock_us)
 

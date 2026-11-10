@@ -96,17 +96,20 @@ class FlowTrialService:
                 if proof_fingerprint(request.plan)!=command.plan_hash:
                     raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT,'同一操作编号已经提交其他试运行计划')
                 return self._read(work,project_id,request.trial_id)
-            plan=self._plan(work,project_id,command.selection)
+            try:
+                plan=self._plan(work,project_id,command.selection)
+            except JiejianError as error:
+                raise error.not_accepted() from None
             if proof_fingerprint(plan)!=command.plan_hash:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'场景、环境或账号已变化，请重新预览')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'场景、环境或账号已变化，请重新预览').not_accepted()
             if any(job.state in {JobState.PENDING,JobState.RUNNING,JobState.RETRY_WAIT} for job in work.jobs.list_for_project(project_id)):
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先结束当前应用的其他执行任务')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先结束当前应用的其他执行任务').not_accepted()
             gaps=trial_recovery_gaps(work,project_id)
             if plan.mode=='RESTORE':
                 if not any(item.trial_id==plan.origin_trial_id for item in gaps):
-                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'原试运行没有待处理的恢复请求')
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'原试运行没有待处理的恢复请求').not_accepted()
             elif any(item.plan.case.resource_id==plan.case.resource_id for item in gaps):
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'该资源的上次试运行恢复情况未明确，请先处理原记录')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'该资源的上次试运行恢复情况未明确，请先处理原记录').not_accepted()
             request=FlowTrialRequest(trial_id='ftr_'+uuid4().hex,operation_id=command.operation_id,
                 control_session_id=self.control_session_id,created_at_us=self._clock(),plan=plan)
             self.jobs.submit(work,request)

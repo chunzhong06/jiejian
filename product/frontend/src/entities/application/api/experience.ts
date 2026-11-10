@@ -1,8 +1,10 @@
-/* 官方 Sample 体验 API：只交换非秘密状态与明确用户动作，不携带源码路径或预期结论。 */
+/* 官方示例交换非秘密运行状态与待批准的规则草稿；不据此生成检查结论。 */
 
 import { request } from '../../../shared/api/http'
 import type { RepairReference } from '../../check/api/repairs'
-import type { BoundaryProposalViewDto } from '../../permission/api/businessBoundaries'
+import type { BoundaryProposalCommandDto, BoundaryProposalViewDto } from '../../permission/api/businessBoundaries'
+
+export type OfficialBoundaryDraftDto = {project_id:string;runtime_kind:'PYTHON'|'NODE_ESM';command:BoundaryProposalCommandDto;choice_permission_item_id:string|null}
 
 export type OfficialScenarioVersion = 'BASELINE' | 'VULNERABLE' | 'EVIDENCE_LIMITED' | 'FIXED' | 'EXPOSE_REVOKE' | 'PREVIEW_CHANGED'
 
@@ -78,6 +80,7 @@ export const experienceApi = {
     }),
   prepare: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
+  boundaryDraft: (exhibitionDownload=true) => request<OfficialBoundaryDraftDto>('/api/experience/official-sample/boundary-draft?exhibition_download='+String(exhibitionDownload)),
   boundaryProposal: (exhibitionDownload?: boolean) => request<BoundaryProposalViewDto>('/api/experience/official-sample/boundary-proposal', { method: 'POST', ...(exhibitionDownload===undefined?{}:{body:JSON.stringify({exhibition_download:exhibitionDownload})}) }),
   switchVersion: (version: OfficialScenarioVersion, reference?: RepairReference) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/version', {

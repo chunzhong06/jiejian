@@ -135,3 +135,25 @@ def test_local_references_and_body_names_are_imported_without_example_values():
 def test_malformed_shapes_produce_safe_input_errors(document,kind):
     with pytest.raises(JiejianError):
         normalize_source(json.dumps(document),kind)
+
+
+def test_connection_impact_is_read_only_and_stale_material_basis_is_rejected(core, monkeypatch):
+    project = core.application_environments.create_application(operation_id=uuid4().hex, name='连接切换')
+    target = WebTargetScope(base_url='http://127.0.0.1:18081', allowed_origins=('http://127.0.0.1:18081',),
+        allowed_hosts=('127.0.0.1',), allowed_ports=(18081,), allow_private_network=True)
+    environment = FrozenEnvironment(environment_id='env_' + uuid4().hex, revision=1, name='修复部署', target=target)
+    core.application_environments.save(project.project_id, environment, expected_revision=0)
+    current = dict(state='RECHECK_REQUIRED', basis='old', items=[])
+    monkeypatch.setattr(core.application_environments, '_impact_reader', lambda project, work: current.copy())
+    preview = core.application_environments.activation_preview(project.project_id, environment.environment_id, revision=1)
+    assert preview['materials']['basis'] == 'old'
+    assert core.application_environments.context(project.project_id)['active_environment'] is None
+    current['basis'] = 'changed'
+    with pytest.raises(JiejianError, match='重新查看切换影响'):
+        core.application_environments.activate(project.project_id, environment.environment_id,
+            revision=1, expected_revision=0, impact_fingerprint=preview['impact_fingerprint'])
+    assert core.application_environments.context(project.project_id)['active_environment'] is None
+    fresh = core.application_environments.activation_preview(project.project_id, environment.environment_id, revision=1)
+    selected = core.application_environments.activate(project.project_id, environment.environment_id,
+        revision=1, expected_revision=0, impact_fingerprint=fresh['impact_fingerprint'])
+    assert selected.environment == environment

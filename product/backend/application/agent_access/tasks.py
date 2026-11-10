@@ -275,12 +275,20 @@ class CollaborationTasks:
         try:
             result = capability.invoke(project, arguments, command.operation_id)
         except JiejianError as error:
-            self._settle(project, task, command.operation_id, 'FAILED', None, error.code)
+            state = 'FAILED' if error.request_outcome == 'NOT_ACCEPTED' else 'UNKNOWN'
+            settled = self._settle(project, task, command.operation_id, state, None, error.code,
+                expected_identity=(capability.key, fingerprint))
+            if settled['state'] == 'SUCCEEDED':
+                return settled
             raise
         except Exception:
-            self._settle(project, task, command.operation_id, 'UNKNOWN', None, 'EXECUTION_UNKNOWN')
+            settled = self._settle(project, task, command.operation_id, 'UNKNOWN', None, 'EXECUTION_UNKNOWN',
+                expected_identity=(capability.key, fingerprint))
+            if settled['state'] == 'SUCCEEDED':
+                return settled
             raise JiejianError(ErrorCode.STATE_PRECONDITION, '操作结果尚未确认，请查询原操作') from None
-        return self._settle(project, task, command.operation_id, 'SUCCEEDED', result)
+        return self._settle(project, task, command.operation_id, 'SUCCEEDED', result,
+            expected_identity=(capability.key, fingerprint))
 
     def decide(self, project, task, operation_id, accept):
         value = self.show(project, task)
@@ -303,7 +311,8 @@ class CollaborationTasks:
         receipt = self.capabilities.receipt(project, operation)
         if receipt is None:
             return operation
-        return self._settle(project, task, operation_id, 'SUCCEEDED', receipt)
+        return self._settle(project, task, operation_id, 'SUCCEEDED', receipt,
+            expected_identity=(operation['capability'], operation['fingerprint']))
 
     def ask(self, project, task, command: CollaborationQuestion):
         def update(value):
@@ -384,13 +393,21 @@ class CollaborationTasks:
             self.capabilities.cancel_owned(project, result['operations'])
         return result
 
-    def _settle(self, project, task, operation_id, state, result, error=None, *, required_state=None):
+    def _settle(self, project, task, operation_id, state, result, error=None, *, required_state=None, expected_identity=None):
         # 业务事务在协作事务外完成，迟到回执只能补记录，不能撤销用户的暂停或停止。
         settled, cleanup = {}, []
         def update(value):
             operation = next(item for item in value['operations'] if item['operation_id'] == operation_id)
             if required_state and operation['state'] != required_state:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '这项操作已处理，请读取当前回执')
+            if expected_identity is not None and (operation['capability'], operation['fingerprint']) != expected_identity:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '原操作内容已变化，请读取当前回执')
+            # 查询可能先于原调用返回成功；同一身份的迟到异常不能抹掉权威回执或再记一次事件。
+            if operation['state'] == 'SUCCEEDED':
+                settled.update(operation)
+                if value['state'] == 'CANCELLED':
+                    cleanup.append(operation)
+                return False
             operation.update(state=state, result=self.capabilities.public(result), error_code=error)
             settled.update(operation)
             if value['state'] == 'CANCELLED' and state == 'SUCCEEDED':

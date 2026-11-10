@@ -1,3 +1,4 @@
+import {discardProjectEditorDrafts} from '../../entities/runtime/model/handoff'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { InitialRules } from './InitialRules';
@@ -13,7 +14,7 @@ const draft: BoundaryMaintenanceCommandDto = {
 };
 const basis: BoundaryMaintenanceDraftDto = { project_id: 'app', boundary_state_fingerprint: 'basis', actors: [], actions: [], permissions: [], candidate_options: [], implementation_inspections: [] };
 
-afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear();discardProjectEditorDrafts('app'); });
 
 it('草稿编号保留前缀及既有的16位UUID后缀，只取一次随机值',()=>{
     const random=vi.spyOn(crypto,'randomUUID').mockReturnValue('01234567-89ab-4cde-8fab-0123456789ab');

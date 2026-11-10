@@ -51,6 +51,11 @@ def _workspace_action(project, task):
     if task is None:
         return None
     refs = {}
+    # 修复任务已经归入问题工作面；保留原题身份，不能降成问题目录的默认选择。
+    if task.route == '/issues' and task.repair is not None:
+        refs.update(repair_reference=task.repair.repair_fingerprint,
+                    source_run_id=task.repair.source_run_id, source_case_id=task.repair.source_case_id,
+                    section='repair')
     if task.proposal_id and task.route == '/permissions':
         refs['proposal_id'] = task.proposal_id
     if task.repair_fingerprint and task.route == '/changes':

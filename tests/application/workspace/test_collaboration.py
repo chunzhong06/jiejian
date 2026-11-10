@@ -67,6 +67,42 @@ def test_unknown_write_is_not_replayed_and_can_only_be_reconciled(harness, monke
     assert calls == [command.operation_id]
 
 
+@pytest.mark.parametrize('late_result', ['transport_error', 'business_error', 'duplicate_success'])
+@pytest.mark.parametrize('control', [None, 'pause', 'cancel'])
+def test_authoritative_receipt_survives_late_call_and_preserves_stop(harness, monkeypatch, late_result, control):
+    service, project, value = harness.core.collaboration, harness.project_id, task(harness)
+    receipt, calls, event_counts = {'job_id': 'owned-original-job'}, [], []
+    monkeypatch.setattr(service.capabilities, 'receipt', lambda p, op: receipt)
+    cleanup = []
+    monkeypatch.setattr(service.capabilities, 'cancel_owned', lambda p, ops: cleanup.extend(
+        op['result'] for op in ops if op['result']))
+
+    def invoke(p, arguments, operation_id):
+        # 使用实际事务嵌入“查询先确认、原调用后返回”的交错，不依赖线程睡眠。
+        calls.append(operation_id)
+        if control:
+            service.control(project, value['task_id'], control)
+        assert service.reconcile(project, value['task_id'], operation_id)['result'] == receipt
+        event_counts.append(len(service.show(project, value['task_id'])['events']))
+        if late_result == 'transport_error':
+            raise OSError('response-lost')
+        if late_result == 'business_error':
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '迟到的拒绝')
+        return receipt
+
+    service.capabilities.items['fixture.settle'] = Capability('fixture.settle', '提交原任务', '测试', 'PREPARE', Empty, invoke)
+    command = CollaborationAction(operation_id=uuid4().hex, capability='fixture.settle')
+    result = service.act(project, value['task_id'], command)
+    assert result['state'] == 'SUCCEEDED' and result['result'] == receipt
+    stored = service.show(project, value['task_id'])
+    assert len(stored['events']) == event_counts[0]
+    assert stored['operations'][0]['result'] == receipt
+    if control:
+        assert stored['state'] == ('PAUSED' if control == 'pause' else 'CANCELLED')
+    assert calls == [command.operation_id]
+    assert bool(cleanup) == (control == 'cancel')
+
+
 def test_operation_id_reused_by_another_task_cannot_bypass_unknown_write(harness):
     calls=[]
     def disconnected(project,arguments,operation):

@@ -25,7 +25,7 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
   // 自适应回调可随渲染重建；引用保存最新策略，避免因此不断重启读取。
   const timing=useRef(interval);timing.current=interval
   const [epoch,setEpoch]=useState(0)
-  const [state,setState]=useState<{key:string|null;data?:T;error?:Error;loading:boolean}>({key,loading:key!==null})
+  const [state,setState]=useState<{key:string|null;data?:T;error?:Error;loading:boolean;refreshing?:boolean;receivedAt?:number}>({key,loading:key!==null})
   useEffect(()=>{
     if(key===null)return
     let valid=true,pending=false,timer:ReturnType<typeof setTimeout>|undefined,last:T|undefined
@@ -34,8 +34,9 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
     const refresh=async(manual=false)=>{
       if(pending||document.visibilityState==='hidden')return
       pending=true
-      try{const data=await (manual?manualSource.current??source.current:source.current)(controller.signal);last=data;if(valid)setState({key,data,loading:false})}
-      catch(error){if(valid)setState(previous=>({key,data:previous.key===key?previous.data:undefined,error:error instanceof Error?error:new Error('暂时无法读取，请重试。'),loading:false}))}
+      if(valid)setState(previous=>({...previous,refreshing:true}))
+      try{const data=await (manual?manualSource.current??source.current:source.current)(controller.signal);last=data;if(valid)setState({key,data,loading:false,refreshing:false,receivedAt:Date.now()})}
+      catch(error){if(valid)setState(previous=>({key,data:previous.key===key?previous.data:undefined,error:error instanceof Error?error:new Error('暂时无法读取，请重试。'),loading:false,refreshing:false,receivedAt:previous.key===key?previous.receivedAt:undefined}))}
       finally{pending=false;const delay=typeof timing.current==='function'?timing.current(last):timing.current;if(valid&&delay)timer=setTimeout(()=>void refresh(),delay)}
     }
     // 隐藏期间不启动新读取；恢复焦点或网络后复用串行入口，避免轮询和恢复同时发请求。
@@ -46,5 +47,7 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
     return()=>{valid=false;controller.abort();clearTimeout(timer);unsubscribe();unsubscribeRefresh()}
   },[key,epoch,typeof interval==='number'?interval:'adaptive'])
   const reload=useCallback(()=>setEpoch(value=>value+1),[])
-  return {...(state.key===key?state:{key,loading:key!==null}),reload}
+  const visible=state.key===key?state:{key,loading:key!==null}
+  const status=key===null?'idle':visible.error?(visible.data===undefined?'failed':'stale'):visible.data===undefined?'loading':visible.refreshing?'refreshing':'ready'
+  return {...visible,status,refreshing:Boolean(visible.refreshing),reload}
 }

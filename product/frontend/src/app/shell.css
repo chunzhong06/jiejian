@@ -53,13 +53,11 @@
 .jj-collaboration-starting-points > [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
 .jj-content { padding:34px 38px 64px; min-height:calc(100dvh - 68px); }
 .jj-content:focus { outline: 0; }
-.jj-page { width: 100%; max-width: 1280px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.jj-page { width:100%; max-width:1280px; margin-inline:auto; display:flex; flex-direction:column; gap:28px; min-width:0; }
 .jj-page:has(> .jj-loading) { min-height: calc(100dvh - 180px); }
 .jj-page[data-view='/environment'] { max-width: 960px; }
-.jj-page[data-view='/storage'] { max-width: 1000px; }
 .jj-page:has(> .jj-understanding-workspace), .jj-page:has(.jj-source-review), .jj-page[data-view='/changes']:has(.jj-change-registration) { max-width: 1000px; }
 .jj-page:has(.jj-recording-workspace), .jj-page:has(.jj-recording-live) { max-width: 840px; }
-.jj-page[data-view='/tools'] { max-width: 1080px; }
 .jj-skip { position: fixed; top: -80px; left: 240px; z-index: 200; padding: 12px 18px; border-radius: 8px; color: var(--on-accent); background: var(--accent); }
 .jj-skip:focus { top: 12px; }
 .jj-global-error { display: flex; align-items: center; gap: 10px; max-width: 1168px; margin: 0 auto 20px; }

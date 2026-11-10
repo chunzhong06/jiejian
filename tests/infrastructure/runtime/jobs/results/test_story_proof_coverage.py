@@ -53,6 +53,8 @@ def test_static_published_package_preserves_verdict_case_scope_and_integrity(pac
     package = CheckPublisher(var_dir, factory, clock_us=lambda: NOW+20).publish(staging)
     reader = CheckResultReader(var_dir=var_dir, uow_factory=factory)
     builder = CheckStoryBuilder(reader)
+    from hashlib import sha256
+    original_files = {path: sha256(path.read_bytes()).hexdigest() for path in package.directory.rglob("*") if path.is_file()}
     forbidden = Mock(side_effect=AssertionError("read projection must not execute or consult live registry"))
     monkeypatch.setattr("product.backend.domain.verification.checks.evaluate_check_case", forbidden)
     monkeypatch.setattr("product.backend.application.checks.registry.CheckRuntimeRegistry.snapshot", forbidden)
@@ -65,11 +67,15 @@ def test_static_published_package_preserves_verdict_case_scope_and_integrity(pac
     frozen = reader.package(job.run_id)
     cases = {case.case_id: case for action in frozen.request.actions for case in action.cases}
     for story in result.actions:
+        published = next(item for item in frozen.result.case_results if item.case_id == story.case_id)
+        assert story.case_verdict == published.verdict
+        assert all(item.assessment_state in {"CONFIRMED", "ABSENT", "UNKNOWN"} for item in story.fact_comparison.effects)
         assert [item.proof_fingerprint for item in story.proof_coverage] == [
             item.proof_fingerprint for item in cases[story.case_id].proof_requirements]
         assert all(item.observed_state == "UNKNOWN" and item.evidence_refs == () for item in story.proof_coverage)
     assert builder.build(job.run_id) == result
     forbidden.assert_not_called()
+    assert {path: sha256(path.read_bytes()).hexdigest() for path in original_files} == original_files
     (package.directory / "result.json").write_bytes(b"{}")
     with pytest.raises(JiejianError):
         builder.build(job.run_id)

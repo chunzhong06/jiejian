@@ -43,7 +43,7 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
     available = current is not None and (
         current.result.run_id != contract.source_run_id
         and current.request.project_id == contract.project_id
-        and current.request.change_context is not None
+        and (current.request.change_context is not None or current.request.external_recheck is not None)
         and (current.request.repair_context == repair_context(contract) or linked_reference == contract.reference())
     )
     candidates, current_results = {}, {}

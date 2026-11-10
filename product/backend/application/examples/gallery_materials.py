@@ -31,7 +31,9 @@ def prepare_gallery_content(service,project,identities):
     if any(item.status is not TestIdentityStatus.PREPARED for item in identities):
         raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,'示例账号尚未准备好')
     owner,reviewer=identities
-    source=service.understanding.get(project).source_fingerprint
+    understanding=service.understanding.get(project)
+    source=understanding.source_fingerprint
+    environment=None if understanding.environment is None else understanding.environment.fingerprint
     views={item.action_id:item for item in service.preparation.get(project).actions}
     for name,action in actions.items():
         prior=views[action.action_id]
@@ -41,12 +43,12 @@ def prepare_gallery_content(service,project,identities):
         method='POST' if suffix=='internal' else 'GET'
         recording=service.installer.install_recording(project_id=project,action_id=action.action_id,identity_id=subject.identity_id,
             resource_owner_identity_id=owner.identity_id,endpoint=origin,event_factory=lambda endpoint,identity,now:_events(endpoint,identity,now,method,suffix),
-            resource_consumer=ValueSlotConsumer.PATH,resource_location='path[2]',source_fingerprint=source,target_request_id='request_000002',runtime_instance_id=state['operation']['instance_id'])
+            resource_consumer=ValueSlotConsumer.PATH,resource_location='path[2]',source_fingerprint=source,target_request_id='request_000002',runtime_instance_id=state['operation']['instance_id'],environment_fingerprint=environment)
         if action.state_changing:
             service.installer.install_recording(project_id=project,action_id=action.action_id,identity_id=owner.identity_id,
                 resource_owner_identity_id=owner.identity_id,endpoint=origin,event_factory=lambda endpoint,identity,now:_events(endpoint,identity,now,'POST','withdraw'),
                 resource_consumer=ValueSlotConsumer.PATH,resource_location='path[2]',source_fingerprint=source,target_request_id='request_000002',
-                purpose=RecordingPurpose.RECOVERY,parent_recording_id=recording,runtime_instance_id=state['operation']['instance_id'])
+                purpose=RecordingPurpose.RECOVERY,parent_recording_id=recording,runtime_instance_id=state['operation']['instance_id'],environment_fingerprint=environment)
     context=service.proofs.context(project)
     claims=tuple(dict(identity_id=item.identity_id,application_subject_id=subject,application_role=role,request_path='/api/me',subject_path=('id',),role_path=('role',))
         for item,subject,role in [(owner,'curator','owner'),(reviewer,'judge','reviewer')])

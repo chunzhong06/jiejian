@@ -1,5 +1,5 @@
 import {useWorkflow} from '../../../shared/lib/workflow'
-import {editorDraft,rememberEditorDraft,requestCollaboration,useHandoffContext} from '../../../entities/runtime/model/handoff'
+import {editorDraft,rememberEditorDraft,editorDraftGeneration,clearSubmittedDraft,useDraftProtection,requestCollaboration,useHandoffContext} from '../../../entities/runtime/model/handoff'
 import {useEffect,useRef,useState} from 'react'
 import {Choice} from '../../../shared/ui/Choice'
 import {proofSourcesApi as api,type ProofContext,type ProofConfig,type RelationshipSourceMapping} from '../../../entities/preparation/api/proofSources'
@@ -51,6 +51,9 @@ export function SourceConfiguration({projectId,context,actionId,requestedEffect,
     const table=database===''?undefined:tables[Number(database)]
     const field=table?.fields.includes(column)?column:table?.fields.length===1?table.fields[0]:''
     const completed=useRef(false)
+    const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
+    const initialValues=useRef(JSON.stringify({action,effect,resource,database,column,tenantColumn,stateColumn,identityTenantPath,relationshipMapping,collection,deferred,exportMapping})).current
+    useDraftProtection(initialValues!==JSON.stringify({action,effect,resource,database,column,tenantColumn,stateColumn,identityTenantPath,relationshipMapping,collection,deferred,exportMapping}))
     useEffect(()=>{if(!completed.current)rememberEditorDraft(draftKey,{action,effect,resource,database,column,tenantColumn,stateColumn,identityTenantPath,relationshipMapping,collection,deferred,exportMapping,basis:context.basis_id},projectId)},[draftKey,projectId,action,effect,resource,database,column,tenantColumn,stateColumn,identityTenantPath,relationshipMapping,collection,deferred,exportMapping,context.basis_id])
     const resume='/preparation?proof_sources=1&configure='+(initial?'edit':'new')+'&action_id='+action+(sourceId?'&source_id='+sourceId:'')+(effectId?'&effect_id='+effectId:'');
     useHandoffContext({projectId,label:(chosen?.label??'当前操作')+' · 结果判断草稿',references:{...workflow?.references,action_id:action,return_to:workflow?.resume?.(resume)??resume},editor:{kind:'PROOF',basis_id:context.basis_id,action_id:action,effect_id:effectId,resource_binding_id:selectedResource?.resource_binding_id??null,table:table?.table??null,connection_id:table?.connection_id??null,collection:collection||null,...(deferred&&asyncExportReady(exportMapping)?{async_export:exportMapping}:{}),protected_column:field||null,tenant_column:tenantColumn||null,state_column:stateColumn||null,relationship_mapping:relationshipMapping.application_action?relationshipMapping:null}})
@@ -64,13 +67,14 @@ export function SourceConfiguration({projectId,context,actionId,requestedEffect,
     const result=effects.find(item=>item.effect_id===effectId)
     return <TaskSurface title="设置结果判断依据" onBack={onClose} backLabel="返回结果证明" actions={dismiss=><><Button disabled={busy} onClick={()=>requestCollaboration(projectId,'SETUP','请沿用当前结果判断草稿和已声明的数据来源，补齐对应关系并保存候选；不明确的业务字段请向我确认，读取与采用仍由我审阅。')}>请 Agent 补全</Button><Button disabled={busy} onClick={dismiss}>取消</Button>{(fileEffect||Boolean(tables.length))&&<Button kind="primary" busy={busy} disabled={!ready} onClick={async()=>{
         setBusy(true)
+        const submitted=editorDraftGeneration(draftKey,projectId)
         try{
             const config=fileEffect?await api.fileCandidate(projectId,{basis_id:context.basis_id,action_id:action,effect_id:effectId,resource_binding_id:selectedResource!.resource_binding_id,collection,async_export:deferred?exportMapping:null}):await (table!.connection_id?api.databaseCandidate:api.sqliteCandidate)(projectId,{basis_id:context.basis_id,action_id:action,effect_id:effectId,resource_binding_id:selectedResource!.resource_binding_id,...(table!.connection_id?{connection_id:table!.connection_id}:{database_path:table!.database_path,table:table!.table}),protected_column:field,
                 ...(conditions?.tenant?{tenant_column:tenantColumn,identity_tenant_path:identityTenantPath.trim()}:{}),
                 ...(conditions?.resource_state?{condition_state_column:stateColumn}:{}),
                 ...(relationships.length?{relationship_mapping:relationshipMapping}:{})})
             const saved=fileEffect&&initial?.reference_artifact&&initial.resource_binding_id===selectedResource?.resource_binding_id?{...config,reference_artifact:initial.reference_artifact,reference_origin:initial.reference_origin}:config
-            if(await onSave(saved)){completed.current=true;rememberEditorDraft(draftKey,undefined);dismiss()}
+            if(await onSave(saved)){completed.current=true;clearSubmittedDraft(draftKey,projectId,submitted);if(alive.current)dismiss()}
         }catch(e){setError(e)}finally{setBusy(false)}
     }}>保存判断方式</Button>}</>}>
         <div className="jj-source-configuration">
@@ -82,7 +86,7 @@ export function SourceConfiguration({projectId,context,actionId,requestedEffect,
                     {resources.length>1&&<Field label="测试资源"><Choice value={selectedResource?.resource_binding_id??''} onValueChange={setResource}>{resources.map(item=><option key={item.resource_binding_id} value={item.resource_binding_id}>{item.resource_id} / {context.identities.find(identity=>identity.identity_id===item.owner_identity_id)?.label}</option>)}</Choice></Field>}
                 </div>}
             </section>
-            {fileEffect?<section className="jj-source-mapping"><h3>如何核对完整文件</h3><div className="jj-form-grid"><Field label="资源所在的受控记录集合"><input value={collection} placeholder="填写应用已使用的记录集合名称" onChange={event=>setCollection(event.target.value)}/></Field><Field label="交付方式"><Choice value={deferred?'async':'direct'} onValueChange={value=>setDeferred(value==='async')}><option value="direct">本次操作直接返回文件</option><option value="async">先创建导出任务，再接收文件</option></Choice></Field></div>{deferred&&<AsyncExportFields value={exportMapping} onChange={setExportMapping} disabled={busy}/>}<p className="jj-small jj-muted">保存后准备所属资源的完整参照，再审阅读取范围。任务状态与实际文件分别核对。</p></section>:tables.length?<section className="jj-source-mapping"><h3>用哪项业务数据判断</h3>
+            {fileEffect?<section className="jj-source-mapping"><h3>如何判断文件是否完整交付</h3><p className="jj-small jj-muted">将实际收到的文件与同一测试资源的完整参照比对。下面的集合用于对应文件所属的资源。</p><div className="jj-form-grid"><Field label="资源所属记录集合" hint="使用当前应用中保存资源编号和所有者的集合，不是文件名。"><input value={collection} placeholder="填写应用已使用的记录集合名称" onChange={event=>setCollection(event.target.value)}/></Field><Field label="交付方式"><Choice value={deferred?'async':'direct'} onValueChange={value=>setDeferred(value==='async')}><option value="direct">本次操作直接返回文件</option><option value="async">先创建导出任务，再接收文件</option></Choice></Field></div>{deferred&&<AsyncExportFields value={exportMapping} onChange={setExportMapping} disabled={busy}/>}<p className="jj-small jj-muted">保存后准备所属资源的完整参照，再审阅读取范围。任务状态与实际文件分别核对。</p></section>:tables.length?<section className="jj-source-mapping"><h3>用哪项业务数据判断</h3>
                 <div className="jj-form-grid">{tables.length>1?<Field label="数据表"><Choice value={database} onValueChange={value=>{setDatabase(value);setColumn('')}}>{tables.map((item,index)=><option key={index} value={index}>{item.database_path} / {item.table}</option>)}</Choice></Field>:<dl className="jj-facts is-stacked" data-layout="columns"><div><dt>业务记录</dt><dd>{table?.database_path} / {table?.table}</dd></div></dl>}
                 <Field label="需要核对的业务字段"><Choice value={field} placeholder="选择实际结果对应的字段" disabled={!table} onValueChange={setColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field></div>
                 {(conditions?.tenant||conditions?.resource_state)&&<section className="jj-condition-source"><h3>核对规则的适用条件</h3><div className="jj-form-grid">

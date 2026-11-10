@@ -24,9 +24,9 @@ export function AgentHandoff({projectId,runId,caseId,targets=[],repair=false,onC
     const task=active?await collaborationApi.followup(projectId,active.task_id,goal,repair?'REPAIR':'UNDERSTAND',references,operation.current):await collaborationApi.create(projectId,goal,repair?'REPAIR':'UNDERSTAND',references,operation.current)
     onClose();go('/workspace?view=collaboration&task_id='+encodeURIComponent(task.task_id))
   }catch(value){setError(value)}finally{setBusy(false)}}
-  return <Dialog title={repair?'协作处理这项权限问题':'协作解读当前报告'} onClose={onClose} actions={<><Button onClick={onClose}>取消</Button><Button kind="primary" busy={busy} onClick={()=>void start()}>进入协作任务</Button></>}>
-    <p>{repair?'本次报告、原问题和正常功能要求会随任务保留。修改、运行和复验继续关联同一目标。':'任务会固定当前报告及所选记录，帮助你理解实际结果、证据缺口和下一步。'}</p>
-    <p className="jj-small jj-muted">进入后选择本地 Agent 或已连接开发工具；需要你的决定时，在同一任务中确认。</p>
+  return <Dialog title={repair?'协作处理这项权限问题':'协作解读当前报告'} onClose={onClose} actions={dismiss=><><Button onClick={dismiss}>取消</Button><Button kind="primary" busy={busy} onClick={()=>void start()}>进入协作任务</Button></>}>
+    <p>{repair?'交接当前问题、报告和正常功能要求，协助修改与复验。':'交接当前报告及所选记录，解读结果和证据缺口。'}</p>
+    <p className="jj-small jj-muted">下一步选择本地 Agent 或已连接的开发工具。</p>
     {Boolean(error)&&<ErrorNote error={error}/>}
   </Dialog>
 }

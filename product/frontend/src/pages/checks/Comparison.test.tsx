@@ -45,7 +45,7 @@ it('未覆盖的原问题保持证据不足，回到原报告仍携带准确比�
 it('手工深链接缺少准确记录时拒绝比较，不退回最近或全部记录',()=>{
  const value=props();value.route.query.delete('baseline')
  render(<Comparison {...value}/>)
- expect(screen.getByText('请选择用作参照和这次比较的准确记录，不会自动替换成最近记录。')).toBeVisible()
+ expect(screen.getByText('请选择参照记录和本次记录。此处会保留所选对象，不自动改用最近记录。')).toBeVisible()
  expect(comparisonApi.read).not.toHaveBeenCalled()
 })
 

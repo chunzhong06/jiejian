@@ -46,7 +46,7 @@ export default function App(){
       {projects.error&&<ErrorNote error={projects.error}/>}
       <PageSurface route={route.path+(route.query.size?'?'+route.query.toString():'')} transitionKey={key} view={current+(route.query.has('proposal_id')?'/review':route.query.get('view')==='plan'?'/plan':route.query.has('run_id')?'/result':'')}>
         <RouteBoundary key={key}>
-          {application.resolutionError?<ErrorNote error={application.resolutionError}/>:application.resolving?<PageSkeleton view={current}/>:<RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} environment={environment.data} onConnected={application.connected} onError={setError}/>}
+          {projects.error&&!project?<ErrorNote error={projects.error}/>:application.resolutionError?<ErrorNote error={application.resolutionError}/>:application.resolving?<PageSkeleton view={current}/>:<><div aria-live="polite">{workspace.error&&workspace.data&&<ErrorNote error={new Error('应用状态更新失败，当前显示上次读取的内容。可使用右上角刷新重试。')}/>}</div><RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} workspaceError={workspace.error} environment={environment.data} onConnected={application.connected} onError={setError}/></>}
         </RouteBoundary>
       </PageSurface>
     </AppShell>

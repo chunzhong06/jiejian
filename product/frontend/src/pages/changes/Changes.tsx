@@ -46,7 +46,7 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
         return <PageSkeleton view="/changes"/>;
     if (state.error)
         return <PageError title="源码修改" error={state.error}/>;
-    if(register)return <TaskSurface title="登记已完成的源码修改" context={repairRule?.title} onBack={()=>setRegister(false)} backLabel="返回源码修改">{ruleState.loading ? <Loading>正在读取可关联的权限</Loading> : ruleState.error ? <ErrorNote error={ruleState.error}/> : reference && (!contract || !repairRule) ? <Notice tone="caution">原问题不在当前有效规则中，请从权限规则重新选择修改范围。</Notice> : <ChangeRegistration projectId={projectId} options={changeTargetOptions(ruleState.data?.rules ?? [])} initialTargets={contract ? [{permission: repairRule!.permission, repair: repairReference(contract)}] : []} onClose={() => setRegister(false)} onError={onError} onSaved={id => { setRegister(false); state.reload(); refresh(); go(changePath(id)); }}/>}</TaskSurface>;
+    if(register)return <TaskSurface title="登记已完成的源码修改" context={repairRule?.title} onBack={()=>setRegister(false)} backLabel="返回源码修改">{ruleState.loading ? <Loading>正在读取可关联的权限</Loading> : ruleState.error ? <ErrorNote error={ruleState.error}/> : reference && (!contract || !repairRule) ? <Notice tone="caution">原问题不在当前有效规则中，请从权限规则重新选择修改范围。</Notice> : <ChangeRegistration embedded projectId={projectId} options={changeTargetOptions(ruleState.data?.rules ?? [])} initialTargets={contract ? [{permission: repairRule!.permission, repair: repairReference(contract)}] : []} onClose={() => setRegister(false)} onError={onError} onSaved={id => { setRegister(false); state.reload(); refresh(); go(changePath(id)); }}/>}</TaskSurface>;
     return <>
     {origin&&<div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin)} kind="quiet">{returnDestinationLabel(origin)}</ActionLink></div>}
     <Heading title="源码修改" actions={!register && Boolean(changes?.length) && <Button kind="primary" onClick={() => setRegister(true)}>登记本地修改</Button>}/>
@@ -71,7 +71,7 @@ export function Changes({ projectId, official, onError, refresh, route, workspac
         </div>}
       </article>;
             })}
-    </section> : !register && <Empty title="尚未登记源码修改" action={!register && <Button onClick={() => setRegister(true)} icon={<CodeOutlined aria-hidden="true"/>}>登记本地修改</Button>}>在开发工具中完成修改，再登记实际文件变化。随后核对运行代码和材料，检查修改是否解决了原问题。</Empty>}
+    </section> : !register && <Empty layout="section" title="尚未登记源码修改" action={!register && <Button kind="primary" onClick={() => setRegister(true)} icon={<CodeOutlined aria-hidden="true"/>}>登记本地修改</Button>}>完成当前应用的代码修改后，在这里登记文件差异，再核对运行版本并复验。</Empty>}
   </>;
 }
 function changeTitle(reason: string, official: boolean) {

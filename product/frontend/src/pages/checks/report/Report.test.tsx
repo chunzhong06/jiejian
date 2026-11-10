@@ -32,6 +32,7 @@ it('深入证据退出完整报告总览，返回同一业务事项并保留原�
   const value=story(),p={...props(value),selectedCaseId:'c1',tab:'trace',returnPath:'/issues?issue=original'};
   const view=render(<Report {...p}/>);
   expect(view.container.querySelector('.jj-report-hero')).not.toBeInTheDocument();
+  expect(screen.queryByRole('tab',{name:'业务结果'})).not.toBeInTheDocument();
   expect(screen.queryByRole('group',{name:'按检查结果筛选'})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'返回本项业务结果'}));
   const query=new URLSearchParams(location.hash.split('?')[1]);
@@ -69,8 +70,8 @@ it('归档状态归入报告信息，保留只读边界与两个明确返回入�
   expect(location.hash).toBe('#/archive?project_id=app')
 })
 
-it('展开依据后索引只保留定位信息，关闭后恢复完整摘要',()=>{
-  const value=story(),p=props(value)
+it('大量结果展开依据后索引只保留定位信息，关闭后恢复完整摘要',()=>{
+  const value=story();for(let i=0;i<4;i++)value.actions.push({...structuredClone(value.actions[0]),case_id:'extra-'+i,display_name:'其他操作'+i});const p=props(value)
   const view=render(<Report {...p}/>),results=()=>view.container.querySelector('.jj-report-results')!
   expect(results().querySelector('.jj-result-actual')).toBeInTheDocument()
   view.rerender(<Report {...p} selectedCaseId="c1"/>)
@@ -83,17 +84,16 @@ it('展开依据后索引只保留定位信息，关闭后恢复完整摘要',()
   expect(results().querySelector('.jj-result-actual')).toBeInTheDocument()
 })
 
-it('结果筛选保留对应检查项，空筛选可以返回全部结果',()=>{
-  const value=story(),safe=structuredClone(value.actions[0]);safe.case_id='safe';safe.judgement='检查结果符合已批准的权限要求';safe.display_name='正常下载'
-  value.actions.push(safe)
+it('结果筛选保留对应检查项，零项类别不占入口且可返回全部结果',()=>{
+  const value=story(),safe=structuredClone(value.actions[0]);safe.case_id='safe';safe.case_verdict='SAFE';safe.judgement='检查结果符合已批准的权限要求';safe.display_name='正常下载'
+  value.actions.push(safe);for(let i=0;i<3;i++)value.actions.push({...structuredClone(value.actions[0]),case_id:'other-'+i,display_name:'其他操作'+i});
   render(<Report {...props(value)}/>)
   const filters=screen.getByRole('group',{name:'按检查结果筛选'})
   fireEvent.click(within(filters).getByRole('button',{name:/^1 符合规则$/}))
   expect(screen.getByRole('button',{name:'查看成员正常下载的依据'})).toBeVisible()
   expect(screen.queryByRole('button',{name:'查看成员导出资料的依据'})).not.toBeInTheDocument()
-  fireEvent.click(within(filters).getByRole('button',{name:/证据不足/}))
-  expect(screen.getByText('本次没有这类结果')).toBeVisible()
-  fireEvent.click(screen.getByRole('button',{name:'查看全部结果'}))
+  expect(within(filters).queryByRole('button',{name:/证据不足/})).not.toBeInTheDocument()
+  fireEvent.click(within(filters).getByRole('button',{name:/全部结果/}))
   expect(screen.getByRole('button',{name:'查看成员导出资料的依据'})).toBeVisible()
 })
 
@@ -187,7 +187,7 @@ it('未知记录不退回第一条，也不读取不存在的片段',async()=>{
 })
 
 it('复验先比较修改前后，原始依据只在选中项中查阅；缺少对应场景不能显示已解决',()=>{
-  const value=story();value.verdict='PASS';value.actions[0].judgement='本次权限要求已得到验证';
+  const value=story();value.verdict='PASS';value.actions[0].case_verdict='SAFE';value.actions[0].judgement='本次权限要求已得到验证';
   value.repair_verification={repair_reference:'repair',source_run_id:'before',run_id:'r1',status:'VERIFIED',reason_codes:[]};
   value.repair_comparison=[{role:'DENY',source_case_id:'old',action_label:'导出资料',subject_label:'成员',resource_owner_label:'负责人',resource_id:'resource',effect_labels:['完整交付包'],before_verdict:'VULNERABLE',before_evidence_refs:['original'],after_case_id:'c1',match_status:'MATCHED'}];
   const p=props(value),view=render(<Report {...p}/>);
@@ -233,4 +233,13 @@ it('从比较进入报告后，打开依据仍保留准确比较记录及其上�
   expect(query.get('run_id')).toBe(value.run_id)
   expect(query.get('case_id')).toBe(value.actions[0].case_id)
   expect(query.get('return_to')).toBe(origin)
+})
+
+it('少量结果在原行展开依据，要求与观察只出现一次，深入记录仍保留原报告',()=>{
+ const value=story(),p=props(value),view=render(<Report {...p} selectedCaseId="c1"/>)
+ expect(screen.queryByRole('group',{name:'按检查结果筛选'})).not.toBeInTheDocument()
+ expect(screen.getAllByRole('heading',{name:'成员不得导出资料'})).toHaveLength(1)
+ expect(view.container.querySelector('.jj-result-entry .jj-evidence-inspector.is-inline')).toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button',{name:'操作经过'}))
+ expect(location.hash).toContain('case_id=c1');expect(location.hash).toContain('tab=trace')
 })

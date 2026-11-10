@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
@@ -91,11 +92,14 @@ def exclusive_file(path: Path):
         stream = path.open('a+b')
         acquired = try_lock_stream(stream)
         if not acquired:
-            raise OSError('busy')
-    except OSError:
+            raise BlockingIOError(errno.EAGAIN, 'busy')
+    except OSError as exc:
         if stream:
             stream.close()
-        raise JiejianError(ErrorCode.LOCAL_MAINTENANCE_FAILED, '运行环境正在准备或清理，请稍后重新扫描', details={'execution_started':False}) from None
+        busy = exc.errno in {errno.EAGAIN, errno.EWOULDBLOCK} or getattr(exc,'winerror',None) in {32,33}
+        reason = ('ENVIRONMENT_BUSY' if path.name == 'prepare.lock' else 'MAINTENANCE_BUSY') if busy else 'LOCK_UNAVAILABLE'
+        message = '运行环境正在准备或清理，请稍后重新扫描' if busy else '无法访问清理所需的锁文件，请检查运行目录的访问权限'
+        raise JiejianError(ErrorCode.LOCAL_MAINTENANCE_FAILED, message, details={'execution_started':False,'reason':reason}) from None
     try:
         yield
     finally:
@@ -189,6 +193,13 @@ class StartupAssets:
                 valid = False; continue
             other = Path(record['var_dir'])
             if not other.is_absolute():
+                valid = False; continue
+            try:
+                other.lstat()
+            except FileNotFoundError:
+                # 已移除实例的登记不再扩大未知范围；生存期锁仍独立保护实际使用的版本。
+                continue
+            except OSError:
                 valid = False; continue
             refs = source_references(other)
             if refs is None:

@@ -36,7 +36,8 @@ it('空选区保持选择状态且不构造预览',async()=>{
 it('同类缺口保留所属操作，处理入口携带返回检查的上下文',async()=>{
   render(<Plan {...props()}/>);
   const action=await screen.findByRole('region',{name:'当前准备事项'})
-  expect(screen.getAllByText('测试账号尚未就绪')).toHaveLength(3)
+  expect(within(action).getAllByText('测试账号尚未就绪')).toHaveLength(1)
+  expect(within(screen.getByRole('navigation',{name:'准备事项'})).getAllByRole('button')).toHaveLength(2)
   expect(workspaceApi.current).not.toHaveBeenCalled()
   const destination=within(action).getByRole('link',{name:'准备测试账号'}).getAttribute('href')!
   const query=new URLSearchParams(destination.split('?')[1])

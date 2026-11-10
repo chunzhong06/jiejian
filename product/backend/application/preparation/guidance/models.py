@@ -11,7 +11,7 @@ class PreparationNextAction(BoundaryModel):
     title: str = Field(min_length=1, max_length=256)
     reason: str = Field(min_length=1, max_length=1024)
     handler: Literal['USER', 'AGENT', 'EITHER', 'SYSTEM']
-    gui_url: str = Field(pattern=r'^#/(application|permissions|tests|changes|environment|history)(\?|$)', max_length=2048)
+    gui_url: str = Field(pattern=r'^#/(application|permissions|tests|changes|issues|environment|history)(\?|$)', max_length=2048)
     mcp_tool: Literal['jiejian_rule_context', 'jiejian_proof_source_save', 'jiejian_proof_preflight_start',
                       'jiejian_proof_preflight_status', 'jiejian_proof_adoption_preview',
                       'jiejian_check_preview', 'jiejian_change_registration_preview'] | None = None

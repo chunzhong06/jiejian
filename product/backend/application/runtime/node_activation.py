@@ -23,21 +23,24 @@ class NodeRuntimeActivation:
                 return self._resolve(work,previous)
             delivery=work.development.delivery(project_id,delivery_id)
             if delivery is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'本应用中未找到这批交付')
-            task=require_active_task_version(work,project_id,delivery.task_id,expected_version)
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'本应用中未找到这批交付').not_accepted()
+            try:
+                task=require_active_task_version(work,project_id,delivery.task_id,expected_version)
+            except JiejianError as error:
+                raise error.not_accepted() from error
             if work.development.deliveries(project_id,task.task_id,limit=1)[0]!=delivery or task.context_id!=delivery.context_id:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'只有当前任务的最新交付可以加载运行')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'只有当前任务的最新交付可以加载运行').not_accepted()
             snapshot=work.source_changes.snapshot(delivery.current_snapshot_id)
             previous_load=work.runtime_loads.latest(project_id)
             if snapshot is None or snapshot.project_id!=project_id or previous_load is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在“待测应用”中确认启动方式')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先在“待测应用”中确认启动方式').not_accepted()
             _,manifest=read_node_manifest(self.runtime.var_dir,previous_load)
             understanding=work.application_understanding.get(project_id)
             options=dict(build_script=manifest.package.build_script if manifest.package else None,
                 allow_install_scripts=bool(manifest.package and manifest.package.allow_install_scripts),sqlite=manifest.sqlite,databases=manifest.databases)
             preview=self.runtime.preview(project_id,entry=manifest.entry,port=manifest.port,revision=understanding.revision,**options)
             if preview.source_fingerprint!=snapshot.source_fingerprint:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,'本地源码与这批交付不一致，请先登记当前修改')
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'本地源码与这批交付不一致，请先登记当前修改').not_accepted()
             self.runtime.start(project_id,entry=preview.entry,port=preview.port,revision=preview.revision,
                 preview_fingerprint=preview.preview_fingerprint,operation_id=operation_id,consent_execute=True,work=work,**options)
             request=work.runtime_loads.operation(project_id,operation_id)

@@ -52,7 +52,8 @@ it('交代目标即可建立任务，结果未知时重试沿用原标识',async
   await waitFor(()=>expect(screen.getByRole('button',{name:'Agent 协作，开始任务'})).toBeEnabled())
   fireEvent.click(screen.getByRole('button',{name:'Agent 协作，开始任务'}))
   expect(await screen.findByRole('combobox',{name:'任务类型'})).toBeEnabled()
-  fireEvent.click(screen.getByRole('button',{name:'整理权限要求'}))
+  fireEvent.mouseDown(screen.getByRole('combobox',{name:'任务类型'}))
+  fireEvent.click(await screen.findByText('整理权限要求',{selector:'.ant-select-item-option-content'}))
   expect(screen.getByLabelText('希望 Agent 完成什么')).toHaveValue('根据当前应用的接口资料，整理业务操作与权限要求，提交待我确认的候选。')
   expect(identifiers).toHaveLength(0)
   fireEvent.change(screen.getByLabelText('希望 Agent 完成什么'),{target:{value:'检查工单访问权限'}})
@@ -65,7 +66,7 @@ it('交代目标即可建立任务，结果未知时重试沿用原标识',async
   expect(identifiers[0]).toBe(identifiers[1])
 })
 
-it.each([['WAITING_AGENT','待接续'],['WAITING_USER','待你确认']])('固定协作入口呈现%s，接续原任务并保留所属应用',async(state,status)=>{
+it.each([['WAITING_AGENT','待继续'],['WAITING_USER','待你确认']])('固定协作入口呈现%s，接续原任务并保留所属应用',async(state,status)=>{
   location.hash='/workspace?project_id=other';
   const fetch=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
     expect(String(input)).toBe('/api/projects/app/collaboration-active');
@@ -83,7 +84,7 @@ it.each([['WAITING_AGENT','待接续'],['WAITING_USER','待你确认']])('固定
 });
 
 
-it('等待接续时突出实际启动入口，打开确认前不调用本地模型',async()=>{
+it('等待继续时突出实际启动入口，打开确认前不调用本地模型',async()=>{
   let executionCalls=0;
   const task={task_id:'task',project_id:'app',goal:'继续核对原工单问题',purpose:'UNDERSTAND',state:'WAITING_AGENT',revision:1,updated_at_us:1,references:{},reviews:[],questions:[],events:[],execution:null,operations:[]};
   const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}));
@@ -122,7 +123,9 @@ it.each([['整理权限要求','RULES'],['补齐检查准备','SETUP'],['调查�
   }))
   render(<CollaborationEntry projectId="app" route="/permissions?candidate_id=chosen"/>)
   fireEvent.click(await screen.findByRole('button',{name:'Agent 协作，开始任务'}))
-  fireEvent.click(await screen.findByRole('button',{name:label}))
+  fireEvent.mouseDown(await screen.findByRole('combobox',{name:'任务类型'}))
+  fireEvent.click(await screen.findByText(label,{selector:'.ant-select-item-option-content'}))
+  fireEvent.change(screen.getByLabelText('希望 Agent 完成什么'),{target:{value:'核对当前业务的权限要求'}})
   fireEvent.click(screen.getByRole('button',{name:'建立协作任务'}))
   await waitFor(()=>expect(submitted).toBe(true))
 })
@@ -139,7 +142,7 @@ it('当前对象显式补充到原任务，创建和交接都不启动模型',as
   }))
   function Current(){useHandoffContext({projectId:'app',label:'当前订单',references:{action_id:'order',return_to:'/testing?action_id=order'}});return <button onClick={()=>requestCollaboration('app','SETUP','补全当前流程')}>请求协作</button>}
   render(<><CollaborationEntry projectId="app" route="/testing?action_id=order"/><Current/></>)
-  await screen.findByText('待接续')
+  await screen.findByText('待继续')
   fireEvent.click(screen.getByText('请求协作'))
   expect(await screen.findByText('当前订单')).toBeVisible()
   fireEvent.click(screen.getByRole('button',{name:'补充到原任务'}))
@@ -158,7 +161,7 @@ it('有建议选项时仍能补充自由回答，选择本身不提交',async()=
     return response(task)
   }))
   render(<Collaboration projectId="app" taskId="task"/>)
-  fireEvent.click(await screen.findByRole('button',{name:'同团队'}))
+  fireEvent.click(await screen.findByRole('radio',{name:'同团队'}))
   expect(answer).toBeUndefined()
   fireEvent.change(screen.getByLabelText('你的回答或补充说明'),{target:{value:'同团队，但归档后只能负责人修改'}})
   fireEvent.click(screen.getByRole('button',{name:'提交回答并继续'}))
@@ -230,4 +233,28 @@ it('产物链接与成功回执不相符时不读取任意流程',()=>{
   expect(screen.getByRole('link',{name:'审阅产物'})).toBeVisible()
   expect(fetch).not.toHaveBeenCalled()
   expect(screen.queryByRole('region',{name:'流程结构对照'})).not.toBeInTheDocument()
+})
+
+it('不预选建议，暂不确定留在原任务查证，来源链接保留准确修订',async()=>{
+ const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+ const task={task_id:'task',project_id:'app',goal:'准备结果证明',purpose:'SETUP',state:'WAITING_USER',revision:1,references:{return_to:'/preparation?proof_sources=1&configure=new'},editor:{kind:'PROOF',basis_id:'basis',action_id:'read',effect_id:'note',resource_binding_id:null,table:'orders',collection:null,protected_column:'note',tenant_column:null,state_column:null},operations:[],events:[],questions:[{question_id:'question',question:'订单备注使用哪个字段？',options:['note','remark'],answer:null}],execution:null}
+ const writes:Array<{path:string;answer:string}>=[]
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const path=String(input)
+  if(init?.method==='POST'){writes.push({path,answer:JSON.parse(String(init.body)).answer});return response({})}
+  if(path.includes('executor'))return response({available:false})
+  if(path.endsWith('/activity'))return response([])
+  if(path.includes('proof-preparation'))return response({project_id:'app',basis_id:'basis',actions:[{action_id:'read',revision:1,label:'查看订单备注',effects:[{effect_id:'note',label:'订单备注可读',kind:'DATA_DISCLOSURE'}]}],sources:[{source_id:'source',revision:4,adopted:false,config:{action_id:'read',action_revision:1,effect_id:'note',resource_binding_id:null,table:'orders',protected_column:'note'}}]})
+  return response(task)
+ }))
+ render(<Collaboration projectId="app" taskId="task"/>)
+ const choice=await screen.findByRole('radio',{name:'note'})
+ expect(choice).not.toBeChecked();expect(writes).toHaveLength(0)
+ const source=await screen.findByRole('link',{name:/核对这份来源/});expect(source).toHaveAttribute('href',expect.stringContaining('revision=4'))
+ fireEvent.click(screen.getByRole('radio',{name:/暂不确定/}))
+ expect(screen.getByRole('heading',{level:1,name:task.questions[0].question})).toBeVisible()
+ expect(screen.getByText(/条件不足时，Agent 会说明需要补充的信息并等待处理/)).toBeVisible()
+ fireEvent.click(screen.getByRole('button',{name:'提交回答并继续'}))
+ await waitFor(()=>expect(writes).toHaveLength(1))
+ expect(writes[0].path).toContain('/task/questions/question');expect(writes[0].answer).toContain('当前任务已有授权范围内继续查证')
 })

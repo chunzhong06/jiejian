@@ -50,7 +50,13 @@ async def validation_error_handler(
         logging.getLogger("jiejian.interfaces.http.errors").error('Internal record validation trace=%s details=%s', request.state.trace_id, details)
         error = JiejianError(ErrorCode.STORAGE_STATE, '界鉴内部记录校验失败，请保留现有要求与材料，并提供本次记录编号', details=details)
         return JSONResponse(status_code=500, content={'schema_version':'1','error':error.to_dict(),'trace_id':request.state.trace_id})
-    error = JiejianError(ErrorCode.INPUT_INVALID, "请求参数无效")
+    fields = {'name', 'operation_id', 'expected_plan_fingerprint', 'expected_version', 'expected_revision', 'plan_hash'}
+    reasons = {'missing':'REQUIRED', 'string_too_long':'TOO_LONG', 'string_too_short':'TOO_SHORT'}
+    # 只提取公开模型的字段名和稳定原因；input、ctx及任意用户键不进入错误响应。
+    field_errors = [{'field':item['loc'][1], 'reason':reasons.get(item['type'], 'INVALID')}
+        for item in exc.errors()[:16] if len(item['loc']) == 2 and item['loc'][0] == 'body' and item['loc'][1] in fields]
+    error = JiejianError(ErrorCode.INPUT_INVALID, "请求参数无效",
+        details={'request_outcome':'NOT_ACCEPTED', 'field_errors':field_errors})
     return JSONResponse(
         status_code=422,
         content={

@@ -4,8 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.application.preparation.guidance.service import PreparationGuidanceService, _source_advice, _preparation_progress
+from product.backend.application.preparation.guidance.service import PreparationGuidanceService, _source_advice, _preparation_progress, _workspace_action
 from product.backend.application.workspace.models import PrimaryTaskView
+from product.backend.domain.checks.repair import CurrentRepairReference
 
 
 def source_context():
@@ -24,6 +25,22 @@ def task(kind='COMPLETE_EFFECT_EVIDENCE'):
         user_responsibility='核对业务事实', system_will_do='读取当前情况', route='/tests',
         can_execute=True, stale_fingerprint='a'*64, business_action_id='action-one',
         action_revision=3, effect_id='effect-one')
+
+
+@pytest.mark.parametrize('kind', ['PREPARE_AGENT_REPAIR', 'VERIFY_REPAIR'])
+def test_repair_guidance_returns_to_the_original_issue(kind):
+    from urllib.parse import parse_qs, urlsplit
+
+    reference = CurrentRepairReference(source_run_id='run_original', source_case_id='case_original',
+                                       repair_fingerprint='b'*64)
+    current = task(kind).model_copy(update={'route': '/issues', 'repair': reference,
+                                           'repair_fingerprint': reference.repair_fingerprint})
+    result = _workspace_action('app_guidance', current)
+    target = urlsplit(result.gui_url[1:])
+    assert target.path == '/issues'
+    assert parse_qs(target.query) == {'project_id': ['app_guidance'], 'repair_reference': ['b'*64],
+        'source_run_id': ['run_original'], 'source_case_id': ['case_original'], 'section': ['repair']}
+    assert result.handler == 'USER' and result.mcp_tool is None
 
 
 @pytest.mark.parametrize('updates,expected,handler,level', [

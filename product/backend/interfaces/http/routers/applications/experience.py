@@ -78,6 +78,11 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
             context.official_experience.prepare().model_dump(mode="json")
         )
 
+    @router.get("/api/experience/official-sample/boundary-draft", response_model=ApiResponse)
+    def official_boundary_draft(exhibition_download: bool = True):
+        options={} if context.official_samples.installation.runtime_kind=='PYTHON' else {'exhibition_download':exhibition_download}
+        return data_response(context.official_experience.boundary_draft(**options).model_dump(mode="json"))
+
     @router.post("/api/experience/official-sample/boundary-proposal", response_model=ApiResponse)
     def official_boundary_proposal(body: OfficialBoundaryChoice | None = None):
         options={} if context.official_samples.installation.runtime_kind=='PYTHON' else {'exhibition_download':None if body is None else body.exhibition_download}

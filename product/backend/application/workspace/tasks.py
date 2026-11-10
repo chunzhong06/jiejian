@@ -27,7 +27,7 @@ def boundary_task(
         return task_view(
             "AUTHORIZE_SOURCE_ANALYSIS",
             title="授权只读源码分析",
-            why_now="界鉴需要从当前源码整理可供你审阅的业务主体和动作线索。",
+            why_now="从源码中查找角色和业务操作，结果由你审阅。",
             user_responsibility="明确授权界鉴只读分析当前应用源码。",
             system_will_do="界鉴只形成候选线索，不会把候选自动当成业务权限。",
             route="/application",
@@ -48,9 +48,9 @@ def boundary_task(
         return task_view(
             "REVIEW_BOUNDARY_PROPOSAL",
             title="审阅待确认的业务边界",
-            why_now="已有一份不可变提案等待你的明确决定。",
+            why_now="有一份权限变更提案等待审阅。",
             user_responsibility="核对业务主体、动作、结果和权限变化，并确认或放弃提案。",
-            system_will_do="只有你明确批准后，界鉴才会写入新的正式事实。",
+            system_will_do="你批准后，新权限规则才会生效。",
             route="/permissions",
             facts={
                 "proposal_id": proposal.proposal_id,
@@ -82,7 +82,7 @@ def boundary_task(
             return task_view(
                 "REVIEW_APPLICATION_CANDIDATES", title="审阅识别到的业务信息",
                 why_now="源码分析已完成，候选尚未由你审阅。",
-                user_responsibility="确认、排除或保留待审的权限组和业务动作。",
+                user_responsibility="确认、排除或保留待审的权限组和业务操作。",
                 system_will_do="保存角色和动作后，由 Agent 协助整理权限候选，再由你审阅批准。",
                 route="/application", facts={"understanding_revision": understanding.revision},
             )
@@ -126,8 +126,8 @@ def boundary_task(
             business_action_id=permission_review.action_id,
             title=f"重新确认“{permission_review.display_name}”的权限关系",
             why_now="已有权限的业务版本或资源关系需要复核，历史规则仍完整保留。",
-            user_responsibility="确认操作人、资源所有者及其关系是否适用于当前业务动作。",
-            system_will_do="你确认后，界鉴才写新的 Permission revision；旧规则继续保留用于历史追溯。",
+            user_responsibility="确认操作人、资源所有者及其关系是否适用于当前业务操作。",
+            system_will_do="你确认后，界鉴会保存新的权限修订；旧规则保留在历史记录中。",
             route="/permissions",
             facts={
                 "action_id": permission_review.action_id,
@@ -144,8 +144,8 @@ def boundary_task(
             "COMPLETE_ALLOW_CONTROL", business_action_id=allow_missing.action_id,
             title=f"补充“{allow_missing.display_name}”的正常允许权限",
             why_now="准备拒绝权限的真实测试前，需要明确谁在什么资源关系下应当被允许。",
-            user_responsibility="在业务边界中补充覆盖受保护业务结果的 ALLOW 权限并审阅批准。",
-            system_will_do="界鉴据此编译对照身份与测试材料，不会替你猜测允许权限。",
+            user_responsibility="补充允许这项业务结果发生的访问规则，并审阅批准。",
+            system_will_do="界鉴会按已确认的允许规则准备正常对照的账号和材料。",
             route="/permissions",
             facts={"action_id": allow_missing.action_id, "action_revision": allow_missing.revision,
                    "permissions": [item.model_dump(mode="json") for item in boundary.permission_intents
@@ -168,9 +168,9 @@ def boundary_task(
             "REVIEW_ACTOR_IMPLEMENTATION",
             business_actor_id=actor.actor_id,
             title=f"重新确认“{actor.display_name}”的代码实现",
-            why_now="原来确认的源码证据已经变化，但业务主体和权限规则仍然保持有效。",
+            why_now="角色对应的源码位置有变化，需要重新核对。",
             user_responsibility="确认当前源码中的哪项实现仍然代表这个业务主体。",
-            system_will_do="界鉴只更新实现映射，不修改业务主体 revision 或权限规则。",
+            system_will_do="界鉴只更新角色与代码的对应关系，保留角色定义和权限规则。",
             route="/permissions",
             facts=actor_issue.model_dump(mode="json"),
         )
@@ -193,9 +193,9 @@ def boundary_task(
             "REVIEW_ACTION_IMPLEMENTATION",
             business_action_id=action.action_id,
             title=f"重新确认“{action.display_name}”的代码实现",
-            why_now="原来确认的源码证据已经变化，但业务动作和权限规则仍然保持有效。",
-            user_responsibility="确认当前源码中的哪项实现仍然代表这项业务动作。",
-            system_will_do="界鉴只更新实现映射，不修改业务动作 revision、权限规则或权限考题。",
+            why_now="操作对应的源码位置有变化，需要重新核对。",
+            user_responsibility="确认当前源码中的哪项实现仍然代表这项业务操作。",
+            system_will_do="界鉴只更新操作与代码的对应关系，保留操作定义、权限规则和检查要求。",
             route="/permissions",
             facts=action_issue.model_dump(mode="json"),
         )
@@ -220,9 +220,9 @@ def allow_control_task(preparation):
     if selection is not None:
         return task_view(
             "SELECT_ALLOW_CONTROL", business_action_id=selection.action_id,
-            action_revision=selection.action_revision, title="选择合法对照",
-            why_now="这条权限有多个同等合适的合法对照。",
-            user_responsibility="选择用于比较的合法操作。",
+            action_revision=selection.action_revision, title="选择正常业务对照",
+            why_now="这项检查有多个符合要求的正常业务对照。",
+            user_responsibility="选择用于对照的正常操作。",
             system_will_do="界鉴将使用同一资源和业务结果进行比较。",
             route="/tests", facts=selection.model_dump(mode="json"),
         )
@@ -230,10 +230,10 @@ def allow_control_task(preparation):
 
 
 PREPARATION_TEXTS = {
-    "PREPARE_TEST_IDENTITY": ("准备真实测试账号", "当前权限需要独立的真实账号。", "为指定业务主体创建账号记录，并在独立浏览器中登录。", "界鉴只安全保存当前目标所需的登录状态。"),
-    "DEMONSTRATE_ACTION": ("演示一次业务动作", "当前动作还缺少可复用的业务演示。", "使用指定的正常账号完成一次业务操作。", "界鉴从实际操作中整理执行步骤与资源位置。"),
+    "PREPARE_TEST_IDENTITY": ("准备真实测试账号", "检查需要可登录应用的测试账号。", "为指定业务主体创建账号记录，并在独立浏览器中登录。", "界鉴只安全保存当前目标所需的登录状态。"),
+    "DEMONSTRATE_ACTION": ("演示一次业务操作", "尚未准备可重复执行的操作。", "使用指定的正常账号完成一次业务操作。", "界鉴从实际操作中整理执行步骤与资源位置。"),
     "PREPARE_ACTION_RESOURCE": ("准备具体测试资源", "当前权限仍缺少指定账号拥有的资源。", "使用指定账号演示一次对指定资源的操作。", "界鉴保留各账号各自的资源材料。"),
-    "COMPLETE_EFFECT_EVIDENCE": ("演示如何确认业务结果", "当前业务结果还缺少可观察的证明。", "演示平时在哪里确认这项业务结果。", "界鉴只关联已经确认的业务结果，不生成新请求。"),
+    "COMPLETE_EFFECT_EVIDENCE": ("演示如何确认业务结果", "尚未配置如何核对实际业务结果。", "演示平时在哪里确认这项业务结果。", "界鉴只关联已经确认的业务结果，不生成新请求。"),
     "COMPLETE_RECOVERY": ("演示如何恢复业务状态", "这项业务操作需要明确的恢复方式。", "演示如何恢复本次操作改变的状态。", "界鉴保存恢复材料，不运行正式安全检查。"),
 }
 
@@ -289,7 +289,7 @@ class PreparationTaskSelection:
     def resume_recording(self, recording):
         slots = self.slots
         pending = recording.state is RecordingState.PENDING_REVIEW
-        text = ("确认业务演示", "已有业务演示等待确认。", "核对业务动作、资源和结果证明。", "界鉴只保存你确认的演示材料。") if pending else (
+        text = ("确认业务演示", "已有业务演示等待确认。", "核对业务操作、资源和结果证明。", "界鉴只保存你确认的演示材料。") if pending else (
             "继续业务演示", "已有业务演示正在进行。", "回到当前演示窗口完成采集。", "界鉴继续跟踪这次演示，不重复创建任务。")
         self.add(0, "REVIEW_RECORDING", text=text,
             slot=next(item for item in slots if item.test_identity_id == recording.subject_test_identity_id),
@@ -303,8 +303,8 @@ class PreparationTaskSelection:
     def prepare_missing(self):
         action, boundary, slots, slots_by_id = self.action, self.boundary, self.slots, self.slots_by_id
         if any(code.startswith('REFERENCE_') for code in action.reason_codes):
-            self.add(0,'COMPLETE_RECOVERY',text=('核对取样后的恢复','这份测试资源还有未收口的取样。',
-                '查看原取样并核对资源恢复。','界鉴核对原起点，不重新发送取样操作。'))
+            self.add(0,'COMPLETE_RECOVERY',text=('核对取样后的恢复','这份测试资源的参照采集尚未结束，需要核对恢复记录。',
+                '查看原采集记录，确认测试资源是否已恢复。','界鉴会查询原采集记录，不重复发送采集请求。'))
             return
         for slot in slots:
             if slot.status is not PreparationStatus.SATISFIED:
@@ -360,10 +360,11 @@ def current_check_task(task, drifted, latest_result, preview_can_execute=None):
         title,why,responsibility = CURRENT_TASK_TEXT[kind]
         change_id = task.change_id if kind=="VERIFY_REPAIR" else None
         run_id = latest_result.run_id if kind=="VIEW_CURRENT_RESULT" else None
-        repair_fingerprint = task.contract.repair_fingerprint if kind=="PREPARE_AGENT_REPAIR" else None
+        repair = task.contract.reference() if kind in {"PREPARE_AGENT_REPAIR", "VERIFY_REPAIR"} else None
+        repair_fingerprint = None if repair is None else repair.repair_fingerprint
         return task_view(kind,title=title,why_now=why,user_responsibility=responsibility,
-            system_will_do=why,route="/changes" if kind in {"REGISTER_SOURCE_CHANGE", "PREPARE_AGENT_REPAIR"} else "/tests",
-            change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint,
+            system_will_do=why,route="/issues" if repair is not None else "/changes" if kind=="REGISTER_SOURCE_CHANGE" else "/tests",
+            change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint,repair=None if repair is None else repair.model_dump(mode='json'),
             facts=dict(change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint))
     return None
 

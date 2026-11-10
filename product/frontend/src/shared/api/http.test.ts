@@ -3,6 +3,22 @@ import {request,ApiError} from './http'
 
 const response=(data:unknown,status=200)=>new Response(JSON.stringify({schema_version:'1',data}),{status})
 
+it('接纳结果和字段原因只消费白名单；缺失或非法状态保持未知',async()=>{
+ const error=new ApiError('INPUT_INVALID','输入错误',undefined,undefined,false,undefined,'NOT_ACCEPTED',[
+  {field:'name',reason:'TOO_LONG',input:'not-public'}, {field:'password',reason:'INVALID'}, {field:'name',reason:'raw-private-reason'}])
+ expect(error.requestOutcome).toBe('NOT_ACCEPTED')
+ expect(error.fieldErrors).toEqual([{field:'name',reason:'TOO_LONG'}])
+ expect(new ApiError('INPUT_INVALID','输入错误').requestOutcome).toBe('UNKNOWN')
+ expect(new ApiError('INPUT_INVALID','输入错误',undefined,undefined,false,undefined,'SUCCEEDED').requestOutcome).toBe('UNKNOWN')
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({schema_version:'1',error:{code:'INPUT_INVALID',message:'名称过长',details:{request_outcome:'NOT_ACCEPTED',field_errors:[{field:'name',reason:'TOO_LONG'}]}}}),{status:422})))
+ try{await expect(request('/api/applications',{method:'POST'})).rejects.toMatchObject({requestOutcome:'NOT_ACCEPTED',fieldErrors:[{field:'name',reason:'TOO_LONG'}]})}finally{vi.unstubAllGlobals()}
+})
+
+it('只传递有界公开原因码与执行门禁，支持未开始操作的就地恢复',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({schema_version:'1',error:{code:'LOCAL_MAINTENANCE_FAILED',message:'正在准备',details:{execution_started:false,reason:'ENVIRONMENT_BUSY',private:'ignored'}}}),{status:409})))
+ try{await expect(request('/api/system/maintenance/clear-all',{method:'POST'})).rejects.toMatchObject({executionStarted:false,reason:'ENVIRONMENT_BUSY'});expect(new ApiError('code','message',undefined,undefined,false,'bad reason').reason).toBeUndefined()}finally{vi.unstubAllGlobals()}
+})
+
 it('同一读取的订阅者独立取消，最后一个离开才取消网络请求',async()=>{
   let finish!:(value:Response)=>void
   const pending=new Promise<Response>(resolve=>{finish=resolve})

@@ -12,10 +12,10 @@ export const flowDraftKey=(project:string,action:string)=>'flow:'+project+':'+ac
 
 export function FlowCandidateReview({candidate,previous,accounts,onApply,onKeep}:{candidate:OperationFlow;previous?:FlowEditorDraft;accounts:{identity_id:string;label:string}[];onApply:(preserveValues:boolean)=>void;onKeep:()=>void}){
   const [preserve,setPreserve]=useState(true)
-  return <Dialog title={'审阅流程候选 · 第 '+candidate.revision+' 修订'} onClose={onKeep} actions={<><Button onClick={onKeep}>保留当前草稿</Button><Button kind="primary" onClick={()=>onApply(preserve)}>带入候选继续核对</Button></>}>
-    <p>比较 Agent 保存的准确修订。带入后可以继续编辑，尚未用于正式检查。</p>
+  return <Dialog title={'审阅流程候选 · 第 '+candidate.revision+' 修订'} onClose={onKeep} actions={dismiss=><><Button onClick={dismiss}>保留当前草稿</Button><Button kind="primary" onClick={()=>onApply(preserve)}>带入候选继续核对</Button></>}>
+    <p>与当前内容比较后，可将候选带入编辑器。</p>
     <FlowComparison candidate={candidate} previous={previous} accounts={accounts}/>
-    {previous&&<label className="jj-checkbox"><input type="checkbox" checked={preserve} onChange={event=>setPreserve(event.target.checked)}/><span>沿用同一步骤中同名参数的已填写值<small>这些值没有交接给 Agent。参数位置和来源一致时保留；结构变化请在编辑器中核对。</small></span></label>}
+    {previous&&<label className="jj-checkbox"><input type="checkbox" checked={preserve} onChange={event=>setPreserve(event.target.checked)}/><span>沿用同一步骤中同名参数的已填写值<small>参数原值未发送给 Agent。位置和来源一致的参数可沿用已填写值；结构变化的部分请在编辑器中核对。</small></span></label>}
   </Dialog>
 }
 
@@ -45,8 +45,8 @@ export function FlowComparison({candidate,previous,accounts,baselineLabel='当�
   const changed=rows.filter(([,before,after])=>before!==after)
   const visible=previous&&mode==='changed'?changed:rows
   return <section className="jj-flow-comparison" aria-label="流程结构对照">
-    <header><p className="jj-small jj-muted">{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'没有可读取的比较基准，以下展示候选内容。'}</p>{previous&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
-    {visible.length?<div className="jj-flow-candidate-diff"><table className="jj-comparison-data"><thead><tr><th>内容</th><th>{baselineLabel}</th><th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead><tbody>{visible.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th><td>{previous?before:'没有交接基准'}</td><td>{after}</td></tr>)}</tbody></table></div>:<p className="jj-flow-comparison-unchanged">这几项流程结构一致。固定值及其他配置仍需在流程中核对。</p>}
-    <p className="jj-small jj-muted">这里对照请求、账号、资源与恢复结构；固定值和请求正文不在此展示。带入、保存和用于检查是分别确认的操作。</p>
+    <header><p className="jj-small jj-muted">{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'没有可读取的比较基准，以下展示候选内容。'}</p>{previous&&changed.length>0&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
+    {visible.length?<div className="jj-flow-candidate-diff"><table className="jj-comparison-data"><thead><tr><th>内容</th>{previous&&<th>{baselineLabel}</th>}<th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead><tbody>{visible.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th>{previous&&<td>{before}</td>}<td>{after}</td></tr>)}</tbody></table></div>:<p className="jj-flow-comparison-unchanged">流程结构没有变化。</p>}
+    <p className="jj-small jj-muted">此处只比较结构。固定值和请求正文请在编辑器中核对；带入后仍需保存并确认使用。</p>
   </section>
 }

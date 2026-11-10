@@ -1,9 +1,10 @@
+import {PendingRecovery} from '../../../shared/ui/PendingRecovery'
+import {IndexSelection} from '../../../shared/ui/IndexSelection'
 import {useEffect,useRef,useState} from 'react'
 import {flowTrialsApi as api,type FlowTrial,type TrialPreview,type TrialSelection} from '../api/flowTrials'
 import type {OperationFlow} from '../api/operationFlows'
-import {ApiError} from '../../../shared/api/http'
 import {useRead} from '../../../shared/lib/useRead'
-import {operationId,readPending,savePending} from '../../../shared/lib/operations'
+import {operationId,readPending,savePending,notAccepted,isOperationId} from '../../../shared/lib/operations'
 import {Button} from '../../../shared/ui/actions'
 import {Field,ObjectIdentity} from '../../../shared/ui/layout'
 import {Choice} from '../../../shared/ui/Choice'
@@ -18,7 +19,7 @@ const recoveryLabels={NOT_REQUIRED:'本场景无需恢复',NOT_ATTEMPTED:'尚未
 
 export function FlowTrialPanel({projectId,flow,accounts,onResume,initialTrialId,onInteractionChange,initialSelection,mode,showHeading=true,onViewChange}:{projectId:string;flow:OperationFlow;accounts:Array<{identity_id:string;label:string}>;onResume?:(flow:OperationFlow)=>void;initialTrialId?:string;onInteractionChange?:(active:boolean)=>void;initialSelection?:TrialSelection;mode?:'current'|'history';showHeading?:boolean;onViewChange?:(view:'current'|'history')=>void}){
   const key='jiejian.flow-trial:'+projectId+':'+flow.id
-  const [pending,setPending]=useState(()=>readPending<string>(key))
+  const [pending,setPending]=useState(()=>readPending<string>(key,isOperationId))
   const [subject,setSubject]=useState(initialSelection?.subject_identity_id??flow.subject_test_identity_id),[owner,setOwner]=useState(initialSelection?.resource_owner_identity_id??flow.resource_owner_test_identity_id),[resource,setResource]=useState(initialSelection?.resource_id??flow.actual_resource_id)
   const [adjusting,setAdjusting]=useState(false),[preview,setPreview]=useState<TrialPreview>(),[restore,setRestore]=useState<FlowTrial>(),[selected,setSelected]=useState<string|undefined>(initialTrialId)
   const [view,setView]=useState(mode??(initialTrialId?'history':'current'))
@@ -50,7 +51,7 @@ export function FlowTrialPanel({projectId,flow,accounts,onResume,initialTrialId,
     {flow_id:flow.id,revision:flow.revision,subject_identity_id:subject,resource_owner_identity_id:owner,resource_id:resource}
   const label=(id:string)=>accounts.find(item=>item.identity_id===id)?.label??'原测试账号'
   return <section className="jj-flow-trial" aria-labelledby={showHeading?"flow-trial-heading":undefined} aria-label={showHeading?undefined:"试运行反馈"}>
-    {showHeading&&<header><div className="jj-flow-trial-heading"><div className="jj-object-line"><h2 id="flow-trial-heading">试运行操作</h2><Badge>第 {flow.revision} 修订</Badge></div></div><p>观察实际请求与执行反馈。权限结论由正式检查给出。</p></header>}
+    <PendingRecovery storageKey={key} projectId={projectId} destination={'/testing?action_id='+flow.business_action_id} label="查看本操作的流程"/>{showHeading&&<header><div className="jj-flow-trial-heading"><div className="jj-object-line"><h2 id="flow-trial-heading">试运行操作</h2><Badge>第 {flow.revision} 修订</Badge></div></div><p>观察实际请求与执行反馈。权限结论由正式检查给出。</p></header>}
     {(error||history.error)&&<ErrorNote error={error??history.error}/>}
     {unresolved&&<Notice tone="caution">这次提交的结果还未确认，正在继续查询。本次操作不会重复执行。<Button kind="quiet" onClick={history.reload}>查询原操作</Button></Notice>}
     {!preview&&<div className="jj-task-actions">{view==='current'?<Button kind="quiet" onClick={()=>setView('history')}>查看试运行记录{items.length?' · '+items.length:''}</Button>:<Button kind="quiet" disabled={interacting} onClick={()=>setView('current')}>准备新的试运行</Button>}</div>}
@@ -69,13 +70,13 @@ export function FlowTrialPanel({projectId,flow,accounts,onResume,initialTrialId,
       <h3>{preview.plan.mode==='RESTORE'?'仅执行恢复请求':'确认本次执行范围'}</h3>
       <dl className="jj-facts jj-flow-trial-scope" data-layout="columns"><div><dt>目标地址</dt><dd>{preview.plan.runtime.target.base_url}</dd></div><div><dt>操作账号</dt><dd>{label(preview.plan.case.subject_test_identity_id)}</dd></div><div><dt>资源</dt><dd>{preview.plan.case.resource_id}<small>所有者：{label(preview.plan.case.resource_owner_test_identity_id)}</small></dd></div><div><dt>请求预算</dt><dd>最多 {preview.plan.runtime.budget.max_requests} 次，{Math.ceil(preview.plan.runtime.budget.max_duration_us/1e6)} 秒</dd></div></dl>
       <ol className="jj-flow-trial-requests">{preview.plan.mode==='TRIAL'&&preview.plan.flow.workflow.steps.map(step=><li key={step.id}><Badge>{step.purpose==='TARGET'?'受检操作':'准备'}</Badge><code>{step.request_template.method} {step.request_template.path}</code></li>)}{preview.plan.state_changing&&preview.plan.flow.recovery&&<li><Badge>恢复</Badge><code>{preview.plan.flow.recovery.method} {preview.plan.flow.recovery.relative_path}</code></li>}</ol>
-      <p className="jj-small jj-muted">执行前会核对真实主体。恢复反馈只说明请求结果；本次不会采用场景或改变权限规则。</p>
+      <p className="jj-small jj-muted">执行前会核验实际账号。恢复反馈记录请求的执行情况；试运行不会将流程用于检查或修改权限规则。</p>
       <div className="jj-inline-actions"><Button disabled={busy} onClick={()=>setPreview(undefined)}>返回调整</Button><Button kind="primary" busy={busy} disabled={Boolean(pending)} onClick={()=>void act(async()=>{
         const operation=operationId();savePending(key,operation);setPending(operation)
         let result:FlowTrial
         try{result=await api.start(projectId,selection,preview,operation)}catch(error){
           // 明确的输入/前置条件拒绝可重新预览；传输未知时只查询原operation。
-          if(error instanceof ApiError&&['INPUT_INVALID','STATE_PRECONDITION','TEST_IDENTITY_NOT_READY','JOB_REQUEST_CONFLICT'].includes(error.code)){
+          if(notAccepted(error,Boolean(pending))){
             savePending(key,undefined);setPending(undefined);setPreview(undefined)
           }
           history.reload();throw error
@@ -83,21 +84,22 @@ export function FlowTrialPanel({projectId,flow,accounts,onResume,initialTrialId,
         savePending(key,undefined);setPending(undefined);setSelected(result.request.trial_id);setView('history');setPreview(undefined);setRestore(undefined);history.reload()
       })}>{preview.plan.mode==='RESTORE'?'确认执行恢复请求':'确认执行一次'}</Button></div>
     </section>}
-    {!preview&&view==='history'&&(items.length>0?<section className="jj-flow-trial-history">
+    {!preview&&view==='history'&&(items.length>0?<section className="jj-flow-trial-history" data-multiple={items.length>1||undefined}>
+      {items.length>1&&<IndexSelection as="nav" className="jj-flow-trial-records" identity={current?.request.trial_id??''} label="试运行记录">{items.map(item=><button type="button" className="jj-index-item" key={item.request.trial_id} aria-current={current?.request.trial_id===item.request.trial_id?'true':undefined} onClick={()=>setSelected(item.request.trial_id)}><ObjectIdentity name={<strong>第 {item.request.plan.flow.revision} 修订 · {item.request.plan.mode==='RESTORE'?'恢复':'试运行'}</strong>} status={<Status tone={active(item)?'accent':'neutral'}>{states[item.state]}</Status>}/><time>{new Date(item.request.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</time></button>)}</IndexSelection>}
       {items.length>1&&<div className="jj-flow-trial-record-picker"><Field label="选择试运行记录"><Choice value={current?.request.trial_id??''} onValueChange={setSelected}>{items.map(item=><option key={item.request.trial_id} value={item.request.trial_id}>第 {item.request.plan.flow.revision} 修订 · {item.request.plan.mode==='RESTORE'?'恢复':'试运行'} · {new Date(item.request.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</option>)}</Choice></Field></div>}
-      {selected&&!current&&!history.loading&&<Notice tone="caution">未找到指定的试运行记录，当前没有改为显示其他记录。<Button kind="quiet" onClick={()=>setSelected(undefined)}>重新选择记录</Button></Notice>}
+      {selected&&!current&&!history.loading&&<Notice tone="caution">未找到指定的试运行记录，请重新选择一条记录。<Button kind="quiet" onClick={()=>setSelected(undefined)}>重新选择记录</Button></Notice>}
       {current&&<div className="jj-flow-trial-result" aria-live="polite"><header>{items.length===1&&<p className="jj-small jj-muted">第 {current.request.plan.flow.revision} 修订 · {current.request.plan.mode==='RESTORE'?'恢复请求':'试运行'} · <time>{new Date(current.request.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</time></p>}<div className="jj-object-line"><h3>{label(current.request.plan.case.subject_test_identity_id)} · {current.request.plan.case.resource_id}</h3><Badge tone={active(current)?'accent':'neutral'}>{states[current.state]}</Badge></div></header>
         <details><summary>查看本次提交的执行步骤</summary><ol className="jj-flow-trial-requests">{current.request.plan.flow.workflow.steps.map(step=><li key={step.id}><Badge>{step.purpose==='TARGET'?'受检操作':'准备'}</Badge><code>{step.request_template.method} {step.request_template.path}</code></li>)}</ol></details>
-        {current.report?<><div className="jj-flow-trial-feedback"><section><h3>执行条件核对</h3><ResultList label="执行条件核对" items={[{label:"实际账号与计划",status:<Badge tone={current.report.identity_status==='MATCH'?'positive':'caution'}>{{MATCH:'一致',MISMATCH:'不一致',UNKNOWN:'尚未确认'}[current.report.identity_status]}</Badge>},{label:"恢复请求",status:<Badge tone={current.report.recovery==='NOT_REQUIRED'?'neutral':current.report.recovery==='REQUEST_ACCEPTED'?'accent':'caution'}>{recoveryLabels[current.report.recovery]}</Badge>}]}/>
+        {current.report?<><div className="jj-flow-trial-feedback"><section><ResultList label="执行条件核对" items={[{label:"实际账号与计划",status:<Badge tone={current.report.identity_status==='MATCH'?'positive':'caution'}>{{MATCH:'一致',MISMATCH:'不一致',UNKNOWN:'尚未确认'}[current.report.identity_status]}</Badge>},{label:"恢复请求",status:<Badge tone={current.report.recovery==='NOT_REQUIRED'?'neutral':current.report.recovery==='REQUEST_ACCEPTED'?'accent':'caution'}>{recoveryLabels[current.report.recovery]}</Badge>}]}/>
           {current.report.recovery==='REQUEST_ACCEPTED'&&<p className="jj-small jj-muted">请求被接受只表示接口反馈，业务状态仍由正式检查核对。</p>}
-        </section><section><h3>逐步请求反馈</h3><div className="jj-flow-trial-step-list">{current.report.steps.map((step,index)=><div key={step.step_id+index}>
+        </section><section><h3>请求反馈</h3><div className="jj-flow-trial-step-list">{current.report.steps.map((step,index)=><div key={step.step_id+index}>
           <ObjectIdentity name={<strong>{step.purpose==='RESTORE'?'恢复请求':`第 ${index+1} 步`}</strong>} status={<Status tone={step.classification==='UNKNOWN'?'caution':'neutral'}>{classifications[step.classification]}</Status>}/>
           <div className="jj-flow-trial-step-meta"><span>HTTP {step.status_code??'—'}</span><span>{step.response_bytes??'—'} 字节</span></div>
           {step.error_code&&<code>{step.error_code}</code>}
-        </div>)}</div></section></div>{current.report.error_code&&<p className="jj-small jj-muted">执行提示：{current.report.error_code}。保留当前记录，调整后请保存新的场景修订。</p>}</>:<p className="jj-small jj-muted">{active(current)?'正在等待本次有限步骤反馈。':current.operation_may_have_run?'执行可能已经发出请求，尚未形成完整反馈。请核对原记录及恢复情况。':'本次尚未执行操作。'}</p>}
+        </div>)}</div></section></div>{current.report.error_code&&<p className="jj-small jj-muted">执行提示：{current.report.error_code}。保留当前记录，调整后请保存新的场景修订。</p>}</>:<p className="jj-small jj-muted">{active(current)?'正在等待本次请求的执行反馈。':current.operation_may_have_run?'执行可能已经发出请求，尚未形成完整反馈。请核对原记录及恢复情况。':'本次尚未执行操作。'}</p>}
         <div className="jj-flow-trial-result-actions">{active(current)?<Button busy={busy} onClick={()=>void act(async()=>{await api.cancel(projectId,current.request.trial_id);history.reload()})}>取消原任务</Button>:onResume?<Button kind="quiet" disabled={busy||unresolved||items.some(active)} onClick={()=>onResume(current.request.plan.flow)}>从此修订继续编辑</Button>:null}{current.recovery_pending&&!active(current)&&current.request.plan.mode==='TRIAL'&&<Button disabled={busy||unresolved} onClick={()=>{setRestore(current);setView('current');setPreview(undefined)}}>处理恢复请求</Button>}</div>
       </div>}
-    </section>:<p className="jj-flow-trial-empty jj-muted">还没有试运行记录。可先预览本次账号、资源和请求，再明确执行。</p>)}
+    </section>:<p className="jj-flow-trial-empty jj-muted">还没有试运行记录。先预览账号、资源和请求，确认后再执行。</p>)}
     </div>
   </section>
 }

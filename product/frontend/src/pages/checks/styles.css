@@ -7,7 +7,7 @@
 .jj-saved-checks-bar>.jj-choice{min-width:240px;max-width:100%;flex:1}
 .jj-saved-checks-bar>.jj-button{margin-left:auto}
 .jj-saved-checks>.jj-notice{margin-top:12px}
-.jj-scope-rule-options { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; margin-top: 18px; animation: jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-scope-rule-options { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; margin-top: 18px; }
 .jj-scope-rule-option { display: flex; align-items: flex-start; gap: 12px; padding: 16px; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
 .jj-scope-rule-option > span:first-of-type { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .jj-scope-rule-option strong { font-weight: 500; font-size:var(--text-meta); }
@@ -26,18 +26,19 @@
 .jj-history-toolbar form > .jj-search-field { flex:1; }
 .jj-history-toolbar > .jj-choice { width: 150px; flex: none; }
 .jj-history-table-wrap { position: relative; overflow-x: auto; }
-.jj-history-table { min-width: 720px; table-layout: fixed; }
+.jj-history-table { min-width: 840px; table-layout: fixed; }
 .jj-history-table th { border-bottom: 1px solid var(--line); }
 .jj-history-table td { border-bottom: 1px solid var(--line); }
 .jj-history-table th { color: var(--muted); }
-.jj-history-table th:first-child { width: 146px; }
-.jj-history-table th:nth-child(3) { width: 120px; }
-.jj-history-table th:nth-child(4) { width: 124px; }
-.jj-history-table th:last-child { width: 164px; }
-.jj-history-table td { vertical-align: middle; }
-.jj-history-table td:nth-child(2) strong { font-weight:500; font-size:var(--text-object); line-height:22px; }
-.jj-history-table td:first-child { font-size: var(--text-meta); white-space: nowrap; }
-.jj-history-table td:first-child small { display: block; margin-top: 6px; color: var(--muted); }
+/* 列按职责分配宽度；归档视图省略选择列时，业务名称仍占剩余阅读空间。 */
+.jj-history-table th.jj-history-select { width:48px; }
+.jj-history-table th.jj-history-time { width:184px; }
+.jj-history-table th.jj-table-state { width:112px; }
+.jj-history-table th.jj-table-actions { width:136px; }
+.jj-history-table td { vertical-align:middle; }
+.jj-history-table .jj-history-action strong { font-weight:500; font-size:var(--text-object); line-height:22px; }
+.jj-history-table .jj-history-time { font-size:var(--text-meta); white-space:nowrap; }
+.jj-history-table .jj-history-time small { display:block; margin-top:6px; color:var(--muted); }
 .jj-history-table :is(th,td):last-child { padding-inline: 12px 24px; }
 .jj-history-context { color: var(--muted); font-size: var(--text-meta); white-space: nowrap; }
 .jj-history-table tbody tr:last-child td { border-bottom: 0; }
@@ -54,7 +55,7 @@
 .jj-report { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .jj-report-navigation { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
 .jj-archive-label { display:inline-flex; align-items:center; gap:8px; }
-.jj-report-workspace { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.jj-report-workspace { display:flex; flex-direction:column; gap:28px; min-width:0; }
 .jj-report-hero { padding: 0 0 22px; border-bottom: 1px solid var(--line); }
 .jj-report-summary.jj-toggle-group { display:flex;flex-wrap:wrap;align-self:flex-start;gap:4px;padding:4px;background:var(--surface-heading);border:1px solid var(--line);border-radius:var(--radius-control); }
 .jj-report-summary.jj-toggle-group>button { display:flex;align-items:baseline;gap:8px;text-align:start;padding:8px 12px;min-height:36px;border-radius:var(--radius-control); }
@@ -75,7 +76,7 @@
 .jj-report-metadata { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: var(--text-meta); }
 .jj-report-context > .jj-button { min-height:var(--control-compact); padding: 5px 8px; font-size:var(--text-body); }
 .jj-report-layout { display: grid; grid-template-columns: minmax(0,1fr); gap: 24px; align-items: start; }
-.jj-report-layout.has-inspector { grid-template-columns: 248px minmax(0,1fr); gap: 26px; }
+.jj-report-layout.has-inspector { grid-template-columns:260px minmax(0,1fr); gap:32px; }
 .jj-report-results { min-width: 0; }
 .jj-inspector-slot { min-width: 0; }
 .jj-inspector-slot:empty { display: none; }
@@ -113,7 +114,7 @@
 .jj-report-scope[open] > summary { margin-bottom:8px; }
 .jj-report-scope > .jj-panel { padding:16px; box-shadow: none; }
 .jj-repair-group + .jj-repair-group { margin-top: 24px; }
-.jj-evidence-inspector { container: evidence-inspector / inline-size; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-surface); box-shadow: var(--surface-shadow); background: var(--surface); overflow: hidden; }
+.jj-evidence-inspector { container:evidence-inspector / inline-size; min-width:0; border-block:1px solid var(--line); background:transparent; overflow:hidden; }
 .jj-inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 42px; padding: 6px 18px; border-bottom: 1px solid var(--line); background:var(--inset);color: var(--muted); font-size: var(--text-meta); }
 .jj-inspector-header .jj-button { width:var(--control-compact); min-height:var(--control-compact); padding: 0; }
 .jj-inspector-title { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; padding:20px 22px 16px; }
@@ -138,7 +139,7 @@
 .jj-operation-path { container: operation-path / inline-size; }
 .jj-semantic-events, .jj-capture-coverage { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
 .jj-capture-coverage > p { margin-top: 12px; }
-.jj-step-workspace { display: grid; grid-template-columns: minmax(170px,220px) minmax(0,1fr); gap: 20px; margin-top: 20px; align-items: start; }
+.jj-step-workspace { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: 32px; margin-top: 20px; align-items: start; }
 .jj-step-mobile { display: none; }
 .jj-step-mobile .jj-choice { width: 100%; }
 .jj-operation-steps { list-style:none; padding:0; margin:0; display:grid; align-content:start; gap:0; min-width:0; }
@@ -253,15 +254,15 @@
 
 .jj-evidence-reading { display:grid; grid-template-columns:minmax(0,1fr); gap:24px; }
 .jj-evidence-main { min-width:0; }
-.jj-evidence-comparison { display:grid; gap:0; margin-bottom:24px; border-block:1px solid var(--line); }
-.jj-evidence-comparison > div { padding:20px 0; }
-.jj-evidence-comparison > div + div { border-top:1px solid var(--line); }
+.jj-evidence-comparison { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:32px; margin-bottom:28px; border-bottom:1px solid var(--line); }
+.jj-evidence-comparison > div { padding:0 0 24px; min-width:0; }
+.jj-evidence-comparison > div + div { border:0; }
 .jj-evidence-comparison h3 { color:var(--muted);   margin-bottom:10px; }
 .jj-evidence-comparison p { font-size:var(--text-object); line-height:var(--leading-reading); font-weight:400; }
 .jj-evidence-comparison p + p { margin-top:8px; }
 .jj-evidence-comparison small { display:block; color:var(--muted); margin-top:5px; }
 .jj-evidence-comparison [data-tone=negative] p { color:var(--bad); }
-.jj-evidence-context { min-width:0; border-top:1px solid var(--line); padding-top:20px; }
+.jj-evidence-context { min-width:0; padding-top:24px; border-top:1px solid var(--line); }
 .jj-evidence-context > section + section, .jj-evidence-context > details { margin-top:24px; }
 .jj-evidence-context h3 { margin-bottom:14px;  }
 .jj-evidence-context .jj-facts { margin:14px 0 0; }
@@ -302,7 +303,7 @@
 .jj-plan-index h3 { margin:0; padding:4px 16px 12px; }
 .jj-plan-index .jj-index-item { display:grid; width:100%; gap:6px; text-align:left; }
 .jj-plan-index small { color:var(--muted); line-height:1.6; font-size:var(--text-meta); }
-.jj-plan-detail { min-width:0; padding:0 0 0 28px; border-left:1px solid var(--line); animation:jj-content-enter var(--motion-content) var(--ease-enter) both; }
+.jj-plan-detail { min-width:0; padding:0 0 0 28px; border-left:1px solid var(--line); }
 .jj-plan-focus[data-empty=true] > .jj-plan-detail { padding:0; border:0; }
 .jj-plan-detail h3 { margin:0; }
 .jj-plan-detail > header { margin-bottom:24px; }
@@ -323,4 +324,31 @@
 .jj-plan-scope-summary { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px 24px; border-block:1px solid var(--line); padding:16px 0; }
 .jj-plan-scope-summary > p { max-width:76ch; color:var(--muted); line-height:var(--leading-reading); }
 .jj-plan-execution { margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
+.jj-plan-review-panel > .jj-plan-execution:first-child { margin-top:0; padding-top:0; border-top:0; }
 .jj-plan-execution[open] > summary { margin-bottom:24px; }
+
+/* 少量结果在原行展开；技术阅读仍进入同一报告的独立任务。 */
+.jj-result-entry{min-width:0}
+.jj-evidence-inspector.is-inline{position:static;margin:0 24px 28px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none}
+.is-inline .jj-inspector-header{padding:18px 0 0}
+.jj-inline-evidence-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;margin-top:20px}
+.jj-inline-evidence-actions h4{margin:0 auto 0 0;font-size:var(--text-object);font-weight:500}
+.is-inline .jj-inspector-content{padding:24px 0 0}
+.is-inline .jj-evidence-reading{display:flex;flex-direction:column-reverse;gap:28px}
+.is-inline .jj-evidence-context{border:0;padding:0}
+.is-inline .jj-evidence-context>.jj-facts{margin:0}
+@media(max-width:600px){.jj-evidence-inspector.is-inline{margin-inline:16px}}
+
+.jj-step-workspace[data-single=true]{grid-template-columns:minmax(0,1fr)}
+.jj-step-workspace[data-single=true]>:is(.jj-operation-steps,.jj-step-mobile){display:none}
+
+.jj-evidence-inspector[data-standalone=true]{border:0;overflow:visible}
+.jj-evidence-inspector[data-standalone=true]>.jj-inspector-content{padding:0}
+
+/* 单操作无需目录；缺项原因和处理入口在同一阅读组，不再建立材料子目录。 */
+.jj-plan-focus:not(:has(>nav)) { grid-template-columns:minmax(0,1fr); }
+.jj-plan-focus:not(:has(>nav))>.jj-plan-detail { border-inline-start:0; }
+.jj-plan-gap-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:28px 36px;margin-block:28px; }
+.jj-plan-gap-groups article { min-width:0; }
+.jj-plan-gap-groups h4 { margin:0 0 12px; }
+.jj-plan-gap-groups .jj-inline-actions { margin-block-start:16px; }

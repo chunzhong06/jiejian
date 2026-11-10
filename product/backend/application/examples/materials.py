@@ -110,6 +110,7 @@ class OfficialScenarioInstaller:
         target_request_id="request_000001",
         runtime_instance_id=None,
         resource_owner_identity_id=None,
+        environment_fingerprint=None,
     ) -> str:
         from product.backend.application.preparation.demonstrations import legal_demonstrations
         action=next(item for item in self._preparation.get(project_id).actions if item.action_id==action_id)
@@ -121,6 +122,8 @@ class OfficialScenarioInstaller:
         key=(project_id,action_id,action.action_revision,identity_id,choice.resource_owner_test_identity_id,
              choice.subject_slot_id,choice.resource_owner_slot_id,source_fingerprint,endpoint,runtime_instance_id,purpose.value,parent_recording_id,
              resource_consumer.value,resource_location,target_request_id,"official-recipe-v3")
+        # 同地址切换具名连接也改变录制来源；原连接内的重试仍使用同一身份。
+        if environment_fingerprint is not None:key+=('environment',environment_fingerprint)
         submitted=self._project_recordings.submit_captured(project_id,
             events=event_factory(endpoint,identity_id,self._clock_us()),
             business_action_id=action_id,action_revision=action.action_revision,

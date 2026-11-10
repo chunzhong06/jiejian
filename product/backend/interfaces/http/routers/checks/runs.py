@@ -16,7 +16,7 @@ from product.protocols.checks.execution_request import PermissionReference
 from product.backend.application.checks.service import ExternalRecheckCommand
 from product.protocols.checks.scenarios import ScenarioReference
 from product.protocols.checks.routine_reference import RoutineReference
-from product.backend.application.checks.reading.results import CheckRunStatus, CheckRunView, CheckJobView, CheckHistoryPage
+from product.backend.application.checks.reading.results import CheckRunStatus, CheckRunView, CheckJobView, CheckHistoryPage, CheckContinuation
 
 
 class RunSubmissionProjection(ApiModel):
@@ -66,6 +66,10 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
         with context.uow_factory() as work:
             job = work.jobs.get_by_idempotency(project_id, 'CHECK', operation_id)
         return data_response(None if job is None else context.check_results.status(job.run_id, project_id=project_id).model_dump(mode='json'))
+
+    @router.get('/api/projects/{project_id}/runs/{run_id}/continuation', response_model=ApiResponse[CheckContinuation])
+    def continuation(project_id: str, run_id: str):
+        return data_response(context.check_results.continuation(project_id, run_id, repair_contracts=context.check_repairs.contracts), projection=CheckContinuation)
 
     @router.get("/api/projects/{project_id}/check-history", response_model=ApiResponse[CheckHistoryPage])
     def check_history(project_id: str, limit: int = Query(25, ge=1, le=50),
