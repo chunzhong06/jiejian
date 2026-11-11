@@ -1,3 +1,4 @@
+import {TaskActions} from '../../shared/ui/layout'
 import {PendingRecovery} from '../../shared/ui/PendingRecovery'
 import type {ScenarioReference} from '../../entities/preparation/api/businessScenarios'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
@@ -9,7 +10,7 @@ import { preparationApi, type PermissionReference, type ActionPreparation } from
 import { testIdentitiesApi } from '../../entities/preparation/api/testIdentities';
 import { ApiError } from '../../shared/api/http';
 import {ActionLink,Button} from '../../shared/ui/actions'
-import {PageError,  Badge, ErrorNote, Notice } from '../../shared/ui/feedback';
+import {PageError, Badge, ErrorNote, InlineFeedback, Notice} from '../../shared/ui/feedback';
 import { Heading,Field } from '../../shared/ui/layout';
 import {Choice} from '../../shared/ui/Choice';
 import { PageSkeleton } from '../../shared/ui/PageSkeleton';
@@ -112,16 +113,16 @@ export function Plan({ projectId, onError, route, refresh, official }: PageProps
             throw error;
         }
     };
-    if(invalidScenario)return <PageError title="核对业务场景" error={new Error('场景引用缺少准确修订，请返回场景目录重新预览。')}/>;
-    if (state.loading || (selected === null && chosen.loading)) return <PageSkeleton view="/reports" title="检查范围"/>;
-    if (!state.data || state.error) return <PageError title="核对本次检查范围" error={state.error}/>;
+    if(invalidScenario)return <PageError title="本次检查" error={new Error('场景引用缺少准确修订，请返回场景目录重新预览。')}/>;
+    if (state.loading || (selected === null && chosen.loading)) return <PageSkeleton view="/reports" title="本次检查"/>;
+    if (!state.data || state.error) return <PageError title="本次检查" error={state.error}/>;
     const { materials, identities } = state.data;
     const preview = activePreview;
     const returnTo = '/reports?' + new URLSearchParams({ view: 'plan', ...(scenario ? {scenario_id:scenario.scenario_id,scenario_revision:String(scenario.revision)} : {}), ...(selection!=='RULE'&&selected !== null ? {scope_id: scopeId.current} : {}), ...(changeId ? { change_id: changeId } : {}), ...(ruleId ? { rule_id: ruleId } : {}), ...(route.query.has('repair_reference')?{repair_reference:route.query.get('repair_reference')!}:{}), ...(origin ? {return_to:origin} : {}) });
     return <>
         <div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{origin ? returnDestinationLabel(origin) : ruleId ? '返回权限规则' : '全部检查记录'}</ActionLink></div>
         <Heading title="本次检查"/><PendingRecovery storageKey={key} projectId={projectId}/>
-        {pending && <Notice tone="caution">上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)}>查看上次提交结果</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>继续上次提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
+        {pending && <Notice tone="caution">上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)} busyLabel="正在查询">查看上次提交结果</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>继续上次提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
         {chosen.error && <><ErrorNote error={chosen.error}/>{!changeId&&!scenario&&<Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button>}</>}
         <PlanWorkspace official={official} preview={preview} actions={materials.actions} identities={identities} returnTo={returnTo} changeId={changeId}
             initialView={route.query.get('plan_tab')} initialItem={route.query.get('plan_item')}
@@ -175,7 +176,7 @@ export function PlanWorkspace({preview,actions,identities,returnTo,changeId,init
                 </IndexSelection></nav>}
                 <section className="jj-plan-detail" key={focused||'ready'} aria-label="当前准备事项">
                     {gap&&!completedItem?<><header><p className="jj-eyebrow">本次检查准备</p><h3>{text(gap.action.display_name)}</h3><p>为这项操作准备账号、执行方式和判断依据。完成后返回本次检查，按实际材料重新核对。</p></header>
-                      {itemId.includes(':')&&!gap.groups.some(group=>itemId===gap.id+':'+group.kind)&&<Notice tone="positive">刚才处理的准备项已不在当前缺口中。以下是这项操作仍需准备的材料。</Notice>}
+                      {itemId.includes(':')&&!gap.groups.some(group=>itemId===gap.id+':'+group.kind)&&<InlineFeedback tone="positive">刚才处理的准备项已不在当前缺口中。以下是这项操作仍需准备的材料。</InlineFeedback>}
                       <div className="jj-plan-gap-groups">{gap.groups.map(group=><article key={group.kind}><h4>{gapAction(group.kind)}</h4><ul className="jj-plan-reasons">{group.messages.map(message=><li key={message}>{message}</li>)}</ul>
                         <div className="jj-inline-actions">{gapEntryItems(gap.action,group.items).map(item=><ActionLink key={JSON.stringify(item)} href={'#'+scopedPath(gapDestination(item,backTo(gap.id+':'+group.kind),changeId))}>{gapLinkLabel(gap.action,item)}<ArrowRightOutlined aria-hidden="true"/></ActionLink>)}</div>
                       </article>)}</div></>:boundary?<><header><h3>核对权限要求</h3></header><p>{text(boundary.message)}</p>{preview.requirement_scope?.filter(scope=>scope.candidate_id===boundary.candidate_id&&scope.revision===boundary.revision).flatMap(scope=>scope.requirements).map(item=><p key={item.requirement_id}>{text(item.requirement)}</p>)}<p className="jj-small jj-muted">这项要求尚未批准。核对后将返回本次检查，重新确认对应材料。</p><footer><Button kind="quiet" onClick={()=>(workflow?.open??go)(boundary.review_url.replace(/^#/,'')+'&'+new URLSearchParams({return_to:backTo('requirement:'+boundary.issue_id)}))}>核对要求<ArrowRightOutlined aria-hidden="true"/></Button></footer></>:orphan?<><h3>核对检查条件</h3><p>{gapName(orphan.reason)}</p><footer><Button kind="quiet" onClick={()=>(workflow?.open??go)(gapDestination(orphan,backTo(focused),changeId))}>核对检查条件<ArrowRightOutlined aria-hidden="true"/></Button></footer></>:<><h3>{itemId?'这项准备已不在当前缺口中':'当前没有材料缺口'}</h3><p>{attention?'其余待处理事项保留在左侧，可继续逐项核对。':'材料已齐备，可核对执行安排。'}</p><footer><Button kind="primary" onClick={()=>completedItem&&gap?setItem(gap.id):selectView(attention?'prepare':'execute')}>{attention?'继续处理下一项':'查看执行安排'}<ArrowRightOutlined aria-hidden="true"/></Button></footer></>}
@@ -190,8 +191,8 @@ export function PlanWorkspace({preview,actions,identities,returnTo,changeId,init
             </div></details>}
             {!preview&&!error&&<p role="status">{loading?'正在核对所选规则与必要材料…':'请在检查范围中选择规则。'}</p>}
         </div>
-        {workflow?.reviewed&&preview&&<Notice>已重新核对本次检查。{attention?`还有 ${attention} 项待处理，已保存的材料继续保留。`:preview.can_execute?'材料已齐备，请核对执行安排后开始检查。':'请继续确认本次使用的材料与执行条件。'}</Notice>}
-        {workflow&&preview&&attention>0?<PreparationNext official={official} preview={preview} onReview={()=>selectView('prepare')}/>:<footer className="jj-plan-review-confirm"><div><p className="jj-small jj-muted">{executionExplanation??(preview?.can_execute?'将执行真实操作，检查期间可离开此页。':'已有材料会保留，可按具体缺口继续处理。')}</p></div>{executionAction??<Button kind="primary" busy={busy} disabled={!preview?.can_execute||pending||loading} onClick={onSubmit}>开始检查<ArrowRightOutlined aria-hidden="true"/></Button>}</footer>}
+        {workflow?.reviewed&&preview&&<InlineFeedback>已重新核对本次检查。{attention?`还有 ${attention} 项待处理，已保存的材料继续保留。`:preview.can_execute?'材料已齐备，请核对执行安排后开始检查。':'请继续确认本次使用的材料与执行条件。'}</InlineFeedback>}
+        {workflow&&preview&&attention>0?<PreparationNext official={official} preview={preview} onReview={()=>selectView('prepare')}/>:<TaskActions separated note={executionExplanation??(preview?.can_execute?'将执行真实操作，检查期间可离开此页。':'已有材料会保留，可按具体缺口继续处理。')}>{executionAction??<Button kind="primary" busy={busy} disabled={!preview?.can_execute||pending||loading} onClick={onSubmit}>开始检查<ArrowRightOutlined aria-hidden="true"/></Button>}</TaskActions>}
     </section>;
 }
 

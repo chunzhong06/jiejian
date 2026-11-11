@@ -12,6 +12,8 @@ import threading
 import time
 from pathlib import Path
 from typing import TextIO
+from contextlib import nullcontext
+from product.backend.infrastructure.runtime.workflow_timing import workflow_timings, workflow_phase
 
 logger = logging.getLogger("jiejian.runtime.worker_process")
 
@@ -66,6 +68,8 @@ def main() -> int:
     lifetime_lock = None
     watchdog_stop = threading.Event()
     watchdog_thread: threading.Thread | None = None
+    timing_scope = workflow_timings(job_id=arguments.job_id) if os.environ.get('JIEJIAN_WORKFLOW_TIMING') == '1' else nullcontext()
+    timings = timing_scope.__enter__()
     try:
         from product.backend.infrastructure.runtime.process.controlled.identity import require_python_environment
         from product.backend.infrastructure.runtime.worker.lifetime import WorkerLifetimeLock
@@ -105,7 +109,8 @@ def main() -> int:
         ).resolve(initial_job)
         while True:
             try:
-                handler.run_job(arguments.job_id)
+                with workflow_phase('worker.job'):
+                    handler.run_job(arguments.job_id)
             except JiejianError as exc:
                 logger.error(
                     "任务处理失败：%s",
@@ -137,6 +142,9 @@ def main() -> int:
             context.close()
         if lifetime_lock is not None:
             lifetime_lock.release()
+        timing_scope.__exit__(None, None, None)
+        if timings is not None:
+            timings.save(var_dir)
 
 
 def _start_service_watchdog(context, job_id: str, stop: threading.Event) -> threading.Thread | None:

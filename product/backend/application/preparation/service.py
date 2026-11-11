@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from product.backend.domain.checks.plan import PreparedActionInput, PreparedIdentityAssignment, compile_project_check_plan
 from product.backend.domain.identities.models import identity_source_fingerprint
 from product.backend.application.reading import projected_once
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
 
 from product.backend.domain.preparation.requirements import ActionAssuranceContract, AssuranceStatus, compile_action_assurance, ActionAllowControlBinding, PermissionIdentity
 from product.backend.domain.boundaries.entities import BusinessActionRevision
@@ -107,14 +108,19 @@ class PreparationService:
                        if item.action_id == action_id and item.project_id == project_id), None)
         return evidence_details(project_id, prepared, action, self._bindings)
 
-    def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str, selected_permissions=None):
+    @timed_workflow('check.plan')
+    def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str, selected_permissions=None, work=None):
         """在装配事务内重读来源和绑定，再编译本次检查计划。"""
         if self._uow_factory is None:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配")
-        view = self.get(project_id)
+        if work is None:
+            with self._uow_factory() as current:
+                return self.current_plan(project_id, engine_version=engine_version, config_fingerprint=config_fingerprint,
+                    selected_permissions=selected_permissions, work=current)
+        view = self.get(project_id, work=work)
         prepared = {item.action_id: item for item in view.actions}
         inputs = []
-        with self._uow_factory() as work:
+        with nullcontext(work) as work:
             boundary = self._business_boundaries.view(project_id, work=work)
             from product.backend.domain.checks.selection import resolve_selected_permissions, select_action_input
             selected = None if selected_permissions is None else resolve_selected_permissions(boundary.permission_intents, selected_permissions)
@@ -173,12 +179,12 @@ class PreparationService:
 
     def build_execution_request(self, project_id: str, *, engine_version: str,
                                    config_fingerprint: str, budget_fingerprint: str,
-                                   change_context=None, repair_context=None, selected_permissions=None):
+                                   change_context=None, repair_context=None, selected_permissions=None, work=None):
         """只构造完整快照；有缺口时拒绝，不生成会话、Job 或 Run。"""
         import json
         from product.protocols.checks.execution_request import ExecutionRequest
         plan = self.current_plan(project_id, engine_version=engine_version,
-                                 config_fingerprint=config_fingerprint, selected_permissions=selected_permissions)
+                                 config_fingerprint=config_fingerprint, selected_permissions=selected_permissions, work=work)
         if plan.gaps or not plan.actions or any(not item.cases for item in plan.actions):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备尚未完成",
                                details={"reason": "CHECK_PLAN_INCOMPLETE"})
@@ -188,7 +194,7 @@ class PreparationService:
         payload.update(config_fingerprint=config_fingerprint, budget_fingerprint=budget_fingerprint,
                        change_context=None if change_context is None else change_context.model_dump(mode="json"),
                        repair_context=None if repair_context is None else repair_context.model_dump(mode="json"))
-        with self._uow_factory() as work:
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
             understanding = work.application_understanding.get(project_id)
             if understanding.environment is not None:
                 payload.update(schema_version='2', environment=understanding.environment.model_dump(mode='json'))
@@ -263,7 +269,10 @@ class PreparationService:
             work.commit()
             return binding
 
-    def get(self, project_id: str) -> PreparationView:
+    @timed_workflow('preparation.read')
+    def get(self, project_id: str, *, work=None) -> PreparationView:
+        if work is not None:
+            return projected_once(self, (project_id, id(work)), lambda: self._project_current(project_id, work))
         return projected_once(self,project_id,lambda:self._project(project_id))
 
     def _project(self, project_id: str) -> PreparationView:
@@ -355,6 +364,7 @@ class PreparationService:
                 'source_fingerprint':source,'actions':[item.model_dump(mode='json') for item in actions]}),
             impacts=tuple(MaterialImpactView(action_id=action.action_id, action_label=action.display_name,
                 kind=kind, status=item.status, reason_codes=item.reason_codes,
+                reuse_basis=item.reuse_basis,
                 member_id=getattr(item,'owner_test_identity_id',None) or getattr(item,'effect_id',None) or getattr(item,'test_identity_id',None),
                 member_label=getattr(item,'actor_display_name','') or getattr(item,'business_label',''),
                 permission_ids=tuple(rule.intent_id for rule in action.permissions

@@ -5,7 +5,8 @@ from product.backend.application.workspace.models import WorkspaceConnectionView
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.workspace.reading import WorkspaceReader, WorkspaceCheckReaders
 from product.backend.application.workspace.presentation import boundary_views, endpoint_status, source_status, area_views, journey_view, development_view
-from product.backend.application.workspace.tasks import boundary_task, allow_control_task, PreparationTaskSelection, current_check_task, development_task, CheckPreviewRequired
+from product.backend.application.workspace.tasks import boundary_task, current_check_task, development_task, CheckPreviewRequired
+from product.backend.application.workspace.preparation import preparation_task
 
 
 class WorkspaceService:
@@ -72,25 +73,14 @@ class WorkspaceService:
         scoped = preparation.model_copy(update={"actions": selected})
         return PreparationWorkView(project_id=project_id,
             actions=tuple(PreparationWorkAction(action_id=item.action_id, label=item.display_name,
+                action_revision=item.action_revision,
                 preparation_complete=item.preparation_complete) for item in selected),
             primary_task=self._preparation_task(boundary, scoped, understanding),
             preparation_complete=all(item.preparation_complete for item in selected))
 
     def _preparation_task(self, boundary, preparation, understanding):
-        selected = allow_control_task(preparation)
-        if selected is not None:
-            return selected
-        candidates = []
         with self._reader.preparation(preparation.project_id) as reading:
-            for action in sorted(preparation.actions, key=lambda item: item.action_id):
-                selection = PreparationTaskSelection(boundary, action, understanding, reading.recordings)
-                for recording in selection.current_recordings:
-                    if reading.resumable(recording, selection.prepared_ids):
-                        selection.resume_recording(recording)
-                selection.prepare_missing()
-                selection.complete_materials(reading.parent_for(action))
-                candidates.extend(selection.candidates)
-        return min(candidates, key=lambda item: item[0])[1] if candidates else None
+            return preparation_task(boundary, preparation, understanding, reading)
 
 
 __all__ = ["WorkspaceService"]

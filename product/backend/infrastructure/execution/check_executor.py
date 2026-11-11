@@ -1,5 +1,6 @@
 # 串行执行冻结 CHECK：完整 ALLOW 先行、每 Case 单次 TARGET、独立观察与精确资源恢复。
 from __future__ import annotations
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
 
 import time
 from dataclasses import dataclass
@@ -70,6 +71,7 @@ class CheckExecutor:
                 return False
         return runtime_corresponds(self._var_dir,self._runtime_reference)
 
+    @timed_workflow('check.execute')
     def execute(self) -> CheckExecutionOutput:
         started = self.clock()
         runtime_before = None if self._runtime_reference is None else self._runtime_matches()

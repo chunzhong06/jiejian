@@ -98,6 +98,9 @@ def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_pa
         assert view["pending_proposals"][0]["proposal_id"] == created["proposal"]["proposal_id"]
         assert "proposal" not in view["pending_proposals"][0]
         exact = client.get(prefix + "/proposals/" + created["proposal"]["proposal_id"]).json()["data"]
+        recovery = client.get(prefix + "/proposals/" + created["proposal"]["proposal_id"] + "?reconcile_decision=true")
+        assert recovery.status_code == 200 and recovery.json()["data"] == exact
+        assert client.get(prefix + "/proposals/" + created["proposal"]["proposal_id"] + "?reconcile_decision=invalid").status_code == 422
         assert exact["review"]["basis_state"] == "COMPLETE"
         assert all(row["before"] is None and row["change_kind"] == "CREATE" for row in exact["review"]["items"])
         assert client.get(prefix).json()["data"]["policy_epoch"] == 0

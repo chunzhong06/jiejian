@@ -35,6 +35,7 @@ class PreparationMaterialService:
                     current=any(item.binding_fingerprint == getattr(current, "binding_fingerprint", None) for item in bindings),
                     updates=[self._reference(item).model_dump(mode="json") for item in bindings]))
             return dict(material=reference.model_dump(mode="json"), status=view.status.value,
+                reuse_basis=view.reuse_basis,
                 reason_codes=view.reason_codes, retained=current is not None,
                 source_recording_id=getattr(current, "source_recording_id", None),
                 confirmed_at_us=getattr(current, "confirmed_at_us", None),

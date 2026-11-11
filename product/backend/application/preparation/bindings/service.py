@@ -256,6 +256,7 @@ class PreparationBindingService:
         return PreparationItemView(
             status=PreparationStatus.STALE if reasons else PreparationStatus.SATISFIED,
             binding_fingerprint=binding.binding_fingerprint, reason_codes=tuple(dict.fromkeys(reasons)),
+            reuse_basis=None if reasons else ('CURRENT_SOURCE' if binding.source_fingerprint == understanding.source_fingerprint else 'VERIFIED_SOURCE_CONTRACT'),
         )
 
 

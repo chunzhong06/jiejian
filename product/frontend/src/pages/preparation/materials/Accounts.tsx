@@ -196,7 +196,7 @@ export function Accounts({ projectId, actions, requestedPreparation, requestedSl
     <Heading title="准备测试账号"/>
     {state.error && <ErrorNote error={state.error}/>}
     {requested.error && <ErrorNote error={requested.error}/>}
-    {pending && !current && <Notice tone="caution">上次账号操作仍待确认。<Button busy={busy} onClick={() => void act(() => recover(true))}>查询并恢复本次操作</Button></Notice>}
+    {pending && !current && <Notice tone="caution">上次账号操作仍待确认。<Button busy={busy} onClick={() => void act(() => recover(true))} busyLabel="正在查询">查询并恢复本次操作</Button></Notice>}
     {state.loading ? <Loading page/> : <section className="jj-accounts-workspace">
 
       <div className="jj-accounts-console" data-single={accountEntries.length<=1||undefined}>{accountEntries.length>1&&<IndexSelection as="nav" className="jj-account-index" label="待准备的账号" identity={selectedId??""}>{accountEntries.map(([id,{slot,identity}])=><Button key={id} kind="quiet" className="jj-index-item" aria-current={selectedId===id?'page':undefined} onClick={()=>setSelectedAccount(id)}><UserOutlined aria-hidden="true"/><span className="jj-object-identity"><span className="jj-account-index-name">{text(slot.actor_display_name)}账号{slot.requirement.ordinal>1?' '+slot.requirement.ordinal:''}</span><Status className="jj-account-index-status" tone={identity?.status==='PREPARED'?'positive':'neutral'}>{identity?.status==='PREPARED'&&<CheckOutlined aria-hidden="true"/>}{identity?.status==='PREPARED'?'已准备':identity?.status==='NEEDS_REVIEW'?'需重新登录':'待登录'}</Status></span></Button>)}</IndexSelection>}

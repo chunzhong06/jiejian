@@ -80,6 +80,7 @@ _ROLE_POLICIES = MappingProxyType(
             source_names=frozenset(
                 {
                     "JIEJIAN_CONTROL_ORIGIN",
+                    "JIEJIAN_WORKFLOW_TIMING",
                     "JIEJIAN_SERVE_LOCK_PATH",
                     "JIEJIAN_SERVE_OWNER_TOKEN",
                     # Worker 是 Recording 的受信启动中介，必须保留非秘密浏览器运行时根路径。
@@ -89,7 +90,7 @@ _ROLE_POLICIES = MappingProxyType(
             allows_secrets=True,
         ),
         ProcessEnvironmentRole.RUNNER: _policy(
-            source_names=frozenset({"JIEJIAN_CONTROL_ORIGIN"}),
+            source_names=frozenset({"JIEJIAN_CONTROL_ORIGIN", "JIEJIAN_WORKFLOW_TIMING"}),
             allows_secrets=True,
         ),
         ProcessEnvironmentRole.RECORDING: _policy(

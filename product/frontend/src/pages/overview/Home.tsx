@@ -1,3 +1,4 @@
+import {TaskActions} from '../../shared/ui/layout'
 import {Progress} from '../../shared/ui/Progress'
 import {taskDestination} from '../../entities/workspace/taskDestination'
 import type {WorkspaceViewDto} from '../../entities/workspace/api/workspace'
@@ -38,7 +39,7 @@ export function Home({projectId,workspace,experience}:PageProps&{workspace:Works
       {result&&<div className="jj-home-task-result"><Badge tone={result.verdict==='PASS'?'positive':result.verdict==='BLOCK'?'negative':'caution'}>{result.verdict==='PASS'?'本轮符合规则':result.verdict==='BLOCK'?'本轮不符合规则':'本轮证据不足'}</Badge><p>{result.summary}</p></div>}
       {running&&active.progress&&<div className="jj-home-task-progress"><span>{active.progress.planned_cases>0?`已完成 ${active.progress.completed_cases} / ${active.progress.planned_cases} 项`:'正在整理检查事项'}</span><Progress label="检查进度" value={active.progress.planned_cases>0?active.progress.completed_cases:undefined} max={active.progress.planned_cases} active/></div>}
       </div>
-      <footer><ActionLink kind="primary" href={href(stopped?'/environment':destination)}>{running?'查看进度':stopped?'打开示例环境':task?.action_label??'查看权限规则'}</ActionLink></footer>
+      <TaskActions><ActionLink kind="primary" href={href(stopped?'/environment':destination)}>{running?'查看进度':stopped?'打开示例环境':task?.action_label??'查看权限规则'}</ActionLink></TaskActions>
     </section>
     <section className="jj-home-check-history" aria-labelledby="home-recent-checks"><header><h2 id="home-recent-checks" className="jj-title-group">{result?'更早的检查':'最近检查'}</h2>{Boolean(recent?.length)&&<ActionLink href={href('/reports')}>全部检查记录</ActionLink>}</header>
       {history.error?<ErrorNote error={history.error}/>:history.loading?<Loading/>:recent?.length?<div className="jj-home-check-list">{recent.map(item=><a className="jj-home-check-row" key={item.status.run.run_id} href={href('/reports?run_id='+item.status.run.run_id)}><Status className="jj-home-check-outcome" tone={item.status.run.verdict==='PASS'?'positive':item.status.run.verdict==='BLOCK'?'negative':'caution'}>{item.status.run.verdict==='PASS'?'符合规则':item.status.run.verdict==='BLOCK'?'不符合规则':'证据不足'}</Status><div><strong>{item.action_labels.join('、')||'权限检查'}</strong><p><time>{new Date(item.status.run.created_at_us/1000).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})}</time><span>{item.change_id?'修改后检查':'常规检查'}</span></p></div></a>)}</div>:<p className="jj-small jj-muted">{result?'后续检查会持续保留各轮范围和依据。':'尚无检查记录。完成准备后的结果会保留在这里。'}</p>}

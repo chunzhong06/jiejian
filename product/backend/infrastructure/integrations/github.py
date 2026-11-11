@@ -23,8 +23,10 @@ class GitHubIssues:
                 if response.status_code >= 400:
                     # 只有确定的请求拒绝才作为已知失败；5xx可能发生在创建成功之后。
                     if 400 <= response.status_code < 500:
-                        raise JiejianError(ErrorCode.STATE_PRECONDITION,'GitHub拒绝了工单请求，请核对仓库权限或请求额度',
+                        error=JiejianError(ErrorCode.STATE_PRECONDITION,'GitHub拒绝了工单请求，请核对仓库权限或请求额度',
                             details={'upstream_status':response.status_code})
+                        # 明确的权限/额度拒绝不应被协作恢复器显示成未知；不会自动重试创建。
+                        raise error.not_accepted() if response.status_code in (403,429) else error
                     raise RuntimeError('GitHub outcome unknown')
                 if response.status_code not in {200,201}:
                     raise RuntimeError('GitHub outcome unknown')

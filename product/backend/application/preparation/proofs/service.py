@@ -583,15 +583,16 @@ class ProofPreparationService:
 
     def active_sources(self, project_id):
         """重启后从持久采用记录重建投影；新实例必须重新预检查，不复制旧READY。"""
-        result = []
         with self._uow() as work:
-            facts = self._facts(work,project_id)
-            for source in work.proof_sources.list(project_id,limit=256):
-                active = self._active_source(work, source, facts,
-                    adoption=work.proof_sources.adoption(project_id, source.source_id))
-                if active is not None:
-                    result.append(active)
-        return tuple(result)
+            return tuple(active for active, _ in self._active_sources(work, project_id))
+
+    def _active_sources(self, work, project_id):
+        facts = self._facts(work,project_id)
+        for source in work.proof_sources.list(project_id,limit=256):
+            adoption = work.proof_sources.adoption(project_id, source.source_id)
+            active = self._active_source(work, source, facts, adoption=adoption)
+            if active is not None:
+                yield active, adoption
 
     def _active_source(self, work, source, facts, *, adoption, loaded=None):
         project_id = source.project_id
@@ -617,10 +618,12 @@ class ProofPreparationService:
 
     def frozen_sources(self, project_id):
         from product.protocols.preparation.proof_sources import FrozenProofSource
-        return tuple(FrozenProofSource(source_id=source.source_id,revision=source.revision,
-            source_fingerprint=source.fingerprint,config=source.config,contract=request.contract,
-            owner_subject_id=request.owner_subject_id,identity_roles=request.identity_roles,adoption_preflight_id=request.preflight_id)
-            for source,request,*_ in self.active_sources(project_id))
+        with self._uow() as work:
+            # 当前报告提供已重核的运行事实；采用引用始终指向人的原确认，不能借新预检冒充重新采用。
+            return tuple(FrozenProofSource(source_id=source.source_id,revision=source.revision,
+                source_fingerprint=source.fingerprint,config=source.config,contract=request.contract,
+                owner_subject_id=request.owner_subject_id,identity_roles=request.identity_roles,adoption_preflight_id=adoption.preflight_id)
+                for (source,request,*_),adoption in self._active_sources(work, project_id))
 
     def sources_authorized(self,project_id,sources):
         """核对场景冻结来源仍有原采用、读取范围和主体授权，不连接目标或重做预检。"""

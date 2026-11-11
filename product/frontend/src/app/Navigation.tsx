@@ -8,6 +8,8 @@ import LinkOutlined from '@ant-design/icons/LinkOutlined';
 import type {Route} from '../shared/lib/navigation'
 import {settingsSection,settingsSections} from '../shared/lib/settings'
 import {historyLocation,scopedPath} from '../shared/lib/navigation'
+import {useRef} from 'react'
+import {useSelectionIndicator} from '../shared/lib/selectionIndicator'
 
 const icons:Record<string,React.ReactNode>={'/workspace':<AppstoreOutlined aria-hidden="true"/>,'/permissions':<SafetyOutlined aria-hidden="true"/>,'/testing':<CarryOutOutlined aria-hidden="true"/>,'/issues':<FileSearchOutlined aria-hidden="true"/>,'/application':<LinkOutlined aria-hidden="true"/>}
 const primary=routes.filter(item=>item.primary).map(item=>({...item,icon:icons[item.path]}))
@@ -36,8 +38,11 @@ export function navigationDirection(from:Route,to:Route){
 }
 export function NavigationLinks({current,hasProject,projectId,onNavigate}:{current:string;hasProject:boolean;projectId?:string;onNavigate:()=>void}){
   current=routeDefinition(current)?.parent??current
+  const root=useRef<HTMLDivElement>(null)
+  // 主入口沿用目录选择的连续反馈，路由和焦点仍立即切换到实际工作面。
+  const indicator=useSelectionIndicator(root,'.jj-nav-item[aria-current=page]',current+'|'+Boolean(hasProject),'surface')
   const items=(list:typeof primary)=>list.map(item=><a className="jj-nav-item" key={item.path} href={'#'+scopedPath(item.path,projectId)} onPointerEnter={()=>preloadRoute(item.path)} onFocus={()=>preloadRoute(item.path)} aria-current={current===item.path?'page':undefined} onClick={onNavigate}>{item.icon}<span className="jj-nav-label" data-short={/^[\u4e00-\u9fff]{2}$/.test(item.label)||undefined}>{item.label}</span></a>)
-  return <div className="jj-nav-groups"><nav aria-label="应用工作区">{items(hasProject?primary.filter(item=>item.path!=='/application'):primary.filter(item=>item.path==='/application'))}</nav>{hasProject&&<nav className="jj-nav-context" aria-label="应用资料">{items(primary.filter(item=>item.path==='/application'))}</nav>}</div>
+  return <div ref={root} className="jj-nav-groups" data-selection-ready={Boolean(indicator)}>{indicator&&<span className="jj-nav-indicator" data-selection-indicator aria-hidden="true" style={indicator}/>}<nav aria-label="应用工作区">{items(hasProject?primary.filter(item=>item.path!=='/application'):primary.filter(item=>item.path==='/application'))}</nav>{hasProject&&<nav className="jj-nav-context" aria-label="应用资料">{items(primary.filter(item=>item.path==='/application'))}</nav>}</div>
 }
 export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectName?:string;projectId?:string}){
   const setting=settingsSection(route)

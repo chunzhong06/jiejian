@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 import logging
+import os
 from pathlib import Path
 from time import perf_counter
 
@@ -41,6 +42,8 @@ from product.backend.interfaces.http.mcp import build_mcp_control
 from product.backend.application.agent_access.service import MCPAccessController
 from product.backend.infrastructure.runtime.logging import request_log_context, request_trace_id
 from product.backend.interfaces.http.body import ApiBodyBudget, BodyBudgetExceeded, body_budget_error
+from product.backend.infrastructure.runtime.workflow_timing import workflow_timings, workflow_phase
+from contextlib import nullcontext
 
 
 logger = logging.getLogger("jiejian.api.startup")
@@ -141,7 +144,8 @@ def create_app(
         trace_id = request_trace_id(request.headers.get("x-trace-id"))
         request.state.trace_id = trace_id
         decision = app.state.local_control_guard.authorize(request)
-        with request_log_context(trace_id):
+        diagnostic = workflow_timings() if (environ if environ is not None else os.environ).get('JIEJIAN_WORKFLOW_TIMING') == '1' else nullcontext()
+        with diagnostic as timings, request_log_context(trace_id), workflow_phase('http.request'):
             if decision.allowed:
                 response = await call_next(request)
                 if decision.issue_session and response.status_code < 400:
@@ -149,6 +153,8 @@ def create_app(
             else:
                 response = app.state.local_control_guard.rejected_response(trace_id)
         response.headers["x-trace-id"] = trace_id
+        if timings is not None:
+            await asyncio.to_thread(timings.save, context.var_dir)
         return response
 
     app.add_exception_handler(JiejianError, jiejian_error_handler)

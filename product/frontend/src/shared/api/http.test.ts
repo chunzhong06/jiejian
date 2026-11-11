@@ -66,9 +66,9 @@ it('拒绝未知消息版本，不把错误结构当作成功数据',async()=>{
 })
 
 it('写入结果未知不会自动重发',async()=>{
-  const fetch=vi.fn().mockRejectedValue(new TypeError('connection interrupted'))
+  const fetch=vi.fn().mockRejectedValue(new TypeError('connection interrupted: private transport detail'))
   vi.stubGlobal('fetch',fetch)
-  await expect(request('/api/command',{method:'POST'})).rejects.toThrow('connection interrupted')
+  await expect(request('/api/command',{method:'POST'})).rejects.toMatchObject({code:'CONTROL_CONNECTION_FAILED',requestOutcome:'UNKNOWN',message:'与界鉴服务的连接已中断。请检查本机服务；已提交的操作先查询原回执。'})
   expect(fetch).toHaveBeenCalledTimes(1)
 })
 

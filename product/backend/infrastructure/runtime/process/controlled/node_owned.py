@@ -49,7 +49,11 @@ def _digest(path: Path) -> str:
 def node_execution_identity(node_executable: Path, *, module_loader='NODE_STANDARD') -> dict[str, str]:
     """按解释器、固定执行器顺序核验身份；路径与摘要算法由运行基础设施拥有。"""
     return {"interpreter_fingerprint": _digest(node_executable),
-        "executor_fingerprint": hashlib.sha256(EXECUTOR.read_bytes() + (SQLITE_ADAPTER.read_bytes()+DATABASE_ADAPTER.read_bytes() if module_loader == 'NODE_STANDARD' else b'')).hexdigest()}
+        "executor_fingerprint": node_executor_fingerprint(module_loader)}
+
+
+def node_executor_fingerprint(module_loader):
+    return hashlib.sha256(EXECUTOR.read_bytes() + (SQLITE_ADAPTER.read_bytes()+DATABASE_ADAPTER.read_bytes() if module_loader == 'NODE_STANDARD' else b'')).hexdigest()
 
 
 def node_reference_matches(var_dir: Path, request: NodeRuntimeLoadRequest, reference: NodeRuntimeReference,
@@ -85,7 +89,8 @@ def node_corresponds(var_dir: Path, reference: NodeRuntimeReference, node_execut
                 or reference.manifest_fingerprint != node_document_fingerprint(manifest)
                 or reference.source_fingerprint != manifest.source_fingerprint or reference.port != manifest.port
                 or _digest(node_executable) != manifest.interpreter_fingerprint
-                or node_execution_identity(node_executable,module_loader=manifest.module_loader)['executor_fingerprint'] != manifest.executor_fingerprint):
+                # 解释器已在前一条件按实际字节核对；这里只读执行器，避免再次哈希同一大型Node文件。
+                or node_executor_fingerprint(manifest.module_loader) != manifest.executor_fingerprint):
             return False
         from product.backend.infrastructure.runtime.process.controlled.npm import verify_dependencies
         verify_dependencies(root, manifest)

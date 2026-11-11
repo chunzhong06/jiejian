@@ -13,7 +13,7 @@ export type AllowControlRequirement = {
 }
 
 export type PreparationStatus = 'SATISFIED' | 'NEEDS_USER' | 'STALE' | 'BLOCKED' | 'NOT_REQUIRED'
-export type PreparationItem = { status: PreparationStatus; reason_codes: string[]; binding_fingerprint?: string | null }
+export type PreparationItem = { status: PreparationStatus; reason_codes: string[]; binding_fingerprint?: string | null;reuse_basis?:'CURRENT_SOURCE'|'VERIFIED_SOURCE_CONTRACT'|null }
 export type IdentitySlot = PreparationItem & {
   requirement: { slot_id: string; actor_id: string; actor_revision: number; ordinal: number }
   actor_display_name: string
@@ -49,6 +49,7 @@ export type EvidenceMaterialDetail = {
 export type MaterialReference = { action_id: string; action_revision: number; kind: 'execution' | 'resource' | 'evidence' | 'recovery'; member_id: string | null }
 export type MaterialDetails = {
   material: MaterialReference; status: PreparationStatus; reason_codes: string[]; retained: boolean
+  reuse_basis?:'CURRENT_SOURCE'|'VERIFIED_SOURCE_CONTRACT'|null
   source_recording_id: string | null; confirmed_at_us: number | null; expected_fingerprint: string; observed_at_us: number
   candidates: Array<{ recording_id: string; captured_at_us: number | null; current: boolean; updates: MaterialReference[] }>
   recording_context: MaterialRecordingContext | null

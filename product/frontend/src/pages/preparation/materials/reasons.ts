@@ -1,4 +1,10 @@
 const reasons: Record<string,string> = {
+    MATERIAL_ACTION_REVISION_CHANGED:'业务操作的修订已变化，需要核对新要求',
+    MATERIAL_OWNER_CHANGED:'测试数据所属账号已变化，需要重新确认数据归属',
+    MATERIAL_SUBJECT_CHANGED:'演示时的操作账号与当前账号不再对应',
+    MATERIAL_IMPLEMENTATION_CHANGED:'业务操作的实现位置已变化，需要核对当前实现',
+    MATERIAL_SOURCE_CHANGED:'运行代码已变化，原材料尚未通过来源沿用核验',
+    MATERIAL_ENDPOINT_CHANGED:'检查连接或运行实例已变化，需要核对新现场的材料',
     CONDITION_SOURCE_REQUIRED:'需要设置租户或数据状态的判断依据', RULE_CASE_DATA_STALE:'这条规则的测试数据需要重新核对',
     PERMISSION_CONDITION_UNKNOWN:'未能确认规则所需的身份、租户或数据状态', PERMISSION_CONDITION_MISMATCH:'这份数据不符合规则的适用条件',
     TEST_IDENTITY_REQUIRED:'尚未建立对应的测试账号', TEST_IDENTITY_LOGIN_REQUIRED:'需要先完成账号登录',
@@ -13,5 +19,6 @@ const reasons: Record<string,string> = {
     SUPPLEMENT_REQUEST_STALE:'补充记录与当前请求不一致', REFERENCE_CAPTURE_IN_PROGRESS:'资源正在取样，需等待操作收尾',
 };
 export function materialReasons(codes:string[]) {
-    return [...new Set(codes.map(code=>reasons[code]??'当前材料需要重新核对，原记录仍保留'))];
+    const specific=codes.some(code=>code.startsWith('MATERIAL_')&&reasons[code])
+    return [...new Set(codes.filter(code=>!specific||!['ACTION_BINDING_SOURCE_STALE','RESOURCE_OWNER_SOURCE_STALE'].includes(code)).map(code=>reasons[code]??'当前材料需要重新核对，原记录仍保留'))];
 }

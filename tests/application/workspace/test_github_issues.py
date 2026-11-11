@@ -108,7 +108,7 @@ def test_permission_or_rate_limit_rejection_keeps_original_failed_operation(harn
     assert service.act(project,identity,action)['state']=='WAITING_USER'
     with pytest.raises(JiejianError) as rejected:
         service.decide(project,identity,action.operation_id,True)
-    assert rejected.value.to_dict()['details']=={'upstream_status':status}
+    assert rejected.value.to_dict()['details']=={'upstream_status':status,'request_outcome':'NOT_ACCEPTED'}
     assert service.decide(project,identity,action.operation_id,True)['state']=='FAILED'
     assert service.reconcile(project,identity,action.operation_id)['state']=='FAILED'
     assert requests==['POST']

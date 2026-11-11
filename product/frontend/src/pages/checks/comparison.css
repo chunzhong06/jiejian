@@ -3,6 +3,7 @@
 .jj-comparison-runs h2 { margin:0 0 16px; }
 .jj-comparison-runs p { margin:8px 0; }
 .jj-comparison-runs details { margin-top:20px; }
+.jj-comparison-results { border:0; }
 .jj-comparison-results .jj-comparison-table { width:100%; table-layout:fixed; }
 .jj-comparison-table thead th:first-child { width:48%; }
 .jj-comparison-table thead th:not(:first-child) { width:26%; }
@@ -13,8 +14,9 @@
 .jj-comparison-inline > header h2 { margin:0; }
 .jj-comparison-inline > header .jj-button { min-height:var(--control-compact); width:var(--control-compact); padding:0; }
 .jj-comparison-inline > footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; margin-top:24px; }
-.jj-comparison-context { margin-bottom:24px; }
-.jj-comparison-context > summary { color:var(--muted);font-size:var(--text-meta); }
+.jj-comparison-overview { display:grid; gap:20px; }
+.jj-comparison-context { margin:0; padding:0; }
+.jj-comparison-context > summary { min-height:36px; align-items:center; color:var(--muted);font-size:var(--text-meta); }
 .jj-comparison-context[open] > .jj-comparison-runs { margin-top:20px; }
 .jj-comparison-requirement { margin-bottom:24px;max-width:76ch;line-height:var(--leading-reading); }
 .jj-comparison-setup { border-block:1px solid var(--line); padding:24px 0; margin-bottom:24px; }

@@ -94,5 +94,5 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
         else
             setUncertain(true);
         throw error;
-    } })}>生成待审变更</Button></div>{uncertain && <Notice tone="caution">生成结果尚未确认，请先读取已经保存的提案。<Button busy={busy} onClick={() => void act(async () => { const result = await api.proposals(projectId, true); assertProject(result.project_id, projectId); result.proposals.forEach(item => assertProject(item.proposal.project_id, projectId)); setProposals(result.proposals.map(item => item.proposal.proposal_id)); })}>读取待审提案</Button></Notice>}{proposals.map((id, index) => <Button key={id} onClick={() => void act(() => onProposal(id))}>审阅提案 {index + 1}</Button>)}</section></>;
+    } })}>生成待审变更</Button></div>{uncertain && <Notice tone="caution">生成结果尚未确认，请先读取已经保存的提案。<Button busy={busy} onClick={() => void act(async () => { const result = await api.proposals(projectId, true); assertProject(result.project_id, projectId); result.proposals.forEach(item => assertProject(item.proposal.project_id, projectId)); setProposals(result.proposals.map(item => item.proposal.proposal_id)); })} busyLabel="正在查询">读取待审提案</Button></Notice>}{proposals.map((id, index) => <Button key={id} onClick={() => void act(() => onProposal(id))}>审阅提案 {index + 1}</Button>)}</section></>;
 }

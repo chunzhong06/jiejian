@@ -1,4 +1,5 @@
 // 共享 HTTP 传输：解包响应、映射脱敏错误，并按读取代次合并并发请求。
+import {beginWorkflowTiming} from '../lib/workflowTiming'
 export type ApiEnvelope<T> = { schema_version: '1'; data: T }
 
 export type ErrorDiagnosis = {
@@ -80,11 +81,17 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   else init?.signal?.addEventListener('abort', cancel, {once:true})
   // 自动超时只施加于读取；写入结果未知时由用例查询原回执，传输层不自动重放副作用。
   const timer = controller ? setTimeout(() => controller.abort(), 30_000) : undefined
+  const finishTiming=beginWorkflowTiming(read?'http.read':'http.command')
+  let timingOutcome:'COMPLETE'|'FAILED'|'ABORTED'='COMPLETE'
   try {
   const response = await fetch(path, {
     ...init,
     ...(controller ? {signal:controller.signal} : {}),
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  }).catch(error=>{
+    // 浏览器网络错误没有服务端回执；保留 UNKNOWN，并用固定文案避免泄露底层地址或错误正文。
+    if(error instanceof TypeError)throw new ApiError('CONTROL_CONNECTION_FAILED','与界鉴服务的连接已中断。请检查本机服务；已提交的操作先查询原回执。')
+    throw error
   })
   const body = await response.json().catch(() => ({}))
   if (!isApiEnvelope(body)) {
@@ -100,9 +107,10 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   // 这里只识别 envelope 版本；具体字段与项目归属仍由对应 API 和页面消费者核对。
   return body.data as T
   } catch (error) {
+    timingOutcome=init?.signal?.aborted?'ABORTED':'FAILED'
     if (controller?.signal.aborted && !init?.signal?.aborted) throw new ApiError('READ_TIMEOUT', '读取尚未完成，可以返回或稍后重试；已提交的操作请查询原回执。')
     throw error
-  } finally { if (timer) clearTimeout(timer); init?.signal?.removeEventListener('abort',cancel) }
+  } finally { finishTiming(timingOutcome);if (timer) clearTimeout(timer); init?.signal?.removeEventListener('abort',cancel) }
 }
 
 function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> & { error?: { code?: string; message?: string; diagnosis?: ErrorDiagnosis; details?:{execution_started?:boolean;reason?:string;request_outcome?:unknown;field_errors?:unknown} }; trace_id?: string } {

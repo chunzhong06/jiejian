@@ -27,4 +27,11 @@ export function PageError({title,error}:{title:string;error:unknown}){
   return <section className="jj-page-state"><Heading title={title}/><div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>请根据下面的原因处理，再使用右上角刷新重试。</p><ErrorNote error={error}/></div></div></section>
 }
 
-export function Notice({children,tone='neutral'}:{children:ReactNode;tone?:FeedbackTone}){return <div className={`jj-notice is-${tone}`} role="status">{children}</div>}
+/** 长期需要核对的原因与恢复动作成组；普通简短消息仍保留行内表达。 */
+export function Notice({children,tone='neutral',title,actions}:{children?:ReactNode;tone?:FeedbackTone;title?:string;actions?:ReactNode}){return <div className={`jj-notice is-${tone}`} role="status">{title||actions?<><div className="jj-notice-copy">{title&&<strong>{title}</strong>}{children&&<div>{children}</div>}</div>{actions&&<div className="jj-notice-actions">{actions}</div>}</>:children}</div>}
+
+/** 解释已知事实的适用范围；需要用户处理的异常仍用 Notice 呈现。 */
+export function ContextNote({children,label}:{children:ReactNode;label:string}){return <aside className="jj-context-note" aria-label={label}>{children}</aside>}
+
+/** 已发生的完成反馈留在原操作附近，不与需要处理的持续警告争夺视觉重量。 */
+export function InlineFeedback({children,tone='neutral'}:{children:ReactNode;tone?:'neutral'|'positive'}){return <p className="jj-inline-feedback" data-tone={tone} role="status">{children}</p>}

@@ -29,6 +29,7 @@ export type CheckPreview = {
   selection?: CheckSelection | null
   omitted_review_gaps?: BoundaryReviewGap[]
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
+  preparation_work?: {project_id:string;plan_fingerprint:string;primary_task:import('../../workspace/api/workspace').PrimaryTaskDto|null;preparation_complete:boolean;actions:Array<{action_id:string;action_revision:number;label:string;preparation_complete:boolean}>;impacts:Array<{action_id:string;action_label:string;kind:'identity'|'execution'|'resource'|'evidence'|'recovery';status:string;reason_codes:string[];permission_ids:string[];member_id?:string|null;member_label?:string}>}
   gaps: Array<{ action_id: string; action_revision: number; reason: string; intent_id?: string | null; effect_id?: string | null }>
   boundary_review_gaps?: BoundaryReviewGap[]
   requirement_scope?: RequirementScope[]

@@ -1,3 +1,4 @@
+import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import {useWorkflow} from '../../shared/lib/workflow'
 import {flowTrialsApi} from '../../entities/preparation/api/flowTrials'
 import {operationFlowsApi} from '../../entities/preparation/api/operationFlows'
@@ -6,7 +7,7 @@ import {OperationFlowEditor} from '../../entities/preparation/ui/OperationFlowEd
 import {useRead} from '../../shared/lib/useRead'
 import {go,returnDestination,returnDestinationLabel} from '../../shared/lib/navigation'
 import type {PageProps} from '../../shared/model/page'
-import {PageError, Loading} from '../../shared/ui/feedback'
+import {PageError} from '../../shared/ui/feedback'
 
 export function TestingEditor({projectId,route,actionId}:PageProps&{actionId:string}) {
   const workflow=useWorkflow()
@@ -19,7 +20,7 @@ export function TestingEditor({projectId,route,actionId}:PageProps&{actionId:str
     sourceId&&requestId?workbenchApi.sources(projectId,signal,sourceId):Promise.resolve(undefined),
     flowId&&revision?operationFlowsApi.read(projectId,flowId,Number(revision),signal):Promise.resolve(undefined)
   ]))
-  if(state.loading)return <Loading page/>
+  if(state.loading)return <PageSkeleton view="/testing" title="接口流程"/>
   if(state.error)return <PageError title="接口流程" error={state.error}/>
   const [trial,sources,flow]=state.data??[]
   if(flow&&flow.business_action_id!==actionId)return <PageError title="接口流程" error={new Error('这份流程不属于当前业务操作，请返回原任务核对。')}/>

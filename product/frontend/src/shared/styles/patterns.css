@@ -64,15 +64,15 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-result-overview .jj-result-label { color:var(--ink); font-size:var(--text-body); line-height:var(--leading-body); }
 .jj-result-overview .jj-badge { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 .jj-task-surface { width:100%; max-width:1040px; margin-inline:auto; min-width:0; }
-.jj-task-surface-heading { display:grid; gap:10px; margin-bottom:32px; }
-.jj-task-surface-heading > h1 { margin:0; }
-.jj-task-surface-heading > p { margin:0; max-width:72ch; color:var(--muted); line-height:var(--leading-reading); }
+.jj-task-surface > .jj-heading { margin-bottom:32px; }
 .jj-task-surface-body { min-width:0; }
-.jj-task-surface > .jj-task-actions { margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+.jj-task-actions[data-separated=true] { margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
 .jj-hint-layer { position:fixed; inset:0; overflow:clip; pointer-events:none; z-index:1070; }
 .jj-hint-layer > .ant-tooltip { pointer-events:auto; }
 .jj-task-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; }
 .jj-task-actions > .jj-action-note { flex:1 1 240px; color:var(--muted); font-size:var(--text-meta); line-height:var(--leading-reading); }
+.jj-task-actions[data-composed] { column-gap:24px; row-gap:16px; }
+.jj-task-commands { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:10px; margin-left:auto; }
 
 /* 外层可组织事实组的位置；标签和值的字级、列宽及换行只在这里定义。 */
 .jj-facts { container:facts / inline-size; display:grid; gap:14px; min-width:0; }
@@ -99,7 +99,7 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-compare-columns > section > details { margin-top:6px; }
 @container compare-pair (max-width:600px) { .jj-compare-pair > .jj-compare-columns { grid-template-columns:minmax(0,1fr); } }
 .jj-comparison-data { width:100%; table-layout:fixed; }
-.jj-comparison-data :is(th,td) { text-align:start; vertical-align:top; padding:14px 16px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; white-space:pre-wrap; }
+.jj-comparison-data :is(th,td) { text-align:start; vertical-align:top; overflow-wrap:anywhere; white-space:pre-wrap; }
 .jj-comparison-data thead th { color:var(--muted); font-size:var(--text-meta); font-weight:500; }
 .jj-comparison-data tbody th { font-size:var(--text-label); font-weight:500; }
 .jj-comparison-data [data-changed=true] td:last-child { border-left:2px solid var(--selection-mark); }
@@ -119,7 +119,7 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-scroll-table > .jj-content-table[data-density=compact] > :is(thead,tbody,tfoot) > tr:not(.jj-expanded-row) > :last-child { padding-inline-end:var(--table-edge-inline); }
 /* 记录的独立字段共用行节奏；名称旁的短状态和表格列继续使用各自间距。 */
 .jj-record-row { column-gap:20px; row-gap:12px; padding-block:18px; }
-.jj-operation-selector { width:min(400px,100%); }
+.jj-operation-selector { width:min(520px,100%); }
 @media(max-width:600px) { .jj-content-table { --table-cell-block:14px; --table-cell-inline:16px; } .jj-scroll-table > .jj-content-table[data-density=compact] { --table-edge-inline:16px; } }
 @media(prefers-reduced-motion:reduce) { .jj-progress-activity { transform:translateX(116%); } }
 .jj-task-surface[data-width=wide] { max-width:none; }

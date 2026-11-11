@@ -70,6 +70,13 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,c
             scope=dict(scenario_reference=scenario_reference) if complex_flow and stage<2 else dict(change_id=change_id)
             preview = core.checks.preview(project,**scope)
             assert not preview.gaps,preview
+            with core.uow_factory() as work:
+                adoption = work.proof_sources.adoption(project,source)
+            frozen = service.frozen_sources(project)
+            assert frozen[0].adoption_preflight_id == adoption.preflight_id
+            if stage == 1:
+                # 新实例已重核，但本次未要求人重新采用；运行引用仍绑定原确认。
+                assert frozen[0].adoption_preflight_id != preflight
             submitted = core.checks.submit(project,expected_plan_fingerprint=preview.plan_fingerprint,idempotency_key=uuid4().hex,**scope)
             deadline = time.monotonic()+40
             while time.monotonic()<deadline:

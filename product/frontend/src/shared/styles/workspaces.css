@@ -1,7 +1,8 @@
 /* 工作面共用阅读与操作语法；业务模块仍负责自身状态和数据寿命。 */
 .jj-collection { min-width:0; background:transparent; border-block:1px solid var(--line); }
-.jj-collection .jj-scroll-table { border:0; border-radius:0; background:transparent; box-shadow:none; }
-.jj-collection .jj-scroll-table thead { background:transparent; }
+/* 持续选择的集合沿工作面展开；独立成组比较时，由共用表格外框表达归属。 */
+.jj-collection .jj-scroll-table:not([data-appearance=contained]) { border:0; border-radius:0; background:transparent; box-shadow:none; }
+.jj-collection .jj-scroll-table:not([data-appearance=contained]) thead { background:transparent; }
 .jj-workspace-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 20px; }
 .jj-workspace-toolbar > .jj-search-field { width:min(360px,100%); }
 .jj-collection-layout { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr); align-items:start; min-width:0; }
@@ -11,7 +12,11 @@
 .jj-inspector { display:flex; flex-direction:column; align-self:start; min-width:0; padding:26px 0 28px 28px; border-left:1px solid var(--line); }
 .jj-inspector-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:16px; }
 .jj-object-line > :is(h2,h3) { margin:0; min-width:0; overflow-wrap:anywhere; }
-.jj-inspector h3 { margin:28px 0 16px; }
+.jj-inspector-body { min-width:0; margin-top:24px; }
+.jj-inspector-body > :first-child { margin-top:0; }
+.jj-inspector-section + .jj-inspector-section { margin-top:24px; }
+.jj-inspector-section > .jj-section-header { margin-bottom:12px; }
+.jj-inspector-section > p { color:var(--muted); line-height:var(--leading-reading); }
 .jj-inspector-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:28px; padding-top:20px; border-top:1px solid var(--line); }
 .jj-object-table :is(th,td) { border-bottom:1px solid var(--line); vertical-align:middle; }
 .jj-object-table thead th { color:var(--muted); }
@@ -66,5 +71,3 @@
 :where(time, progress, .jj-badge, .jj-pagination, .jj-testing-count, .jj-rule-directory-summary, .jj-source-toolbar p, .jj-inspector .jj-facts dd) { font-variant-numeric:tabular-nums; }
 .jj-inspector-heading > .jj-button { width:var(--control-compact); min-height:var(--control-compact); padding:0; margin-top:-6px; }
 @media(max-width:700px) { .jj-collection[data-detail-open=true] .jj-collection-main { display:none; } .jj-collection[data-detail-open=true] .jj-inspector { border-top:0; padding:24px 0; } }
-
-.jj-inspector>.jj-facts:not(.jj-rule-quick-facts){margin:28px 0 0}

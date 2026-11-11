@@ -26,7 +26,7 @@
 
 ### checks/CheckPlan.tsx
 
-[源码](../../../product/frontend/src/pages/checks/CheckPlan.tsx)（242 行）。公开声明：`Plan`、`PlanWorkspace`、`gapDestination`、`gapName`。
+[源码](../../../product/frontend/src/pages/checks/CheckPlan.tsx)（243 行）。公开声明：`Plan`、`PlanWorkspace`、`gapDestination`、`gapName`。
 
 ### checks/CheckRun.tsx
 
@@ -38,15 +38,15 @@
 
 ### checks/comparison.css
 
-[源码](../../../product/frontend/src/pages/checks/comparison.css)（31 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/checks/comparison.css)（33 行）。公开声明：包、内部机制或样式。
 
 ### checks/Comparison.tsx
 
-[源码](../../../product/frontend/src/pages/checks/Comparison.tsx)（113 行）。公开声明：`Comparison`、`changeLabels`。
+[源码](../../../product/frontend/src/pages/checks/Comparison.tsx)（116 行）。公开声明：`Comparison`、`changeLabels`。
 
 ### checks/ContinueCheck.tsx
 
-[源码](../../../product/frontend/src/pages/checks/ContinueCheck.tsx)（38 行）。公开声明：`ContinueCheck`、`continuationDestination`。
+[源码](../../../product/frontend/src/pages/checks/ContinueCheck.tsx)（39 行）。公开声明：`ContinueCheck`、`continuationDestination`。
 
 ### checks/History.tsx
 
@@ -58,7 +58,7 @@
 
 ### checks/RoutinePlan.tsx
 
-[源码](../../../product/frontend/src/pages/checks/RoutinePlan.tsx)（72 行）。公开声明：`RoutinePlan`。
+[源码](../../../product/frontend/src/pages/checks/RoutinePlan.tsx)（73 行）。公开声明：`RoutinePlan`。
 
 ### checks/RuleCheckScope.tsx
 
@@ -74,7 +74,7 @@
 
 ### checks/styles.css
 
-[源码](../../../product/frontend/src/pages/checks/styles.css)（354 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/checks/styles.css)（358 行）。公开声明：包、内部机制或样式。
 
 ### checks/types.ts
 
@@ -96,7 +96,7 @@
 
 ### checks/report/Report.tsx
 
-[源码](../../../product/frontend/src/pages/checks/report/Report.tsx)（168 行）。公开声明：`Report`。
+[源码](../../../product/frontend/src/pages/checks/report/Report.tsx)（170 行）。公开声明：`Report`。
 
 ### checks/report/ScenarioResults.tsx
 
@@ -146,7 +146,7 @@
 
 ### connections/sources.css
 
-[源码](../../../product/frontend/src/pages/connections/sources.css)（63 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/connections/sources.css)（65 行）。公开声明：包、内部机制或样式。
 
 ### connections/styles.css
 
@@ -154,11 +154,11 @@
 
 ### connections/understanding.css
 
-[源码](../../../product/frontend/src/pages/connections/understanding.css)（43 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/connections/understanding.css)（41 行）。公开声明：包、内部机制或样式。
 
 ### connections/Understanding.tsx
 
-[源码](../../../product/frontend/src/pages/connections/Understanding.tsx)（76 行）。公开声明：`Understanding`。
+[源码](../../../product/frontend/src/pages/connections/Understanding.tsx)（77 行）。公开声明：`Understanding`。
 
 ### connections/workbench.css
 
@@ -172,7 +172,7 @@
 
 ### issues/Issues.tsx
 
-[源码](../../../product/frontend/src/pages/issues/Issues.tsx)（82 行）。公开声明：`Issues`。
+[源码](../../../product/frontend/src/pages/issues/Issues.tsx)（83 行）。公开声明：`Issues`。
 
 ### issues/workspace.css
 
@@ -182,11 +182,11 @@
 
 ### overview/Home.tsx
 
-[源码](../../../product/frontend/src/pages/overview/Home.tsx)（48 行）。公开声明：`Home`。
+[源码](../../../product/frontend/src/pages/overview/Home.tsx)（49 行）。公开声明：`Home`。
 
 ### overview/workbench.css
 
-[源码](../../../product/frontend/src/pages/overview/workbench.css)（24 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/overview/workbench.css)（23 行）。公开声明：包、内部机制或样式。
 
 ## permissions
 
@@ -200,19 +200,19 @@
 
 ### permissions/official-rules.css
 
-[源码](../../../product/frontend/src/pages/permissions/official-rules.css)（26 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/permissions/official-rules.css)（23 行）。公开声明：包、内部机制或样式。
 
 ### permissions/OfficialRules.tsx
 
-[源码](../../../product/frontend/src/pages/permissions/OfficialRules.tsx)（55 行）。公开声明：`OfficialRules`、`OfficialRulesReady`、`matchesOfficialDraft`。
+[源码](../../../product/frontend/src/pages/permissions/OfficialRules.tsx)（57 行）。公开声明：`OfficialRules`、`OfficialRulesReady`、`matchesOfficialDraft`。
 
 ### permissions/Permissions.tsx
 
-[源码](../../../product/frontend/src/pages/permissions/Permissions.tsx)（167 行）。公开声明：`Permissions`。
+[源码](../../../product/frontend/src/pages/permissions/Permissions.tsx)（185 行）。公开声明：`Permissions`。
 
 ### permissions/ProposalReview.tsx
 
-[源码](../../../product/frontend/src/pages/permissions/ProposalReview.tsx)（102 行）。公开声明：`ProposalReview`。
+[源码](../../../product/frontend/src/pages/permissions/ProposalReview.tsx)（104 行）。公开声明：`ProposalReview`。
 
 ### permissions/RuleEditor.tsx
 
@@ -230,7 +230,7 @@
 
 ### permissions/styles/permissions.css
 
-[源码](../../../product/frontend/src/pages/permissions/styles/permissions.css)（119 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/permissions/styles/permissions.css)（120 行）。公开声明：包、内部机制或样式。
 
 ### permissions/styles/rules.css
 
@@ -262,11 +262,11 @@
 
 ### preparation/materials/MaterialEditor.tsx
 
-[源码](../../../product/frontend/src/pages/preparation/materials/MaterialEditor.tsx)（170 行）。公开声明：`MaterialEditor`。
+[源码](../../../product/frontend/src/pages/preparation/materials/MaterialEditor.tsx)（172 行）。公开声明：`MaterialEditor`。
 
 ### preparation/materials/reasons.ts
 
-[源码](../../../product/frontend/src/pages/preparation/materials/reasons.ts)（17 行）。公开声明：`materialReasons`。
+[源码](../../../product/frontend/src/pages/preparation/materials/reasons.ts)（24 行）。公开声明：`materialReasons`。
 
 ### preparation/materials/RuleCaseData.tsx
 
@@ -284,7 +284,7 @@
 
 ### preparation/styles/materials.css
 
-[源码](../../../product/frontend/src/pages/preparation/styles/materials.css)（175 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/preparation/styles/materials.css)（174 行）。公开声明：包、内部机制或样式。
 
 ### preparation/styles/preparation.css
 
@@ -314,15 +314,15 @@
 
 ### testing/BusinessScenarios.tsx
 
-[源码](../../../product/frontend/src/pages/testing/BusinessScenarios.tsx)（157 行）。公开声明：`BusinessScenarios`。
+[源码](../../../product/frontend/src/pages/testing/BusinessScenarios.tsx)（158 行）。公开声明：`BusinessScenarios`。
 
 ### testing/CheckRoutines.tsx
 
-[源码](../../../product/frontend/src/pages/testing/CheckRoutines.tsx)（154 行）。公开声明：`CheckRoutines`。
+[源码](../../../product/frontend/src/pages/testing/CheckRoutines.tsx)（156 行）。公开声明：`CheckRoutines`。
 
 ### testing/routines.css
 
-[源码](../../../product/frontend/src/pages/testing/routines.css)（67 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/testing/routines.css)（64 行）。公开声明：包、内部机制或样式。
 
 ### testing/scenario-directory.css
 
@@ -342,11 +342,11 @@
 
 ### testing/Testing.tsx
 
-[源码](../../../product/frontend/src/pages/testing/Testing.tsx)（71 行）。公开声明：`Testing`。
+[源码](../../../product/frontend/src/pages/testing/Testing.tsx)（72 行）。公开声明：`Testing`。
 
 ### testing/TestingEditor.tsx
 
-[源码](../../../product/frontend/src/pages/testing/TestingEditor.tsx)（28 行）。公开声明：`TestingEditor`。
+[源码](../../../product/frontend/src/pages/testing/TestingEditor.tsx)（29 行）。公开声明：`TestingEditor`。
 
 ### testing/TestingSections.tsx
 
@@ -368,7 +368,7 @@
 
 ### tools/Collaboration.tsx
 
-[源码](../../../product/frontend/src/pages/tools/Collaboration.tsx)（248 行）。公开声明：`Collaboration`。
+[源码](../../../product/frontend/src/pages/tools/Collaboration.tsx)（250 行）。公开声明：`Collaboration`。
 
 ### tools/CollaborationArtifactReview.tsx
 
@@ -376,7 +376,7 @@
 
 ### tools/CollaborationHub.tsx
 
-[源码](../../../product/frontend/src/pages/tools/CollaborationHub.tsx)（32 行）。公开声明：`CollaborationHub`。
+[源码](../../../product/frontend/src/pages/tools/CollaborationHub.tsx)（35 行）。公开声明：`CollaborationHub`。
 
 ### tools/workspace.css
 

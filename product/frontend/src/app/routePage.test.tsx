@@ -32,7 +32,9 @@ it('悬停预取只加载模块，进入页面前不挂载或读取业务',async
 it('页面模块读取失败后由统一刷新恢复，离开后不再重试该模块',async()=>{
   const read=vi.fn().mockRejectedValueOnce(new Error('模块暂不可用')).mockResolvedValue({default:()=> <h1>已恢复页面</h1>})
   const Page=routePage(read,'/permissions'),view=render(<Page/>)
-  expect(await screen.findByText('模块暂不可用')).toBeVisible()
+  expect(await screen.findByText('页面资源暂时未能加载，请使用右上角刷新重试。')).toBeVisible()
+  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('权限与覆盖')
+  expect(screen.queryByText('模块暂不可用')).not.toBeInTheDocument()
   await act(async()=>{await refreshCurrentPage()})
   expect(screen.getByRole('heading',{name:'已恢复页面'})).toBeVisible()
   expect(read).toHaveBeenCalledTimes(2)

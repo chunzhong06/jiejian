@@ -62,7 +62,7 @@ def test_snapshot_requires_exact_registered_capability_and_preserves_source(tmp_
             work.application_understanding.replace(understanding.model_copy(update={"confirmed_endpoint": "http://127.0.0.1:8766"}))
             work.commit()
         # 模拟 GET 已返回而目标随后漂移；装配不能仅凭旧 SATISFIED 创建快照。
-        monkeypatch.setattr(core.preparation, "get", lambda _: old_view)
+        monkeypatch.setattr(core.preparation, "get", lambda _, **kwargs: old_view)
         with pytest.raises(JiejianError) as error:
             core.preparation.build_execution_request(harness.project_id, **arguments)
         assert error.value.code == "STATE_PRECONDITION"

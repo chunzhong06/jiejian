@@ -1,5 +1,6 @@
 # Worker 在同一 fenced 事务发布不可变检查包及索引；故障恢复只补交既有包，不再执行目标。
 from __future__ import annotations
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
 
 import hashlib
 import os
@@ -27,6 +28,7 @@ class CheckPublisher:
         self._uow_factory = uow_factory
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
 
+    @timed_workflow('report.publish')
     def publish(self, staging: Path, *, known_secrets=()) -> CheckPackage:
         reject_check_links(RuntimePaths(self._var_dir).jobs, staging)
         has_manifest = (staging / MANIFEST_NAME).exists()

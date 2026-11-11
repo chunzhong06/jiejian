@@ -28,6 +28,8 @@ def execute_check_attempt(input_path: Path, staging: Path, *, environ) -> int:
     """路径、根协议或资产不一致在任何 TARGET 前退出；再次运行同一 staging 也会拒绝。"""
     try:
         runner_input = parse_check_document(read_check_bytes(input_path), CheckRunnerInput)
+        from product.backend.infrastructure.runtime.workflow_timing import link_workflow
+        link_workflow(job_id=runner_input.job_id, run_id=runner_input.run_id)
         attempt = input_path.parent
         if len(input_path.parents) < 6:
             return 64

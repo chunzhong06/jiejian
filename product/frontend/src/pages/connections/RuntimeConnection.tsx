@@ -6,7 +6,7 @@ import { useRead } from '../../shared/lib/useRead';
 import { operationId, readPending, savePending, notAccepted } from '../../shared/lib/operations';
 import { Button } from '../../shared/ui/actions';
 import {Field,ObjectIdentity} from '../../shared/ui/layout'
-import { Badge, ErrorNote, Loading, Notice } from '../../shared/ui/feedback';
+import { Badge, ErrorNote, InlineFeedback, Loading, Notice } from '../../shared/ui/feedback';
 
 type ConnectionMethod = 'existing' | 'managed';
 type PendingStart = { preview: RuntimePreview; operation: string };
@@ -134,7 +134,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                     <footer><Button disabled={busy} onClick={()=>{setPreview(undefined);setAck(false)}}>返回修改</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(start)}>启动测试实例</Button></footer>
                 </section>}
                 {!preview && terminalState === 'FAILED' && <Notice tone="caution">本次启动未完成，请重新预览启动范围。检查地址未因启动失败而改变。</Notice>}
-                {!preview && terminalState === 'CANCELLED' && <Notice tone="neutral">本次启动已取消。</Notice>}
+                {!preview && terminalState === 'CANCELLED' && <InlineFeedback>本次启动已取消。</InlineFeedback>}
             </>}
         </div>
         {currentMethod === 'existing' && state.error && <ErrorNote error={state.error}/>}

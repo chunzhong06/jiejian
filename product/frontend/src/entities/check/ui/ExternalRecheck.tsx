@@ -5,7 +5,7 @@ import {repairReference,type RepairContract,type RepairComparisonRow} from '../a
 import {Dialog} from '../../../shared/ui/Dialog'
 import {Field} from '../../../shared/ui/layout'
 import {Button} from '../../../shared/ui/actions'
-import {ErrorNote,Notice} from '../../../shared/ui/feedback'
+import {ContextNote,ErrorNote,InlineFeedback,Notice} from '../../../shared/ui/feedback'
 import {operationId,readPending,savePending,notAccepted,isRecord,isOperationId,isPublicId} from '../../../shared/lib/operations'
 import {go,withReturnDestination} from '../../../shared/lib/navigation'
 import './recheck.css'
@@ -45,9 +45,9 @@ export function ExternalRecheck({projectId,contract,comparison,endpoint,onClose,
     <PendingRecovery storageKey={key} projectId={projectId}/><p>本次应用连接：<strong>{endpoint}</strong></p>
     <Field label="本次部署或处理说明" hint="填写本次部署或处理的公开信息，请勿填写凭据。返回后可继续编辑。"><textarea maxLength={256} value={statement} disabled={busy||Boolean(pending)} onChange={event=>{setStatement(event.target.value);savePending(draftKey,event.target.value);setPreview(undefined)}}/></Field>
     <section className="jj-recheck-context"><h3>沿用的原问题与正常功能</h3><div className="jj-recheck-cases">{comparison.map(row=><article key={row.source_case_id}><h4>{row.role==='DENY'?'禁止场景':'正常对照'}</h4><p>{row.subject_label} → {row.resource_owner_label}</p><p className="jj-small jj-muted">资源 {row.resource_id} · {row.effect_labels.join('、')}</p></article>)}</div></section>
-    {preview&&<Notice tone={preview.can_execute?'neutral':'caution'}>本次执行 {preview.case_count} 项检查，保留原问题、正常对照及原检查范围。{preview.can_execute?'材料具备，提交前仍会重新核对。':'仍有准备缺口，请返回测试场景处理。'}</Notice>}
-    <Notice tone="caution">这次验证会核对应用当前的实际行为。源码修复及部署版本尚未核对；规则、账号、测试数据或判断标准变化时，请先重新确认原问题的检查条件。</Notice>
-    {pending&&<Notice tone="caution">原提交的结果尚待查询。先查回原记录，再决定是否恢复同一请求。</Notice>}
-    {Boolean(error)&&<ErrorNote error={error}/>}
+    {preview&&(preview.can_execute?<InlineFeedback>本次执行 {preview.case_count} 项检查，沿用原问题、正常对照及原检查范围。材料已齐备，提交前会再次核对。</InlineFeedback>:<Notice tone="caution" title="仍有准备缺口">本次需要 {preview.case_count} 项检查，请返回测试场景补齐材料后再提交。</Notice>)}
+    <ContextNote label="本次验证的适用范围"><p>本次验证应用当前的实际行为。确认源码修复有效，还需核对运行版本。规则、账号、测试数据或判断标准发生变化时，请先重新确认原问题的检查条件。</p></ContextNote>
+    {pending&&<Notice tone="caution" title="原提交结果待确认">先查询原记录，再决定是否恢复同一请求。{Boolean(error)&&<p>{error instanceof Error?error.message:'查询未完成，请稍后重试。'}</p>}</Notice>}
+    {!pending&&Boolean(error)&&<ErrorNote error={error}/>}
   </Dialog>
 }

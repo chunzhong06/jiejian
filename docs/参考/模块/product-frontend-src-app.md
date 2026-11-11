@@ -24,7 +24,7 @@
 
 ### Navigation.tsx
 
-[源码](../../../product/frontend/src/app/Navigation.tsx)（58 行）。公开声明：`Breadcrumbs`、`NavigationLinks`、`navigationDirection`、`normalizedPath`、`pageTransitionKey`。
+[源码](../../../product/frontend/src/app/Navigation.tsx)（63 行）。公开声明：`Breadcrumbs`、`NavigationLinks`、`navigationDirection`、`normalizedPath`、`pageTransitionKey`。
 
 ### RouteBoundary.tsx
 
@@ -36,7 +36,7 @@
 
 ### shell.css
 
-[源码](../../../product/frontend/src/app/shell.css)（88 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/app/shell.css)（94 行）。公开声明：包、内部机制或样式。
 
 ### Shutdown.tsx
 

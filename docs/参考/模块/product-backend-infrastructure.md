@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[根目录](#根目录)（2 个文件）、[artifacts](#artifacts)（7 个文件）、[artifacts/checks](#artifactschecks)（6 个文件）、[execution](#execution)（5 个文件）、[execution/web](#executionweb)（6 个文件）、[identity](#identity)（4 个文件）、[integrations](#integrations)（1 个文件）、[maintenance](#maintenance)（4 个文件）、[observers](#observers)（5 个文件）、[observers/adapters](#observersadapters)（8 个文件）、[observers/checks](#observerschecks)（15 个文件）、[observers/records](#observersrecords)（10 个文件）、[recording](#recording)（10 个文件）、[runtime](#runtime)（13 个文件）、[runtime/capture_runner](#runtimecapture_runner)（4 个文件）、[runtime/check_runner](#runtimecheck_runner)（4 个文件）、[runtime/jobs](#runtimejobs)（15 个文件）、[runtime/process](#runtimeprocess)（7 个文件）、[runtime/process/controlled](#runtimeprocesscontrolled)（13 个文件）、[runtime/process/records](#runtimeprocessrecords)（3 个文件）、[runtime/proof_runner](#runtimeproof_runner)（4 个文件）、[runtime/trial_runner](#runtimetrial_runner)（4 个文件）、[runtime/worker](#runtimeworker)（4 个文件）、[samples](#samples)（2 个文件）、[samples/official](#samplesofficial)（5 个文件）、[secrets](#secrets)（5 个文件）、[storage](#storage)（7 个文件）、[storage/applications](#storageapplications)（5 个文件）、[storage/boundaries](#storageboundaries)（4 个文件）、[storage/changes](#storagechanges)（4 个文件）、[storage/execution](#storageexecution)（6 个文件）、[storage/preparation](#storagepreparation)（14 个文件）、[storage/results](#storageresults)（4 个文件）、[storage/runtime](#storageruntime)（5 个文件）、[storage/settings](#storagesettings)（2 个文件）。
+按目录定位：[根目录](#根目录)（2 个文件）、[artifacts](#artifacts)（7 个文件）、[artifacts/checks](#artifactschecks)（6 个文件）、[execution](#execution)（5 个文件）、[execution/web](#executionweb)（6 个文件）、[identity](#identity)（4 个文件）、[integrations](#integrations)（1 个文件）、[maintenance](#maintenance)（4 个文件）、[observers](#observers)（5 个文件）、[observers/adapters](#observersadapters)（8 个文件）、[observers/checks](#observerschecks)（15 个文件）、[observers/records](#observersrecords)（10 个文件）、[recording](#recording)（10 个文件）、[runtime](#runtime)（14 个文件）、[runtime/capture_runner](#runtimecapture_runner)（4 个文件）、[runtime/check_runner](#runtimecheck_runner)（4 个文件）、[runtime/jobs](#runtimejobs)（15 个文件）、[runtime/process](#runtimeprocess)（7 个文件）、[runtime/process/controlled](#runtimeprocesscontrolled)（13 个文件）、[runtime/process/records](#runtimeprocessrecords)（3 个文件）、[runtime/proof_runner](#runtimeproof_runner)（4 个文件）、[runtime/trial_runner](#runtimetrial_runner)（4 个文件）、[runtime/worker](#runtimeworker)（4 个文件）、[samples](#samples)（2 个文件）、[samples/official](#samplesofficial)（5 个文件）、[secrets](#secrets)（5 个文件）、[storage](#storage)（7 个文件）、[storage/applications](#storageapplications)（5 个文件）、[storage/boundaries](#storageboundaries)（4 个文件）、[storage/changes](#storagechanges)（4 个文件）、[storage/execution](#storageexecution)（6 个文件）、[storage/preparation](#storagepreparation)（14 个文件）、[storage/results](#storageresults)（4 个文件）、[storage/runtime](#storageruntime)（5 个文件）、[storage/settings](#storagesettings)（2 个文件）。
 
 ## 根目录
 
@@ -60,7 +60,7 @@
 
 ### artifacts/checks/check_publication.py
 
-[源码](../../../product/backend/infrastructure/artifacts/checks/check_publication.py)（155 行）。公开声明：`CheckPublisher`。
+[源码](../../../product/backend/infrastructure/artifacts/checks/check_publication.py)（157 行）。公开声明：`CheckPublisher`。
 
 ### artifacts/checks/check_validation.py
 
@@ -86,7 +86,7 @@
 
 ### execution/check_executor.py
 
-[源码](../../../product/backend/infrastructure/execution/check_executor.py)（333 行）。公开声明：`CheckExecutionOutput`、`CheckExecutor`。
+[源码](../../../product/backend/infrastructure/execution/check_executor.py)（335 行）。公开声明：`CheckExecutionOutput`、`CheckExecutor`。
 
 ### execution/creation_check.py
 
@@ -144,7 +144,7 @@
 
 ### integrations/github.py
 
-[源码](../../../product/backend/infrastructure/integrations/github.py)（67 行）。公开声明：`GitHubIssues`。
+[源码](../../../product/backend/infrastructure/integrations/github.py)（69 行）。公开声明：`GitHubIssues`。
 
 ## maintenance
 
@@ -420,6 +420,10 @@
 
 [源码](../../../product/backend/infrastructure/runtime/updates.py)（288 行）。公开声明：`file_digest`、`read_root`、`package_files`、`verify_package`、`PortableUpdateService`、`finish_after_exit`。
 
+### runtime/workflow_timing.py
+
+[源码](../../../product/backend/infrastructure/runtime/workflow_timing.py)（128 行）。公开声明：`WorkflowTimings`、`workflow_timings`、`link_workflow`、`workflow_phase`、`timed_workflow`。
+
 ## runtime/capture_runner
 
 ### runtime/capture_runner/__init__.py
@@ -446,11 +450,11 @@
 
 ### runtime/check_runner/__main__.py
 
-[源码](../../../product/backend/infrastructure/runtime/check_runner/__main__.py)（18 行）。公开声明：`main`。
+[源码](../../../product/backend/infrastructure/runtime/check_runner/__main__.py)（26 行）。公开声明：`main`。
 
 ### runtime/check_runner/executor.py
 
-[源码](../../../product/backend/infrastructure/runtime/check_runner/executor.py)（80 行）。公开声明：`execute_check_attempt`。
+[源码](../../../product/backend/infrastructure/runtime/check_runner/executor.py)（82 行）。公开声明：`execute_check_attempt`。
 
 ### runtime/check_runner/supervisor.py
 
@@ -530,7 +534,7 @@
 
 ### runtime/process/environment.py
 
-[源码](../../../product/backend/infrastructure/runtime/process/environment.py)（584 行）。公开声明：`ProcessEnvironmentRole`、`process_environment_failure_summary`、`minimal_process_environment`、`confirmed_python_executable`、`python_module_command`、`spawn_python_module`、`run_python_module`。
+[源码](../../../product/backend/infrastructure/runtime/process/environment.py)（585 行）。公开声明：`ProcessEnvironmentRole`、`process_environment_failure_summary`、`minimal_process_environment`、`confirmed_python_executable`、`python_module_command`、`spawn_python_module`、`run_python_module`。
 
 ### runtime/process/exclusive_file.py
 
@@ -580,7 +584,7 @@
 
 ### runtime/process/controlled/node_owned.py
 
-[源码](../../../product/backend/infrastructure/runtime/process/controlled/node_owned.py)（194 行）。公开声明：`node_artifact_store`、`read_node_manifest`、`node_execution_identity`、`node_reference_matches`、`node_process_alive`、`node_corresponds`、`OwnedNodeProcess`、`start_owned_node`。
+[源码](../../../product/backend/infrastructure/runtime/process/controlled/node_owned.py)（199 行）。公开声明：`node_artifact_store`、`read_node_manifest`、`node_execution_identity`、`node_executor_fingerprint`、`node_reference_matches`、`node_process_alive`、`node_corresponds`、`OwnedNodeProcess`等。
 
 ### runtime/process/controlled/node_target.mjs
 

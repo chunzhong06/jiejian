@@ -21,6 +21,9 @@ from product.backend.domain.checks.plan import ActionCheckPlan, CheckPlanGap
 from product.backend.domain.checks.repair import CurrentRepairReference
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.boundaries.candidate_reviews import BoundaryReviewGap
+from product.backend.application.reading import projection_read
+from product.backend.application.workspace.models import CheckPreparationWork, PreparationWorkAction
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow, workflow_phase, link_workflow
 from product.backend.application.business_boundaries.candidates.reviews import project_review_gaps
 from product.backend.application.business_boundaries.candidates.coverage import frozen_requirement_scope
 from product.backend.infrastructure.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
@@ -50,6 +53,7 @@ class CheckPreview(WireModel):
     selection: FrozenCheckSelection | None = None
     omitted_review_gaps: tuple[BoundaryReviewGap, ...] = ()
     scenario: FrozenBusinessScenario | None = Field(default=None,exclude_if=lambda value:value is None)
+    preparation_work: CheckPreparationWork | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _preview_fingerprint(plan, scope, selection):
@@ -65,6 +69,7 @@ class CheckService:
     def __init__(self, *, uow_factory, var_dir, preparation, business_boundaries, runtime_builder,
                  registry, queue, engine_version, source_inspector, clock_us=None, code_observations: CodeObservationService | None = None, proof_authority=None):
         self._uow_factory, self._preparation = uow_factory, preparation
+        self._var_dir = var_dir
         self._boundaries, self._builder, self._registry = business_boundaries, runtime_builder, registry
         self._queue, self._store = queue, CheckRequestStore(var_dir)
         self._engine_version = engine_version
@@ -135,12 +140,16 @@ class CheckService:
         return self._accepted_submission(project_id, expected_plan_fingerprint=fingerprint, idempotency_key=operation,
             change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=reference)
 
+    @timed_workflow('check.preview')
+    @projection_read
     def preview(self, project_id: str, *, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None) -> CheckPreview:
         # 预览只反映本次读取的现场；提交会重新冻结，页面不能直接复用旧请求作为执行授权。
-        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
+        preview, _request, _bundle = self._freeze(project_id,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference, include_work=True)
         return preview
 
+    @timed_workflow('check.submit')
     def submit(self, project_id: str, *, expected_plan_fingerprint: str, idempotency_key: str, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
+        link_workflow(operation_id=idempotency_key)
         # 本地锁只避免同实例交错；跨进程的请求唯一性和事务前置条件仍由 JobQueue 核对。
         with self._submission_lock:
             arguments = dict(expected_plan_fingerprint=expected_plan_fingerprint, idempotency_key=idempotency_key,
@@ -148,13 +157,17 @@ class CheckService:
                 external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
             previous = self._accepted_submission(project_id, **arguments)
             if previous is not None:
+                link_workflow(job_id=previous.job.job_id, run_id=previous.run.run_id)
                 return previous
             try:
-                return self._submit(project_id, **arguments)
+                submitted = self._submit(project_id, **arguments)
+                link_workflow(job_id=submitted.job.job_id, run_id=submitted.run.run_id)
+                return submitted
             except JiejianError:
                 # 另一进程可能在本次现场核验期间接受了同一请求；只回读，不重放目标。
                 previous = self._accepted_submission(project_id, **arguments)
                 if previous is not None:
+                    link_workflow(job_id=previous.job.job_id, run_id=previous.run.run_id)
                     return previous
                 raise
 
@@ -264,15 +277,17 @@ class CheckService:
                 except (JiejianError, OSError):
                     logging.getLogger("jiejian.application.checks.service").warning("CHECK_ORPHAN_CLEANUP_FAILED", extra={"job_id": job_id})
 
-    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
+    def _freeze(self, project_id, *, work=None, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None, include_work=False):
         # 同次读取共享注册快照，防止计划与运行配置取到两代事实；作用域结束后不缓存授权。
         if work is None:
             with self._uow_factory() as current:
-                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
+                return self._freeze(project_id, work=current,change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference, include_work=include_work)
         with self._registry.read_scope(project_id):
-            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference)
+            return self._freeze_current(project_id, work=work, change_id=change_id, selected_permissions=selected_permissions, external_recheck=external_recheck, scenario_reference=scenario_reference, routine_reference=routine_reference, include_work=include_work)
 
-    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None):
+    @timed_workflow('check.freeze')
+    @projection_read
+    def _freeze_current(self, project_id, *, work, change_id=None, selected_permissions=None, external_recheck=None, scenario_reference=None, routine_reference=None, include_work=False):
         routine_document = routine_binding = None
         if routine_reference is not None:
             if any(value is not None for value in (change_id, selected_permissions, external_recheck, scenario_reference)):
@@ -323,7 +338,7 @@ class CheckService:
             registration = self._registry.snapshot(project_id)
             config_hash = content_hash("UnavailableCheckRuntime", dict(project_id=project_id,
                 registry_fingerprint=None if registration is None else registration.fingerprint, reason=runtime_reason))
-        plan = self._preparation.current_plan(project_id, engine_version=self._engine_version, config_fingerprint=config_hash, selected_permissions=selected_permissions)
+        plan = self._preparation.current_plan(project_id, engine_version=self._engine_version, config_fingerprint=config_hash, selected_permissions=selected_permissions, work=work)
         if scenario_document is not None:
             from product.backend.domain.checks.scenarios import compile_business_scenario
             plan=compile_business_scenario(plan,scenario_document,bundle)
@@ -382,7 +397,7 @@ class CheckService:
         request = None
         if can_execute:
             request = self._preparation.build_execution_request(project_id, engine_version=self._engine_version,
-                config_fingerprint=config_hash, budget_fingerprint=bundle.budget.fingerprint(), selected_permissions=selected_permissions)
+                config_fingerprint=config_hash, budget_fingerprint=bundle.budget.fingerprint(), selected_permissions=selected_permissions, work=work)
             if plan.scenario is not None:
                 values=request.model_dump(mode='json')
                 values.update(actions=[action.model_dump(mode='json',exclude={'gaps'}) for action in plan.actions],
@@ -446,8 +461,22 @@ class CheckService:
                 request = request.model_copy(update=dict(routine=context))
         if request is not None:
             validate_check_inputs(request, bundle)
+        preparation_work = None
+        if include_work:
+            from product.backend.application.preparation.scope import check_preparation
+            from product.backend.application.workspace.preparation import preparation_task
+            from product.backend.application.workspace.reading import PreparationReading
+            with workflow_phase('check.guidance'):
+                boundary = self._boundaries.view(project_id, work=work)
+                prepared = check_preparation(boundary, self._preparation.get(project_id, work=work), selected_permissions)
+                reading = PreparationReading(work, self._var_dir, work.recordings.list_for_project(project_id))
+                preparation_work = CheckPreparationWork(project_id=project_id, plan_fingerprint=preview_fingerprint,
+                    actions=tuple(PreparationWorkAction(action_id=item.action_id, action_revision=item.action_revision,
+                        label=item.display_name, preparation_complete=item.preparation_complete) for item in prepared.actions),
+                    primary_task=preparation_task(boundary, prepared, work.application_understanding.get(project_id), reading),
+                    preparation_complete=prepared.preparation_complete, impacts=prepared.impacts)
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),
             boundary_review_gaps=boundary_gaps,
             requirement_scope=requirement_scope, selection=selection, omitted_review_gaps=omitted_reviews,
             plan_fingerprint=preview_fingerprint, action_count=len(plan.actions), case_count=count,
-            actions=plan.actions,scenario=plan.scenario), request, bundle
+            actions=plan.actions,scenario=plan.scenario,preparation_work=preparation_work), request, bundle

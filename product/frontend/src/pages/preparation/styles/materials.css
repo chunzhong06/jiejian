@@ -18,7 +18,7 @@
 .jj-login-resolution > p { color:var(--muted); line-height:1.8; }
 .jj-login-resolution > .jj-button { justify-self:end; }
 .jj-login-progress > .jj-notice { grid-column:1/-1; margin:0 28px 24px; }
-.jj-proof-workspace.is-single-source { grid-template-columns: minmax(0,1fr); }
+.jj-proof-workspace.is-single-source { grid-template-columns: minmax(0,1fr); border:0; }
 .jj-source-index { padding:24px 0; border-right:1px solid var(--line); }
 .jj-source-index h2 {  padding:0 20px 16px; }
 .jj-source-index > button { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px 12px; margin-bottom:0; }
@@ -43,11 +43,10 @@
 .jj-source-verification > p { margin-top: 12px; }
 .jj-source-check-summary { display:grid; align-content:start; gap:14px; min-width:0; }
 .jj-source-check-summary > .jj-proof-view-note { margin:0; }
-.jj-proof-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px; padding:20px 28px; border-top:1px solid var(--line); }
-.jj-proof-actions > .jj-button:last-child { flex:none; }
+.jj-proof-actions { padding:20px 28px; border-top:1px solid var(--line); }
 .jj-reference-choices, .jj-reference-upload { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 20px; }
 .jj-reference-upload > p { font-size: var(--text-meta); color: var(--muted); margin: 8px 0 16px; }
-.jj-reference-choice { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:16px; padding:16px 0; font-size: var(--text-meta); }
+.jj-reference-choice { display:flex; align-items:center; flex-wrap:wrap; gap:12px 20px; padding:16px 0; font-size: var(--text-meta); }
 .jj-reference-choice > span { display: inline-flex; align-items: center; gap: 8px; }
 .jj-reference-choice small { color: var(--muted); }
 .jj-reference-choice > .jj-button { font-size:var(--text-body); min-height:var(--control-compact); padding: 6px 10px; }
@@ -164,7 +163,7 @@
 .jj-proof-daily{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;}
 .jj-proof-next{max-width:760px;padding:0;margin:0 28px 24px;color:var(--muted);line-height:var(--leading-reading);}
 .jj-proof-current-gaps{margin:24px 28px 0;}
-.jj-proof-check-history{margin:32px 28px 28px;padding-top:20px;border-top:1px solid var(--line);}
+.jj-proof-check-history{margin:32px 28px 28px;}
 .jj-proof-check-history > .jj-result-list{margin-top:20px;}
 .jj-proof-workspace{display:grid;grid-template-columns:270px minmax(0,1fr);}
 .jj-proof-page{width:100%;max-width:1180px;margin-inline:auto;}

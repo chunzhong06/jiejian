@@ -8,6 +8,52 @@ from tests.application.business_boundaries._support_business_boundary_service im
 pytestmark = [pytest.mark.level3, pytest.mark.database]
 
 
+def test_reconcile_waits_for_approval_transaction_and_never_creates_decision(tmp_path: Path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    from threading import Event
+    from product.backend.application.business_boundaries import service
+
+    core, project_id = _core(tmp_path)
+    entered, release, reading = Event(), Event(), Event()
+    try:
+        proposal = _create_proposal(core, project_id)
+        before = core.business_boundaries.proposal(project_id, proposal.proposal_id, reconcile_decision=True)
+        assert before.decision is None
+        assert core.business_boundaries.view(project_id).policy_epoch == 0
+        original = service.boundary_validation._pending_proposal
+
+        def held(*args, **kwargs):
+            value = original(*args, **kwargs)
+            entered.set()
+            assert release.wait(10)
+            return value
+
+        monkeypatch.setattr(service.boundary_validation, '_pending_proposal', held)
+
+        def reconcile():
+            reading.set()
+            return core.business_boundaries.proposal(project_id, proposal.proposal_id, reconcile_decision=True)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            approve = pool.submit(core.business_boundaries.approve, project_id, proposal.proposal_id,
+                expected_fingerprint=proposal.proposal_fingerprint, reason='确认原提案')
+            assert entered.wait(10)
+            query = pool.submit(reconcile)
+            assert reading.wait(10)
+            # 批准在写锁中暂停，恢复读取不能提前把尚无决定解释成批准未发生。
+            try:
+                with pytest.raises(TimeoutError):
+                    query.result(timeout=0.2)
+            finally:
+                release.set()
+            approve.result(timeout=10)
+            assert query.result(timeout=10).decision.decision.value == 'APPROVED'
+        assert core.business_boundaries.view(project_id).policy_epoch == 1
+    finally:
+        release.set()
+        core.close()
+
+
 def test_editor_uses_one_uow_and_returns_pending_summary(tmp_path: Path):
     core, project_id = _core(tmp_path)
     try:

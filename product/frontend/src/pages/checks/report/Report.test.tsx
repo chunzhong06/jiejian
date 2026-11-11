@@ -28,6 +28,28 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
 
+it('外部再次验证只解释一次代码边界，部署声明与检查范围各自保留',()=>{
+ const value=story()
+ value.runtime_status='UNCONFIRMED' as never
+ value.environment={name:'本地测试连接'} as never
+ value.repair_verification={verification_scope:'EXTERNAL_OBSERVATION',source_run_id:'before',status:'VERIFIED',reason_codes:[]} as never
+ value.external_recheck={deployment_statement:'已限制他人读取订单备注'} as never
+ value.selection={selected:[{}],added_controls:[{}],omitted:[],pending_review_ids:[]} as never
+ value.actions[0].case_verdict='SAFE'
+ value.actions.push({...structuredClone(value.actions[0]),case_id:'c2',permission:{expectation:'ALLOW',relation:'OWNS'}})
+ value.repair_comparison=[{role:'DENY',source_case_id:'before1',after_case_id:'c1',before_verdict:'VULNERABLE',match_status:'MATCHED'},{role:'SELECTED_ALLOW',source_case_id:'before2',after_case_id:'c2',before_verdict:'SAFE',match_status:'MATCHED'}] as never
+ render(<Report {...props(value)}/> )
+ const boundary=screen.getByRole('complementary',{name:'本次验证的适用范围'})
+ expect(boundary).toHaveTextContent('源码修改与部署版本的对应关系尚未独立核验')
+ expect(boundary).toHaveTextContent('已限制他人读取订单备注')
+ expect(screen.queryByText('应用声明的运行版本尚未核对')).not.toBeInTheDocument()
+ expect(screen.queryByText(/本次检查尚未核对运行代码/)).not.toBeInTheDocument()
+ expect(screen.queryByText(/另有 0 条规则未检查/)).not.toBeInTheDocument()
+ expect(screen.getByLabelText('本次检查范围')).toHaveTextContent('正常对照 1 条')
+ expect(screen.getByText('本次符合要求',{exact:true})).toBeVisible()
+ expect(screen.queryByText('已解决',{exact:true})).not.toBeInTheDocument()
+})
+
 it('深入证据退出完整报告总览，返回同一业务事项并保留原回程',()=>{
   const value=story(),p={...props(value),selectedCaseId:'c1',tab:'trace',returnPath:'/issues?issue=original'};
   const view=render(<Report {...p}/>);

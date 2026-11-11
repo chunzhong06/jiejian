@@ -1,0 +1,10 @@
+.jj-proposal-queue { min-width:0; padding-block:20px; }
+.jj-proposal-queue > .jj-section-header { margin-bottom:8px; }
+.jj-proposal-queue-row.jj-button { display:flex; width:100%; justify-content:space-between; text-align:start; white-space:normal; padding:16px; border-radius:0; border-bottom:1px solid var(--line); gap:24px; }
+.jj-proposal-queue-row:last-child { border-bottom:0; }
+.jj-proposal-queue-row > span:first-child { min-width:0; }
+.jj-proposal-queue-row strong { display:block; color:var(--ink); font-size:var(--text-object); font-weight:500; overflow-wrap:anywhere; }
+.jj-proposal-queue-row small { display:block; color:var(--muted); font-size:var(--text-meta); margin-top:6px; }
+.jj-proposal-queue-row > span:last-child { display:flex; align-items:center; flex:none; gap:12px; }
+.jj-proposal-queue-row:disabled :is(strong,small) { color:var(--disabled-ink); }
+@media(max-width:600px) { .jj-proposal-queue-row.jj-button { padding-inline:12px; gap:16px; } }

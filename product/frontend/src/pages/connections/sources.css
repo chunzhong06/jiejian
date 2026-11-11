@@ -37,6 +37,8 @@
 .jj-source-link-editor .jj-field { min-width: 0; margin: 0; }
 .jj-request-parameters > .jj-small { margin: 12px 0 0; line-height: 1.8; }
 .jj-request-table-wrap { margin-top: 12px; overflow: auto; }
+.jj-request-table-wrap > .jj-content-table { min-width:0; table-layout:fixed; }
+.jj-request-table-wrap td { overflow-wrap:anywhere; }
 .jj-request-parameters table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: var(--text-meta); }
 .jj-request-parameters th { text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
 .jj-request-parameters td { text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }

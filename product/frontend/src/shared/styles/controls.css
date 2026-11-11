@@ -7,6 +7,8 @@
 .jj-choice.ant-select[data-align=center] .ant-select-selection-search { inset-inline:42px; }
 .jj-choice.ant-select-open .ant-select-selection-item { color: var(--ink); opacity: 1; }
 .jj-choice.ant-select .ant-select-arrow { inset-inline-end: 15px; color: var(--muted); font-size: var(--text-meta); pointer-events: none; }
+/* SVG 自身的命中规则不能截走箭头区域的点击；整块热区仍交给选择器。 */
+.jj-choice.ant-select .ant-select-arrow * { pointer-events:none; }
 .jj-choice.ant-select .ant-select-selection-search { inset-inline: 14px 42px; }
 .jj-choice.ant-select .ant-select-selection-placeholder { padding-inline-end:0; color:var(--placeholder); }
 .jj-choice.ant-select:not(.ant-select-disabled):hover .ant-select-selector { border-color:var(--line-strong); background:var(--control-hover); }

@@ -30,7 +30,7 @@ class BindingSourceInspector:
         if understanding is None or (
             binding.project_id, binding.business_action_id, binding.action_revision, binding.action_semantic_fingerprint,
         ) != (action.project_id, action.action_id, action.revision, action.semantic_fingerprint):
-            return ("ACTION_BINDING_SOURCE_STALE",)
+            return ("ACTION_BINDING_SOURCE_STALE", "MATERIAL_ACTION_REVISION_CHANGED")
         source_reused = False
         if binding.source_fingerprint != understanding.source_fingerprint:
             # 整体源码变化不自动销毁材料；只有独立复用检查成立才允许保留其原来源指纹。
@@ -40,7 +40,7 @@ class BindingSourceInspector:
         owner = material_fact(work, work.test_identities, ("get", binding.resource_owner_test_identity_id), lambda: work.test_identities.get(binding.resource_owner_test_identity_id))
         if (owner is None or owner.project_id != action.project_id or owner.prepared_at_us is None
                 or binding.owner_identity_fingerprint != identity_source_fingerprint(owner)):
-            return ("RESOURCE_OWNER_SOURCE_STALE",)
+            return ("RESOURCE_OWNER_SOURCE_STALE", "MATERIAL_OWNER_CHANGED")
         owner_root = material_fact(work, work.business_boundaries, ("actor", owner.actor_id), lambda: work.business_boundaries.actor(owner.actor_id))
         owner_actor = material_fact(work, work.business_boundaries, ("actor_revision", owner.actor_id, owner.actor_revision), lambda: work.business_boundaries.actor_revision(owner.actor_id, owner.actor_revision))
         if (owner_root is None or owner_actor is None or owner_root.current_revision != owner.actor_revision
@@ -51,15 +51,20 @@ class BindingSourceInspector:
         action_root = work.business_boundaries.action(action.action_id)
         implementation = inspect_action_binding(action.action_id, action.revision,
                                                 material_fact(work, work.business_boundaries, ("action_binding", action.action_id, action.revision), lambda: work.business_boundaries.action_binding(action.action_id, action.revision)), understanding)
-        if (action_root is None or action_root.current_revision != action.revision
-                or action.effective_state is not BusinessRevisionState.ACTIVE
-                or identity is None or identity.project_id != action.project_id or identity.prepared_at_us is None
-                or binding.subject_identity_fingerprint != identity_source_fingerprint(identity)
-                or implementation.status is not ImplementationBindingStatus.CURRENT
-                or binding.implementation_fingerprint != implementation.binding_fingerprint
-                or (binding.source_fingerprint != understanding.source_fingerprint and not source_reused)
-                or binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id))):
-            return ("ACTION_BINDING_SOURCE_STALE",)
+        # 与原失效条件逐一对应，状态和解释取同一次核验，不为文案重读目标或来源。
+        changes = tuple(code for changed, code in (
+            (action_root is None or action_root.current_revision != action.revision or action.effective_state is not BusinessRevisionState.ACTIVE,
+                'MATERIAL_ACTION_REVISION_CHANGED'),
+            (identity is None or identity.project_id != action.project_id or identity.prepared_at_us is None
+                or binding.subject_identity_fingerprint != identity_source_fingerprint(identity), 'MATERIAL_SUBJECT_CHANGED'),
+            (implementation.status is not ImplementationBindingStatus.CURRENT or binding.implementation_fingerprint != implementation.binding_fingerprint,
+                'MATERIAL_IMPLEMENTATION_CHANGED'),
+            (binding.source_fingerprint != understanding.source_fingerprint and not source_reused, 'MATERIAL_SOURCE_CHANGED'),
+            (binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id)),
+                'MATERIAL_ENDPOINT_CHANGED'),
+        ) if changed)
+        if changes:
+            return ('ACTION_BINDING_SOURCE_STALE', *changes)
         actor_root = material_fact(work, work.business_boundaries, ("actor", identity.actor_id), lambda: work.business_boundaries.actor(identity.actor_id))
         actor = material_fact(work, work.business_boundaries, ("actor_revision", identity.actor_id, identity.actor_revision), lambda: work.business_boundaries.actor_revision(identity.actor_id, identity.actor_revision))
         if (actor_root is None or actor is None or actor.project_id != action.project_id

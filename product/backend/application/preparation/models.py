@@ -30,6 +30,7 @@ class PreparationItemView(BoundaryModel):
     status: PreparationStatus
     reason_codes: tuple[str, ...] = ()
     binding_fingerprint: str | None = None
+    reuse_basis: Literal['CURRENT_SOURCE','VERIFIED_SOURCE_CONTRACT'] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class IdentitySlotPreparationView(PreparationItemView):
@@ -93,6 +94,7 @@ class MaterialImpactView(BoundaryModel):
     permission_ids: tuple[str, ...]
     member_id: str | None = None
     member_label: str = ''
+    reuse_basis: Literal['CURRENT_SOURCE','VERIFIED_SOURCE_CONTRACT'] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 __all__ = [

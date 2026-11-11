@@ -1,5 +1,6 @@
 # 从已检查的当前绑定冻结运行配置；原 Flow/Draft/模板先验 hash，秘密仅保留 env 引用。
 from __future__ import annotations
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -80,6 +81,7 @@ class CheckRuntimeBuilder:
         if self._runtime_reference_reader is None or self._json_sources_reader is None:
             raise ValueError("生产检查的运行与来源读取者尚未连接")
 
+    @timed_workflow('check.runtime')
     def build(self, project_id, *, work=None, selected_permissions=None):
         if work is None:
             with self._uow_factory() as current:
@@ -99,7 +101,7 @@ class CheckRuntimeBuilder:
             raise _incomplete("CHECK_RUNTIME_SOURCE_STALE")
         identity_ids, configs, specs, target = set(), [], {}, None
         condition_inputs = []
-        preparation = {item.action_id: item for item in self._preparation.get(project_id).actions}
+        preparation = {item.action_id: item for item in self._preparation.get(project_id, work=work).actions}
         resource_windows = {} if registered is None else {item.binding_fingerprint: item.exclusive_resource_window
             for item in registered.resource_windows}
         for action in boundary.actions:

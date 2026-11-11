@@ -6,13 +6,13 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[api](#api)（1 个文件）、[lib](#lib)（19 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（33 个文件）。
+按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（33 个文件）。
 
 ## api
 
 ### api/http.ts
 
-[源码](../../../product/frontend/src/shared/api/http.ts)（110 行）。公开声明：`ApiEnvelope`、`ApiError`、`ErrorDiagnosis`、`request`。
+[源码](../../../product/frontend/src/shared/api/http.ts)（118 行）。公开声明：`ApiEnvelope`、`ApiError`、`ErrorDiagnosis`、`request`。
 
 ## lib
 
@@ -70,7 +70,7 @@
 
 ### lib/routePage.tsx
 
-[源码](../../../product/frontend/src/shared/lib/routePage.tsx)（29 行）。公开声明：`routePage`。
+[源码](../../../product/frontend/src/shared/lib/routePage.tsx)（35 行）。公开声明：`routePage`。
 
 ### lib/routes.ts
 
@@ -86,11 +86,15 @@
 
 ### lib/useRead.ts
 
-[源码](../../../product/frontend/src/shared/lib/useRead.ts)（53 行）。公开声明：`useRead`。
+[源码](../../../product/frontend/src/shared/lib/useRead.ts)（57 行）。公开声明：`useRead`。
 
 ### lib/workflow.tsx
 
 [源码](../../../product/frontend/src/shared/lib/workflow.tsx)（7 行）。公开声明：`WorkflowContext`、`WorkflowNavigation`、`useWorkflow`。
+
+### lib/workflowTiming.ts
+
+[源码](../../../product/frontend/src/shared/lib/workflowTiming.ts)（28 行）。公开声明：`beginWorkflowTiming`。
 
 ## model
 
@@ -102,7 +106,7 @@
 
 ### styles/controls.css
 
-[源码](../../../product/frontend/src/shared/styles/controls.css)（94 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/controls.css)（96 行）。公开声明：包、内部机制或样式。
 
 ### styles/cross-page.css
 
@@ -110,7 +114,7 @@
 
 ### styles/foundation.css
 
-[源码](../../../product/frontend/src/shared/styles/foundation.css)（164 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/foundation.css)（183 行）。公开声明：包、内部机制或样式。
 
 ### styles/loading.css
 
@@ -118,7 +122,7 @@
 
 ### styles/motion.css
 
-[源码](../../../product/frontend/src/shared/styles/motion.css)（150 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/motion.css)（151 行）。公开声明：包、内部机制或样式。
 
 ### styles/navigation.css
 
@@ -138,17 +142,17 @@
 
 ### styles/workspaces.css
 
-[源码](../../../product/frontend/src/shared/styles/workspaces.css)（70 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/workspaces.css)（73 行）。公开声明：包、内部机制或样式。
 
 ## ui
 
 ### ui/actions.tsx
 
-[源码](../../../product/frontend/src/shared/ui/actions.tsx)（30 行）。公开声明：`ActionLink`、`Button`。
+[源码](../../../product/frontend/src/shared/ui/actions.tsx)（31 行）。公开声明：`ActionLink`、`Button`。
 
 ### ui/Choice.tsx
 
-[源码](../../../product/frontend/src/shared/ui/Choice.tsx)（21 行）。公开声明：`Choice`。
+[源码](../../../product/frontend/src/shared/ui/Choice.tsx)（22 行）。公开声明：`Choice`。
 
 ### ui/CommandMenu.tsx
 
@@ -176,7 +180,7 @@
 
 ### ui/feedback.tsx
 
-[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（30 行）。公开声明：`Badge`、`Empty`、`ErrorNote`、`FeedbackTone`、`Loading`、`Notice`、`PageError`、`ResultList`等。
+[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（37 行）。公开声明：`Badge`、`ContextNote`、`Empty`、`ErrorNote`、`FeedbackTone`、`InlineFeedback`、`Loading`、`Notice`等。
 
 ### ui/FilePicker.css
 
@@ -200,11 +204,11 @@
 
 ### ui/Inspector.tsx
 
-[源码](../../../product/frontend/src/shared/ui/Inspector.tsx)（25 行）。公开声明：`Inspector`。
+[源码](../../../product/frontend/src/shared/ui/Inspector.tsx)（30 行）。公开声明：`Inspector`、`InspectorSection`。
 
 ### ui/layout.tsx
 
-[源码](../../../product/frontend/src/shared/ui/layout.tsx)（35 行）。公开声明：`Field`、`FormColumns`、`Heading`、`ObjectHeading`、`ObjectIdentity`、`SectionHeading`。
+[源码](../../../product/frontend/src/shared/ui/layout.tsx)（42 行）。公开声明：`Field`、`FormColumns`、`Heading`、`ObjectHeading`、`ObjectIdentity`、`SectionHeading`、`TaskActions`。
 
 ### ui/MotionRoot.tsx
 
@@ -224,7 +228,7 @@
 
 ### ui/PageSkeleton.tsx
 
-[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（18 行）。公开声明：`PageSkeleton`。
+[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（21 行）。公开声明：`PageSkeleton`、`pageTitle`。
 
 ### ui/PageSurface.tsx
 
@@ -268,7 +272,7 @@
 
 ### ui/TaskSurface.tsx
 
-[源码](../../../product/frontend/src/shared/ui/TaskSurface.tsx)（14 行）。公开声明：`TaskSurface`。
+[源码](../../../product/frontend/src/shared/ui/TaskSurface.tsx)（15 行）。公开声明：`TaskSurface`。
 
 ### ui/WorkflowSteps.tsx
 

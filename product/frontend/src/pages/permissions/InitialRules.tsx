@@ -173,7 +173,7 @@ export function InitialRules({ projectId, basis, onBack, onProposal, onError }: 
                 </div>
             </aside>}
         </div>
-        {draft.uncertain && <Notice tone="caution">提案结果尚未确认，草稿已保留。<Button busy={busy} onClick={() => void run(async () => { const value = await api.proposals(projectId, true); setProposals(value.proposals.map(item => item.proposal.proposal_id)); })}>查询已接收的提案</Button></Notice>}
+        {draft.uncertain && <Notice tone="caution">提案结果尚未确认，草稿已保留。<Button busy={busy} onClick={() => void run(async () => { const value = await api.proposals(projectId, true); setProposals(value.proposals.map(item => item.proposal.proposal_id)); })} busyLabel="正在查询">查询已接收的提案</Button></Notice>}
         {(draft.proposal_id ? [draft.proposal_id] : proposals).map((value, index) => <Button key={value} onClick={() => void run(() => onProposal(value))}>审阅提案{proposals.length > 1 ? ' ' + (index + 1) : ''}</Button>)}
     </>;
 }

@@ -1,4 +1,4 @@
-import {ObjectHeading} from './layout'
+import {ObjectHeading,SectionHeading} from './layout'
 import {useId,type ReactNode} from 'react'
 import CloseOutlined from '@ant-design/icons/CloseOutlined'
 import {useContentTransition} from '../lib/contentTransition'
@@ -19,7 +19,12 @@ export function Inspector({identity,title,caption,status,onClose,children,action
       <ObjectHeading id={id} title={title} status={status}/>
       <Button kind="quiet" aria-label="收起详情" icon={<CloseOutlined aria-hidden="true"/>} onClick={dismiss}/>
     </header>
-    {children}
+    <div className="jj-inspector-body">{children}</div>
     {actions&&<footer className="jj-inspector-actions">{actions}</footer>}
   </aside>
+}
+
+/** 详情中的业务阅读组保留自己的标题；外围间距由详情正文安排，不再靠 h3 通配覆盖。 */
+export function InspectorSection({title,children}:{title:string;children:ReactNode}){
+  return <section className="jj-inspector-section"><SectionHeading title={title} level={3} appearance="group"/>{children}</section>
 }

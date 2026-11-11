@@ -1,13 +1,12 @@
 .jj-home-layout {width:100%; display:grid; gap:32px; min-width:0; max-width:1080px; margin-inline:auto; }
 .jj-home-layout > .jj-heading { margin:0; }
-.jj-home-current-task { display:grid; grid-template-columns:minmax(0,1fr); gap:24px; padding:8px 0 32px; min-width:0; max-width:880px; border-bottom:1px solid var(--line); }
+.jj-home-current-task { display:grid; grid-template-columns:minmax(0,1fr); gap:24px; padding:8px 0 32px; min-width:0; border-bottom:1px solid var(--line); }
 .jj-home-task-copy { min-width:0; }
 .jj-home-current-task h2 { margin:12px 0 0; font-size:24px; line-height:1.5; font-weight:500; max-width:38ch; }
 .jj-home-task-description { color:var(--muted); font-size:var(--text-object); line-height:var(--leading-reading); margin-top:16px; max-width:70ch; }
 .jj-home-task-result { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:20px; }
 .jj-home-task-result p { color:var(--muted); }
 .jj-home-task-progress { display:grid; gap:10px; font-size:var(--text-meta); margin-top:24px; }
-.jj-home-current-task > footer { display:flex; justify-content:flex-end; gap:24px; }
 .jj-home-check-history > header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; margin-bottom:16px; }
 .jj-home-check-history h2 { margin:0; }
 .jj-home-check-row { display:grid; grid-template-columns:6em minmax(0,1fr); align-items:start; gap:20px; padding:20px 16px; border-bottom:1px solid var(--line); text-decoration:none; color:var(--ink); }

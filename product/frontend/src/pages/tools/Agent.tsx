@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { agentClients, agentConnectionsApi, mcpAccessApi, type AgentClient, type MCPAccessLevel, type AgentConnection } from '../../entities/runtime/api/mcp';
 import { Choice } from "../../shared/ui/Choice";
-import { Badge, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
+import { Badge, ErrorNote, InlineFeedback, Loading } from "../../shared/ui/feedback";
 import { Button } from "../../shared/ui/actions";
 import {Switch} from '../../shared/ui/Switch';
 import { Dialog } from "../../shared/ui/Dialog";
@@ -44,7 +44,7 @@ export function Agent({ projectId, name, onError,embedded=false }: {
     } };
     return <>
     {!embedded&&<Heading title="开发工具"/>}
-    {message&&message!==connection.data?.message&&<Notice tone="accent">{message}</Notice>}
+    {message&&message!==connection.data?.message&&<InlineFeedback>{message}</InlineFeedback>}
     <div className="jj-tools-layout">
       <section className="jj-tools-connection">
         <header className="jj-tools-heading"><h2>工具连接</h2></header>

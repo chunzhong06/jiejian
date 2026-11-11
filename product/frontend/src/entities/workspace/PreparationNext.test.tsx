@@ -17,12 +17,12 @@ it('官方示例在嵌入检查中保留一键准备入口',async()=>{
 })
 const task=(values:Partial<PrimaryTaskDto>)=>({task_kind:'PREPARE_TEST_IDENTITY',business_action_id:'read',title:'准备成员账号',user_responsibility:'登录本次检查所需的成员账号。',action_label:'准备账号',...values} as PrimaryTaskDto)
 
-it('下一步仅请求本次动作，账号槽位与修订准确传入原工作面',async()=>{
- const read=vi.spyOn(workspaceApi,'preparation').mockResolvedValue({project_id:'app',actions:[],preparation_complete:false,primary_task:task({action_revision:3,identity_slot_id:'member-2'})})
+it('下一步使用本次预览的准确建议，不再读取动作级缺口',async()=>{
+ const read=vi.spyOn(workspaceApi,'preparation')
  const open=vi.fn()
- render(<WorkflowContext.Provider value={{open,finish:vi.fn(),label:'本次检查'}}><PreparationNext preview={{project_id:'app',actions:[{action_id:'read'}],gaps:[{action_id:'read'}]} as CheckPreview} onReview={vi.fn()}/></WorkflowContext.Provider>)
+ render(<WorkflowContext.Provider value={{open,finish:vi.fn(),label:'本次检查'}}><PreparationNext preview={{project_id:'app',plan_fingerprint:'basis',actions:[{action_id:'read'}],gaps:[{action_id:'read'}],preparation_work:{project_id:'app',plan_fingerprint:'basis',impacts:[],primary_task:task({action_revision:3,identity_slot_id:'member-2'})}} as unknown as CheckPreview} onReview={vi.fn()}/></WorkflowContext.Provider>)
  fireEvent.click(await screen.findByRole('button',{name:'准备账号'}))
- expect(read.mock.calls[0].slice(0,2)).toEqual(['app',['read']])
+ expect(read).not.toHaveBeenCalled()
  const query=new URLSearchParams(open.mock.calls[0][0].split('?')[1])
  expect(query.get('account_slot')).toBe('member-2');expect(query.get('action_revision')).toBe('3')
 })
@@ -31,6 +31,17 @@ it('没有材料任务时仍可就地核对权限缺口，不留下无动作的�
  const onReview=vi.fn()
  render(<PreparationNext preview={{project_id:'app',actions:[],gaps:[]} as unknown as CheckPreview} onReview={onReview}/>)
  fireEvent.click(screen.getByRole('button',{name:'核对待准备事项'}));expect(onReview).toHaveBeenCalledOnce()
+})
+
+it('新预览不能借用旧基线建议，相同动作ID也不例外',()=>{
+ const open=vi.fn(),review=vi.fn()
+ const preview={project_id:'app',plan_fingerprint:'new',actions:[],gaps:[],preparation_work:{project_id:'app',plan_fingerprint:'old',impacts:[],primary_task:task({title:'旧建议',action_label:'旧动作'})}} as unknown as CheckPreview
+ const {rerender}=render(<WorkflowContext.Provider value={{open,finish:vi.fn(),label:'本次检查'}}><PreparationNext preview={preview} onReview={review}/></WorkflowContext.Provider>)
+ fireEvent.click(screen.getByRole('button',{name:'核对待准备事项'}))
+ expect(review).toHaveBeenCalledOnce();expect(open).not.toHaveBeenCalled()
+ rerender(<WorkflowContext.Provider value={{open,finish:vi.fn(),label:'本次检查'}}><PreparationNext preview={{...preview,preparation_work:{...preview.preparation_work!,plan_fingerprint:'new',primary_task:task({action_revision:4,action_label:'准备当前账号'})}}} onReview={review}/></WorkflowContext.Provider>)
+ fireEvent.click(screen.getByRole('button',{name:'准备当前账号'}))
+ expect(new URLSearchParams(open.mock.calls[0][0].split('?')[1]).get('action_revision')).toBe('4')
 })
 
 it('录制、资源和原问题任务携带各自对象，不借用其他对象',()=>{

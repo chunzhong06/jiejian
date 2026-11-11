@@ -1,3 +1,4 @@
+import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import {requirement} from '../../entities/check/model/checks'
 import {issueDestination} from '../../entities/check/issueDestination'
 import {ComparePair} from '../../shared/ui/ComparePair'
@@ -17,7 +18,7 @@ import {Choice} from '../../shared/ui/Choice'
 import {ObjectTable} from '../../shared/ui/ObjectTable'
 import {useContentTransition} from '../../shared/lib/contentTransition'
 import {Button,ActionLink} from '../../shared/ui/actions'
-import {Badge,Empty,ErrorNote,Loading,Notice,PageError,ResultSummary} from '../../shared/ui/feedback'
+import {Badge,Empty,ErrorNote,Loading,Notice,PageError,ResultSummary,ContextNote} from '../../shared/ui/feedback'
 import type {ReportsProps} from './types'
 import './comparison.css'
 
@@ -30,7 +31,7 @@ const path=(baseline:string,current:string,earlier?:string)=>'/reports?'+new URL
 
 export function Comparison(props:ReportsProps){
  const baseline=props.route.query.get('baseline'),current=props.route.query.get('current'),earlier=props.route.query.get('earlier')??undefined
- if(!baseline||!current||[baseline,current,...(earlier?[earlier]:[])].some(value=>!/^run_[0-9a-f]{32}$/.test(value)))return <PageError title="比较检查记录" error={new Error('请选择参照记录和本次记录。此处会保留所选对象，不自动改用最近记录。')}/>
+ if(!baseline||!current||[baseline,current,...(earlier?[earlier]:[])].some(value=>!/^run_[0-9a-f]{32}$/.test(value)))return <PageError title="本轮变化" error={new Error('请选择参照记录和本次记录。此处会保留所选对象，不自动改用最近记录。')}/>
  return <ComparisonWorkspace key={[props.projectId,baseline,current,earlier].join(':')} {...props} baseline={baseline} current={current} earlier={earlier}/>
 }
 
@@ -39,18 +40,20 @@ function ComparisonWorkspace({projectId,route,baseline,current,earlier}:ReportsP
  const [cursor,setCursor]=useState<string>(),[stack,setStack]=useState<Array<string|undefined>>([]),[setup,setSetup]=useState(false)
  const state=useRead('comparison:'+projectId+':'+baseline+':'+current+':'+earlier+':'+cursor,async signal=>{const value=await comparisonApi.read(projectId,baseline,current,earlier,cursor,signal);assertProject(value.project_id,projectId);return value})
  const directory=useDirectoryState('jiejian.directory:'+projectId+':comparison:'+baseline+':'+current,{selectedId:'',open:true as boolean},Boolean(state.data),root)
- if(state.loading)return <Loading page/>
- if(state.error||!state.data)return <PageError title="比较检查记录" error={state.error}/>
+ if(state.loading)return <PageSkeleton view="/reports" title="本轮变化"/>
+ if(state.error||!state.data)return <PageError title="本轮变化" error={state.error}/>
  const value=state.data,item=value.items.find(item=>item.key===directory.value.selectedId)??value.items.find(item=>!['UNCHANGED','PERSISTING'].includes(item.state))??value.items[0]
  const close=()=>{root.current?.querySelector<HTMLButtonElement>('[aria-pressed=true]')?.focus({preventScroll:true});directory.update({open:false})}
  return <><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,projectId)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(origin)}</ActionLink></div>
   <Heading title="本轮变化" actions={<Button onClick={()=>setSetup(value=>!value)}>{setup?'收起记录选择':'更换比较记录'}</Button>}>比较原问题、正常访问和检查条件的变化。</Heading>
   {setup&&<ComparisonSetup projectId={projectId} baseline={baseline} current={current} earlier={earlier} origin={origin}/>}
+  <div className="jj-comparison-overview">
   <details className="jj-comparison-context"><summary>检查时间、连接与代码对应</summary><section className="jj-comparison-runs" aria-label="比较前提"><RunFacts label="作为参照的检查" run={value.baseline}/><RunFacts label="这次检查" run={value.current}/></section></details>
   {value.limitations.includes('UNPUBLISHED_OR_INVALID_RUN')&&<Notice tone="caution">至少一次检查还没有完整、有效的报告。请先核对执行情况，再判断问题是否发生变化。</Notice>}
-  {value.limitations.includes('DEPLOYMENT_VERSION_UNCONFIRMED')&&<Notice>至少一次检查尚未核对运行代码。这里会比较实际观察结果；确认源码修复有效，还需要核对对应的运行版本。</Notice>}
+  {value.limitations.includes('DEPLOYMENT_VERSION_UNCONFIRMED')&&<ContextNote label="运行代码核对情况"><p>至少一次检查尚未核对运行代码。这里会比较实际观察结果；确认源码修复有效，还需要核对对应的运行版本。</p></ContextNote>}
   <p className="jj-small jj-muted" data-motion-text>{Object.entries(value.counts).filter(([,count])=>count>0).map(([kind,count])=>(kind==='FIXED'?'原问题验证完成':changeLabels[kind as ChangeKind])+' '+count+' 项').join(' · ')||'尚无可比较事项'}{value.earlier?' · 已核对更早的问题记录':''}</p>
-  {value.items.length?<section ref={root} className="jj-collection jj-comparison-results" aria-label="逐项比较结果"><ObjectTable selection={item?.key??''} className="jj-comparison-table"><thead><tr><th>业务事项</th><th>参照结果</th><th>这次变化</th></tr></thead><tbody>{[...value.items].sort((a,b)=>Number(a.state==='UNCHANGED')-Number(b.state==='UNCHANGED')).map(row=>{
+  </div>
+  {value.items.length?<section ref={root} className="jj-collection jj-comparison-results" aria-label="逐项比较结果"><ObjectTable appearance="contained" selection={item?.key??''} className="jj-comparison-table"><thead><tr><th>业务事项</th><th>参照结果</th><th>这次变化</th></tr></thead><tbody>{[...value.items].sort((a,b)=>Number(a.state==='UNCHANGED')-Number(b.state==='UNCHANGED')).map(row=>{
    const expanded=directory.value.open&&row===item,detailId='comparison-detail-'+row.key;
    return <Fragment key={row.key}><tr data-selected={row===item}><th scope="row"><button className="jj-object-select" aria-pressed={row===item} aria-expanded={expanded} aria-controls={expanded?detailId:undefined} data-directory-id={row.key} onClick={()=>directory.update({selectedId:row.key,open:row===item?!directory.value.open:true})}><span className="jj-comparison-object"><DisclosureMarker expanded={expanded}/><span><strong>{row.action_label}</strong><small>{row.subject_label}</small></span></span></button></th><td>{resultLabel(row.before?.verdict)}</td><td><Badge tone={tone(row.state)}>{comparisonLabel(row)}</Badge></td></tr>
     {expanded&&<tr className="jj-comparison-detail-row"><td colSpan={3}><ExpandedComparison id={detailId} item={row} deploymentExplained={value.limitations.includes('DEPLOYMENT_VERSION_UNCONFIRMED')} onClose={close}>

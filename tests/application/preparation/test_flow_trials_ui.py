@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
+from urllib.parse import urlsplit, parse_qs
 import httpx
 import httpx2
 import pytest
@@ -99,16 +100,19 @@ def test_continuous_source_scene_trial_check_and_external_recheck():
                         page.on('response',record_response)
                         def visit(path):
                             page.goto(origin+'/?workflow='+uuid4().hex+'#'+path+('&' if '?' in path else '?')+'project_id='+project)
+                        def visible_run(url):
+                            # 原题编号也会出现在return_to里；只接受当前页面自己的run_id。
+                            return parse_qs(urlsplit(str(url)).fragment.partition('?')[2]).get('run_id',[None])[0]
                         def capture(name):
                             for theme in ('light','dark'):
                                 if page.locator('html').get_attribute('data-studio-theme')!=theme:
                                     page.get_by_role('button',name='切换'+('雾蓝深色' if theme=='dark' else '浅色'),exact=True).click()
                                 for width in (1512,800,375):
                                     page.set_viewport_size({'width':width,'height':980});page.evaluate('scrollTo(0,0)');settled(page)
-                                    geometry=page.locator('.jj-flow-review').evaluate('''root=>({overflow:document.documentElement.scrollWidth>innerWidth,clipped:[...root.querySelectorAll('button,input,select,code')].filter(node=>{const r=node.getBoundingClientRect();return r.width&&r.height&&(r.left<0||r.right>innerWidth+1)}).map(node=>node.tagName)})''')
+                                    geometry=page.locator('.jj-flow-trial').evaluate('''root=>({overflow:document.documentElement.scrollWidth>innerWidth,clipped:[...root.querySelectorAll('button,input,select,code')].filter(node=>{const r=node.getBoundingClientRect();return r.width&&r.height&&(r.left<0||r.right>innerWidth+1)}).map(node=>node.tagName)})''')
                                     assert not geometry['overflow'] and not geometry['clipped'],geometry
-                                    alignment=page.locator('.jj-flow-trial-heading').evaluate('node=>{const [a,b]=[...node.children].map(child=>child.getBoundingClientRect());return Math.abs(a.y+a.height/2-b.y-b.height/2)}')
-                                    assert alignment<1,alignment
+                                    alignment=page.locator('.jj-flow-trial').evaluate('root=>{const node=root.querySelector(".jj-flow-trial-result .jj-object-line");if(!node)return null;const [a,b]=[...node.children].map(child=>child.getBoundingClientRect());return Math.abs(a.y+a.height/2-b.y-b.height/2)}')
+                                    assert alignment is None or alignment<1,alignment
                                     observations.append(dict(state=name,theme=theme,width=width,heading_alignment=alignment,**geometry))
                                     if theme=='dark' and width==1512 and name in {'trial-selection','trial-result'}:
                                         page.screenshot(path=str(output/f'{name}-{theme}-{width}.png'),full_page=True)
@@ -128,12 +132,13 @@ def test_continuous_source_scene_trial_check_and_external_recheck():
                         page.get_by_role('checkbox',name='订单备注可见',exact=True).check()
                         page.get_by_label('所有者查询路径',exact=True).fill('/owner/orders/{case_resource_id}')
                         page.get_by_role('button',name='下一步：核对操作',exact=True).click()
-                        page.get_by_role('button',name='保存操作设置',exact=True).click()
+                        page.get_by_role('button',name='保存接口流程',exact=True).click()
+                        page.get_by_role('button',name='试运行第 1 修订',exact=True).click()
                         expect(page.get_by_role('button',name='预览试运行',exact=True)).to_be_visible()
                         capture('trial-selection')
                         page.get_by_role('button',name='预览试运行',exact=True).click()
                         expect(page.get_by_role('heading',name='确认本次执行范围',exact=True)).to_be_visible()
-                        expect(page.get_by_role('button',name='确认用于检查',exact=True)).to_be_disabled()
+                        expect(page.get_by_role('button',name='确认用于检查',exact=True)).to_have_count(0)
                         capture('trial-preview')
                         page.get_by_role('button',name='确认执行一次',exact=True).click()
                         expect(page.get_by_text('请求被接受',exact=True)).to_be_visible(timeout=45000)
@@ -144,17 +149,21 @@ def test_continuous_source_scene_trial_check_and_external_recheck():
                         assert app.state['inputs'][-1]==dict(query='view=detail',accept='application/json')
                         # 重新打开准确修订后编辑，查询和请求头值仍在，旧试运行仍引用修订1。
                         visit('/testing?action_id='+action)
+                        page.get_by_role('combobox',name='选择流程',exact=True).press('ArrowDown')
+                        # 同修订的来源可能同名；按只读上下文中的准确ID定位对应选项，不取第一项。
+                        available=[item for item in core.operation_flows.context(project)['flows'] if item['document']['business_action_id']==action]
+                        selected_index=next(index for index,item in enumerate(available) if item['document']['id']==saved['id'])
+                        page.get_by_role('option').nth(selected_index).click()
                         page.get_by_role('button',name='核对这份操作',exact=True).click()
-                        page.get_by_role('button',name='修改设置',exact=True).click()
-                        page.get_by_role('button',name='下一步：设置执行步骤',exact=True).click()
+                        page.get_by_role('button',name='编辑流程',exact=True).click()
+                        page.get_by_role('tab',name='执行请求',exact=True).click()
                         expect(page.get_by_label('发送的值',exact=True)).to_have_value('detail')
                         page.get_by_label('发送的值',exact=True).fill('summary')
                         page.get_by_role('tab',name='请求头 1',exact=True).click()
                         expect(page.get_by_label('发送的值',exact=True)).to_have_value('application/json')
-                        page.get_by_role('button',name='下一步：结果核对',exact=True).click()
-                        page.get_by_role('button',name='下一步：核对操作',exact=True).click()
-                        page.get_by_role('button',name='保存操作设置',exact=True).click()
-                        expect(page.locator('.jj-flow-trial > header').get_by_text('第 2 修订',exact=True)).to_be_visible()
+                        page.get_by_role('button',name='保存修改',exact=True).click()
+                        page.get_by_role('tab',name='保存与使用',exact=True).click()
+                        expect(page.locator('.jj-flow-confirm')).to_contain_text('第 2 修订')
                         saved=next(item['document'] for item in core.operation_flows.context(project)['flows'] if item['document']['id']==saved['id'])
                         assert saved['revision']==2
                         async def queue_trial():
@@ -181,30 +190,37 @@ def test_continuous_source_scene_trial_check_and_external_recheck():
                         visit('/testing?action_id='+action+'&trial_id='+trial['request']['trial_id'])
                         expect(page.get_by_text('请求被拒绝',exact=True)).to_be_visible()
                         capture('trial-history')
+                        page.get_by_role('button',name='返回流程编辑',exact=True).click()
                         page.get_by_role('button',name='确认用于检查',exact=True).click()
+                        page.get_by_role('dialog',name='将这份流程用于后续检查',exact=True).get_by_role('button',name='确认用于检查',exact=True).click()
                         expect(page.get_by_role('heading',name='操作已准备好',exact=True)).to_be_visible()
                         visit('/reports?view=plan')
                         expect(page.get_by_role('button',name='开始检查',exact=True)).to_be_enabled()
+                        page.get_by_role('button',name='调整检查范围',exact=True).click()
                         page.get_by_text('保存与沿用检查范围',exact=True).click()
                         page.get_by_role('combobox',name='沿用检查范围',exact=True).press('ArrowDown')
                         page.get_by_role('option',name='订单权限日常检查',exact=True).click()
-                        expect(page.get_by_role('heading',name='必要正常对照',exact=True)).to_be_visible()
+                        if page.get_by_role('button',name='核对本次检查',exact=True).count():
+                            page.get_by_role('button',name='核对本次检查',exact=True).click()
+                        expect(page.locator('.jj-plan-review-summary')).to_contain_text('1 项正常对照')
                         expect(page.get_by_role('button',name='开始检查',exact=True)).to_be_enabled()
                         page.get_by_role('button',name='开始检查',exact=True).click()
-                        page.wait_for_url(lambda url:'run_id=' in url,timeout=15000)
-                        run_id=page.url.split('run_id=')[1].split('&')[0]
+                        page.wait_for_url(lambda url:visible_run(url) is not None,timeout=15000)
+                        run_id=visible_run(page.url)
                         status=until(lambda:core.check_results.status(run_id,project_id=project),lambda value:value.run.lifecycle.value in {'COMPLETED','FAILED','CANCELLED'},seconds=45)
                         assert status.run.verdict.value=='BLOCK',status
                         story=core.check_story.build(run_id,include_repair=False,project_id=project)
                         stages.append(dict(run_id=run_id,verdict='BLOCK'))
                         app.state['vulnerable']=False
                         visit('/issues')
+                        # 证据与处理各自持有工作面；先进入当前原题的处理页，再显式提交外部复验。
+                        page.get_by_role('tab',name='处理与复验',exact=True).click()
                         page.get_by_role('button',name='按原问题再次验证',exact=True).click()
                         page.get_by_label('本次部署或处理说明',exact=True).fill('普通订单应用已限制他人读取，核对原问题及本人正常访问')
                         page.get_by_role('button',name='预览原问题与正常对照',exact=True).click()
                         page.get_by_role('button',name='确认范围并开始',exact=True).click()
-                        page.wait_for_url(lambda url:'run_id=' in url and run_id not in url,timeout=15000)
-                        repeated=page.url.split('run_id=')[1].split('&')[0]
+                        page.wait_for_url(lambda url:visible_run(url) is not None and visible_run(url)!=run_id,timeout=15000)
+                        repeated=visible_run(page.url)
                         status=until(lambda:core.check_results.status(repeated,project_id=project),lambda value:value.run.lifecycle.value in {'COMPLETED','FAILED','CANCELLED'},seconds=45)
                         assert status.run.verdict.value=='PASS',status
                         assert core.check_story.build(run_id,include_repair=False,project_id=project)==story
@@ -228,10 +244,9 @@ def test_continuous_source_scene_trial_check_and_external_recheck():
                         visit('/testing?action_id='+action+'&trial_id='+first_trial['request']['trial_id'])
                         page.get_by_role('button',name='从此修订继续编辑',exact=True).click()
                         expect(page.get_by_label('发送的值',exact=True)).to_have_value('detail')
-                        page.get_by_role('button',name='下一步：结果核对',exact=True).click()
-                        page.get_by_role('button',name='下一步：核对操作',exact=True).click()
-                        page.get_by_role('button',name='保存操作设置',exact=True).click()
-                        expect(page.locator('.jj-flow-trial > header').get_by_text('第 3 修订',exact=True)).to_be_visible()
+                        page.get_by_role('button',name='保存修改',exact=True).click()
+                        page.get_by_role('tab',name='保存与使用',exact=True).click()
+                        expect(page.locator('.jj-flow-confirm')).to_contain_text('第 3 修订')
                         final=core.operation_flows.context(project)['flows']
                         assert any(item['document']['id']==saved['id'] and item['document']['revision']==2 and item['in_use'] for item in final)
                         assert any(item['document']['id']==saved['id'] and item['document']['revision']==3 and not item['in_use'] for item in final)

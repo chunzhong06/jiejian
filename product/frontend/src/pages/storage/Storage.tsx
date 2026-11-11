@@ -8,7 +8,7 @@ import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined';
 import { ApiError } from '../../shared/api/http';
 import { systemApi, type MaintenanceStatus, type MaintenanceOperationResult } from '../../entities/runtime/api/system';
 import { ActionLink, Button } from "../../shared/ui/actions";
-import { Badge, Empty, ErrorNote, Loading, Notice } from "../../shared/ui/feedback";
+import {Badge, ContextNote, Empty, ErrorNote, Loading, Notice} from "../../shared/ui/feedback";
 import { ObjectHeading, Heading } from "../../shared/ui/layout";
 const categories: Record<string, string> = { builds: '旧前端构建', build_cache: '下载与构建缓存', components: '闲置运行组件', assistant: 'AI 辅助缓存', logs: '历史日志', temporary: '运行临时文件' };
 const pendingKey = 'jiejian.maintenance.pending';
@@ -184,7 +184,7 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
     {(review||!embedded)&&<div className="jj-back-link">{review ? <Button kind="quiet" disabled={busy || Boolean(pending)} icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => { setReview(false); setPlan(undefined); setError(undefined); }}>本地存储</Button> : <ActionLink href="#/workspace"><ArrowLeftOutlined aria-hidden="true"/>应用概览</ActionLink>}</div>}
     <Heading title={review ? '核对清理项目' : embedded?'清理闲置文件':'本地存储'} level={embedded?2:1}/>
     {error && (waitingForEnvironment(error)?<Notice tone="caution">运行环境正在准备，清理尚未开始。等待准备或其他清理结束后，点击“预览清理”重试；现有文件已保留。</Notice>:<ErrorNote error={error}/>)}
-    {pending && <Notice tone="caution">上次清理的结果还未确认。<Button busy={busy} onClick={() => void recover()}>查看本次清理结果</Button></Notice>}
+    {pending && <Notice tone="caution">上次清理的结果还未确认。<Button busy={busy} onClick={() => void recover()} busyLabel="正在查询">查看本次清理结果</Button></Notice>}
     {!status&&!reading&&<section className="jj-storage-start" aria-label="扫描范围"><p>先扫描当前工作区，再核对具体清理项目。</p><dl className="jj-facts"><div><dt>扫描范围</dt><dd>已登记的构建、缓存、历史日志与临时文件</dd></div><div><dt>保留内容</dt><dd>应用、权限规则、材料和报告</dd></div></dl><footer><Button kind="primary" busy={busy} onClick={()=>void scan()}>扫描本地存储</Button></footer></section>}
     {reading && !status ? <Loading page>正在扫描已登记的运行文件</Loading> : status && <>
       {review ? <section className="jj-storage-review" aria-label="确认清理范围">
@@ -215,7 +215,7 @@ export function Storage({embedded=false}:{embedded?:boolean}={}) {
         {result && <section ref={completion} className="jj-storage-result"><header data-milestone-part="heading"><ObjectHeading title={result.interrupted?"清理已中断":"本次清理已完成"} icon={<CheckCircleOutlined/>}/></header>
           <p data-milestone-part="facts">已清理 {result.counts.DELETED} 项，跳过 {result.counts.ALREADY_MISSING + result.counts.SKIPPED_CHANGED + result.counts.SKIPPED_IN_USE} 项，失败 {result.counts.FAILED} 项。</p>
           {result.interrupted&&<Notice tone="caution">有 {result.unconfirmed} 项结果尚未确认，未自动重试。<Button busy={busy} onClick={()=>void reviewInterruption()}>核对清理中断结果</Button></Notice>}
-          {result.requires_restart && <Notice tone="neutral">运行环境调整将在重新启动界鉴后生效。</Notice>}
+          {result.requires_restart && <ContextNote label="生效时间">运行环境调整将在重新启动界鉴后生效。</ContextNote>}
           <details open={Boolean(result.interrupted||result.counts.FAILED)}><summary>查看处理明细</summary>{result.results.map(item => <div className="jj-storage-file" key={item.item_id}><strong>{item.label}</strong><span>{({ DELETED: '已清理', ALREADY_MISSING: '文件已不存在', SKIPPED_CHANGED: '文件已变化，已保留', SKIPPED_IN_USE: '正在使用，已保留', FAILED: '未能清理' } as const)[item.status]}</span><small>{item.relative_path}</small><small>{item.reason}</small></div>)}</details>
           <footer className="jj-task-actions"><Button disabled={busy||Boolean(pending)||Boolean(result.interrupted)} onClick={()=>{setResult(undefined);void scan()}}>重新扫描闲置文件</Button></footer>
         </section>}

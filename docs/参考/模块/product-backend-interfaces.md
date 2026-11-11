@@ -74,7 +74,7 @@
 
 ### http/app.py
 
-[源码](../../../product/backend/interfaces/http/app.py)（244 行）。公开声明：`create_app`。
+[源码](../../../product/backend/interfaces/http/app.py)（250 行）。公开声明：`create_app`。
 
 ### http/body.py
 
@@ -264,7 +264,7 @@
 
 ### worker/job.py
 
-[源码](../../../product/backend/interfaces/worker/job.py)（190 行）。公开声明：`main`。
+[源码](../../../product/backend/interfaces/worker/job.py)（198 行）。公开声明：`main`。
 
 ### worker/runtime.py
 

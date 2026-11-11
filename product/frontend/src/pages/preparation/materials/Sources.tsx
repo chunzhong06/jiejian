@@ -16,9 +16,9 @@ import { proofSourcesApi as api, type AdoptionPreview, type ProofOperationKind, 
 import { assertProject } from '../../../shared/model/page';
 import { text } from '../../../shared/lib/format';
 import { useRead } from '../../../shared/lib/useRead';
-import {PageError,  Badge, Empty, ErrorNote, Notice, ResultList} from "../../../shared/ui/feedback";
+import {PageError,  Badge, Empty, ErrorNote, InlineFeedback, Notice, ResultList} from "../../../shared/ui/feedback";
 import { Button,ActionLink } from "../../../shared/ui/actions";
-import {Heading, SectionHeading} from "../../../shared/ui/layout"
+import {Heading, SectionHeading, TaskActions} from "../../../shared/ui/layout"
 import { Dialog } from "../../../shared/ui/Dialog";
 function sourceState(source: ProofSource): {
     label: string;
@@ -149,9 +149,9 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
         setBusy(false);
     } };
     if (state.loading)
-        return <PageSkeleton view="/preparation" title="证明来源"/>;
+        return <PageSkeleton view="/preparation" title="准备业务结果证明"/>;
     if (!context)
-        return <PageError title="业务结果证明" error={state.error}/>;
+        return <PageError title="准备业务结果证明" error={state.error}/>;
     if (requestedSource && !source)
         return <Empty title="没有找到指定的证明来源" action={<Button onClick={onBack}>返回检查准备</Button>}/>;
     const common = source ? { source_id: source.source_id, revision: source.revision, basis_id: context.basis_id } : undefined;
@@ -211,20 +211,20 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
     <Heading title="准备业务结果证明" actions={<Button kind="quiet" onClick={()=>requestCollaboration(projectId,'SETUP','请整理当前业务操作所需的结果证明，沿用已有来源，补齐缺口并保存待审候选。')}>请 Agent 整理结果证明</Button>}/>
 
     {state.error && <ErrorNote error={state.error}/>}
-    {notice && !(source?.adopted&&usable&&scope) && <Notice tone="positive">{notice}</Notice>}
-    {pending && <Notice tone="caution">上次操作的结果尚未确认。<Button busy={busy} onClick={() => void recover()}>查询这次操作</Button></Notice>}
+    {notice && !(source?.adopted&&usable&&scope) && <InlineFeedback tone="positive">{notice}</InlineFeedback>}
+    {pending && <Notice tone="caution">上次操作的结果尚未确认。<Button busy={busy} onClick={() => void recover()} busyLabel="正在查询">查询这次操作</Button></Notice>}
 
     {!sources.length ? <Empty layout="section" title="尚未设置结果判断方式" action={<Button kind="primary" onClick={()=>setConfiguring('new')}>选择判断方式</Button>}>选择用于核对这项业务结果的记录或完整参照文件，再确认读取范围。</Empty> : <section className={'jj-proof-workspace' + (sources.length === 1 ? ' is-single-source' : '')}>
       {sources.length > 1 && <IndexSelection as="nav" className="jj-source-index" label="证明来源" identity={source?.source_id??""}><h2 className="jj-title-group">业务结果</h2>{sources.map(item => { const label = context.actions.find(action => action.action_id === item.config.action_id)?.effects.find(effect => effect.effect_id === item.config.effect_id)?.label ?? '业务结果', status = sourceState(item); return <button className="jj-index-item" aria-current={source?.source_id === item.source_id ? 'page' : undefined} disabled={busy || Boolean(pending)} key={item.source_id} onClick={() => { setSelected(item.source_id); onLocate?.(item.source_id); }}><span>{text(label)}</span><small data-tone={status.tone}>{status.label}</small></button>; })}</IndexSelection>}
       {source && <div className="jj-proof-detail" key={source.source_id}>
-        <header><div><p className="jj-eyebrow">{text(action?.label ?? '当前业务操作')}</p><div className="jj-object-line"><h2>要确认：{text(title)}</h2><Badge tone={sourceState(source).tone}>{sourceState(source).label}</Badge></div></div></header>
+        <header><div><p className="jj-eyebrow">{text(action?.label ?? '当前业务操作')}</p><div className="jj-object-line"><h2>{text(title)}</h2><Badge tone={sourceState(source).tone}>{sourceState(source).label}</Badge></div></div></header>
         <div className="jj-proof-view">        <div className="jj-proof-daily">
         <section className="jj-proof-view-section">
 
           {source.preflight?.current_basis&&checks.some(item=>item.status!=='CONFIRMED')&&<section className="jj-proof-current-gaps" aria-label="当前仍需处理的核对项">{showChecks(checks.filter(item=>item.status!=='CONFIRMED'))}</section>}
 
 
-          <div className="jj-proof-reading"><section className="jj-proof-input"><h3>用什么依据判断</h3><p className="jj-small jj-muted">检查将核对上述业务结果是否发生。这里准备判断依据，当前准备状态显示在标题旁。</p><p className="jj-proof-method">{methodLabels[source.config.source_kind]}</p>
+          <div className="jj-proof-reading"><section className="jj-proof-input"><h3>判断依据</h3><p className="jj-proof-method">{methodLabels[source.config.source_kind]}</p>
             <dl className="jj-facts"><div><dt>测试资源</dt><dd>{resource?.resource_id ?? '测试数据需要重新确认'}</dd></div><div><dt>资源所有者</dt><dd>{text(context.identities.find(item => item.identity_id === resource?.owner_identity_id)?.label ?? '尚未确认')}</dd></div>{source.config.source_kind!=='REFERENCE_FILE'&&<div><dt>记录定位</dt><dd>{source.config.table??source.config.collection??'应用业务记录'}{source.config.protected_column?' / '+source.config.protected_column:''}</dd></div>}</dl>
             {source.config.source_kind === 'REFERENCE_FILE' && !source.config.reference_artifact && <section className="jj-reference-upload"><h3>准备完整参照文件</h3><p>选择属于上述资源和所有者的正确测试文件，最大 4 MiB。</p><FilePicker label="完整测试参照文件" file={file} maxBytes={4194304} disabled={busy || Boolean(pending)} onFileChange={setFile}/>{file && <div className="jj-form-actions"><Button disabled={busy || Boolean(pending)} onClick={() => void (async () => { if (file.size === 0 || file.size > 4194304) {
                 onError(new Error('请选择非空且不超过 4 MiB 的文件。'));
@@ -235,11 +235,11 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
         </section>
         </div></div>
         {(!source.adopted||!usable||!scope)&&<p className="jj-proof-next" role="status">{!scope?'确认读取范围后，再核对业务记录。':checking?'正在核对账号和业务记录，完成后会更新结果。':!usable?'核对记录是否属于当前账号和测试数据。':!source.adopted?'核对已通过，确认后可用于后续检查。':'这项结果的判断方式已准备好。'}</p>}
-        <footer className="jj-proof-actions">
+        <TaskActions className="jj-proof-actions">
           <Button kind="quiet" onClick={()=>setSourceView('settings')}>读取位置与管理</Button>
 
           {!scope?<Button kind="primary" disabled={busy||Boolean(pending)} onClick={()=>{setAck(false);setReview('scope')}}>核对并允许读取</Button>:checking&&source.preflight?<Button disabled={busy||Boolean(pending)} onClick={()=>void write('CANCEL_PREFLIGHT',{preflight_id:source.preflight!.preflight_id})}>取消本次核对</Button>:source.config.source_kind==='DATABASE_AUDIT'&&!source.database_installation?.installed?<Button kind="primary" disabled={busy||Boolean(pending)} onClick={()=>void openMaintenance(source.database_installation&&['INCOMPLETE','REMOVING'].includes(source.database_installation.state)?'REMOVE_DATABASE':'INSTALL_DATABASE')}>{source.database_installation&&['INCOMPLETE','REMOVING'].includes(source.database_installation.state)?'核对并清理未完成安装':'审阅并安装审计组件'}</Button>:!usable?<Button kind="primary" busy={busy} disabled={Boolean(pending)||!resource||!context.runtime_available||source.config.source_kind==='REFERENCE_FILE'&&!source.config.reference_artifact} onClick={()=>void write('START_PREFLIGHT',common!)}>检查是否可用</Button>:!source.adopted?<Button kind="primary" busy={busy} disabled={Boolean(pending)} onClick={()=>void openAdoption()}>核对并用于检查</Button>:<Button kind="primary" onClick={onBack}>{workflow?.finishLabel??'继续准备检查'}</Button>}
-        </footer>
+        </TaskActions>
         {source.preflight?.report&&<details className="jj-proof-check-history"><summary>最近的来源核对</summary><p className="jj-proof-view-note">{source.preflight.current_basis?'以下记录对应当前读取条件。':'以下记录对应先前的读取条件，本次需要重新核对。'}</p>{showChecks(checks)}</details>}
       </div>}
     </section>}

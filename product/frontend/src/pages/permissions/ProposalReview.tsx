@@ -10,7 +10,7 @@ import {fieldMutationLabel} from '../../entities/permission/ui/FieldMutation'
 import {text} from '../../shared/lib/format'
 import {Button} from '../../shared/ui/actions'
 import {Badge,Notice} from '../../shared/ui/feedback'
-import {Heading} from '../../shared/ui/layout'
+import {Heading,SectionHeading} from '../../shared/ui/layout'
 import {Inspector} from '../../shared/ui/Inspector'
 import {Tabs} from '../../shared/ui/Tabs'
 
@@ -47,6 +47,11 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
   }
   const accepted=value.decision?.decision==='APPROVED'
   const status=value.decision?(accepted?'已批准':'已放弃'):'尚未生效'
+  const rows=(group:ReviewItem[])=>group.map(item=><tr key={item.item_id} data-selected={detailOpen&&current?.item_id===item.item_id}>
+    <th scope="row"><button type="button" className="jj-object-select" aria-pressed={detailOpen&&current?.item_id===item.item_id} onClick={()=>select(item.item_id)}><strong>{itemLabel(item)}</strong>{view==='rules'&&<small>{resource(item.after)}</small>}</button></th>
+    <td className="jj-proposal-summary-column">{view==='rules'?item.after.protected_effects.map((effect,index)=><p key={index}>{text(effect)}</p>):text(item.after.description||item.after.effects.map(effect=>effect.business_label).join('、'))||'未补充说明'}</td>
+    <td className="jj-table-state"><span className="jj-proposal-change-label">{changes[item.change_kind]}</span></td>
+  </tr>)
   return <>
     <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{backLabel??'全部权限规则'}</Button></div>
     <Heading eyebrow={value.decision?'权限变更记录':'权限审阅'} title={value.decision?'查看这次权限变更':'核对规则将如何改变'}>
@@ -55,15 +60,12 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
     <div className="jj-proposal-review">
       <Tabs label="权限提案内容" value={view} onValueChange={setView} divider={false} panelId={panelId} idPrefix={tabId} items={[{value:'rules',label:`访问规则 ${rules.length}`},{value:'definitions',label:`业务定义 ${definitions.length}`}]}/>
       <section id={panelId} role="tabpanel" aria-labelledby={tabId+'-'+view} className="jj-proposal-panel">
-        <section ref={collection} className="jj-collection jj-proposal-workspace" data-detail-open={Boolean(current)&&detailOpen} aria-label={view==='rules'?'访问规则概览':'业务定义概览'}>
+        <section ref={collection} className="jj-collection jj-proposal-workspace" data-view={view} data-detail-open={Boolean(current)&&detailOpen} aria-label={view==='rules'?'访问规则概览':'业务定义概览'}>
           <div className="jj-collection-layout"><div className="jj-collection-main">
-            {items.length?<ObjectTable selection={detailOpen?current?.item_id??"":""}><thead><tr><th scope="col">{view==='rules'?'访问要求与资源':'角色与业务操作'}</th><th scope="col" className="jj-proposal-summary-column">{view==='rules'?'业务结果':'定义内容'}</th><th scope="col" className="jj-table-state">变更</th></tr></thead>
-              {[...groups].map(([name,group])=><tbody key={name} aria-label={name}><tr className="jj-proposal-group"><th colSpan={3}>{name}<small>{group.length} 项</small></th></tr>{group.map(item=><tr key={item.item_id} data-selected={detailOpen&&current?.item_id===item.item_id}>
-                <th scope="row"><button type="button" className="jj-object-select" aria-pressed={detailOpen&&current?.item_id===item.item_id} onClick={()=>select(item.item_id)}><strong>{itemLabel(item)}</strong><small>{view==='rules'?resource(item.after):(item.entity_kind==='ACTOR'?'业务角色':'业务操作')}</small></button></th>
-                <td className="jj-proposal-summary-column">{view==='rules'?item.after.protected_effects.map((effect,index)=><p key={index}>{text(effect)}</p>):text(item.after.description||item.after.effects.map(effect=>effect.business_label).join('、'))||'未补充说明'}</td>
-                <td className="jj-table-state"><span className="jj-proposal-change-label">{changes[item.change_kind]}</span></td>
-              </tr>)}</tbody>)}
-            </ObjectTable>:<p className="jj-proposal-empty jj-muted">这份提案没有{view==='rules'?'调整访问规则':'角色或业务操作定义'}。</p>}
+            {items.length?<div className="jj-proposal-groups">{[...groups].map(([name,group])=><section key={name} aria-label={name}>
+              <SectionHeading title={name} appearance="group" meta={group.length+' 项'}/>
+              <ObjectTable appearance="contained" aria-label={name} selection={detailOpen?current?.item_id??'':''}><thead><tr><th scope="col">{view==='rules'?'访问要求与资源':'名称'}</th><th scope="col" className="jj-proposal-summary-column">{view==='rules'?'业务结果':'业务含义'}</th><th scope="col" className="jj-table-state">变更</th></tr></thead><tbody>{rows(group)}</tbody></ObjectTable>
+            </section>)}</div>:<p className="jj-proposal-empty jj-muted">这份提案没有{view==='rules'?'调整访问规则':'角色或业务操作定义'}。</p>}
           </div>{current&&detailOpen&&<Inspector identity={view+':'+current.item_id} title={view==='rules'?text(current.after.action??'访问规则'):text(current.after.display_name)} caption={view==='rules'?'当前访问规则':'当前业务定义'} status={<span className="jj-proposal-change-label">{changes[current.change_kind]}</span>} onClose={close}>
             <ReviewChange item={current} accepted={accepted}/>
           </Inspector>}</div>

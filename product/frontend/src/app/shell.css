@@ -11,7 +11,10 @@
 .jj-application-switcher > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jj-application-switcher > .anticon { flex: none; }
 .jj-application-menu { width: min(280px,calc(100vw - 64px)); }
-.jj-nav-groups { min-height: 0; overflow-y: auto; margin-inline: -4px; padding-inline: 4px; }
+.jj-nav-groups { position:relative; isolation:isolate; min-height: 0; overflow-y: auto; margin-inline: -4px; padding-inline: 4px; }
+.jj-nav-indicator { position:absolute; top:0; left:0; z-index:0; border-radius:9px; background:var(--selected); box-shadow:inset 3px 0 var(--selection-mark); pointer-events:none; }
+.jj-nav-groups .jj-nav-item { z-index:1; }
+.jj-nav-groups[data-selection-ready=true] .jj-nav-item[aria-current=page] { background:transparent; box-shadow:none; }
 .jj-nav-groups nav { display: grid; gap: 4px; }
 .jj-nav-item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 11px 14px; border: 1px solid transparent; color: var(--muted); background: none; border-radius: 9px; text-align: left; text-decoration: none; font-family: inherit; font-size: var(--text-body); font-weight: 500; line-height: 20px; }
 .jj-nav-item:hover { color: var(--ink); text-decoration: none; }
@@ -86,3 +89,6 @@
 @media(max-width:600px) { .jj-toolbar { gap:4px; } .jj-breadcrumb li:last-child { min-width:0; } }
 .jj-handoff-context{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);display:grid;gap:8px}
 .jj-handoff-context p, .jj-handoff-context small{margin:0;color:var(--muted);line-height:1.7}
+.jj-collaboration-suggestions { display:grid; gap:8px; color:var(--muted); font-size:var(--text-meta); }
+.jj-collaboration-suggestions > div { display:flex; flex-wrap:wrap; gap:4px 8px; margin-left:-12px; }
+.jj-collaboration-suggestions .jj-button { font-size:var(--text-meta); }

@@ -1,5 +1,6 @@
 # 当前结果只读边界：先交叉核验发布收据、不可变文件与数据库索引，再暴露既有结论。
 from __future__ import annotations
+from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
 
 import hashlib
 from typing import Literal
@@ -228,6 +229,7 @@ class CheckResultReader:
                 cursor = CheckHistoryCursor(created_at_us=last.created_at_us, run_id=last.run_id)
             return CheckHistoryPage(project_id=project_id, items=tuple(items), next_cursor=cursor)
 
+    @timed_workflow('report.read')
     def status(self, run_id: str, *, project_id: str | None = None) -> CheckRunStatus:
         with self._uow_factory() as work:
             return self._status(work, self._run(work, run_id, project_id))

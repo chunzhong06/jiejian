@@ -1,7 +1,8 @@
+import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import {ObjectTable} from '../../shared/ui/ObjectTable'
 import {SearchField} from '../../shared/ui/SearchField'
 import {useRef} from 'react'
-import {Inspector} from '../../shared/ui/Inspector'
+import {Inspector,InspectorSection} from '../../shared/ui/Inspector'
 import {CommandMenu} from '../../shared/ui/CommandMenu'
 import DownOutlined from '@ant-design/icons/DownOutlined'
 import {preparationApi} from '../../entities/preparation/api/preparation'
@@ -13,7 +14,7 @@ import {go,scopedPath,withReturnDestination} from '../../shared/lib/navigation'
 import type {PageProps} from '../../shared/model/page'
 import {Heading} from '../../shared/ui/layout'
 import {Button,ActionLink} from '../../shared/ui/actions'
-import {Badge,Empty,ErrorNote,PageError,Loading} from '../../shared/ui/feedback'
+import {Badge,Empty,ErrorNote,PageError} from '../../shared/ui/feedback'
 import './workspace.css'
 import {TestingSections} from './TestingSections'
 
@@ -39,7 +40,7 @@ function TestingDirectory({projectId}:{projectId:string}) {
   const setDetailOpen=(detailOpen:boolean)=>directory.update({detailOpen})
   const closeDetails=()=>{collection.current?.querySelector<HTMLButtonElement>('.jj-object-select[aria-pressed=true]')?.focus({preventScroll:true});setDetailOpen(false)}
   const destination=(path:string)=>withReturnDestination(path,'/testing')
-  if(state.loading&&!state.data)return <Loading page/>
+  if(state.loading&&!state.data)return <PageSkeleton view="/testing" title="操作与材料"/>
   if(!state.data)return <PageError title="操作与材料" error={state.error}/>
   const context=state.data
   const actions=context.actions.filter(item=>item.label.includes(search))
@@ -66,6 +67,6 @@ function TestingDirectory({projectId}:{projectId:string}) {
         return <tr key={action.action_id} data-selected={selected?.action_id===action.action_id}><th scope="row"><button className="jj-object-select" data-directory-id={action.action_id} aria-pressed={selected?.action_id===action.action_id} onClick={()=>{directory.update({selectedId:action.action_id,detailOpen:true as boolean})}}><strong>{action.label}</strong><small className="jj-object-summary">{action.effects.map(effect=>effect.label).join('、')||'按已确认要求核对业务结果'}</small></button></th><td className="jj-object-meta">{active?'接口流程':material?.execution.status==='SATISFIED'?'操作录制':flows.length?'接口草稿':'待准备'}<small>{action.state_changing?'包含恢复安排':'只读操作'}</small></td><td className="jj-table-state"><Badge tone={status.tone}>{status.label}</Badge></td></tr>
       })}</tbody></ObjectTable>:<Empty title={search?'没有匹配的业务操作':'先确认要检查的业务操作'} action={<Button onClick={()=>search?setSearch(''):go('/permissions')}>{search?'清除筛选':'设置权限要求'}</Button>}>{search?'可以调整搜索词，或清除筛选查看已有业务操作。':'先在“权限与覆盖”中添加访问要求，再为对应操作准备账号、执行步骤和结果证明。'}</Empty>}
       <p className="jj-testing-count">{context.actions.length} 项业务操作</p>
-    </div>{selected&&detailOpen&&<Inspector identity={selected.action_id} title={selected.label} caption="当前业务操作" status={<Badge tone={statusFor(selected.action_id).tone}>{statusFor(selected.action_id).label}</Badge>} onClose={closeDetails} actions={<><ActionLink onClick={()=>directory.remember(selected.action_id)} href={'#'+scopedPath(destination('/testing?action_id='+selected.action_id),projectId)}>{selectedFlows.length?'编辑接口流程':'设置接口流程'}</ActionLink><ActionLink kind="primary" onClick={()=>directory.remember(selected.action_id)} href={'#'+scopedPath(destination('/preparation?action_id='+selected.action_id),projectId)}>准备与核对材料</ActionLink></>}><h3>检查准备</h3><dl className="jj-facts" data-layout="columns"><div><dt>执行操作</dt><dd>{selectedMaterial?.execution.status==='SATISFIED'?'已准备':adopted?.configuration_current?'已有接口流程':'需要准备'}</dd></div><div><dt>接口流程</dt><dd>{new Set(selectedFlows.map(item=>item.id)).size} 份{adopted?' · 当前采用第 '+adopted.revision+' 修订':''}</dd></div><div><dt>结果核对</dt><dd>{selected.effects.map(effect=>effect.label).join('、')}</dd></div><div><dt>恢复安排</dt><dd>{selected.state_changing?selectedMaterial?.recovery.status==='SATISFIED'?'已准备恢复':'需确认恢复方式':'只读操作，无需恢复'}</dd></div></dl></Inspector>}</div></section>
+    </div>{selected&&detailOpen&&<Inspector identity={selected.action_id} title={selected.label} caption="当前业务操作" status={<Badge tone={statusFor(selected.action_id).tone}>{statusFor(selected.action_id).label}</Badge>} onClose={closeDetails} actions={<><ActionLink onClick={()=>directory.remember(selected.action_id)} href={'#'+scopedPath(destination('/testing?action_id='+selected.action_id),projectId)}>{selectedFlows.length?'编辑接口流程':'设置接口流程'}</ActionLink><ActionLink kind="primary" onClick={()=>directory.remember(selected.action_id)} href={'#'+scopedPath(destination('/preparation?action_id='+selected.action_id),projectId)}>准备与核对材料</ActionLink></>}><InspectorSection title="要验证的结果"><p>{selected.effects.map(effect=>effect.label).join('、')||'按权限要求核对实际业务结果。'}</p></InspectorSection><InspectorSection title="执行准备"><dl className="jj-facts" data-layout="columns"><div><dt>执行方式</dt><dd>{adopted?.configuration_current?'接口流程，第 '+adopted.revision+' 修订':selectedMaterial?.execution.status==='SATISFIED'?'已有操作录制':'尚未准备'}</dd></div><div><dt>恢复安排</dt><dd>{selected.state_changing?selectedMaterial?.recovery.status==='SATISFIED'?'已准备恢复':'需确认恢复方式':'只读操作，无需恢复'}</dd></div></dl></InspectorSection></Inspector>}</div></section>
   </>
 }

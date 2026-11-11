@@ -228,7 +228,7 @@ const prefix = (projectId: string) => `/api/projects/${projectId}/business-bound
 
 export const businessBoundariesApi = {
   editor: (projectId: string) => request<BoundaryEditorDto>(`${prefix(projectId)}/editor`),
-  proposal: (projectId: string, proposalId: string) => request<BoundaryProposalViewDto>(`${prefix(projectId)}/proposals/${encodeURIComponent(proposalId)}`),
+  proposal: (projectId: string, proposalId: string, reconcileDecision = false) => request<BoundaryProposalViewDto>(`${prefix(projectId)}/proposals/${encodeURIComponent(proposalId)}${reconcileDecision?'?reconcile_decision=true':''}`),
   current: (projectId: string) => request<BusinessBoundaryViewDto>(prefix(projectId)),
   preview: (projectId: string) => request<BoundaryDraftViewDto>(`${prefix(projectId)}/preview`),
   maintenanceDraft: (projectId: string) => request<BoundaryMaintenanceDraftDto>(`${prefix(projectId)}/maintenance-draft`),

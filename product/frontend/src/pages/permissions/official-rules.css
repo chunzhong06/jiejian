@@ -1,7 +1,8 @@
 .jj-official-rules-review {width:100%; max-width:1040px; margin-inline:auto; }
 .jj-official-rules-review > .jj-heading { margin-bottom:12px; }
 .jj-official-rule-section { margin-top:32px; }
-.jj-official-rule-table { width:100%; table-layout:fixed; border-collapse:collapse; margin-top:24px; }
+.jj-official-rule-frame { margin-top:24px; }
+.jj-official-rule-frame .jj-official-rule-table { min-width:0; width:100%; table-layout:fixed; border-collapse:collapse; }
 .jj-official-rule-table col:first-child { width:46%; }
 .jj-official-rule-table col:nth-child(2) { width:28%; }
 .jj-official-rule-table col:last-child { width:26%; }
@@ -10,17 +11,13 @@
 .jj-official-rule-table small { display:block; color:var(--muted); font-size:var(--text-meta); font-weight:400; line-height:20px; margin-top:6px; }
 .jj-official-definitions { margin-block:24px; }
 .jj-official-definitions p { margin-top:12px; color:var(--muted); }
-.jj-official-rule-actions { display:flex; justify-content:space-between; align-items:center; gap:24px; border-top:1px solid var(--line); padding-top:24px; margin-top:28px; }
-.jj-official-rule-actions > .jj-inline-actions { flex:none; }
-.jj-official-pending { margin-top:24px; }
 .jj-official-ready-copy { margin-block:24px 32px; }
 @media(max-width:700px) {
   .jj-official-rule-table, .jj-official-rule-table tbody { display:block; width:100%; }
   .jj-official-rule-table :is(colgroup,thead) { display:none; }
-  .jj-official-rule-table tr { display:grid; gap:14px; padding-block:20px; border-bottom:1px solid var(--line); }
+  .jj-official-rule-table tr { display:grid; gap:14px; padding:20px; border-bottom:1px solid var(--line); }
+  .jj-official-rule-table tr:last-child { border-bottom:0; }
   .jj-official-rule-table :is(td,tbody th) { display:block; width:100%; padding:0; border:0; }
   .jj-official-rule-table td.jj-table-state { text-align:start; }
   .jj-official-rule-table td[data-label]::before { content:attr(data-label); display:inline-block; width:76px; font-size:var(--text-meta); color:var(--muted); }
-  .jj-official-rule-actions { flex-direction:column; align-items:stretch; gap:20px; }
-  .jj-official-rule-actions > .jj-inline-actions { justify-content:flex-end; flex-wrap:wrap; }
 }

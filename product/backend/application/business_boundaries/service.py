@@ -190,8 +190,11 @@ class BusinessBoundaryService:
                 maintenance_draft=draft, pending_proposals=summaries, pending_has_more=len(pending)>100,
                 boundary_state_fingerprint=None if draft is None else draft.boundary_state_fingerprint)
 
-    def proposal(self, project_id: str, proposal_id: str) -> BoundaryProposalView:
+    def proposal(self, project_id: str, proposal_id: str, *, reconcile_decision: bool = False) -> BoundaryProposalView:
         with self._uow_factory() as work:
+            # 恢复未知批准时排在已进入事务的决定之后读取；普通审阅不竞争写锁。
+            if reconcile_decision:
+                work.acquire_write_lock()
             proposal = work.business_boundaries.get_proposal(proposal_id)
             if proposal is None or proposal.project_id != project_id:
                 boundary_validation._raise(ErrorCode.BOUNDARY_PROPOSAL_NOT_FOUND, "业务边界提案不存在")

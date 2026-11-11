@@ -37,7 +37,8 @@ th.jj-table-state, td.jj-table-state { text-align: center; vertical-align: middl
 th.jj-table-actions, td.jj-table-actions { text-align: right; vertical-align: middle; }
 th { font-weight: 500; }
 fieldset { min-width: 0; }
-details { border-top: 1px solid var(--line); padding: 16px 0; }
+/* 展开是阅读行为，不自动增加一道分隔；独立任务与内容表自行持有必要边界。 */
+details { padding:16px 0; }
 summary { display: flex; align-items: baseline; gap: 9px; width: fit-content; max-width: 100%; list-style: none; cursor: pointer; color: var(--muted); font-size: var(--text-meta); }
 summary::-webkit-details-marker { display: none; }
 summary::before { content: '›'; display: inline-block; transform: rotate(0); transform-origin: 50% 56%; color: var(--muted); font-size: var(--text-body); }
@@ -65,7 +66,7 @@ summary:hover { color: var(--accent-ink); }
 .jj-button.is-primary[aria-busy=true] { background:var(--accent); }
 .jj-button.is-danger[aria-busy=true] { background:var(--bad-soft); }
 .jj-button[aria-busy=true] > :not(.jj-button-progress) { opacity:0; }
-.jj-button-progress { position:absolute; inset:0; display:grid; place-items:center; color:var(--ink); }
+.jj-button-progress { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:8px; color:var(--ink); }
 .jj-button.is-primary .jj-button-progress { color:var(--on-accent); }
 .jj-button.is-danger .jj-button-progress { color:var(--bad); }
 
@@ -75,7 +76,7 @@ summary:hover { color: var(--accent-ink); }
 .jj-badge.is-caution { color: var(--warn); background: var(--warn-soft); }
 .jj-badge.is-accent { color: var(--info); background: var(--accent-soft); }
 .jj-heading { min-width:0; }
-.jj-heading > div:first-of-type { display: flex; justify-content: space-between; gap: 24px; align-items: baseline; }
+.jj-heading > .jj-heading-line { display: flex; justify-content: space-between; gap: 24px; align-items: baseline; }
 .jj-heading .jj-eyebrow { margin-bottom: 7px; }
 .jj-heading-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: none; }
 .jj-heading-note { color:var(--muted); font-size:var(--text-body); margin-top:10px; max-width:72ch; line-height:var(--leading-reading); font-weight:400; }
@@ -101,6 +102,9 @@ summary:hover { color: var(--accent-ink); }
 .jj-field > :is(span,label) { font-size:var(--text-label); line-height:20px; font-weight:500; color:var(--muted); }
 .jj-field small { color:var(--muted); }
 .jj-field .jj-field-error { color:var(--bad); }
+.jj-field-with-status { display:flex; align-items:center; flex-wrap:wrap; gap:12px 16px; min-width:0; }
+.jj-field-with-status > :first-child { flex:1 1 240px; min-width:0; }
+.jj-field-status { display:inline-flex; align-items:center; flex:none; }
 .jj-choice-field { display: flex; flex-wrap: wrap; gap: 12px; border: 0; padding: 0; margin: 24px 0; }
 .jj-choice-field legend { margin-bottom: 14px; font-weight: 600; }
 .jj-choice-field > label { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 180px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
@@ -125,8 +129,22 @@ summary:hover { color: var(--accent-ink); }
 .jj-notice.is-positive { --notice-action-ink:var(--good); color: var(--good); background: var(--good-soft); }
 .jj-notice.is-accent { --notice-action-ink:var(--info); color: var(--info); background: var(--accent-soft); }
 .jj-notice > .jj-button { margin-left:auto; }
-.jj-notice .jj-button.is-quiet { color:var(--notice-action-ink); border-color:color-mix(in srgb,var(--notice-action-ink) 28%,transparent); --state-fill:color-mix(in srgb,var(--notice-action-ink) 10%,transparent); }
-.jj-notice .jj-button.is-quiet:not(:disabled):hover { color:var(--notice-action-ink); border-color:color-mix(in srgb,var(--notice-action-ink) 45%,transparent); }
+.jj-notice-copy { flex:1 1 280px; min-width:0; display:grid; gap:6px; line-height:var(--leading-reading); }
+.jj-notice-copy > strong { font-size:var(--text-body); font-weight:500; }
+.jj-notice-copy > div { font-size:var(--text-meta); }
+.jj-notice-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:10px; margin-left:auto; }
+/* 通知内的恢复动作随所属语义变化，普通、禁用和忙碌态都不另铺蓝色底。 */
+.jj-notice .jj-button:is(.is-default,.is-quiet) { color:var(--notice-action-ink); background:transparent; border-color:color-mix(in srgb,var(--notice-action-ink) 28%,transparent); --state-fill:color-mix(in srgb,var(--notice-action-ink) 10%,transparent); }
+.jj-notice .jj-button:is(.is-default,.is-quiet):not(:disabled):hover { color:var(--notice-action-ink); border-color:color-mix(in srgb,var(--notice-action-ink) 45%,transparent); }
+.jj-notice .jj-button:is(.is-default,.is-quiet)[aria-busy=true] { color:transparent; background:transparent; border-color:color-mix(in srgb,var(--notice-action-ink) 20%,transparent); }
+.jj-notice .jj-button-progress { color:var(--notice-action-ink); }
+.jj-context-note { max-width:84ch; margin:0; padding-left:16px; border-left:2px solid var(--line-strong); color:var(--muted); font-size:var(--text-meta); line-height:var(--leading-reading); }
+.jj-context-note p + p { margin-top:10px; }
+.jj-context-note strong { font-weight:500; color:var(--ink); }
+.jj-inline-feedback { color:var(--muted); font-size:var(--text-meta); line-height:var(--leading-reading); }
+.jj-inline-feedback[data-tone=positive] { color:var(--good); }
+.jj-inline-feedback .jj-button { margin-left:12px; }
+.jj-choice-field > .jj-field-guidance { color:var(--warn); font-size:var(--text-meta); line-height:var(--leading-reading); }
 .jj-dialog { padding: 0; width: min(480px,calc(100% - 32px)); max-height: min(85dvh,900px); border: 1px solid var(--line); border-radius:var(--radius-dialog); background:var(--surface-elevated); color:var(--ink); box-shadow:var(--float-shadow); }
 .jj-dialog[open] { display:flex; flex-direction:column; }
 .jj-dialog[data-size=wide] { width:min(840px,calc(100% - 32px)); }
@@ -139,7 +157,8 @@ summary:hover { color: var(--accent-ink); }
 .jj-dialog-body { padding: 24px; min-height:0; overflow-y:auto; }
 .jj-dialog-body > * + * { margin-top: 18px; }
 .jj-dialog > footer { display: flex; flex-wrap:wrap; justify-content: flex-end; gap: 10px; padding: 18px 24px; background: var(--inset); border-top: 1px solid var(--line); }
-.jj-scroll-table { min-width: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--surface-shadow); }
+/* 滚动视口也持有表内绝对定位的无障碍标签，避免窄窗时标签越过本地滚动边界。 */
+.jj-scroll-table { position:relative; min-width:0; overflow:auto; border:1px solid var(--line); border-radius:var(--radius-surface); background:var(--surface); box-shadow:var(--surface-shadow); }
 .jj-scroll-table table { min-width: 640px; }
 .jj-scroll-table th { border-bottom: 1px solid var(--line); vertical-align: top; }
 .jj-scroll-table td { border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -150,7 +169,7 @@ summary:hover { color: var(--accent-ink); }
 .jj-warning-text { color: var(--warn); }
 .jj-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media(max-width:1000px) { .jj-sticky { position: static; } }
-@media(max-width:700px) { .jj-heading > div:first-of-type { align-items: flex-start; flex-direction: column; gap: 16px; } .jj-heading-actions { width: 100%; } .jj-panel { padding: 20px; } }
+@media(max-width:700px) { .jj-heading > .jj-heading-line { align-items: flex-start; flex-direction: column; gap: 16px; } .jj-heading-actions { width: 100%; } .jj-panel { padding: 20px; } }
 
 .jj-segment-indicator { position:absolute; top:0; left:0; z-index:0; pointer-events:none; background:var(--selected); border-radius:6px; box-shadow:none; }
 

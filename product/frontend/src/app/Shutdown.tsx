@@ -3,7 +3,7 @@ import PoweroffOutlined from '@ant-design/icons/PoweroffOutlined';
 import { systemApi } from '../entities/runtime/api/system';
 import { Button } from "../shared/ui/actions";
 import { Dialog } from "../shared/ui/Dialog";
-import { ErrorNote, Notice } from "../shared/ui/feedback";
+import { ErrorNote, Loading } from "../shared/ui/feedback";
 export function Shutdown({compact=false}:{compact?:boolean}={}) {
     const [open, setOpen] = useState(false);
     const [state, setState] = useState<'idle' | 'sending' | 'accepted' | 'unknown'>('idle');
@@ -31,8 +31,8 @@ export function Shutdown({compact=false}:{compact?:boolean}={}) {
       <Button kind="danger" onClick={() => void quit()}>退出界鉴</Button>
     </> : undefined}>
       {state === 'idle' && <p>退出将停止当前检查并关闭本地服务。已保存的规则、材料和报告会保留。</p>}
-      {state === 'sending' && <Notice tone="accent">正在请求退出。</Notice>}
-      {state === 'accepted' && <Notice tone="accent">退出请求已接收，服务正在清理当前任务。</Notice>}
+      {state === 'sending' && <Loading>正在请求退出</Loading>}
+      {state === 'accepted' && <Loading>退出请求已接收，正在清理当前任务</Loading>}
       {state === 'unknown' && <><ErrorNote error={error}/><p>退出结果尚未确认，请查看启动窗口中的服务状态。</p></>}
     </Dialog>}
   </>;

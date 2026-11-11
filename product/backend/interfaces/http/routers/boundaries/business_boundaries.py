@@ -283,9 +283,9 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         )
 
     @router.get(f"{prefix}/proposals/{{proposal_id}}", response_model=ApiResponse)
-    def get_proposal(project_id: str, proposal_id: str):
+    def get_proposal(project_id: str, proposal_id: str, reconcile_decision: bool = False):
         return data_response(
-            context.business_boundaries.proposal(project_id, proposal_id).model_dump(mode="json")
+            context.business_boundaries.proposal(project_id, proposal_id, reconcile_decision=reconcile_decision).model_dump(mode="json")
         )
 
     @router.post(f"{prefix}/proposals/{{proposal_id}}/approve", response_model=ApiResponse)

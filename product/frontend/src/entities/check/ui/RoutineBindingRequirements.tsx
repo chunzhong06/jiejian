@@ -5,7 +5,7 @@ import {preparationApi} from '../../preparation/api/preparation'
 import {assertProject} from '../../../shared/model/page'
 import {go,withReturnDestination} from '../../../shared/lib/navigation'
 import {IndexSelection} from '../../../shared/ui/IndexSelection'
-import {Badge,ErrorNote,Notice} from '../../../shared/ui/feedback'
+import {Badge,ContextNote,ErrorNote} from '../../../shared/ui/feedback'
 import {Button} from '../../../shared/ui/actions'
 
 type Group={kind:RoutineAsset['kind'];slot:string;label:string;minimum:number;items:RoutineAsset[];requirement?:RoutineRequirement;progress?:RoutineRequirementProgress}
@@ -23,7 +23,7 @@ export function RoutineBindingRequirements({projectId,document,assets,progress=[
  const available=(item:Group)=>reusable(item)||item.items.length>=item.minimum||item.progress?.status==='PRESENT'
  const attention=groups.filter(item=>!available(item)),retained=groups.filter(available)
  const group=groups.find(item=>item.kind+':'+item.slot===selected)??attention[0]??groups[0]
- if(!group)return <Notice>还没有可核对的材料。请先查看本次检查的准备清单，补齐材料后再确认使用。已有记录保留。</Notice>
+ if(!group)return <ContextNote label="准备清单">还没有可核对的材料。请先查看本次检查的准备清单，补齐材料后再确认使用。已有记录保留。</ContextNote>
  const unchanged=reusable(group)
  const statusLabel=(item:Group)=>reusable(item)?'与上次确认一致':item.items.length?'已有材料，等待确认':({PRESENT:'已有材料，等待确认',PARTIAL:'还需补齐数量',NEEDS_REVIEW:'已有记录，需要重核',MISSING:'需要准备',UNKNOWN:'状态待确认'}[item.progress?.status??'MISSING'])
  const progressDescription=group.progress?.status==='PRESENT'?'已经准备了这项材料。补齐当前其余缺口后，再一起确认用于本次检查。':group.progress?.status==='PARTIAL'?`已核对 ${group.progress.count} 项，方案至少需要 ${group.minimum} 项。`:group.progress?.status==='NEEDS_REVIEW'?'已有材料记录需要重新核对，请沿用原记录处理变化。':group.progress?.status==='UNKNOWN'?'暂时无法读取材料状态。请重新读取准备信息，已有记录保留。':undefined

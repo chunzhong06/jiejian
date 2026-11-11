@@ -7,14 +7,15 @@ import {go} from '../lib/navigation';
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
     kind?: 'default' | 'primary' | 'quiet' | 'danger';
     busy?: boolean;
+    busyLabel?: string;
     complete?: boolean;
     size?: 'regular' | 'compact';
     icon?: ReactNode;
     tip?: string;
-}>(function Button({ children, kind = 'default', busy = false, complete = false, size = 'regular', icon, tip, title, ...props }, ref) {
+}>(function Button({ children, kind = 'default', busy = false, busyLabel, complete = false, size = 'regular', icon, tip, title, ...props }, ref) {
     const label = tip ?? title ?? (!children ? props['aria-label'] : undefined);
     // 忙碌指示覆盖原内容，保留原图标和文字占位，提交时不能挤动相邻操作。
-    const button = <button {...props} ref={ref} type={props.type ?? 'button'} className={`jj-button is-${kind} ${props.className ?? ''}`} data-size={size} data-icon-only={!children || undefined} data-complete={complete || undefined} disabled={props.disabled || busy} aria-busy={busy || undefined}>{complete ? <CheckOutlined className="jj-button-complete" aria-hidden="true"/> : icon}{children}{busy && <span className="jj-button-progress" aria-hidden="true"><LoadingOutlined spin/></span>}</button>;
+    const button = <button {...props} ref={ref} type={props.type ?? 'button'} className={`jj-button is-${kind} ${props.className ?? ''}`} data-size={size} data-icon-only={!children || undefined} data-complete={complete || undefined} disabled={props.disabled || busy} aria-busy={busy || undefined}>{complete ? <CheckOutlined className="jj-button-complete" aria-hidden="true"/> : icon}{children}{busy && <span className="jj-button-progress" aria-hidden="true"><LoadingOutlined spin/>{busyLabel&&<span>{busyLabel}</span>}</span>}</button>;
     // 提示停用只改变浮层状态，不能在忙碌切换时替换按钮 DOM。
     return label ? <Hint label={label} disabled={props.disabled || busy}>{button}</Hint> : button;
 });

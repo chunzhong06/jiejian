@@ -1,5 +1,6 @@
-import {useCallback,useEffect,useRef,useState} from 'react'
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react'
 import {subscribePageRefresh} from './pageRefresh'
+import {beginWorkflowTiming} from './workflowTiming'
 
 const readers=new Set<()=>void>()
 let resumeTimer:ReturnType<typeof setTimeout>|undefined
@@ -26,6 +27,8 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
   const timing=useRef(interval);timing.current=interval
   const [epoch,setEpoch]=useState(0)
   const [state,setState]=useState<{key:string|null;data?:T;error?:Error;loading:boolean;refreshing?:boolean;receivedAt?:number}>({key,loading:key!==null})
+  const commitTiming=useRef<ReturnType<typeof beginWorkflowTiming>|undefined>(undefined)
+  useLayoutEffect(()=>{if(!state.loading&&!state.refreshing){commitTiming.current?.(state.error?'FAILED':'COMPLETE');commitTiming.current=undefined}},[state])
   useEffect(()=>{
     if(key===null)return
     let valid=true,pending=false,timer:ReturnType<typeof setTimeout>|undefined,last:T|undefined
@@ -34,9 +37,10 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
     const refresh=async(manual=false)=>{
       if(pending||document.visibilityState==='hidden')return
       pending=true
+      const finishTiming=beginWorkflowTiming('view.read')
       if(valid)setState(previous=>({...previous,refreshing:true}))
-      try{const data=await (manual?manualSource.current??source.current:source.current)(controller.signal);last=data;if(valid)setState({key,data,loading:false,refreshing:false,receivedAt:Date.now()})}
-      catch(error){if(valid)setState(previous=>({key,data:previous.key===key?previous.data:undefined,error:error instanceof Error?error:new Error('暂时无法读取，请重试。'),loading:false,refreshing:false,receivedAt:previous.key===key?previous.receivedAt:undefined}))}
+      try{const data=await (manual?manualSource.current??source.current:source.current)(controller.signal);last=data;if(valid){commitTiming.current=finishTiming;setState({key,data,loading:false,refreshing:false,receivedAt:Date.now()})}else finishTiming('ABORTED')}
+      catch(error){if(valid){commitTiming.current=finishTiming;setState(previous=>({key,data:previous.key===key?previous.data:undefined,error:error instanceof Error?error:new Error('暂时无法读取，请重试。'),loading:false,refreshing:false,receivedAt:previous.key===key?previous.receivedAt:undefined}))}else finishTiming('ABORTED')}
       finally{pending=false;const delay=typeof timing.current==='function'?timing.current(last):timing.current;if(valid&&delay)timer=setTimeout(()=>void refresh(),delay)}
     }
     // 隐藏期间不启动新读取；恢复焦点或网络后复用串行入口，避免轮询和恢复同时发请求。
@@ -44,7 +48,7 @@ export function useRead<T>(key:string|null, read:(signal:AbortSignal)=>Promise<T
     void refresh();const unsubscribe=subscribeResume(resume)
     const unsubscribeRefresh=subscribePageRefresh(()=>{clearTimeout(timer);return refresh(true)})
     // 取消由读取函数执行，valid 仍拦截忽略取消信号的迟到结果。
-    return()=>{valid=false;controller.abort();clearTimeout(timer);unsubscribe();unsubscribeRefresh()}
+    return()=>{valid=false;controller.abort();clearTimeout(timer);commitTiming.current?.('ABORTED');commitTiming.current=undefined;unsubscribe();unsubscribeRefresh()}
   },[key,epoch,typeof interval==='number'?interval:'adaptive'])
   const reload=useCallback(()=>setEpoch(value=>value+1),[])
   const visible=state.key===key?state:{key,loading:key!==null}

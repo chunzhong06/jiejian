@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[application/api](#applicationapi)（4 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（1 个文件）、[check/ui](#checkui)（10 个文件）、[permission/api](#permissionapi)（3 个文件）、[permission/ui](#permissionui)（2 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/ui](#preparationui)（11 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（1 个文件）、[runtime/ui](#runtimeui)（2 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（4 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
+按目录定位：[application/api](#applicationapi)（4 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（1 个文件）、[check/ui](#checkui)（10 个文件）、[permission/api](#permissionapi)（3 个文件）、[permission/ui](#permissionui)（4 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/ui](#preparationui)（11 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（1 个文件）、[runtime/ui](#runtimeui)（2 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（4 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
 
 ## application/api
 
@@ -34,7 +34,7 @@
 
 ### check/api/currentChecks.ts
 
-[源码](../../../product/frontend/src/entities/check/api/currentChecks.ts)（174 行）。公开声明：`ActionResultStory`、`ActivityEvent`、`CheckBreakpoint`、`CheckContinuation`、`CheckEvidence`、`CheckHistoryCursor`、`CheckHistoryItem`、`CheckHistoryPage`等。
+[源码](../../../product/frontend/src/entities/check/api/currentChecks.ts)（175 行）。公开声明：`ActionResultStory`、`ActivityEvent`、`CheckBreakpoint`、`CheckContinuation`、`CheckEvidence`、`CheckHistoryCursor`、`CheckHistoryItem`、`CheckHistoryPage`等。
 
 ### check/api/repairs.ts
 
@@ -92,7 +92,7 @@
 
 ### check/ui/RoutinePreparation.tsx
 
-[源码](../../../product/frontend/src/entities/check/ui/RoutinePreparation.tsx)（46 行）。公开声明：`RoutinePreparation`。
+[源码](../../../product/frontend/src/entities/check/ui/RoutinePreparation.tsx)（47 行）。公开声明：`RoutinePreparation`。
 
 ### check/ui/RoutineRunContext.tsx
 
@@ -118,6 +118,14 @@
 
 [源码](../../../product/frontend/src/entities/permission/ui/FieldMutation.tsx)（27 行）。公开声明：`FieldMutationEditor`、`fieldMutationLabel`、`validFieldMutation`。
 
+### permission/ui/ProposalQueue.css
+
+[源码](../../../product/frontend/src/entities/permission/ui/ProposalQueue.css)（10 行）。公开声明：包、内部机制或样式。
+
+### permission/ui/ProposalQueue.tsx
+
+[源码](../../../product/frontend/src/entities/permission/ui/ProposalQueue.tsx)（34 行）。公开声明：`ProposalQueue`、`RequirementQueue`。
+
 ### permission/ui/RuleConditions.tsx
 
 [源码](../../../product/frontend/src/entities/permission/ui/RuleConditions.tsx)（78 行）。公开声明：`RuleConditionFields`、`RuleConditionsEditor`、`conditionLabels`、`relationshipNames`。
@@ -142,7 +150,7 @@
 
 ### preparation/api/preparation.ts
 
-[源码](../../../product/frontend/src/entities/preparation/api/preparation.ts)（87 行）。公开声明：`ActionPreparation`、`AllowControlRequirement`、`EffectMaterialSummary`、`EvidenceMaterialDetail`、`IdentitySlot`、`MaterialChange`、`MaterialDetails`、`MaterialPreview`等。
+[源码](../../../product/frontend/src/entities/preparation/api/preparation.ts)（88 行）。公开声明：`ActionPreparation`、`AllowControlRequirement`、`EffectMaterialSummary`、`EvidenceMaterialDetail`、`IdentitySlot`、`MaterialChange`、`MaterialDetails`、`MaterialPreview`等。
 
 ### preparation/api/preparationGuidance.ts
 
@@ -180,7 +188,7 @@
 
 ### preparation/ui/FlowCandidateReview.tsx
 
-[源码](../../../product/frontend/src/entities/preparation/ui/FlowCandidateReview.tsx)（52 行）。公开声明：`FlowCandidateReview`、`FlowComparison`、`FlowComparisonBaseline`、`flowDraftKey`。
+[源码](../../../product/frontend/src/entities/preparation/ui/FlowCandidateReview.tsx)（51 行）。公开声明：`FlowCandidateReview`、`FlowComparison`、`FlowComparisonBaseline`、`flowDraftKey`。
 
 ### preparation/ui/flowDraft.ts
 
@@ -234,7 +242,7 @@
 
 ### runtime/ui/CollaborationComposer.tsx
 
-[源码](../../../product/frontend/src/entities/runtime/ui/CollaborationComposer.tsx)（25 行）。公开声明：`CollaborationComposer`。
+[源码](../../../product/frontend/src/entities/runtime/ui/CollaborationComposer.tsx)（26 行）。公开声明：`CollaborationComposer`。
 
 ### runtime/ui/CollaborationEntry.tsx
 
@@ -278,7 +286,7 @@
 
 ### workspace/PreparationNext.tsx
 
-[源码](../../../product/frontend/src/entities/workspace/PreparationNext.tsx)（18 行）。公开声明：`PreparationNext`。
+[源码](../../../product/frontend/src/entities/workspace/PreparationNext.tsx)（16 行）。公开声明：`PreparationNext`。
 
 ### workspace/taskDestination.ts
 

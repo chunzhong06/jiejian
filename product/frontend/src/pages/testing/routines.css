@@ -32,9 +32,6 @@
 .jj-routine-rules > legend { margin-bottom:12px; font-size:var(--text-group); font-weight:500; }
 .jj-routine-rules > label { align-items:center; padding:16px 0; border-bottom:1px solid var(--line); }
 .jj-routine-rules small { display:block; margin-top:5px; color:var(--muted); font-size:var(--text-meta); }
-.jj-routine-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
-.jj-routine-actions > .jj-button, .jj-routine-actions > div:last-child { margin-left:auto; }
-.jj-routine-actions > div { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
 .jj-routine-binding-layout { display:grid; grid-template-columns:280px minmax(0,1fr); border-block:1px solid var(--line); }
 .jj-routine-binding-layout > nav { min-width:0; max-height:520px; overflow:auto; padding-block:12px; }
 .jj-routine-binding-layout .jj-index-item { display:grid; gap:6px; }

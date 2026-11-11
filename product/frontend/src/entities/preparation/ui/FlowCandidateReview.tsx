@@ -45,8 +45,7 @@ export function FlowComparison({candidate,previous,accounts,baselineLabel='当�
   const changed=rows.filter(([,before,after])=>before!==after)
   const visible=previous&&mode==='changed'?changed:rows
   return <section className="jj-flow-comparison" aria-label="流程结构对照">
-    <header><p className="jj-small jj-muted">{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'没有可读取的比较基准，以下展示候选内容。'}</p>{previous&&changed.length>0&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
-    {visible.length?<div className="jj-flow-candidate-diff"><table className="jj-comparison-data"><thead><tr><th>内容</th>{previous&&<th>{baselineLabel}</th>}<th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead><tbody>{visible.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th>{previous&&<td>{before}</td>}<td>{after}</td></tr>)}</tbody></table></div>:<p className="jj-flow-comparison-unchanged">流程结构没有变化。</p>}
-    <p className="jj-small jj-muted">此处只比较结构。固定值和请求正文请在编辑器中核对；带入后仍需保存并确认使用。</p>
+    <header><p className="jj-small jj-muted">{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'没有可读取的比较基准，以下展示候选内容。'}</p><p className="jj-small jj-muted">此处只比较结构。固定值和请求正文请在编辑器中核对；带入后仍需保存并确认使用。</p>{previous&&changed.length>0&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
+    {visible.length?<div className="jj-scroll-table jj-flow-candidate-diff"><table className="jj-content-table jj-comparison-data" data-density="compact"><thead><tr><th>内容</th>{previous&&<th>{baselineLabel}</th>}<th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead><tbody>{visible.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th>{previous&&<td>{before}</td>}<td>{after}</td></tr>)}</tbody></table></div>:<p className="jj-flow-comparison-unchanged">流程结构没有变化。</p>}
   </section>
 }

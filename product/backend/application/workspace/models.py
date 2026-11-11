@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 from product.backend.domain.checks.repair import CurrentRepairReference
+from product.backend.application.preparation.models import MaterialImpactView
 
 from typing import Literal
 
@@ -126,6 +127,7 @@ class PrimaryTaskView(WorkspaceModel):
 
 class PreparationWorkAction(WorkspaceModel):
     action_id: str
+    action_revision: int | None = None
     label: str
     preparation_complete: bool
 
@@ -136,6 +138,12 @@ class PreparationWorkView(WorkspaceModel):
     actions: tuple[PreparationWorkAction, ...]
     primary_task: PrimaryTaskView | None
     preparation_complete: bool
+
+
+class CheckPreparationWork(PreparationWorkView):
+    """同一次检查预览的建议；基线只绑定显示，不授予执行许可。"""
+    plan_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    impacts: tuple['MaterialImpactView', ...] = ()
 
 
 class WorkspaceAreaView(WorkspaceModel):

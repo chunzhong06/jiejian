@@ -1,3 +1,4 @@
+import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import {prefixedId as id} from '../../shared/lib/id'
 import {useEffect,useRef,useState} from 'react'
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
@@ -36,11 +37,11 @@ export function BusinessScenarios(props:PageProps){
   const editing=selected!=='list'
   const state=useRead(editing?'business-scenario-context:'+props.projectId:null,signal=>api.context(props.projectId,signal))
   const history=useRead(editing&&selected?.startsWith('bsc_')&&exactRevision?'business-scenario:'+props.projectId+':'+selected+':'+exactRevision:null,()=>api.read(props.projectId,selected!,exactRevision!))
-  if(listing.loading&&!listing.data)return <Loading page/>
+  if(listing.loading&&!listing.data)return <PageSkeleton view="/testing" title="业务场景"/>
   if(!listing.data)return <PageError title="业务场景" error={listing.error}/>
   if(editing){
-    if(state.loading&&!state.data||selected!=='new'&&history.loading&&!history.data)return <Loading page/>
-    if(!state.data||selected!=='new'&&!history.data)return <PageError title="业务场景修订" error={state.error??history.error??new Error('这份场景不存在，可返回测试目录选择当前修订。')}/>
+    if(state.loading&&!state.data||selected!=='new'&&history.loading&&!history.data)return <PageSkeleton view="/testing" title="组合业务场景"/>
+    if(!state.data||selected!=='new'&&!history.data)return <PageError title="组合业务场景" error={state.error??history.error??new Error('这份场景不存在，可返回测试目录选择当前修订。')}/>
     const document=history.data
     return <ScenarioEditor key={props.projectId+':'+(document?.id??'new')+':'+document?.revision} projectId={props.projectId} context={state.data} initial={document} historical={Boolean(document&&(!latest||document.revision<latest.revision))}/>
   }
