@@ -1,7 +1,7 @@
 import {fireEvent,render,screen,within} from '@testing-library/react'
 import {afterEach,expect,it,vi} from 'vitest'
 import {Issues} from './Issues'
-import {repairsApi,type ProjectRepair} from '../../entities/check/api/repairs'
+import {repairsApi,type ProjectRepair,type RepairComparisonRow} from '../../entities/check/api/repairs'
 import {workbenchApi} from '../../entities/application/api/workbench'
 import {ruleWorkspaceApi} from '../../entities/permission/api/ruleWorkspace'
 import {sourceChangesApi} from '../../entities/source-change/api/sourceChanges'
@@ -10,15 +10,24 @@ import {ExternalRecheck} from '../../entities/check/ui/ExternalRecheck'
 
 const contract={project_id:'app',source_run_id:'run',source_case_id:'case',repair_fingerprint:'fingerprint',original_policy_epoch:1,
   deny:{identity:{action_id:'read',resource_id:'order',subject_test_identity_id:'member',resource_owner_test_identity_id:'owner',protected_effect_ids:[]},evidence_refs:[]},regressions:[]}
-function setup(query:string,source=false){
+function setup(query:string,source=false,comparison?:RepairComparisonRow[]){
   const tasks:ProjectRepair['tasks']=['VERIFIED','REPAIR_REQUIRED'].map((status,index)=>({task_reference:index?'other':'exact',status:status as 'VERIFIED'|'REPAIR_REQUIRED',contract:{...contract,repair_fingerprint:index?'otherfp':'fingerprint'},change_id:null,run_id:null,verification:null,
     comparison:[{role:'DENY',source_case_id:'case',action_label:index?'其他待处理问题':'指定的已验证问题',subject_label:'成员',resource_owner_label:'所有者',resource_id:'order',effect_labels:[],before_verdict:'VULNERABLE',before_evidence_refs:[],match_status:'NOT_AVAILABLE'}]}))
+  if(comparison)tasks[0].comparison=comparison
   vi.spyOn(repairsApi,'project').mockResolvedValue({project_id:'app',status:null,primary_task_reference:null,tasks})
   vi.spyOn(workbenchApi,'environments').mockResolvedValue({project_id:'app',revision:1,environments:[],active_environment:null,confirmed_endpoint:null,endpoint_reachable:null,endpoint_checked_at_us:null,source_available:source})
   if(source)vi.spyOn(ruleWorkspaceApi,'read').mockResolvedValue({project_id:'app',rules:[{permission:{intent_id:'deny',revision:1,intent_hash:'hash'},title:'指定规则',issues:tasks,resource_scope:'所有者的数据'}]} as never)
   return render(<Issues projectId="app" name="订单" official={false} refresh={vi.fn()} onError={vi.fn()} route={{path:'/issues',query:new URLSearchParams(query)}}/>)
 }
 afterEach(()=>vi.restoreAllMocks())
+
+it('正常对照和功能回归引用同一记录时只显示一行并保留用途',async()=>{
+ const row={source_case_id:'normal',action_label:'甲读取申请',subject_label:'甲',resource_owner_label:'甲',resource_id:'loan',effect_labels:['内部安排'],before_verdict:'SAFE' as const,before_evidence_refs:[],match_status:'NOT_AVAILABLE' as const}
+ setup('issue=exact',false,[{...row,role:'SELECTED_ALLOW'},{...row,role:'REGRESSION'}])
+ await screen.findByRole('heading',{name:'原问题与正常访问'})
+ expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
+ expect(screen.getByText(/正常对照、保留功能/)).toBeVisible()
+})
 
 it('指定的已验证问题优先于默认筛选，不借用其他问题',async()=>{
   setup('issue=exact')

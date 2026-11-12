@@ -194,8 +194,8 @@ export function Accounts({ projectId, actions, requestedPreparation, requestedSl
     return <>
     {!workflow&&<div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>检查准备</Button></div>}
     <Heading title="准备测试账号"/>
-    {state.error && <ErrorNote error={state.error}/>}
-    {requested.error && <ErrorNote error={requested.error}/>}
+    {state.error && <ErrorNote error={state.error} actions={<Button kind="quiet" busy={state.loading} onClick={state.reload}>重新读取账号</Button>}/>}
+    {requested.error && <ErrorNote error={requested.error} actions={<Button kind="quiet" busy={requested.loading} onClick={requested.reload}>重新读取登录任务</Button>}/>}
     {pending && !current && <Notice tone="caution">上次账号操作仍待确认。<Button busy={busy} onClick={() => void act(() => recover(true))} busyLabel="正在查询">查询并恢复本次操作</Button></Notice>}
     {state.loading ? <Loading page/> : <section className="jj-accounts-workspace">
 

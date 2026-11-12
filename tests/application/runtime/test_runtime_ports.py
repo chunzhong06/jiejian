@@ -12,6 +12,7 @@ def test_unowned_project_does_not_call_sample_or_guess_launch():
     read, load = Mock(), Mock()
     ports = ProjectRuntimePorts((RuntimeProvider("sample", lambda project: project == "sample", read, load),))
     assert ports.reference("ordinary") is None
+    assert ports.selected_reference("ordinary") is None
     with pytest.raises(JiejianError) as failure:
         ports.load_delivery("ordinary", "a" * 64)
     assert failure.value.to_dict()["details"]["reason"] == "RUNTIME_PROVIDER_UNAVAILABLE"
@@ -27,6 +28,7 @@ def test_persisted_owner_routes_exact_project_and_revision():
     ports = ProjectRuntimePorts((RuntimeProvider("first", lambda project: project == "first", read, load),
         RuntimeProvider("second", lambda project: project == "second", other_read, other_load)))
     assert ports.reference("first") is None
+    assert ports.selected_reference("first") is None
     assert ports.load_delivery("first", "b" * 64) is reference
     load.assert_called_once_with("first", "b" * 64)
     other_read.assert_not_called()
@@ -50,6 +52,9 @@ def test_owned_source_failure_is_not_reinterpreted_as_unowned():
     ports = ProjectRuntimePorts((RuntimeProvider("owned", lambda _: True, Mock(side_effect=error), load),))
     with pytest.raises(JiejianError) as failure:
         ports.reference("project")
+    assert failure.value is error
+    with pytest.raises(JiejianError) as failure:
+        ports.selected_reference("project")
     assert failure.value is error
     with pytest.raises(JiejianError) as failure:
         ports.load_delivery("project", "c" * 64)

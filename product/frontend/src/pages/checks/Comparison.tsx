@@ -47,7 +47,7 @@ function ComparisonWorkspace({projectId,route,baseline,current,earlier}:ReportsP
  return <><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,projectId)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(origin)}</ActionLink></div>
   <Heading title="本轮变化" actions={<Button onClick={()=>setSetup(value=>!value)}>{setup?'收起记录选择':'更换比较记录'}</Button>}>比较原问题、正常访问和检查条件的变化。</Heading>
   {setup&&<ComparisonSetup projectId={projectId} baseline={baseline} current={current} earlier={earlier} origin={origin}/>}
-  <div className="jj-comparison-overview">
+  <div className="jj-comparison-overview"><dl className="jj-facts jj-comparison-identities" data-layout="columns" aria-label="本次比较的两份检查"><div><dt>参照检查</dt><dd><time dateTime={new Date(value.baseline.created_at_us/1000).toISOString()}>{date(value.baseline.created_at_us)}</time>{value.baseline.environment&&<small>{value.baseline.environment.name}</small>}</dd></div><div><dt>这次检查</dt><dd><time dateTime={new Date(value.current.created_at_us/1000).toISOString()}>{date(value.current.created_at_us)}</time>{value.current.environment&&<small>{value.current.environment.name}</small>}</dd></div></dl>
   <details className="jj-comparison-context"><summary>检查时间、连接与代码对应</summary><section className="jj-comparison-runs" aria-label="比较前提"><RunFacts label="作为参照的检查" run={value.baseline}/><RunFacts label="这次检查" run={value.current}/></section></details>
   {value.limitations.includes('UNPUBLISHED_OR_INVALID_RUN')&&<Notice tone="caution">至少一次检查还没有完整、有效的报告。请先核对执行情况，再判断问题是否发生变化。</Notice>}
   {value.limitations.includes('DEPLOYMENT_VERSION_UNCONFIRMED')&&<ContextNote label="运行代码核对情况"><p>至少一次检查尚未核对运行代码。这里会比较实际观察结果；确认源码修复有效，还需要核对对应的运行版本。</p></ContextNote>}

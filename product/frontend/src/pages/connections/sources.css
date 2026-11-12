@@ -1,9 +1,9 @@
-.jj-source-library { --request-method-width:64px; --request-method-gap:16px; min-width:0; display:grid; gap:16px; }
+.jj-source-library { --request-method-width:64px; --request-method-gap:16px; min-width:0; display:grid; gap:16px; container:source-library / inline-size; }
 .jj-source-library > .jj-source-toolbar { margin:0; min-height: 40px; }
 .jj-source-library > .jj-source-toolbar p { color: var(--muted); font-size: var(--text-meta); }
 .jj-source-toolbar p > strong { color: var(--ink); font-size: var(--text-body); font-variant-numeric: tabular-nums; }
 .jj-source-toolbar p > span { margin-left: 12px; }
-.jj-source-library .jj-source-workspace { grid-template-columns:minmax(0,1.4fr) minmax(360px,1fr); margin: 0; align-items: stretch; }
+.jj-source-library .jj-source-workspace { grid-template-columns:minmax(240px,.7fr) minmax(420px,1.3fr); margin: 0; align-items: stretch; }
 .jj-request-index { min-width: 0; border-right: 1px solid var(--line); }
 .jj-request-search { padding:12px 14px; border-bottom:1px solid var(--line); }
 .jj-source-library .jj-source-requests { border: 0; padding: 0; max-height: clamp(280px,calc(100dvh - 390px),720px); }
@@ -52,7 +52,8 @@
 .jj-request-origin > .jj-button { margin-top: 12px; }
 .jj-source-no-selection { display: grid; place-items: center; padding: 24px; color: var(--muted); font-size: var(--text-meta); }
 .jj-source-back { display: none; }
-@media(max-width:1100px) {
+/* 详情需要可读的字段宽度；嵌入或缩窗都按实际容器切换，目录选择与草稿仍由原组件持有。 */
+@container source-library (max-width:780px) {
   .jj-source-library .jj-source-workspace { grid-template-columns: minmax(0,1fr); }
   .jj-request-index { border-right: 0; }
   .jj-source-library .jj-source-requests { max-height: min(65dvh,580px); }

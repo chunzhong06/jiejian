@@ -13,17 +13,20 @@ import {useRead} from '../../shared/lib/useRead'
 import {operationId,readPending,savePending,notAccepted,isOperationId} from '../../shared/lib/operations'
 import {go,readRoute,returnDestination,returnDestinationLabel,withReturnDestination,scopedPath} from '../../shared/lib/navigation'
 import {Button,ActionLink} from '../../shared/ui/actions'
+import {date} from '../../shared/lib/format'
 import {Heading,Field} from '../../shared/ui/layout'
 import {Badge,ErrorNote,Loading} from '../../shared/ui/feedback'
 import {routePage} from '../../shared/lib/routePage'
 import {assertProject} from '../../shared/model/page'
 import {Tabs} from '../../shared/ui/Tabs'
+import {applicationSections} from '../../shared/ui/SectionNavigation'
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
 import './workbench.css'
 
-const SourceLibrary=routePage(()=>import('./SourceLibrary').then(module=>({default:module.SourceLibrary})),'/application')
-const Connect=routePage(()=>import('./Connect').then(module=>({default:module.Connect})),'/application')
-const Understanding=routePage(()=>import('./Understanding').then(module=>({default:module.Understanding})),'/application')
+// 外层已经拥有应用分类；内部模块失败只替换内容，不再复制同一组导航。
+const SourceLibrary=routePage(()=>import('./SourceLibrary').then(module=>({default:module.SourceLibrary})),'/application',{embedded:true})
+const Connect=routePage(()=>import('./Connect').then(module=>({default:module.Connect})),'/application',{embedded:true})
+const Understanding=routePage(()=>import('./Understanding').then(module=>({default:module.Understanding})),'/application',{embedded:true})
 
 export function ApplicationWorkbench({selected,existingProjectId,onChanged}:{selected?:ProjectDto;existingProjectId?:string;onChanged:(id:string)=>void}) {
   const workflow=useWorkflow(),route=workflow?.route??readRoute(),origin=returnDestination(route.query.get('return_to'))
@@ -48,6 +51,7 @@ export function ApplicationWorkbench({selected,existingProjectId,onChanged}:{sel
   useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
   const changed=(id:string)=>{if(alive.current&&liveScope.current===errorScope)onChanged(id)}
   const [impact,setImpact]=useState<EnvironmentImpact>()
+  const [runtimeFocused,setRuntimeFocused]=useState(false)
   const dirty=Boolean(sourceDirectory||environmentEditing&&(address||deployment||environmentRevision))
   useDraftProtection(dirty)
   useEffect(()=>{if(state.data&&draftBasis===undefined)setDraftBasis(state.data.revision);if(dirty)rememberEditorDraft(draftKey,{environmentName,address,deployment,sourceDirectory,maxRequests,environmentTarget,environmentEditing,environmentRevision,environmentId,basis:draftBasis},selected?.project_id??'new')},[environmentName,address,deployment,sourceDirectory,maxRequests,environmentTarget,environmentEditing,environmentRevision,environmentId,state.data?.revision,draftBasis])
@@ -96,18 +100,18 @@ export function ApplicationWorkbench({selected,existingProjectId,onChanged}:{sel
     await workbenchApi.saveEnvironment(selected.project_id,configuration,environmentRevision);clearSubmittedDraft(draftKey,selected.project_id,submitted);if(!alive.current||liveScope.current!==errorScope)return;state.reload();setEnvironmentId('env_'+operationId());setEnvironmentRevision(0);setAddress('');setDeployment('');setEnvironmentEditing(false)
   })
   const environmentForm=current&&<section className="jj-environment-form">
-    {!current.active_environment&&current.confirmed_endpoint&&<dl className="jj-facts jj-environment-current"><dt>当前运行地址</dt><dd><code>{current.confirmed_endpoint}</code><span>尚未选择检查连接</span></dd></dl>}
+    {!environments.length&&<header><h3>新增检查连接</h3><p>保存这次检查使用的地址配置，保存后再选择使用。</p></header>}
     {dirty&&draftBasis!==current.revision&&<p role="status">应用连接已有变化。请对照当前连接和下方编辑值，核对后再继续。<Button kind="quiet" onClick={()=>{setDraftBasis(current.revision);rememberEditorDraft(draftKey,{environmentName,address,deployment,sourceDirectory,maxRequests,environmentTarget,environmentEditing,environmentRevision,environmentId,basis:current.revision},selected.project_id)}}>已核对当前连接</Button></p>}<div className="jj-environment-fields"><Field label="连接名称"><input value={environmentName} onChange={event=>setEnvironmentName(event.target.value)}/></Field><Field label="应用地址" hint="仅填写本机 IPv4 的 HTTP/HTTPS 地址，不含路径、参数或凭据。"><input value={address} onChange={event=>setAddress(event.target.value)} placeholder="http://127.0.0.1:8080"/></Field></div>
     <details className="jj-environment-options"><summary>部署说明与请求限制</summary><div className="jj-environment-fields"><Field label="部署说明（可选）" hint="用于区分分支或构建，不代表已核对部署版本。"><input value={deployment} onChange={event=>setDeployment(event.target.value)} placeholder="例如：测试分支 · 本周构建"/></Field><Field label="每次检查请求上限" hint="包含身份核验、业务操作和恢复请求；保存并使用此连接后生效。"><input type="number" min={1} max={500} step={1} value={Number.isFinite(maxRequests)?maxRequests:''} onChange={event=>setMaxRequests(event.target.valueAsNumber)}/></Field></div></details>
     <footer><p>保存后再选择使用。切换连接时需重新核对账号和材料。</p><div>{environments.length>0&&<Button disabled={busy} onClick={()=>setEnvironmentEditing(false)}>取消编辑</Button>}<Button kind="primary" busy={busy} disabled={!environmentName.trim()||!address.trim()||!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>500} onClick={saveEnvironment}>保存连接</Button></div></footer>
   </section>
-  return <div className="jj-application-page">{origin&&<div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,selected.project_id)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{origin.startsWith('/preparation?')&&new URLSearchParams(origin.split('?')[1]).has('configure')?'返回结果判断草稿':returnDestinationLabel(origin)}</ActionLink></div>}<Heading title="应用与来源"/>
+  return <div className="jj-application-page">{origin&&!runtimeFocused&&<div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,selected.project_id)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{origin.startsWith('/preparation?')&&new URLSearchParams(origin.split('?')[1]).has('configure')?'返回结果判断草稿':returnDestinationLabel(origin)}</ActionLink></div>}<div hidden={runtimeFocused}><Heading title="应用与来源"/></div>
     <section className="jj-application-browser" data-view={view}>
-      <Tabs label="应用资料" value={view==='source'?'environment':view} panelId="application-panel" idPrefix="application" className="jj-application-tabs" items={[{value:'environment',label:'应用连接'},{value:'sources',label:'接口来源'},{value:'business',label:'业务角色与操作'}]} onValueChange={navigateView}/>
-      {Boolean(error)&&<ErrorNote error={error}/>}
+      <Tabs label="应用资料" value={view==='source'?'environment':view} panelId="application-panel" idPrefix="application" className="jj-application-tabs" items={applicationSections} onValueChange={navigateView}/>
+      {!runtimeFocused&&Boolean(error)&&<ErrorNote error={error}/>}
       <div id="application-panel" role="tabpanel" aria-labelledby={'application-'+(view==='source'?'environment':view)} className="jj-application-content" key={view}>
-    {view==='sources'?<SourceLibrary projectId={selected.project_id}/>:view==='business'?<Understanding embedded projectId={selected.project_id}/>:state.loading&&!current?<Loading/>:!current?<ErrorNote error={state.error}/>:view==='source'?<><div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={()=>navigateView('environment')}>返回应用连接</Button></div>{current.source_available?<Connect embedded selected={selected} onChanged={onChanged} onError={setError}/>:attachment}</>:<>
-      <div ref={completion} className="jj-application-connections"><section className="jj-environments" aria-labelledby="connection-address-title"><div data-milestone-part="heading" className="jj-connection-introduction"><h2 id="connection-address-title">检查连接</h2></div>
+    {view==='sources'?<SourceLibrary projectId={selected.project_id}/>:view==='business'?<Understanding embedded projectId={selected.project_id}/>:state.loading&&!current?<Loading/>:!current?<ErrorNote error={state.error}/>:view==='source'?<>{current.source_available?<Connect embedded selected={selected} onRuntimeFocus={setRuntimeFocused} onSourceBack={()=>navigateView('environment')} onChanged={onChanged} onError={setError}/>:<><div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={()=>navigateView('environment')}>返回应用连接</Button></div>{attachment}</>}</>:<>
+      <div ref={completion} className="jj-application-connections"><section className="jj-environments" aria-labelledby="connection-address-title"><div data-milestone-part="heading" className="jj-connection-introduction"><div className="jj-object-line"><h2 id="connection-address-title">检查连接</h2>{!current.active_environment&&<Badge>尚未选择</Badge>}</div></div>
         {environments.length>0&&<>
           <header className="jj-environment-toolbar"><p>{environments.length} 个已保存连接</p><Button onClick={()=>{setEnvironmentId('env_'+operationId());setEnvironmentRevision(0);setEnvironmentName('测试环境');setAddress('');setDeployment('');setMaxRequests(64);setEnvironmentTarget(undefined);setEnvironmentEditing(true)}}>添加连接</Button></header>
           {!environmentEditing&&!current.active_environment&&current.confirmed_endpoint&&<div className="jj-environment-context"><span>当前运行地址</span><code>{current.confirmed_endpoint}</code><span className="jj-small jj-muted">尚未选择检查连接</span></div>}
@@ -115,8 +119,8 @@ export function ApplicationWorkbench({selected,existingProjectId,onChanged}:{sel
             const active=current.active_environment?.environment_id===environment.environment_id&&current.active_environment.revision===environment.revision
             return <section className="jj-environment-card" key={environment.environment_id+':'+environment.revision}>
               <header><div className="jj-object-line"><h3>{environment.name}</h3>{active&&<Badge tone="accent">当前使用</Badge>}</div></header>
-              <div className="jj-environment-details"><p className="jj-environment-address jj-mono">{environment.target.base_url}</p>{active&&<div className="jj-environment-reachability"><span>地址状态</span><Badge tone={current.endpoint_reachable===false?'caution':current.endpoint_reachable?'positive':'neutral'}>{current.endpoint_reachable===false?'未连通':current.endpoint_reachable?'最近核验可达':'尚未核验'}</Badge></div>}{environment.deployment_label&&<dl className="jj-facts jj-environment-facts"><div><dt>部署说明</dt><dd>{environment.deployment_label}</dd></div></dl>}</div>
-              <footer><Button kind="quiet" disabled={busy} onClick={()=>{setEnvironmentId(environment.environment_id);setEnvironmentRevision(environment.revision);setEnvironmentName(environment.name);setAddress(environment.target.base_url);setDeployment(environment.deployment_label??'');setMaxRequests(environment.target.max_requests??64);setEnvironmentTarget(environment.target);setEnvironmentEditing(true)}}>编辑</Button>{active?<Button busy={busy} onClick={()=>void act(async()=>{await projectsApi.confirmEndpoint(selected.project_id,environment.target.base_url,current.revision);state.reload();changed(selected.project_id)})}>检查地址是否可访问</Button>:<Button kind="primary" busy={busy} onClick={()=>void act(async()=>{const reviewed=await workbenchApi.previewActivation(selected.project_id,environment.environment_id,environment.revision);assertProject(reviewed.project_id,selected.project_id);if(alive.current&&liveScope.current===errorScope)setImpact(reviewed)})}>使用此连接</Button>}</footer>
+              <div className="jj-environment-details"><p className="jj-environment-address jj-mono">{environment.target.base_url}</p>{active&&<div className="jj-environment-reachability"><span>地址状态</span><Badge tone={current.endpoint_reachable===false?'caution':current.endpoint_reachable?'positive':'neutral'}>{current.endpoint_reachable===false?'未连通':current.endpoint_reachable?'上次核验可达':'尚未核验'}</Badge>{current.endpoint_checked_at_us&&<time dateTime={new Date(current.endpoint_checked_at_us/1000).toISOString()}>{date(current.endpoint_checked_at_us)}</time>}</div>}{environment.deployment_label&&<dl className="jj-facts jj-environment-facts"><div><dt>部署说明</dt><dd>{environment.deployment_label}</dd></div></dl>}</div>
+              <footer><Button kind="quiet" disabled={busy} onClick={()=>{setEnvironmentId(environment.environment_id);setEnvironmentRevision(environment.revision);setEnvironmentName(environment.name);setAddress(environment.target.base_url);setDeployment(environment.deployment_label??'');setMaxRequests(environment.target.max_requests??64);setEnvironmentTarget(environment.target);setEnvironmentEditing(true)}}>编辑</Button>{active?<Button busy={busy} onClick={()=>void act(async()=>{await projectsApi.confirmEndpoint(selected.project_id,environment.target.base_url,current.revision);state.reload();changed(selected.project_id)})}>检查地址是否可访问</Button>:<Button kind="default" busy={busy} onClick={()=>void act(async()=>{const reviewed=await workbenchApi.previewActivation(selected.project_id,environment.environment_id,environment.revision);assertProject(reviewed.project_id,selected.project_id);if(alive.current&&liveScope.current===errorScope)setImpact(reviewed)})}>使用此连接</Button>}</footer>
             </section>
           })}</div>
         </>}
@@ -125,7 +129,7 @@ export function ApplicationWorkbench({selected,existingProjectId,onChanged}:{sel
           <section><h3>需要重新核对</h3>{impact.materials.items===null?<p>当前未能取得材料影响范围，请到检查准备中核对。</p>:impact.materials.items.length?<ul>{[...new Set(impact.materials.items.map(item=>item.action_id))].map(id=><li key={id}><strong>{impact.materials.items!.find(item=>item.action_id===id)!.action_label}</strong><p>{[...new Set(impact.materials.items!.filter(item=>item.action_id===id).map(item=>({identity:'测试账号',execution:'执行操作',resource:'测试数据',evidence:'结果判断依据',recovery:'恢复方式'} as Record<string,string>)[item.kind]??item.kind))].join('、')}</p></li>)}</ul>:<p>当前尚未准备检查材料。</p>}</section>
           <section><h3>继续保留</h3><p>{impact.retained.join('、')}。</p></section>{!impact.can_activate&&<p>应用仍有活动任务，请等待原任务结束后再切换。</p>}</div>
         </Dialog>}
-        {!environments.length&&environmentForm}
+        {!environments.length&&<>{current.confirmed_endpoint&&<dl className="jj-facts"><div><dt>当前运行地址</dt><dd className="jj-mono">{current.confirmed_endpoint}</dd></div></dl>}{environmentForm}</>}
         {environmentEditing&&environments.length>0&&<Dialog title={environmentRevision?'修改检查连接':'添加连接'} onClose={()=>setEnvironmentEditing(false)} closeDisabled={busy}>{environmentForm}</Dialog>}
         {state.error&&<ErrorNote error={state.error}/>}
       </section>

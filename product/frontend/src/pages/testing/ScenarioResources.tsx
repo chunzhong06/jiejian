@@ -13,6 +13,9 @@ export function ScenarioResources({current,options,context,producers,disabled,on
   const active=current.items.find(item=>item.id===selected)??current.items[0]
   const identity=(id:string|null|undefined)=>id===null?'未登录访客':context.identities.find(item=>item.identity_id===id)?.label??'未确认'
   const optionFor=(item:ScenarioItem)=>options.find(option=>matchesScenarioItem(item,option))
+  const activeOption=optionFor(active)
+  const source=active.resource_from??'PREPARED'
+  const sourceHint=source==='PREPARED'?'沿用上方所选材料中的资源编号和归属。':producers.some(node=>node.id===source)?'使用所选前序步骤本轮创建的对象，执行时核对实际编号和归属；准备编号仅作模板。':'原创建步骤已变化，请重新选择前序步骤，或沿用已准备的资源。'
   const group=optionFor(current.items[0])
   const choices=current.batch&&active.id!==current.items[0].id?options.filter(option=>option.action.action_id===group?.action.action_id&&option.value.subject_test_identity_id===group?.value.subject_test_identity_id):options
   const mismatched=Boolean(current.batch&&current.items.some(item=>{const option=optionFor(item);return !option||option.action.action_id!==group?.action.action_id||option.value.subject_test_identity_id!==group?.value.subject_test_identity_id}))
@@ -26,11 +29,13 @@ export function ScenarioResources({current,options,context,producers,disabled,on
         return <tr key={item.id} data-selected={active.id===item.id}><th scope="row"><button type="button" className="jj-object-select" aria-label={'编辑第 '+(index+1)+' 项资源'} aria-pressed={active.id===item.id} onClick={()=>setSelected(item.id)}>{item.resource_id}</button></th><td>{identity(item.subject_identity_id)}</td><td>{identity(option?.value.resource_owner_test_identity_id)}</td><td className="jj-table-state">{expected(item)}</td></tr>
       })}</tbody></table></div>
       <p className="jj-small jj-muted">{mismatched?'这批资源的操作或账号尚未统一。本次请求使用第一项的操作和账号；其余每项都需选择与资源对应的规则。':current.batch.strategy==='ATOMIC'?'整批原子处理：只要包含禁止项，整批都不应产生业务效果。':'逐项处理：允许项保留正常效果，禁止项不能产生受保护效果。'}每项都要对应已确认的权限规则，并保留相同操作方式的正常访问作为对照。</p></>}
-    <div className="jj-scenario-resource-detail"><Field label={current.batch?'调整所选资源与规则':'操作、账号与资源'}><Choice disabled={disabled} value={optionFor(active)?.value.case_id??''} placeholder="选择已准备的规则与数据" onValueChange={value=>{
+    <div className="jj-scenario-resource-detail"><Field label={current.batch?'所选资源的准备项':'已准备的操作与数据'} error={activeOption?undefined:'原准备项已变化，请重新核对操作、账号和资源。'}><Choice disabled={disabled} value={activeOption?.value.case_id??''} placeholder="选择已准备的规则与数据" onValueChange={value=>{
       const option=options.find(entry=>entry.value.case_id===value)!
+      // 一个准备项是权限、账号和资源的准确绑定；分项摘要只供核对，不拆成可自由组合的选择。
       patch({permission:{intent_id:option.value.permission.intent_id,revision:option.value.permission.revision,intent_hash:option.value.permission.intent_hash},subject_identity_id:option.value.subject_test_identity_id,resource_id:option.value.resource_id})
     }}>{choices.map(option=><option key={option.value.case_id} value={option.value.case_id}>{option.action.label} · {identity(option.value.subject_test_identity_id)} · {option.value.resource_id} · {option.value.permission.expectation==='ALLOW'?'允许':'禁止'}</option>)}</Choice></Field>
-      {current.batch?current.items.length>1&&<div className="jj-scenario-local-actions"><Button kind="quiet" disabled={disabled} onClick={()=>onChange(current.items.filter(item=>item.id!==active.id))}>移除此项</Button></div>:<Field label="实际资源从哪里取得" hint="使用本次操作实际创建的数据。界鉴会从独立记录核对新数据的编号和归属，准备时填写的编号仅作模板。"><Choice disabled={disabled} value={active.resource_from??'PREPARED'} onValueChange={value=>{
+      <dl className="jj-facts" data-layout="columns" aria-label="所选准备项"><div><dt>业务操作</dt><dd>{activeOption?.action.label??'待重新核对'}</dd></div><div><dt>操作账号</dt><dd>{identity(active.subject_identity_id)}</dd></div><div><dt>测试资源</dt><dd>{active.resource_id}</dd></div><div><dt>资源归属</dt><dd>{identity(activeOption?.value.resource_owner_test_identity_id)}</dd></div><div><dt>访问要求</dt><dd>{!activeOption?'待重新核对':activeOption.value.permission.expectation==='ALLOW'?'允许访问':'禁止访问'}</dd></div></dl>
+      {current.batch?current.items.length>1&&<div className="jj-scenario-local-actions"><Button kind="quiet" disabled={disabled} onClick={()=>onChange(current.items.filter(item=>item.id!==active.id))}>移除此项</Button></div>:<Field label="实际资源从哪里取得" hint={sourceHint}><Choice disabled={disabled} value={source} onValueChange={value=>{
         const {resource_from:omitted,...rest}=active
         void omitted
         onChange(current.items.map(item=>item.id===active.id?{...rest,...(value==='PREPARED'?{}:{resource_from:value})}:item))

@@ -15,6 +15,8 @@
 .jj-comparison-inline > header .jj-button { min-height:var(--control-compact); width:var(--control-compact); padding:0; }
 .jj-comparison-inline > footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; margin-top:24px; }
 .jj-comparison-overview { display:grid; gap:20px; }
+.jj-comparison-identities { padding-block:20px; border-block:1px solid var(--line); }
+.jj-comparison-identities dd > small { display:block; margin-top:8px; color:var(--muted); }
 .jj-comparison-context { margin:0; padding:0; }
 .jj-comparison-context > summary { min-height:36px; align-items:center; color:var(--muted);font-size:var(--text-meta); }
 .jj-comparison-context[open] > .jj-comparison-runs { margin-top:20px; }

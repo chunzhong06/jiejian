@@ -21,10 +21,13 @@ export function Empty({title,children,action,layout='page'}:{title:string;childr
 
 export function Loading({children='正在读取',page=false}:{children?:ReactNode;page?:boolean}){return <div className="jj-loading" role="status" data-page-pending={page||undefined}><LoadingOutlined aria-hidden="true" spin/>{children}</div>}
 
-export function ErrorNote({error}:{error:unknown}){return <div className="jj-notice is-negative" role="alert"><span>{error instanceof Error?error.message:'请求未完成，可通过右上角刷新重新读取。'}</span>{error instanceof ApiError&&error.traceId&&<small className="jj-small">诊断编号：{error.traceId}</small>}</div>}
+export function ErrorNote({error,actions}:{error:unknown;actions?:ReactNode}){
+  const copy=<><span>{error instanceof Error?error.message:'请求未完成，请重新读取。'}</span>{error instanceof ApiError&&error.traceId&&<small className="jj-small">诊断编号：{error.traceId}</small>}</>;
+  return <div className="jj-notice is-negative" role="alert">{actions?<><div className="jj-notice-copy">{copy}</div><div className="jj-notice-actions">{actions}</div></>:copy}</div>;
+}
 
-export function PageError({title,error}:{title:string;error:unknown}){
-  return <section className="jj-page-state"><Heading title={title}/><div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>请根据下面的原因处理，再使用右上角刷新重试。</p><ErrorNote error={error}/></div></div></section>
+export function PageError({title,error,actions,navigation}:{title:string;error:unknown;actions?:ReactNode;navigation?:ReactNode}){
+  return <section className="jj-page-state"><Heading title={title}/>{navigation}<div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>请根据下面的原因处理，或返回原入口重新选择。</p><ErrorNote error={error}/>{actions&&<div className="jj-form-actions">{actions}</div>}</div></div></section>
 }
 
 /** 长期需要核对的原因与恢复动作成组；普通简短消息仍保留行内表达。 */

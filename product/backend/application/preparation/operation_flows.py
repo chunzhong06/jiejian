@@ -174,8 +174,11 @@ class OperationFlowService:
         from product.backend.application.business_boundaries.inspection import inspect_action_binding,inspect_actor_binding
         implementation=inspect_action_binding(action.action_id,action.revision,work.business_boundaries.action_binding(action.action_id,action.revision),understanding)
         actors=[inspect_actor_binding(item.actor_id,item.actor_revision,work.business_boundaries.actor_binding(item.actor_id,item.actor_revision),understanding) for item in (identity,owner)]
-        if implementation.status.value!='CURRENT' or any(item.status.value!='CURRENT' for item in actors):
-            raise JiejianError(ErrorCode.STATE_PRECONDITION,'请先核对业务操作与源码的对应' if understanding.source_root is not None else '接口资料已变化，请先在业务角色与操作中核对对应关系')
+        # 角色定位与操作定位分别说明；修改候选名称不会重绑正式业务对象。
+        if any(item.status.value!='CURRENT' for item in actors):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'账号所属业务角色尚未完成对应，请在权限与覆盖的编辑页核对角色与操作对应')
+        if implementation.status.value!='CURRENT':
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,'业务操作尚未完成对应，请在权限与覆盖的编辑页核对角色与操作对应')
         if document.source_recording_id is not None:
             source=work.recordings.get(document.source_recording_id)
             if source is None or (source.project_id,source.business_action_id,source.action_revision,source.state.value)!=(project_id,action.action_id,action.revision,'COMPLETED'):

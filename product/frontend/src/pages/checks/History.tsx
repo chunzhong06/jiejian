@@ -13,7 +13,7 @@ import {go,returnDestination,returnDestinationLabel,withReturnDestination,scoped
 import { useRead } from '../../shared/lib/useRead';
 import type { ReportsProps } from './types';
 import './comparison.css';
-import {TestingSections} from '../testing/TestingSections';
+import {TestingSections} from '../../shared/ui/SectionNavigation';
 type ComparisonSelection={run_id:string;created_at_us:number};
 export type HistoryMemory = {
     query: string;

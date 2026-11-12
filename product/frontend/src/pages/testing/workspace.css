@@ -1,3 +1,11 @@
+/* 目录按自身可用宽度重排，确保 640px 表格、24px 留白和 320px 详情各有空间。 */
+.jj-testing-directory { container:testing-directory / inline-size; }
+.jj-testing-directory .jj-collection-layout:has(> .jj-inspector) { grid-template-columns:minmax(664px,1.15fr) minmax(320px,.85fr); }
+@container testing-directory (max-width:984px) {
+  .jj-testing-directory .jj-collection-layout:has(> .jj-inspector) { grid-template-columns:minmax(0,1fr); }
+  .jj-testing-directory .jj-collection-main { padding-right:0; }
+  .jj-testing-directory .jj-inspector { border-left:0; border-top:1px solid var(--line); padding:24px 0; }
+}
 .jj-testing-directory .jj-object-table th:first-child { width:52%; }
 .jj-testing-directory .jj-object-meta > small { display:block; margin-top:5px; }
 .jj-testing-count { padding:20px 12px; color:var(--muted); font-size:var(--text-meta); }
@@ -10,16 +18,19 @@
 .jj-scenario-layout[data-empty=true] { grid-template-columns:minmax(0,1fr); }
 .jj-scenario-layout[data-empty=true]>.jj-scenario-reading { padding-left:0; border-left:0; }
 .jj-scenario-reading { min-width:0; padding-left:32px; border-left:1px solid var(--line); display:grid; align-content:start; gap:28px; }
-.jj-scenario-reading>header { display:flex; align-items:center; justify-content:space-between; gap:20px; }
-.jj-scenario-reading>header>div { display:flex; gap:8px; }
+.jj-scenario-reading>header { display:flex; align-items:start; justify-content:space-between; flex-wrap:wrap; gap:16px 20px; }
+.jj-scenario-step-actions { display:flex; gap:8px; margin-left:auto; }
 .jj-scenario-resources { display:grid; gap:20px; }
 .jj-scenario-resources>.jj-section-header { margin-bottom:0; }
 .jj-scenario-resource-detail { display:grid; gap:24px; min-width:0; }
+.jj-scenario-resource-detail > .jj-facts { padding-block:20px; border-block:1px solid var(--line); }
 .jj-scenario-resource-table { min-width:580px; }
 .jj-scenario-resource-table th:first-child { width:28%; }
 .jj-scenario-resource-table .jj-object-select { padding:8px 0; overflow-wrap:anywhere; }
 .jj-scenario-local-actions { display:flex; justify-content:flex-end; }
-.jj-scenario-debug { display:grid; gap:16px; padding-top:24px; }
+.jj-scenario-debug { display:grid; gap:16px; padding-top:24px; border-top:1px solid var(--line); }
+.jj-scenario-debug > .jj-section-header { margin:0; }
+.jj-scenario-debug > .jj-field { width:min(480px,100%); }
 .jj-scenario-debug footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
 .jj-scenario-debug p { max-width:72ch; }
 .jj-scenario-reading>footer, .jj-scenario-actions { display:flex; justify-content:flex-end; gap:12px; }

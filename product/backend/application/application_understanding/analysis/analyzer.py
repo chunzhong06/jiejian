@@ -39,6 +39,8 @@ _IGNORED_DIRECTORIES = frozenset(
 )
 
 _SOURCE_SUFFIXES = frozenset({".py", ".js", ".mjs", '.cjs', ".jsx", ".ts", ".tsx"})
+# 运行时读取的页面和数据同样属于冻结输入；只参与身份，不送入代码候选检测器。
+_RESOURCE_SUFFIXES = frozenset({".json", ".html", ".css", ".svg"})
 _PACKAGE_NAMES = frozenset({'package.json', 'package-lock.json','tsconfig.json','jsconfig.json'})
 
 _OPENAPI_NAMES = frozenset(
@@ -48,6 +50,7 @@ _OPENAPI_NAMES = frozenset(
 _SENSITIVE_FILE = re.compile(
     "(?:^\\.env(?:\\.|$)|credential|secret|private[_-]?key|\\.pem$|\\.key$)", re.IGNORECASE
 )
+_SENSITIVE_RESOURCE = re.compile(r"password|passwd|cookie|token|api[_-]?key", re.IGNORECASE)
 
 
 class ApplicationUnderstandingAnalyzer:
@@ -81,7 +84,7 @@ class ApplicationUnderstandingAnalyzer:
                 )
             elif Path(relative).suffix.casefold() == ".py":
                 analyze_python(findings, relative, text, content_hash)
-            elif Path(relative).name.casefold() not in _PACKAGE_NAMES:
+            elif Path(relative).suffix.casefold() in _SOURCE_SUFFIXES:
                 analyze_javascript(findings, relative, text, content_hash)
         # 摘要覆盖本次成功读取的相对路径和原始内容；它不表示忽略目录或不可读文件的完整快照。
         # 文件排序和路径分隔参与身份，不能只对检测出的候选做摘要。
@@ -99,7 +102,10 @@ class ApplicationUnderstandingAnalyzer:
             action_candidates=findings.action_candidates(self.limits.max_actions),
             files_read=len(files),
             total_bytes=sum((len(raw) for _, raw in files)),
-            sqlite_setup=sqlite_setup_suggestions(files),
+            sqlite_setup=sqlite_setup_suggestions(tuple(
+                (relative, raw) for relative, raw in files
+                if Path(relative).suffix.casefold() in _SOURCE_SUFFIXES
+            )),
         )
 
     def _read_sources(self, root: Path) -> tuple[tuple[str, bytes], ...]:
@@ -126,6 +132,7 @@ class ApplicationUnderstandingAnalyzer:
                     if entry.is_dir(follow_symlinks=False):
                         if (
                             entry.name.casefold() not in _IGNORED_DIRECTORIES
+                            and not _SENSITIVE_FILE.search(entry.name)
                             and depth < self.limits.max_depth
                         ):
                             stack.append((path, depth + 1))
@@ -137,8 +144,13 @@ class ApplicationUnderstandingAnalyzer:
                 lower_name = entry.name.casefold()
                 if _SENSITIVE_FILE.search(lower_name):
                     continue
+                if path.suffix.casefold() in _RESOURCE_SUFFIXES and any(
+                    _SENSITIVE_RESOURCE.search(part) for part in path.relative_to(root).parts
+                ):
+                    continue
                 if (
                     path.suffix.casefold() not in _SOURCE_SUFFIXES
+                    and path.suffix.casefold() not in _RESOURCE_SUFFIXES
                     and lower_name not in _OPENAPI_NAMES
                     and lower_name not in _PACKAGE_NAMES
                 ):

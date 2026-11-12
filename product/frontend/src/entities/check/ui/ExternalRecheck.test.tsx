@@ -34,3 +34,10 @@ it('恢复未知提交时先查询原回执，未查到不会自动重发',async
   expect(submit).not.toHaveBeenCalled()
   expect(JSON.parse(sessionStorage.getItem('jiejian.external-recheck:app:'+contract.repair_fingerprint)!)).toEqual(saved)
 })
+
+it('同一正常用例承担对照和回归时合并展示，保留两个用途',()=>{
+ const row={source_case_id:'normal',action_label:'读取内部安排',subject_label:'甲',resource_owner_label:'甲',resource_id:'loan-1042',effect_labels:['内部安排'],before_verdict:'SAFE',before_evidence_refs:[],match_status:'NOT_AVAILABLE'} as const
+ render(<ExternalRecheck projectId="app" contract={contract} comparison={[{...row,role:'DENY',source_case_id:'deny',subject_label:'乙',effect_labels:[...row.effect_labels],before_evidence_refs:[]},{...row,role:'SELECTED_ALLOW',effect_labels:[...row.effect_labels],before_evidence_refs:[]},{...row,role:'REGRESSION',effect_labels:[...row.effect_labels],before_evidence_refs:[]}]} endpoint="http://127.0.0.1:8080" onClose={vi.fn()}/> )
+ expect(screen.getAllByRole('article')).toHaveLength(2)
+ expect(screen.getByRole('heading',{name:'正常对照与功能回归'})).toBeVisible()
+})

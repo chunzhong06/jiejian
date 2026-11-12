@@ -2,7 +2,7 @@ import {TaskActions} from '../../shared/ui/layout'
 import {PendingRecovery} from '../../shared/ui/PendingRecovery'
 import type {ScenarioReference} from '../../entities/preparation/api/businessScenarios'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { currentChecksApi as api, type CheckPreview } from '../../entities/check/api/currentChecks';
@@ -28,6 +28,7 @@ import {PreparationNext} from '../../entities/workspace/PreparationNext';
 
 export function Plan({ projectId, onError, route, refresh, official }: PageProps) {
     const workflow=useWorkflow();
+    const [scopeFocused,setScopeFocused]=useState(false);
     const ruleId=route.query.get('rule_id'),changeId=route.query.get('change_id');
     const scenarioId=route.query.get('scenario_id'),scenarioRevision=Number(route.query.get('scenario_revision'));
     const scenario:ScenarioReference|undefined=scenarioId&&Number.isInteger(scenarioRevision)&&scenarioRevision>0?{scenario_id:scenarioId,revision:scenarioRevision}:undefined;
@@ -120,11 +121,11 @@ export function Plan({ projectId, onError, route, refresh, official }: PageProps
     const preview = activePreview;
     const returnTo = '/reports?' + new URLSearchParams({ view: 'plan', ...(scenario ? {scenario_id:scenario.scenario_id,scenario_revision:String(scenario.revision)} : {}), ...(selection!=='RULE'&&selected !== null ? {scope_id: scopeId.current} : {}), ...(changeId ? { change_id: changeId } : {}), ...(ruleId ? { rule_id: ruleId } : {}), ...(route.query.has('repair_reference')?{repair_reference:route.query.get('repair_reference')!}:{}), ...(origin ? {return_to:origin} : {}) });
     return <>
-        <div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{origin ? returnDestinationLabel(origin) : ruleId ? '返回权限规则' : '全部检查记录'}</ActionLink></div>
-        <Heading title="本次检查"/><PendingRecovery storageKey={key} projectId={projectId}/>
+        {!scopeFocused&&<><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin ?? (ruleId ? '/permissions?rule_id=' + encodeURIComponent(ruleId) : '/reports'))} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{origin ? returnDestinationLabel(origin) : ruleId ? '返回权限规则' : '全部检查记录'}</ActionLink></div>
+        <Heading title="本次检查"/></>}<PendingRecovery storageKey={key} projectId={projectId}/>
         {pending && <Notice tone="caution">上次提交的结果尚未确认。<Button busy={busy} onClick={() => void act(recover)} busyLabel="正在查询">查看上次提交结果</Button>{notFound && <><span>尚未查到检查记录。</span>{pending.fingerprint === preview?.plan_fingerprint ? <Button busy={busy} onClick={() => void act(submit)}>继续上次提交</Button> : <span>原范围已变化，请保留请求并稍后查询。</span>}</>}</Notice>}
         {chosen.error && <><ErrorNote error={chosen.error}/>{!changeId&&!scenario&&<Button onClick={() => {state.reload(); select([]);}}>重新选择规则</Button>}</>}
-        <PlanWorkspace official={official} preview={preview} actions={materials.actions} identities={identities} returnTo={returnTo} changeId={changeId}
+        <PlanWorkspace onScopeFocus={setScopeFocused} official={official} preview={preview} actions={materials.actions} identities={identities} returnTo={returnTo} changeId={changeId}
             initialView={route.query.get('plan_tab')} initialItem={route.query.get('plan_item')}
             scope={<>{!changeId&&!scenario&&<CheckScopePicker materials={materials} selected={selected} disabled={Boolean(pending)||busy} onChange={select}/>}{changeId&&<RuleCheckScope projectId={projectId} changeId={changeId}/>}</>}
             loading={chosen.loading} busy={busy} pending={Boolean(pending)} error={Boolean(chosen.error)} onSubmit={()=>void act(submit)}/>
@@ -134,10 +135,10 @@ export function Plan({ projectId, onError, route, refresh, official }: PageProps
 type PlanWorkspaceProps = {
     preview?: CheckPreview; actions: ActionPreparation[]; identities: {identity_id:string;label:string}[]; official?:boolean;
     returnTo:string; changeId:string|null; initialView:string|null; initialItem:string|null; scope:ReactNode;
-    loading:boolean; busy:boolean; pending:boolean; error:boolean; onSubmit:()=>void; executionAction?:ReactNode; executionExplanation?:string;
+    loading:boolean; busy:boolean; pending:boolean; error:boolean; onSubmit:()=>void; executionAction?:ReactNode; executionExplanation?:string; onScopeFocus?:(focused:boolean)=>void; inlineScope?:boolean;
 };
 
-export function PlanWorkspace({preview,actions,identities,returnTo,changeId,initialView,initialItem,scope,loading,busy,pending,error,onSubmit,executionAction,executionExplanation,official=false}:PlanWorkspaceProps) {
+export function PlanWorkspace({preview,actions,identities,returnTo,changeId,initialView,initialItem,scope,loading,busy,pending,error,onSubmit,executionAction,executionExplanation,onScopeFocus,inlineScope=false,official=false}:PlanWorkspaceProps) {
     const workflow=useWorkflow();
     const [chosenView,setView]=useState<string|null>(initialView&&['scope','prepare','execute'].includes(initialView)?initialView:null);
     const [itemId,setItem]=useState(initialItem??'');
@@ -159,14 +160,17 @@ export function PlanWorkspace({preview,actions,identities,returnTo,changeId,init
     const action=actions.find(item=>item.action_id===actionId),plan=plans.find(item=>item.action_id===actionId);
     const backTo=(id:string)=>returnTo+'&'+new URLSearchParams({plan_tab:'prepare',plan_item:id});
     const selectView=(value:string)=>{setView(value==='scope'?'scope':'review');if(value==='prepare')setItem('');};
-    if(view==='scope')return <TaskSurface level={2} title="调整检查范围" onBack={()=>setView('review')} backLabel="返回本次检查" actions={<Button kind="primary" disabled={loading||!preview} onClick={()=>setView('review')}>核对本次检查</Button>}>            <div className="jj-plan-range">{scope}
+    // 只交接标题与导航，范围、草稿和未确认的提交继续由原组件持有。
+    useEffect(()=>{onScopeFocus?.(view==='scope')},[onScopeFocus,view]);
+    useEffect(()=>()=>onScopeFocus?.(false),[onScopeFocus]);
+    if(view==='scope')return <TaskSurface title="调整检查范围" onBack={()=>setView('review')} backLabel="返回本次检查" actions={<Button kind="primary" disabled={loading||!preview} onClick={()=>setView('review')}>核对本次检查</Button>}>            <div className="jj-plan-range">{scope}
                 {preview?.scenario&&<section><h3>{preview.scenario.document.label}</h3><p className="jj-small jj-muted">先执行所选规则的基础检查，再执行以下实验；每次实验结束后核对恢复。</p><ol>{preview.scenario.document.experiments.map(experiment=><li key={experiment.id}><strong>{experiment.label}</strong><p>{experiment.invocations.map(item=>item.label+(item.batch?'（一次批量，'+item.items.length+' 项）':'')).join(' → ')}</p></li>)}</ol></section>}
                 {!!preview?.requirement_scope?.length&&<section><h3>业务要求与覆盖范围</h3>{preview.requirement_scope.flatMap(scope=>scope.requirements.map(item=>({...item,scope}))).map(({scope,...item},index)=><div className="jj-scope-item" key={index}><Badge>{item.disposition==='IN_SCOPE'?(preview.selection?.uncovered_requirements.includes(`${scope.candidate_id}@${scope.revision}/${item.requirement_id}`)?'本次未覆盖':'纳入检查'):item.disposition==='PREPARATION'?'准备条件':'未覆盖'}</Badge><p>{text(item.requirement)}</p></div>)}</section>}
                 {!!preview?.omitted_review_gaps?.length&&<section><h3>{preview.omitted_review_gaps.length} 项未决要求未纳入本次检查</h3>{preview.omitted_review_gaps.map(item=><p key={item.issue_id}>{text(item.message)}</p>)}</section>}
             </div></TaskSurface>;
     return <section className="jj-plan-review" aria-label="检查准备工作面" aria-busy={loading}>
         <header className="jj-plan-review-summary"><div><div className="jj-object-line"><h2>{preview?(preview.case_count?`${preview.case_count} 项检查`:'检查尚待准备'):'选择检查范围'}</h2>{preview&&<Badge tone={preview.can_execute?'positive':'caution'}>{preview.can_execute?'可以开始':`${attention} 项待处理`}</Badge>}</div><p>{preview?`${preview.action_count} 项业务操作${preview.selection?` · ${preview.selection.added_controls.length} 项正常对照 · ${preview.selection.omitted.length} 条规则未检查`:''}`:'先选择要检查的规则，再核对测试账号、数据和将执行的操作。'}</p></div></header>
-        <div className="jj-plan-scope-summary"><p>{preview?.scenario?'本次包括所选业务场景及其基础权限检查。':preview?.selection?'检查所选规则，并保留确认正常功能所需的对照。':'检查当前应用已确认的权限要求及其正常对照。'}</p><Button kind="quiet" disabled={busy||pending} onClick={()=>setView('scope')}>调整检查范围</Button></div>
+        <div className="jj-plan-scope-summary"><p>{preview?.scenario?'本次包括所选业务场景及其基础权限检查。':preview?.selection?'检查所选规则，并保留确认正常功能所需的对照。':'检查当前应用已确认的权限要求及其正常对照。'}</p>{inlineScope?<details className="jj-plan-inline-scope"><summary>查看已保存的检查范围</summary>{scope}</details>:<Button kind="quiet" disabled={busy||pending} onClick={()=>setView('scope')}>调整检查范围</Button>}</div>
         <div className="jj-plan-review-panel">
                         {preview&&(attention>0||Boolean(itemId))&&<div className="jj-plan-focus" data-empty={!attention}>
                 {gaps.length+boundaries.length+unlisted.length>1&&<nav className="jj-plan-index" aria-label="准备事项"><IndexSelection identity={focused} label="缺口选择">
@@ -212,10 +216,10 @@ function gapKind(reason: string) {
 }
 
 function groupGaps(gaps: CheckPreview['gaps']) {
-    // 同一操作的同类原因集中解释，规则与结果定位仍逐条保留；执行门禁使用完整缺口。
+    // 同一恢复去向合并入口，所有原因仍保留；执行门禁继续使用完整缺口。
     const groups = new Map<string, CheckPreview['gaps']>();
-    for (const gap of gaps) { const kind = gapKind(gap.reason); groups.set(kind, [...(groups.get(kind) ?? []), gap]); }
-    return Array.from(groups, ([kind, items]) => ({ kind, items, messages: [...new Set(items.map(item => gapName(item.reason)))] }));
+    for (const gap of gaps) { const kind = gapKind(gap.reason), key=['identity','resource','execution','recovery','evidence'].includes(kind)?kind:gapDestination(gap,''); groups.set(key, [...(groups.get(key) ?? []), gap]); }
+    return Array.from(groups.values(), items => ({ kind:gapKind(items[0].reason), items, messages: [...new Set(items.map(item => gapName(item.reason)))] }));
 }
 
 function gapAction(kind: string) {
@@ -227,7 +231,7 @@ function gapEntryItems(action:ActionPreparation,items:CheckPreview['gaps']){
  const unique=new Map<string,CheckPreview['gaps'][number]>()
  for(const item of items){
   const kind=gapKind(item.reason),rule=action.permissions?.find(rule=>rule.intent_id===item.intent_id)
-  const key=JSON.stringify([kind,kind==='identity'&&rule?[rule.subject_actor_id,rule.conditions?.principal]:['execution','recovery'].includes(kind)?'shared':[item.effect_id,item.intent_id,item.reason]])
+  const key=JSON.stringify([kind,kind==='identity'&&rule?[rule.subject_actor_id,rule.conditions?.principal]:['execution','recovery'].includes(kind)?'shared':gapDestination(item,'')])
   if(!unique.has(key))unique.set(key,item)
  }
  return [...unique.values()]

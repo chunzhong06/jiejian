@@ -39,6 +39,40 @@ afterEach(()=>{vi.restoreAllMocks();sessionStorage.clear();discardProjectEditorD
 const environment=(revision:number,name:string):ApplicationEnvironment=>({environment_id:'env',revision,name,target:{base_url:'http://127.0.0.1:18081',allowed_origins:['http://127.0.0.1:18081'],allowed_hosts:['127.0.0.1'],allowed_ports:[18081],allow_private_network:true},deployment_label:null,deployment_verification:'UNVERIFIED'})
 const context=():EnvironmentContext=>({project_id:'app',revision:1,environments:[],active_environment:null,confirmed_endpoint:'http://127.0.0.1:10910',endpoint_reachable:null,endpoint_checked_at_us:null,source_available:true})
 
+it('嵌入运行任务只保留当前层级的返回，回到源码后恢复应用连接回程',async()=>{
+  location.hash='#/application?view=source&runtime_method=managed&project_id=app'
+  vi.spyOn(workbenchApi,'environments').mockResolvedValue(context())
+  vi.spyOn(projectsApi,'runtime').mockResolvedValue({project_id:'app',running:false,source_matches:false,configuration:null,operation:null})
+  const start=vi.spyOn(projectsApi,'runtimeStart')
+  render(<ApplicationWorkbench selected={{project_id:'app',name:'订单'}} onChanged={vi.fn()}/>)
+  expect(await screen.findByRole('button',{name:'返回源码设置'})).toBeVisible()
+  expect(screen.getByRole('heading',{level:1,name:'准备应用的本地运行'})).toBeVisible()
+  await waitFor(()=>expect(screen.queryByRole('heading',{level:1,name:'应用与来源'})).not.toBeInTheDocument())
+  expect(screen.getByRole('tablist',{name:'应用资料'})).toBeVisible()
+  expect(screen.getByRole('tab',{name:'应用连接'})).toHaveAttribute('aria-selected','true')
+  expect(screen.queryByRole('button',{name:'返回应用连接'})).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'返回源码设置'}))
+  expect(screen.getAllByRole('button',{name:'返回应用连接'})).toHaveLength(1)
+  expect(await screen.findByRole('heading',{level:1,name:'应用与来源'})).toBeVisible()
+  expect(screen.getByRole('tablist',{name:'应用资料'})).toBeVisible()
+  expect(screen.queryByRole('button',{name:'返回源码设置'})).not.toBeInTheDocument()
+  expect(start).not.toHaveBeenCalled()
+})
+
+it.each([['接口来源','sources'],['业务角色与操作','business']])('运行任务保留二级入口：%s',async(label,view)=>{
+  location.hash='#/application?view=source&runtime_method=managed&project_id=app'
+  vi.spyOn(workbenchApi,'environments').mockResolvedValue(context())
+  vi.spyOn(projectsApi,'runtime').mockResolvedValue({project_id:'app',running:false,source_matches:false,configuration:null,operation:null})
+  const start=vi.spyOn(projectsApi,'runtimeStart')
+  render(<ApplicationWorkbench selected={{project_id:'app',name:'订单'}} onChanged={vi.fn()}/>)
+  await screen.findByRole('heading',{level:1,name:'准备应用的本地运行'})
+  fireEvent.click(screen.getByRole('tab',{name:label}))
+  const destination=new URLSearchParams(location.hash.split('?')[1])
+  expect(destination.get('view')).toBe(view)
+  expect(destination.get('project_id')).toBe('app')
+  expect(start).not.toHaveBeenCalled()
+})
+
 it.each([true,false])('继续上次添加先查已有记录，未完成时沿用原内容和请求；已存在=%s',async exists=>{
   const operation='a'.repeat(32),item={project_id:'app_'+operation,name:'原应用'}
   savePending('jiejian.application.create',{operation,name:item.name})
@@ -53,6 +87,21 @@ it.each([true,false])('继续上次添加先查已有记录，未完成时沿用
   else expect(create).toHaveBeenCalledExactlyOnceWith(operation,item.name)
 })
 
+it('运行地址确认失败留在当前运行任务，返回源码不把失败当作源码错误',async()=>{
+  location.hash='#/application?view=source&runtime_method=managed&project_id=app'
+  vi.spyOn(workbenchApi,'environments').mockResolvedValue(context())
+  vi.spyOn(projectsApi,'readiness').mockResolvedValue({project_id:'app',items:[]} as never)
+  vi.spyOn(projectsApi,'confirmEndpoint').mockRejectedValue(new Error('地址核对未完成，原检查连接保留。'))
+  render(<ApplicationWorkbench selected={{project_id:'app',name:'订单'}} onChanged={vi.fn()}/> )
+  fireEvent.change(await screen.findByRole('textbox',{name:'应用地址'}),{target:{value:'http://127.0.0.1:18081'}})
+  fireEvent.click(await screen.findByRole('button',{name:'使用此地址'}))
+  const error=await screen.findByRole('alert')
+  expect(screen.getByRole('region',{name:'准备应用的本地运行'})).toContainElement(error)
+  fireEvent.click(screen.getByRole('button',{name:'返回源码设置'}))
+  await screen.findByRole('heading',{level:1,name:'应用与来源'})
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
 it('空环境直接配置，保存后只形成记录，不隐式采用或发送核验请求',async()=>{
   location.hash='#/application?project_id=app'
   const data=context()
@@ -61,6 +110,8 @@ it('空环境直接配置，保存后只形成记录，不隐式采用或发送�
   const activate=vi.spyOn(workbenchApi,'activateEnvironment'),probe=vi.spyOn(projectsApi,'confirmEndpoint')
   render(<ApplicationWorkbench selected={{project_id:'app'}} onChanged={vi.fn()}/>)
   expect(await screen.findByLabelText('连接名称')).toBeVisible()
+  expect(screen.getByRole('heading',{name:'新增检查连接'})).toBeVisible()
+  expect(screen.getByText('当前运行地址')).toBeVisible()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('已保存的连接')).not.toBeInTheDocument()
   expect(screen.queryByText('接口资料只提供调查线索；实际执行仍需要确认权限要求、主体、资源与操作范围。')).not.toBeInTheDocument()

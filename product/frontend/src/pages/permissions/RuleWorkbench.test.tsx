@@ -21,6 +21,17 @@ beforeEach(() => {
     vi.spyOn(ruleWorkspaceApi, 'read').mockResolvedValue({ schema_version: '1', project_id: 'app', policy_epoch: 1, rules: [rule], change_history_limited: false });
 });
 
+it('尚未检查时突出规则和材料，不用零结果筛选占据首屏',async()=>{
+    const row:RuleItem={...rule,state:'UNTESTED',latest:null,history:[],issues:[]};
+    vi.mocked(ruleWorkspaceApi.read).mockResolvedValue({schema_version:'1',project_id:'app',policy_epoch:1,rules:[row],change_history_limited:false});
+    const boundary={policy_epoch:1,actors:[{actor_id:'owner',revision:1,effective_state:'ACTIVE'}],actions:[{action_id:'action',revision:1,effective_state:'ACTIVE'}],permission_intents:[{...permission,subject_actor_id:'owner',subject_actor_revision:1,resource_owner_actor_id:'owner',resource_owner_actor_revision:1,business_action_id:'action',action_revision:1,effective_state:'ACTIVE'}]} as BusinessBoundaryViewDto;
+    location.hash='/permissions?project_id=app';
+    render(<RuleWorkbench projectId="app" official={false} boundary={boundary} route={readRoute()} refresh={vi.fn()} onError={vi.fn()} onManage={vi.fn()}/>);
+    expect(await screen.findByText('当前规则尚无可用检查记录，先核对所需材料。')).toBeVisible();
+    expect(screen.getByRole('row',{name:/协作者不得完成工单/})).toBeVisible();
+    expect(screen.queryByRole('button',{name:'0 条检查通过'})).not.toBeInTheDocument();
+})
+
 it('同一角色的多条条件规则分别对应自己的状态和详情，筛选不丢失关系', async () => {
     const rows: RuleItem[] = [
         {...rule, permission:{...permission,intent_id:'archived'}, title:'负责人不得完成工单', subject:'负责人', conditions:{principal:'AUTHENTICATED',tenant:'SAME',resource_states:['archived']},state:'VULNERABLE'},

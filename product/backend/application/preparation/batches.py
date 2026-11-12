@@ -58,7 +58,7 @@ class PreparationBatchService:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, '这不是当前运行的官方示例')
         context = self._proofs.context(project)
         if not context['runtime_available']:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先启动当前应用并核对运行对应')
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '整批核对需要已核验运行对应的受控来源；外部连接请逐项核对账号、操作与结果证明。')
         return PreparationBatchPlan(project_id=project, mode=mode, basis_id=context['basis_id'],
             runtime_origin=context['runtime_origin'], guard=_digest(self._guard(project)),
             sources=self._selections(context))

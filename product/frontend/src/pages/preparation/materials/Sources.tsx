@@ -1,4 +1,3 @@
-import {TaskSurface} from '../../../shared/ui/TaskSurface'
 import {useWorkflow} from '../../../shared/lib/workflow'
 import {requestCollaboration,useHandoffContext} from '../../../entities/runtime/model/handoff'
 import {readRoute,scopedPath} from '../../../shared/lib/navigation'
@@ -178,7 +177,7 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
       <div className="jj-source-review-body"><p className="jj-proof-method">{methodLabels[source.config.source_kind]}</p><dl className="jj-facts">
         <div><dt>应用地址</dt><dd>{context.runtime_origin ?? '当前运行地址尚未确认'}{!context.runtime_origin&&<ActionLink navigationScope="page" href={'#'+scopedPath('/application?'+new URLSearchParams({view:'environment',return_to:'/preparation?'+new URLSearchParams({action_id:source.config.action_id,proof_sources:'1',source_id:source.source_id})}),projectId)}>核对应用连接<ArrowRightOutlined aria-hidden="true"/></ActionLink>}</dd></div>
         {source.config.database_capture&&<><div><dt>数据库连接</dt><dd>{source.config.database_capture.engine} · {source.config.database_capture.host}:{source.config.database_capture.port} / {source.config.database_capture.database}</dd></div><div><dt>数据库账号</dt><dd>{source.config.database_capture.username}</dd></div><div><dt>数据表与读取字段</dt><dd>{source.config.database_capture.namespace}.{source.config.database_capture.table} / {[source.config.database_capture.resource_column,source.config.database_capture.owner_column,...source.config.database_capture.fields].join('、')}</dd></div></>}
-        <div><dt>读取账号</dt><dd>{source.config.identity_claims.map(claim => context.identities.find(item => item.identity_id === claim.identity_id)?.label ?? '未找到对应账号').map(text).join('、')}</dd></div>
+        <div><dt>读取账号</dt><dd>{source.config.identity_claims.map(claim => context.identities.find(item => item.identity_id === claim.identity_id)?.label ?? '未找到对应账号').map(text).join('、') || '尚未配置身份核对'}</dd></div>
         <div><dt>测试资源</dt><dd>{[resource?.resource_id, ...context.resources.filter(item=>item.action_id===source.config.action_id&&item.case_specific).map(item=>item.resource_id)].filter(Boolean).join('、') || '测试数据已有变化'}</dd></div>
         {['SQLITE_AUDIT','SQLITE_OBJECTS'].includes(source.config.source_kind)?<><div><dt>测试数据库</dt><dd>{source.config.database_path}</dd></div><div><dt>数据表与读取字段</dt><dd>{source.config.table} / {[source.config.resource_column,source.config.owner_column,...(source.config.observed_columns??[source.config.protected_column])].join('、')}</dd></div></>:<div><dt>结果记录位置</dt><dd>{source.config.relative_path_template}</dd></div>}
         {[...new Set(source.config.identity_claims.map(item => item.request_path).filter(Boolean))].map(path => <div key={path}><dt>身份核对位置</dt><dd>{path}</dd></div>)}
@@ -193,19 +192,18 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
     </section>
   </>;
     if(configuring)return <SourceConfiguration projectId={projectId} context={context} actionId={actionId} requestedEffect={requestedEffect} initial={configuring==='edit'?source?.config:undefined} sourceId={configuring==='edit'?source?.source_id:undefined} onClose={()=>setConfiguring(null)} onSave={config=>write('SAVE_SOURCE',{basis_id:context.basis_id,config,...(configuring==='edit'&&source?{source_id:source.source_id,expected_revision:source.revision}:{})})}/>;
-    if(source&&sourceView==='settings')return <><TaskSurface title="读取位置与管理" context={title} onBack={()=>setSourceView('overview')} backLabel="返回结果证明">        <section className="jj-proof-view-section jj-proof-reading">
+    const settings=source&&sourceView==='settings'&&<section className="jj-proof-inline-settings" aria-label="读取位置与管理">
           <section className="jj-proof-locations"><SectionHeading title="技术定位与读取限制" level={3} appearance="group" actions={<Button kind="quiet" disabled={busy || Boolean(pending)} onClick={()=>{setAck(false);setReview('scope')}}>查看读取范围</Button>}/><p className="jj-proof-view-note">这些位置用于核对“{text(title)}”。调整判断方式会返回当前业务操作，已有读取授权另行核对。</p><dl className="jj-facts">
             {source.config.database_path&&<div><dt>测试数据库</dt><dd>{source.config.database_path}</dd></div>}
             {source.config.table&&<div><dt>读取数据表</dt><dd>{source.config.table}</dd></div>}
             {source.config.collection&&<div><dt>记录集合</dt><dd>{source.config.collection}</dd></div>}
             {source.config.relative_path_template&&<div><dt>读取位置</dt><dd className="jj-path">{source.config.relative_path_template}</dd></div>}
-            <div><dt>单次读取限制</dt><dd>{Math.ceil(source.config.max_response_bytes/1024)} KiB，{source.config.timeout_us/1000000} 秒</dd></div>
+            <div><dt>响应大小上限</dt><dd>{Math.ceil(source.config.max_response_bytes/1024)} KiB</dd></div><div><dt>单次读取超时</dt><dd>{source.config.timeout_us/1000000} 秒</dd></div>
           </dl><details><summary>字段映射与技术引用</summary><pre>{JSON.stringify(source.config.mappings,null,2)}</pre></details></section>
-          <section className="jj-proof-management"><SectionHeading title="判断方式" level={3} appearance="group" actions={<>{['SQLITE_AUDIT','SQLITE_OBJECTS','DATABASE_AUDIT','REFERENCE_FILE'].includes(source.config.source_kind)&&<Button kind="quiet" disabled={busy||Boolean(pending)} onClick={()=>setConfiguring('edit')}>调整判断方式</Button>}<Button kind="quiet" disabled={busy||Boolean(pending)} onClick={()=>setConfiguring('new')}>新增判断方式</Button></>}/></section>
+          <section className="jj-proof-management"><SectionHeading title="判断方式" level={3} appearance="group" actions={<>{['SQLITE_AUDIT','SQLITE_OBJECTS','DATABASE_AUDIT','REFERENCE_FILE'].includes(source.config.source_kind)&&<Button kind="quiet" disabled={busy||Boolean(pending)} onClick={()=>setConfiguring('edit')}>调整判断方式</Button>}<Button kind="quiet" disabled={busy||Boolean(pending)} onClick={()=>setConfiguring('new')}>新增判断方式</Button></>}/><p className="jj-proof-method">{methodLabels[source.config.source_kind]}</p></section>
           {scope&&<section className="jj-proof-revoke"><div><h3>撤销读取授权</h3><p className="jj-proof-view-note">使用同一授权的来源将无法继续读取，需要重新核对材料。已发布报告保留。</p></div><Button kind="danger" disabled={busy||Boolean(pending)} onClick={()=>setRevoke(true)}>撤销读取授权</Button></section>}
           {source.config.source_kind==='DATABASE_AUDIT'&&source.database_installation&&['INSTALLED','INCOMPLETE','REMOVING'].includes(source.database_installation.state)&&<section className="jj-proof-revoke"><div><h3>审计组件</h3><p className="jj-proof-view-note">移除后停止读取该数据库的提交历史；已发布报告保留。</p></div><Button kind="danger" disabled={busy||Boolean(pending)} onClick={()=>void openMaintenance('REMOVE_DATABASE')}>审阅移除范围</Button></section>}
-        </section>
-</TaskSurface>{managementDialogs}</>;
+    </section>;
     return <div className="jj-proof-page" data-single={sources.length<=1||undefined}>
     <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{workflow?.finishLabel??'检查准备'}</Button></div>
     <Heading title="准备业务结果证明" actions={<Button kind="quiet" onClick={()=>requestCollaboration(projectId,'SETUP','请整理当前业务操作所需的结果证明，沿用已有来源，补齐缺口并保存待审候选。')}>请 Agent 整理结果证明</Button>}/>
@@ -235,8 +233,8 @@ export function Sources({ projectId, actionId, requestedEffect, requestedSource,
         </section>
         </div></div>
         {(!source.adopted||!usable||!scope)&&<p className="jj-proof-next" role="status">{!scope?'确认读取范围后，再核对业务记录。':checking?'正在核对账号和业务记录，完成后会更新结果。':!usable?'核对记录是否属于当前账号和测试数据。':!source.adopted?'核对已通过，确认后可用于后续检查。':'这项结果的判断方式已准备好。'}</p>}
-        <TaskActions className="jj-proof-actions">
-          <Button kind="quiet" onClick={()=>setSourceView('settings')}>读取位置与管理</Button>
+        {settings}<TaskActions className="jj-proof-actions">
+          <Button kind="quiet" aria-expanded={sourceView==='settings'} onClick={()=>setSourceView(sourceView==='settings'?'overview':'settings')}>{sourceView==='settings'?'收起读取位置与管理':'读取位置与管理'}</Button>
 
           {!scope?<Button kind="primary" disabled={busy||Boolean(pending)} onClick={()=>{setAck(false);setReview('scope')}}>核对并允许读取</Button>:checking&&source.preflight?<Button disabled={busy||Boolean(pending)} onClick={()=>void write('CANCEL_PREFLIGHT',{preflight_id:source.preflight!.preflight_id})}>取消本次核对</Button>:source.config.source_kind==='DATABASE_AUDIT'&&!source.database_installation?.installed?<Button kind="primary" disabled={busy||Boolean(pending)} onClick={()=>void openMaintenance(source.database_installation&&['INCOMPLETE','REMOVING'].includes(source.database_installation.state)?'REMOVE_DATABASE':'INSTALL_DATABASE')}>{source.database_installation&&['INCOMPLETE','REMOVING'].includes(source.database_installation.state)?'核对并清理未完成安装':'审阅并安装审计组件'}</Button>:!usable?<Button kind="primary" busy={busy} disabled={Boolean(pending)||!resource||!context.runtime_available||source.config.source_kind==='REFERENCE_FILE'&&!source.config.reference_artifact} onClick={()=>void write('START_PREFLIGHT',common!)}>检查是否可用</Button>:!source.adopted?<Button kind="primary" busy={busy} disabled={Boolean(pending)} onClick={()=>void openAdoption()}>核对并用于检查</Button>:<Button kind="primary" onClick={onBack}>{workflow?.finishLabel??'继续准备检查'}</Button>}
         </TaskActions>

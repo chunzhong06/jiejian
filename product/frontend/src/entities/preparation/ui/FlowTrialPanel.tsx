@@ -9,6 +9,8 @@ import {Button} from '../../../shared/ui/actions'
 import {Field,ObjectIdentity} from '../../../shared/ui/layout'
 import {Choice} from '../../../shared/ui/Choice'
 import {Badge,ErrorNote,Notice,ResultList,Status} from '../../../shared/ui/feedback'
+// 场景可以直接进入试运行，样式随组件加载，不依赖先打开流程编辑器。
+import './operation-flow.css'
 
 
 const active=(item:FlowTrial)=>['PENDING','RUNNING','RETRY_WAIT'].includes(item.state)

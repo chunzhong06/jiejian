@@ -190,3 +190,58 @@ def test_fingerprint_keeps_file_budget_and_sensitive_path_exclusion(tmp_path):
     (tmp_path/'other.py').write_text('x=4', encoding='utf-8')
     with pytest.raises(JiejianError, match='文件数量预算'):
         analyzer.fingerprint(tmp_path)
+
+
+def test_runtime_resources_are_frozen_without_creating_javascript_candidates(tmp_path, monkeypatch):
+    resources = {
+        'data/requests.json': '{"value":"roles = [\'not-a-role\']; CREATE TABLE false_hint (id TEXT);"}',
+        'public/index.html': '<html>申请页面</html>',
+        'public/style.css': 'body { color: black; }',
+        'public/icon.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    }
+    for relative, text in resources.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    (tmp_path / 'app.mjs').write_text('export const value = 1;', encoding='utf-8')
+    calls = []
+    monkeypatch.setattr(analyzer_module, 'analyze_javascript', lambda findings, path, *args: calls.append(path))
+    analyzer = ApplicationUnderstandingAnalyzer()
+    result = analyzer.analyze('project-a', tmp_path)
+    assert {item.relative_path for item in result.files} == {'app.mjs', *resources}
+    assert calls == ['app.mjs']
+    assert result.role_candidates == ()
+    assert result.sqlite_setup.tables == ()
+    assert analyzer.fingerprint(tmp_path) == result.source_fingerprint
+    for relative in resources:
+        before = analyzer.fingerprint(tmp_path)
+        with (tmp_path / relative).open('a', encoding='utf-8') as stream:
+            stream.write(' ')
+        assert analyzer.fingerprint(tmp_path) != before
+
+
+@pytest.mark.parametrize('relative', [
+    'secret.json', 'credentials/config.json', '.env.local/data.json',
+    'data/passwords.json', 'cookies/session.json', 'tokens/current.json', 'api-key.json',
+    'node_modules/data.json', 'dist/index.html', 'var/current.json',
+])
+def test_runtime_resources_keep_sensitive_and_generated_paths_excluded(tmp_path, relative):
+    (tmp_path / 'app.mjs').write_text('export const value = 1;', encoding='utf-8')
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{}', encoding='utf-8')
+    result = ApplicationUnderstandingAnalyzer().analyze('project-a', tmp_path)
+    assert [item.relative_path for item in result.files] == ['app.mjs']
+
+
+@pytest.mark.parametrize('limits,resources', [
+    (SourceAnalysisLimits(max_files=1), {'a.json': '{}', 'b.html': 'page'}),
+    (SourceAnalysisLimits(max_file_bytes=3), {'a.json': '{"value":1}'}),
+    (SourceAnalysisLimits(max_total_bytes=3), {'a.json': '{}', 'b.json': '{}'}),
+])
+def test_runtime_resources_use_existing_read_budgets(tmp_path, limits, resources):
+    for relative, text in resources.items():
+        (tmp_path / relative).write_text(text, encoding='utf-8')
+    with pytest.raises(JiejianError) as raised:
+        ApplicationUnderstandingAnalyzer(limits=limits).analyze('project-a', tmp_path)
+    assert raised.value.code == ErrorCode.APPLICATION_ANALYSIS_BUDGET.value

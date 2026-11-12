@@ -64,6 +64,8 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-result-overview .jj-result-label { color:var(--ink); font-size:var(--text-body); line-height:var(--leading-body); }
 .jj-result-overview .jj-badge { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 .jj-task-surface { width:100%; max-width:1040px; margin-inline:auto; min-width:0; }
+/* 返回属于导航，名称和标题属于当前对象；所有聚焦任务共用这两级间距。 */
+.jj-task-surface > .jj-back-link { margin-bottom:24px; }
 .jj-task-surface > .jj-heading { margin-bottom:32px; }
 .jj-task-surface-body { min-width:0; }
 .jj-task-actions[data-separated=true] { margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }

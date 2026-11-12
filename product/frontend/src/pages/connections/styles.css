@@ -47,21 +47,24 @@
 .jj-example-lab-content > .jj-notice { grid-column: 1/-1; }
 @media(max-width:1150px) { .jj-source-connection { border-right: 0; border-bottom: 1px solid var(--line); } .jj-connection-facts { max-width: 600px; } }
 @media(max-width:700px) { .jj-example-overview { grid-template-columns: minmax(0,1fr); } .jj-example-overview > footer { grid-column: 1; grid-row: auto; border-left: 0; border-top: 1px solid var(--line); } .jj-source-connection, .jj-connect-new-body{ padding: 22px 20px; } .jj-connection-facts { grid-template-columns: minmax(0,1fr); gap: 14px; } .jj-connection-facts > div { grid-template-columns: 80px minmax(0,1fr); } .jj-endpoint-form { flex-wrap: wrap; } .jj-endpoint-form > .jj-field { flex-basis:100%; } .jj-endpoint-form > .jj-button { margin-left:auto; } .jj-connect-new > header, .jj-example-overview > header { padding: 24px 20px 0; flex-wrap: wrap; } .jj-example-overview > header > .jj-badge { margin-left: 58px; } .jj-example-description { padding: 20px; } .jj-example-overview > footer { padding: 20px; } .jj-example-lab-content { grid-template-columns: minmax(0,1fr); padding: 22px 20px; } .jj-connect-new-choice  { flex-wrap: wrap; padding: 20px; } .jj-connect-new-choice { padding-inline: 0; } .jj-connect-new-choice > .jj-button { margin-left: auto; } }
-.jj-application-runtime { min-width:0; padding:28px; }
-.jj-application-runtime > header { display:flex; align-items:center; gap:16px; margin-bottom:20px; }
-.jj-runtime-methods { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border:0; padding:0; margin:0 0 24px; }
+/* 聚焦运行位于源码容器之外，需自行提供同一响应容器，字段才能在窄窗重排。 */
+.jj-application-runtime { display:grid; gap:24px; min-width:0; padding:0; container:application-workspace / inline-size; }
+.jj-runtime-feedback { display:grid; gap:12px; }
+.jj-runtime-feedback > :is(.jj-notice,.jj-inline-feedback) { margin:0; }
+.jj-runtime-methods { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border:0; padding:0; margin:0; }
 .jj-runtime-method { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:start; gap:12px; padding:14px; border:1px solid var(--line); border-radius:var(--radius-control); cursor:pointer; position:relative; isolation:isolate; }
 .jj-runtime-method > input { margin-top:max(0px,calc((1lh - 18px)/2)); }
 .jj-runtime-method strong { display:block; font-weight:500; font-size:var(--text-object); line-height:22px; }
-.jj-runtime-method small { display:block; margin-top:4px; color:var(--muted); font-size:var(--text-meta); }
+.jj-runtime-method small { display:block; margin-top:4px; color:var(--muted); font-size:var(--text-meta); line-height:var(--leading-reading); }
 .jj-runtime-method:has(input:checked) { --ink:var(--selected-ink); --muted:var(--selected-ink); color:var(--selected-ink); background:var(--selected); border-color:var(--accent); }
 .jj-runtime-method:has(input:checked) strong { color:var(--selected-ink); }
 .jj-runtime-method:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
 .jj-runtime-method:has(input:disabled) { cursor:default; color:var(--disabled-ink); background:var(--disabled-bg); }
 .jj-runtime-method::before { content:''; position:absolute; inset:0; border-radius:inherit; z-index:-1; background:var(--hover); opacity:0; pointer-events:none; }
 @media(hover:hover) and (pointer:fine) { .jj-runtime-method:not(:has(input:disabled)):hover::before { opacity:1; } }
-.jj-runtime-panel { min-width:0; }
-.jj-runtime-panel > .jj-small { margin-top:12px; }
+.jj-runtime-panel { display:grid; gap:20px; min-width:0; }
+.jj-runtime-address { display:grid; gap:8px; }
+.jj-runtime-panel > .jj-runtime-options { margin-top:0; }
 .jj-runtime-setup { display:grid; grid-template-columns:minmax(0,1fr) 100px auto; gap:12px; align-items:end; }
 .jj-runtime-setup > .jj-button { justify-self:end; }
 .jj-runtime-review { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; padding:20px; margin-top:24px; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--inset); }
@@ -74,7 +77,6 @@
 .jj-runtime-instance > footer > .jj-inline-actions { margin-left:auto; }
 .jj-runtime-retained { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-top:22px; padding-top:14px; border-top:1px solid var(--line); font-size:var(--text-meta); color:var(--muted); }
 .jj-runtime-retained > .jj-button { margin-left:auto; font-size:var(--text-body); }
-.jj-application-runtime > .jj-notice, .jj-runtime-panel > .jj-notice { margin-top:20px; }
 .jj-runtime-options { margin-top:24px; border-top:1px solid var(--line); }
 .jj-runtime-options > summary { display:flex; align-items:center; gap:16px; padding:18px 0; cursor:pointer; font-weight:600; }
 .jj-runtime-options > summary span { margin-left:auto; color:var(--muted); font-size:var(--text-meta); font-weight:400; }
@@ -95,7 +97,6 @@
   .jj-runtime-dependencies > .jj-checkbox { margin-left:0; }
 }
 @container application-workspace (max-width:580px) {
-  .jj-application-runtime { padding:24px 20px; }
   .jj-runtime-methods { grid-template-columns:minmax(0,1fr); }
   .jj-runtime-setup { grid-template-columns:minmax(0,1fr) 100px; }
   .jj-runtime-setup > .jj-button { grid-column:1/-1; }
@@ -129,7 +130,6 @@
 .jj-example-lab { background:var(--surface); }
 @media(max-width:600px) { .jj-example-workflow > .jj-button[data-navigation=row] { gap:8px; padding:18px 12px; } .jj-example-archives > article { padding:20px; } .jj-example-archives > article { grid-template-columns:minmax(0,1fr); gap:12px; } .jj-example-archives article > .jj-button { justify-self:start; } }
 
-.jj-application-runtime > header p { margin-top:8px; line-height:1.7; }
 .jj-runtime-review { display:grid; grid-template-columns:minmax(0,1fr); padding:0; margin:0; border:0; background:transparent; gap:22px; }
 .jj-runtime-review > header { display:grid; justify-items:start; gap:12px; }
 .jj-runtime-review .jj-facts { margin:0; }

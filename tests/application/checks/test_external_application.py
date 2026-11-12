@@ -56,6 +56,22 @@ def test_source_free_entity_disclosure_and_repeat_check(tmp_path, monkeypatch):
         core.application_environments.save(project,environment,expected_revision=0)
         current=core.application_environments.activate(project,environment.environment_id,revision=1,expected_revision=0)
         current=core.application_understanding.confirm_endpoint(project,endpoint=origin,revision=current.revision)
+        # 复现曾尝试受控加载、后来明确采用外部环境；正式Worker仍应走外部观察协议。
+        from product.backend.infrastructure.runtime.jobs.attempts import JobAttempts
+        from product.backend.infrastructure.runtime.jobs.models import ClaimJob, FatalFailure, FatalFailureCode
+        from product.backend.infrastructure.runtime.jobs.registration import runtime_load_targets
+        from product.protocols.runtime.node_runtime import NodeRuntimeLoadRequest
+        now=time.time_ns()//1000
+        load=NodeRuntimeLoadRequest(load_id='rld_'+uuid4().hex,project_id=project,operation_id=uuid4().hex,
+            control_session_id='rcs_'+'4'*32,preview_fingerprint='c'*64,instance_id='rti_'+uuid4().hex,
+            manifest_fingerprint='a'*64,source_fingerprint='b'*64,created_at_us=now)
+        job=core.node_runtime.jobs.submit(load)['job']
+        attempts=JobAttempts(core.uow_factory,targets=runtime_load_targets())
+        claim=attempts.claim(ClaimJob(job_id=job.job_id,lease_owner='external-test',now_us=now+10,lease_duration_us=1000))
+        attempts.record_fatal_failure(FatalFailure(job_id=job.job_id,lease_owner=claim.job.lease_owner,
+            fencing_token=claim.job.fencing_token,now_us=now+20,reason_code=FatalFailureCode.RUNNER_FATAL))
+        assert core.node_runtime.owns_project(project)
+        assert core.runtime_ports.selected_reference(project) is None
         for label in ('owner','member'):
             current=core.application_understanding.add_manual_role(project,revision=current.revision,display_name=label)
         source='src_'+uuid4().hex

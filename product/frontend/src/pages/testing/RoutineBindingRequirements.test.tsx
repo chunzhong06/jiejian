@@ -13,10 +13,10 @@ it('只缺结果证明时，已有账号和步骤继续保留，不要求重新�
  const complete=[{kind:'ACCOUNT',slot:required,status:'PRESENT',count:2,minimum_count:2,reason_codes:[]},{kind:'FLOW',slot:action+'@1',status:'PRESENT',count:1,minimum_count:1,reason_codes:[]}]
  const current={...document,requirements:[...document.requirements,{kind:'PROOF',slot:'proof',label:'订单备注',minimum_count:1,action:{action_id:action,revision:1},effect_id:'note'}]}
  render(<RoutineBindingRequirements {...props} document={current as never} progress={complete as never}/>)
- expect(screen.getByRole('button',{name:'业务结果证明 需要准备'})).toBeVisible()
+ expect(screen.getByRole('button',{name:'订单备注 业务结果证明 · 需要准备'})).toBeVisible()
  expect(screen.queryByText('尚未准备可用于本次检查的账号。')).not.toBeInTheDocument()
  fireEvent.click(screen.getByText('已有材料 · 2'))
- fireEvent.click(screen.getByRole('button',{name:'成员的测试账号 已有材料，等待确认'}))
+ fireEvent.click(screen.getByRole('button',{name:'成员的测试账号 测试账号 · 已有材料，等待确认'}))
  expect(screen.getByText('已经准备了这项材料。补齐当前其余缺口后，再一起确认用于本次检查。')).toBeVisible()
 })
 
@@ -25,7 +25,7 @@ it('材料未齐时仍显示逻辑要求，补账号定位未满足的准确槽�
   {requirement:{slot_id:'isl_'+'e'.repeat(32),actor_id:actor,actor_revision:1},status:'SATISFIED'},
   {requirement:{slot_id:slot,actor_id:actor,actor_revision:1},status:'NEEDS_USER'}]}}]} as never)
  render(<RoutineBindingRequirements {...props}/>)
- expect(screen.getByRole('button',{name:'成员的测试账号 需要准备'})).toBeVisible()
+ expect(screen.getByRole('button',{name:'成员的测试账号 测试账号 · 需要准备'})).toBeVisible()
  expect(screen.getByText('需要准备',{selector:'.jj-badge'})).toBeVisible()
  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
  fireEvent.click(screen.getByRole('button',{name:'去准备账号'}))

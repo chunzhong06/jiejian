@@ -18,6 +18,17 @@
 .jj-rule-condition-editor>.jj-relationship-conditions { padding:0; }
 @media(max-width:1000px) { .jj-rule-condition-editor { grid-template-columns:minmax(0,1fr); } }
 .jj-rule-editor-reason { margin:24px; }
+.jj-rule-edit-summary { margin:24px; }
+.jj-implementation-mappings { border-top:1px solid var(--line); }
+.jj-implementation-mappings>summary { padding:24px; cursor:pointer; font-weight:600; }
+.jj-implementation-mappings>summary>.jj-badge { margin-inline-start:12px; }
+.jj-implementation-content { padding:0 24px 24px; display:grid; gap:24px; }
+.jj-implementation-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:24px 40px; }
+.jj-implementation-groups>section,.jj-implementation-items { min-width:0; display:grid; align-content:start; gap:20px; }
+.jj-implementation-items>fieldset { min-width:0; padding:0; border:0; display:grid; gap:12px; }
+.jj-implementation-items legend { padding:0; margin-bottom:12px; overflow-wrap:anywhere; }
+.jj-implementation-items legend>.jj-badge { margin-inline-start:12px; }
+.jj-implementation-items .jj-checkbox { align-items:start; overflow-wrap:anywhere; }
 .jj-rule-editor>.jj-form-actions { margin:0; padding:18px 24px; border-top:1px solid var(--line); background:var(--surface-heading); }
 
 .jj-rule-conditions { margin-top:16px; min-width:0; grid-column:1/-1; }

@@ -15,6 +15,14 @@ beforeEach(()=>{
   vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:['下载','预览'].map((display_name,index)=>({action_id:'action'+index,display_name,identity_requirements:{slots:[]},effect_evidence:[]}))} as never)
   vi.spyOn(currentChecksApi,'preview').mockResolvedValue({project_id:'app',can_execute:false,plan_fingerprint:'basis',action_count:2,case_count:0,actions:[],gaps:[0,0,1].map(index=>({action_id:'action'+index,reason:'TEST_IDENTITY_REQUIRED'}))} as never)
 })
+it('同一资源的多个缺口保留原因，只提供一次准确准备入口',async()=>{
+  vi.mocked(currentChecksApi.preview).mockResolvedValue({project_id:'app',can_execute:false,plan_fingerprint:'basis',action_count:1,case_count:0,actions:[],gaps:['RESOURCE_REQUIRED','RESOURCE_OWNER_SOURCE_STALE'].map(reason=>({action_id:'action0',intent_id:'rule',reason}))} as never)
+  render(<Plan {...props()}/>)
+  expect(await screen.findAllByRole('link',{name:'确认测试资源'})).toHaveLength(1)
+  expect(screen.getByRole('link',{name:'确认测试资源'})).toHaveAttribute('href',expect.stringContaining('rule_id=rule'))
+  expect(document.querySelectorAll('.jj-plan-reasons li')).toHaveLength(2)
+})
+
 it('恢复选定范围只构造该范围预览，空选区不隐式检查全部',async()=>{
   const ref={intent_id:'chosen',revision:1,intent_hash:'hash'}
   sessionStorage.setItem('jiejian.studio.scope:app:selection',JSON.stringify({refs:[ref]}))
@@ -30,6 +38,9 @@ it('空选区保持选择状态且不构造预览',async()=>{
   const value=props();value.route.query.set('scope_id','empty')
   render(<Plan {...value}/>)
   await screen.findByRole('heading',{name:'调整检查范围'})
+  await waitFor(()=>expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1))
+  expect(screen.getByRole('heading',{level:1,name:'调整检查范围'})).toBeVisible()
+  expect(screen.queryByRole('link',{name:'全部检查记录'})).not.toBeInTheDocument()
   expect(currentChecksApi.preview).not.toHaveBeenCalled()
 })
 

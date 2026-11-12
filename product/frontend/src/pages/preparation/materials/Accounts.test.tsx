@@ -9,6 +9,19 @@ import {WorkflowContext} from '../../../shared/lib/workflow';
 
 afterEach(()=>vi.restoreAllMocks());
 
+it('账号清单变化后可以就地重读，不自动开始登录或创建账号',async()=>{
+    const action:ActionPreparation={action_id:'read',action_revision:1,display_name:'读取工单',preparation_complete:false,next_material:'identity',permissions:[],assurance_contract:{allow_controls:[]},identity_requirements:{status:'NEEDS_USER',reason_codes:[],allocation_mode:'ROLE',slots:[{requirement:{slot_id:'member',actor_id:'member',actor_revision:1,ordinal:1},actor_display_name:'成员',test_identity_id:'removed',status:'NEEDS_USER',reason_codes:[]}]},execution:{status:'NEEDS_USER',reason_codes:[]},resources:[],effect_evidence:[],recovery:{status:'NOT_REQUIRED',reason_codes:[]},reason_codes:[]};
+    const document={project_id:'app',actions:[action],preparation_complete:false,recommended_action_id:'read',basis_fingerprint:null,policy_epoch:1,source_fingerprint:null,impacts:[]};
+    vi.spyOn(identities,'list').mockResolvedValue([]);vi.spyOn(identities,'preparations').mockResolvedValue([]);
+    const read=vi.spyOn(preparationApi,'get').mockResolvedValueOnce(document).mockResolvedValue({...document,actions:[{...action,identity_requirements:{...action.identity_requirements,slots:[{...action.identity_requirements.slots[0],test_identity_id:null}]}}]});
+    const create=vi.spyOn(identities,'create');const login=vi.spyOn(identities,'startPreparation');
+    render(<Accounts projectId="app" actions={[action]} onBack={vi.fn()} onError={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'重新读取账号'}));
+    await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(read).toHaveBeenCalledTimes(2);expect(screen.getByRole('button',{name:'开始登录'})).toBeEnabled();
+    expect(create).not.toHaveBeenCalled();expect(login).not.toHaveBeenCalled();
+});
+
 it('本次检查补账号只显示范围内操作，刷新读取不会带入其他操作的账号需求',async()=>{
     const action=(id:string):ActionPreparation=>({action_id:id,action_revision:1,display_name:id,preparation_complete:false,next_material:'identity',permissions:[],assurance_contract:{allow_controls:[]},identity_requirements:{status:'NEEDS_USER',reason_codes:[],allocation_mode:'ROLE',slots:[{requirement:{slot_id:id,actor_id:id,actor_revision:1,ordinal:1},actor_display_name:id==='read'?'成员':'无关角色',test_identity_id:null,status:'NEEDS_USER',reason_codes:[]}]},execution:{status:'NEEDS_USER',reason_codes:[]},resources:[],effect_evidence:[],recovery:{status:'NOT_REQUIRED',reason_codes:[]},reason_codes:[]});
     const selected=action('read');

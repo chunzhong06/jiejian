@@ -26,7 +26,7 @@
 .jj-source-index small { color: var(--muted); }
 .jj-source-index small[data-tone=positive] { color: var(--good); }
 .jj-source-index small[data-tone=caution] { color: var(--warn); }
-.jj-proof-detail { min-width: 0; }
+.jj-proof-detail { min-width:0; container:proof-detail / inline-size; }
 .jj-proof-detail > header { padding: 24px 28px 20px; }
 .jj-proof-detail > header .jj-object-line { margin-top: 6px; }
 .jj-proof-tabs { margin:0 28px 24px; }
@@ -103,6 +103,10 @@
 .jj-proof-locations details { margin-top:24px; }
 .jj-proof-locations pre { overflow:auto; }
 .jj-proof-management, .jj-proof-revoke { padding-top:24px; border-top:1px solid var(--line); min-width:0; }
+.jj-proof-inline-settings { display:grid; grid-template-columns:minmax(0,2fr) minmax(260px,1fr); gap:24px 32px; align-items:start; margin-top:24px; padding:24px 28px; border-top:1px solid var(--line); min-width:0; }
+.jj-proof-inline-settings > .jj-proof-management { padding:0 0 0 24px; border-top:0; border-left:1px solid var(--line); }
+.jj-proof-inline-settings > .jj-proof-revoke { grid-column:1/-1; }
+@container proof-detail (max-width:760px) { .jj-proof-inline-settings { grid-template-columns:minmax(0,1fr); } .jj-proof-inline-settings > .jj-proof-management { padding:24px 0 0; border-left:0; border-top:1px solid var(--line); } }
 .jj-proof-revoke { display:flex; align-items:flex-end; flex-wrap:wrap; gap:20px; }
 .jj-proof-revoke > div { flex:1 1 260px; }
 .jj-proof-revoke > .jj-button { margin-left:auto; }

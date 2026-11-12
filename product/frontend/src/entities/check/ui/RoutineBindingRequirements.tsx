@@ -54,22 +54,23 @@ export function RoutineBindingRequirements({projectId,document,assets,progress=[
    (workflow?.open??go)(withReturnDestination('/preparation?'+query,origin+'&binding_slot='+encodeURIComponent(group.kind+':'+group.slot)),projectId)
   }catch(error){setError(error)}finally{lock.current=false;setBusy(false)}
  }
- const title=(item:Group)=>item.kind==='ACCOUNT'?item.label+'的测试账号':item.kind==='RESOURCE'?'测试资源':item.kind==='FLOW'?'业务操作步骤':'业务结果证明'
+ const category=(item:Group)=>({ACCOUNT:'测试账号',RESOURCE:'测试资源',FLOW:'业务操作步骤',PROOF:'业务结果证明'}[item.kind])
+ const title=(item:Group)=>item.kind==='ACCOUNT'&&!item.label.endsWith('账号')?item.label+'的测试账号':item.label
  const explanation=group.kind==='ACCOUNT'?'本方案需要 '+group.minimum+' 个“'+group.label+'”账号。核对已有账号的实际身份是否符合要求；数量不足时再补充。':group.kind==='RESOURCE'?'选择这次检查要使用的测试资源，并确认它属于正确的账号。':'FLOW'===group.kind?'检查会按照已经保存的业务操作步骤进行。请核对这些步骤是否适用于这次使用的账号和资源。':'本次需要确认“'+group.label+'”是否实际发生。这里准备能够核对业务结果的记录或数据。'
  const actionLabel=group.kind==='ACCOUNT'?'去准备账号':group.kind==='RESOURCE'?'选择测试资源':group.kind==='FLOW'?'核对操作步骤':'配置结果证明'
- return <div className="jj-routine-binding-layout" data-single={groups.length===1||undefined}>{groups.length>1&&<nav aria-label="本次检查需要的材料"><IndexSelection identity={group.kind+':'+group.slot}>{attention.map(item=><button key={item.kind+':'+item.slot} className="jj-index-item" aria-current={group===item?'true':undefined} onClick={()=>{setSelected(item.kind+':'+item.slot);setError(undefined)}}><strong>{title(item)}</strong><small>{statusLabel(item)}</small></button>)}</IndexSelection>{retained.length>0&&<details className="jj-routine-retained"><summary>已有材料 · {retained.length}</summary><IndexSelection identity={group.kind+':'+group.slot}>{retained.map(item=><button className="jj-index-item" key={item.kind+':'+item.slot} aria-current={group===item?'true':undefined} onClick={()=>setSelected(item.kind+':'+item.slot)}><strong>{title(item)}</strong><small>{statusLabel(item)}</small></button>)}</IndexSelection></details>}</nav>}
+ return <div className="jj-routine-binding-layout" data-single={groups.length===1||undefined}>{groups.length>1&&<nav aria-label="本次检查需要的材料"><IndexSelection identity={group.kind+':'+group.slot}>{attention.map(item=><button key={item.kind+':'+item.slot} className="jj-index-item" aria-current={group===item?'true':undefined} onClick={()=>{setSelected(item.kind+':'+item.slot);setError(undefined)}}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection>{retained.length>0&&<details className="jj-routine-retained"><summary>已有材料 · {retained.length}</summary><IndexSelection identity={group.kind+':'+group.slot}>{retained.map(item=><button className="jj-index-item" key={item.kind+':'+item.slot} aria-current={group===item?'true':undefined} onClick={()=>setSelected(item.kind+':'+item.slot)}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection></details>}</nav>}
   <section className="jj-routine-binding-reading" aria-labelledby={id}>
    <header className="jj-routine-binding-heading"><div className="jj-object-line"><h3 id={id}>{title(group)}</h3><Badge tone={unchanged?'positive':group.progress?.status==='NEEDS_REVIEW'?'caution':'neutral'}>{unchanged?'与上次确认一致':statusLabel(group)}</Badge></div></header>
-   <div className="jj-routine-binding-body">
-    <section aria-label="使用要求"><h4 className="jj-title-caption">使用要求</h4><p className="jj-routine-explanation">{explanation}</p>
+   <section className="jj-routine-binding-current" aria-label="当前材料">
+    <dl className="jj-facts"><div><dt>{group.kind==='ACCOUNT'?'当前账号':group.kind==='RESOURCE'?'当前资源':group.kind==='FLOW'?'当前步骤':'当前证明'}</dt><dd>
+     {group.items.length?<div className="jj-routine-bound-items">{group.items.map(item=><div key={item.kind+':'+item.slot}><strong>{item.label}</strong><details><summary>核对材料记录</summary><code>{item.reference}</code></details></div>)}</div>:<p>{progressDescription??(group.kind==='ACCOUNT'?'尚未准备可用于本次检查的账号。':group.kind==='RESOURCE'?'尚未选择本次检查使用的测试资源。':group.kind==='FLOW'?'尚未确认本次检查使用的操作步骤。':'尚未配置能够核对这项业务结果的证明。')}</p>}
+    </dd></div><div><dt>本次要求</dt><dd>{group.kind==='ACCOUNT'?'至少 '+group.minimum+' 个符合“'+group.label+'”身份要求的账号':'核对“'+group.label+'”对应的'+category(group)}</dd></div></dl>
+    {Boolean(error)&&<ErrorNote error={error}/>}
+    {group.progress?.status==='UNKNOWN'&&onReload?<footer className="jj-routine-binding-footer"><Button onClick={onReload}>重新读取准备</Button></footer>:group.requirement&&!dirty&&<footer className="jj-routine-binding-footer"><Button kind="default" busy={busy} onClick={()=>void prepare()}>{actionLabel}</Button></footer>}
+   </section>
+   <details className="jj-routine-binding-requirements"><summary>使用要求与对照</summary><div><p className="jj-routine-explanation">{explanation}</p>
      {group.requirement?.normal_control_required&&<p className="jj-small jj-muted">同时保留正常访问的对照，确认业务仍可正常使用。</p>}
      {group.requirement?.recovery_required&&<p className="jj-small jj-muted">这项操作会改变业务状态，还需准备恢复测试数据的方式。</p>}
-    </section>
-    <section aria-label="当前材料"><h4 className="jj-title-caption">{group.kind==='ACCOUNT'?'当前账号':group.kind==='RESOURCE'?'当前测试资源':group.kind==='FLOW'?'当前操作步骤':'当前结果证明'}</h4>
-     {group.items.length?<div className="jj-routine-bound-items">{group.items.map(item=><div key={item.kind+':'+item.slot}><strong>{item.label}</strong><details><summary>核对材料记录</summary><code>{item.reference}</code></details></div>)}</div>:progressDescription?<p>{progressDescription}</p>:<p className="jj-muted">{group.kind==='ACCOUNT'?'尚未准备可用于本次检查的账号。':group.kind==='RESOURCE'?'尚未选择本次检查使用的测试资源。':group.kind==='FLOW'?'尚未确认本次检查使用的操作步骤。':'尚未配置能够核对这项业务结果的证明。'}</p>}
-    </section>
-   </div>
-   {Boolean(error)&&<ErrorNote error={error}/>}
-   {group.progress?.status==="UNKNOWN"&&onReload&&<Button onClick={onReload}>重新读取准备</Button>}{group.requirement&&!dirty&&<footer className="jj-routine-binding-footer"><Button kind="default" busy={busy} onClick={()=>void prepare()}>{actionLabel}</Button></footer>}
+   </div></details>
   </section></div>
 }

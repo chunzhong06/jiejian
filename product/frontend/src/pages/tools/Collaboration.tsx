@@ -115,6 +115,7 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
     ...reviews.map(data=>({id:'review:'+data.id,kind:'review' as const,label:'审阅产物',title:data.title,data})),
   ]
   const selected=items.find(item=>item.id===selectedId)??items[0]
+  const resumeForDecision=selected&&['question','pending'].includes(selected.kind)
   const focusQuestion=view==='work'&&items.length===1&&selected?.kind==='question'
   const artifacts=artifactLinks(task.operations,task.references).filter(item=>!reviews.some(review=>review.destination===item.path)),check=task.latest_check
   const continuing=task.execution?.continuous&&['RUNNING','WAITING'].includes(task.execution.state)&&!stopped
@@ -161,7 +162,7 @@ export function Collaboration({projectId,taskId}:{projectId:string;taskId:string
     {copied&&<InlineFeedback tone="positive">任务已复制，尚未发送；在开发工具中继续这项任务即可。</InlineFeedback>}
     <div id="collaboration-panel" role="tabpanel" aria-labelledby={'collaboration-view-'+view} className="jj-collaboration-panel">
       {view==='work'&&<>
-        {selected&&task.state==='PAUSED'&&<div className="jj-collaboration-paused"><p>继续任务后可回答或确认待办。</p><Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button></div>}
+        {selected&&task.state==='PAUSED'&&<div className="jj-collaboration-paused"><p>{resumeForDecision?"任务已暂停，继续后可回答或确认当前待办。":"任务已暂停，可以先核对已保存产物或原操作回执；需要继续运行时，从任务操作恢复。"}</p>{resumeForDecision&&<Button kind="primary" busy={busy} onClick={()=>void act(()=>collaborationApi.control(projectId,taskId,'resume'))}>继续任务<ArrowRightOutlined aria-hidden="true"/></Button>}</div>}
         {selected?<div className="jj-collaboration-workbench" data-single={items.length===1||undefined}>
           {items.length>1&&<nav className="jj-collaboration-queue" aria-label="待处理事项">
             <header><h2 className="jj-title-group">需要你处理</h2><span>{decisions} 项</span></header>

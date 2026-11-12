@@ -16,7 +16,7 @@
 
 ### application.py
 
-[源码](../../../product/backend/bootstrap/application.py)（414 行）。公开声明：`ApplicationCore`。
+[源码](../../../product/backend/bootstrap/application.py)（415 行）。公开声明：`ApplicationCore`。
 
 ### worker.py
 

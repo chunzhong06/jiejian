@@ -1,10 +1,12 @@
 import {createElement,useEffect,useRef,useSyncExternalStore,type ComponentType,type ComponentProps} from 'react'
 import {PageSkeleton,pageTitle} from '../ui/PageSkeleton'
-import {PageError} from '../ui/feedback'
+import {PageError,ErrorNote,Loading} from '../ui/feedback'
 import {usePageRefresh} from './pageRefresh'
+import {readRoute,type Route} from './navigation'
+import {directoryNavigation} from '../ui/SectionNavigation'
 
 // 模块就绪立即挂载，不把数据等待叠加到 Suspense 回退周期。
-export function routePage<C extends ComponentType<any>>(read:()=>Promise<{default:C}>,view:string){
+export function routePage<C extends ComponentType<any>>(read:()=>Promise<{default:C}>,view:string,{embedded=false}:{embedded?:boolean}={}){
   let state:{Component?:C;error?:Error}={}
   let pending:Promise<void>|undefined
   const listeners=new Set<()=>void>()
@@ -28,8 +30,13 @@ export function routePage<C extends ComponentType<any>>(read:()=>Promise<{defaul
       if(state.error&&mounted.current)window.location.reload()
     })
     useEffect(()=>{mounted.current=true;void preload();return()=>{mounted.current=false}},[])
-    if(error)return <PageError title={pageTitle(view)} error={error}/>
-    return Component?createElement(Component,props):<PageSkeleton view={view}/>
+    if(Component)return createElement(Component,props)
+    // 内嵌模块只替换所属内容；父页面继续持有标题、分类与准确回程。
+    if(embedded)return error?<ErrorNote error={error}/>:<Loading/>
+    const context=props as {route?:Route;projectId?:string;selected?:{project_id:string}}
+    const directory=directoryNavigation(view,context.route??readRoute(),context.projectId??context.selected?.project_id)
+    if(error)return <PageError title={directory?.title??pageTitle(view)} navigation={directory?.navigation} error={error}/>
+    return <PageSkeleton view={view} title={directory?.title} navigation={directory?.navigation}/>
   }
   return Object.assign(Page,{preload})
 }

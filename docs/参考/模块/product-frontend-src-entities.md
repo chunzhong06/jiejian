@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[application/api](#applicationapi)（4 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（1 个文件）、[check/ui](#checkui)（10 个文件）、[permission/api](#permissionapi)（3 个文件）、[permission/ui](#permissionui)（4 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/ui](#preparationui)（11 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（1 个文件）、[runtime/ui](#runtimeui)（2 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（4 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
+按目录定位：[application/api](#applicationapi)（4 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（2 个文件）、[check/ui](#checkui)（10 个文件）、[permission/api](#permissionapi)（3 个文件）、[permission/ui](#permissionui)（4 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/ui](#preparationui)（11 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（1 个文件）、[runtime/ui](#runtimeui)（2 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（4 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
 
 ## application/api
 
@@ -56,6 +56,10 @@
 
 [源码](../../../product/frontend/src/entities/check/model/checks.ts)（62 行）。公开声明：`Tone`、`actual`、`gaps`、`judgement`、`judgementLabels`、`owner`、`repairGap`、`requirement`等。
 
+### check/model/repairComparisons.ts
+
+[源码](../../../product/frontend/src/entities/check/model/repairComparisons.ts)（14 行）。公开声明：`groupRepairComparisons`。
+
 ## check/ui
 
 ### check/ui/AgentHandoff.tsx
@@ -64,7 +68,7 @@
 
 ### check/ui/ExternalRecheck.tsx
 
-[源码](../../../product/frontend/src/entities/check/ui/ExternalRecheck.tsx)（53 行）。公开声明：`ExternalRecheck`。
+[源码](../../../product/frontend/src/entities/check/ui/ExternalRecheck.tsx)（55 行）。公开声明：`ExternalRecheck`。
 
 ### check/ui/LegacyRepairRedirect.tsx
 
@@ -84,7 +88,7 @@
 
 ### check/ui/RoutineBindingRequirements.tsx
 
-[源码](../../../product/frontend/src/entities/check/ui/RoutineBindingRequirements.tsx)（75 行）。公开声明：`RoutineBindingRequirements`。
+[源码](../../../product/frontend/src/entities/check/ui/RoutineBindingRequirements.tsx)（76 行）。公开声明：`RoutineBindingRequirements`。
 
 ### check/ui/RoutineHandoff.tsx
 
@@ -92,7 +96,7 @@
 
 ### check/ui/RoutinePreparation.tsx
 
-[源码](../../../product/frontend/src/entities/check/ui/RoutinePreparation.tsx)（47 行）。公开声明：`RoutinePreparation`。
+[源码](../../../product/frontend/src/entities/check/ui/RoutinePreparation.tsx)（50 行）。公开声明：`RoutinePreparation`。
 
 ### check/ui/RoutineRunContext.tsx
 
@@ -204,7 +208,7 @@
 
 ### preparation/ui/FlowTrialPanel.tsx
 
-[源码](../../../product/frontend/src/entities/preparation/ui/FlowTrialPanel.tsx)（105 行）。公开声明：`FlowTrialPanel`。
+[源码](../../../product/frontend/src/entities/preparation/ui/FlowTrialPanel.tsx)（107 行）。公开声明：`FlowTrialPanel`。
 
 ### preparation/ui/operation-flow.css
 

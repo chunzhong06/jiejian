@@ -2,6 +2,7 @@ import {RuleConditionFields, conditionLabels} from '../../entities/permission/ui
 import type {PermissionConditions} from '../../entities/permission/api/businessBoundaries';
 import {PageSkeleton} from '../../shared/ui/PageSkeleton'
 import { InitialRules } from './InitialRules';
+import {ImplementationMappings,implementationRows,type ImplementationEdits} from './ImplementationMappings';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { businessBoundariesApi as api } from '../../entities/permission/api/businessBoundaries';
 import {notAccepted} from '../../shared/lib/operations';
@@ -21,15 +22,16 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
 }) {
     const state = useRead('rule-maintenance:' + projectId, async () => { const value = await api.maintenanceDraft(projectId); assertProject(value.project_id, projectId); return value; });
     const draftKey='rule-editor:'+projectId;
-    const saved=useRef(editorDraft<{changes:Record<string,'ALLOW'|'DENY'>;reason:string;conditions:Record<string,PermissionConditions|null>;expanded:string|null;basis?:string}>(draftKey,projectId)).current;
+    const saved=useRef(editorDraft<{changes:Record<string,'ALLOW'|'DENY'>;reason:string;conditions:Record<string,PermissionConditions|null>;sources?:ImplementationEdits;expanded:string|null;basis?:string}>(draftKey,projectId)).current;
     const basis=useRef(saved?.basis);
     const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
     const [changes, setChanges] = useState<Record<string, 'ALLOW' | 'DENY'>>(saved?.changes??{}), [reason, setReason] = useState(saved?.reason??''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(Boolean(sessionStorage.getItem('jiejian.studio.maintenance:' + projectId))), [proposals, setProposals] = useState<string[]>([]), lock = useRef(false);
     const [conditionChanges, setConditionChanges] = useState<Record<string,PermissionConditions | null>>(saved?.conditions??{});
     const [expandedRule, setExpandedRule] = useState<string | null>(saved?.expanded??null);
-    const dirty=!proposals.length&&Boolean(reason||Object.keys(changes).length||Object.keys(conditionChanges).length);
+    const [sourceChanges,setSourceChanges]=useState<ImplementationEdits>(saved?.sources??{});
+    const dirty=!proposals.length&&Boolean(reason||Object.keys(changes).length||Object.keys(conditionChanges).length||Object.keys(sourceChanges).length);
     useDraftProtection(dirty);
-    useEffect(()=>{if(state.data&&!basis.current)basis.current=state.data.boundary_state_fingerprint;if(dirty)rememberEditorDraft(draftKey,{changes,reason,conditions:conditionChanges,expanded:expandedRule,basis:basis.current},projectId)},[changes,reason,conditionChanges,expandedRule,state.data?.boundary_state_fingerprint]);
+    useEffect(()=>{if(state.data&&!basis.current)basis.current=state.data.boundary_state_fingerprint;if(dirty)rememberEditorDraft(draftKey,{changes,reason,conditions:conditionChanges,sources:sourceChanges,expanded:expandedRule,basis:basis.current},projectId)},[changes,reason,conditionChanges,sourceChanges,expandedRule,state.data?.boundary_state_fingerprint]);
     if (state.loading)
         return <PageSkeleton view="/permissions" title="编辑权限要求"/>;
     if (!state.data)
@@ -38,7 +40,10 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     if (!value.permissions.length) return <InitialRules projectId={projectId} basis={value} onBack={onBack} onProposal={onProposal} onError={onError}/>;
     const conflict=Boolean(basis.current&&basis.current!==value.boundary_state_fingerprint);
     const changedRules = value.permissions.filter(item => (changes[item.item_id] && changes[item.item_id] !== item.expectation) || (item.item_id in conditionChanges && JSON.stringify(conditionChanges[item.item_id]) !== JSON.stringify(item.conditions ?? null)));
-    const changed = changedRules.length > 0;
+    const mappingRows=implementationRows(value);
+    const changedMappings=mappingRows.filter(item=>item.item_id in sourceChanges&&(JSON.stringify([...(item.source_candidate_ids??[])].sort())!==JSON.stringify([...sourceChanges[item.item_id]].sort())||Boolean(item.inspection&&item.inspection.status!=='CURRENT')));
+    const changed = changedRules.length > 0||changedMappings.length>0;
+    const unknownMapping=Object.keys(sourceChanges).some(id=>!mappingRows.some(item=>item.item_id===id));
     const act = async (callback: () => Promise<unknown>) => { if (lock.current)
         return; lock.current = true; setBusy(true); try {
         await callback();
@@ -54,7 +59,7 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
     <Heading title="调整访问要求"/>
     <section className="jj-panel jj-rule-editor">
       {state.error&&<Notice tone="caution">权限要求更新失败，编辑内容继续保留。请使用右上角刷新后再生成提案。</Notice>}
-      {conflict&&<Notice tone="caution">正式规则已变化。编辑内容已保留，请对照当前要求与调整值重新核对。<Button kind="quiet" disabled={busy||uncertain||Object.keys(changes).some(id=>!value.permissions.some(item=>item.item_id===id))||Object.keys(conditionChanges).some(id=>!value.permissions.some(item=>item.item_id===id))} onClick={()=>{basis.current=value.boundary_state_fingerprint;setChanges(current=>({...current}))}}>已核对当前规则，继续编辑</Button></Notice>}
+      {conflict&&<Notice tone="caution">正式规则已变化。编辑内容已保留，请对照当前要求与调整值重新核对。<Button kind="quiet" disabled={busy||uncertain||unknownMapping||Object.keys(changes).some(id=>!value.permissions.some(item=>item.item_id===id))||Object.keys(conditionChanges).some(id=>!value.permissions.some(item=>item.item_id===id))} onClick={()=>{basis.current=value.boundary_state_fingerprint;setChanges(current=>({...current}))}}>已核对当前规则，继续编辑</Button></Notice>}
       <header className="jj-rule-editor-heading"><h2>当前生效的访问规则</h2><span className="jj-small jj-muted">{value.permissions.filter(item => item.effective_state === 'ACTIVE').length} 条</span></header>
       <div className="jj-scroll-table"><table data-density="compact" className="jj-content-table jj-rule-editor-table">
         <colgroup><col className="jj-rule-object-column"/><col className="jj-rule-condition-column"/><col className="jj-rule-current-column"/><col className="jj-rule-edit-column"/></colgroup>
@@ -80,8 +85,15 @@ export function RuleEditor({ projectId, onBack, onProposal, onError }: {
             </section>
           </td></tr>}</Fragment>;
         })}</tbody>
-      </table></div>{!value.permissions.length && <Empty title="当前没有可调整的访问规则"/>}{changed&&<p className="jj-small jj-muted">本次将调整 {changedRules.length} 条规则的要求或适用条件；保存后仍需审阅批准。</p>}<label className="jj-field jj-rule-editor-reason"><span>变更理由</span><textarea value={reason} disabled={busy || uncertain} onChange={event => setReason(event.target.value)} placeholder="说明访问要求发生了什么变化"/></label><div className="jj-task-actions jj-form-actions">{dirty&&<Button kind="quiet" disabled={busy||uncertain} onClick={()=>{rememberEditorDraft(draftKey,undefined);basis.current=value.boundary_state_fingerprint;setChanges({});setConditionChanges({});setReason('');setExpandedRule(null)}}>放弃本页编辑</Button>}<Button disabled={busy} onClick={onBack}>返回</Button><Button kind="primary" busy={busy} disabled={!changed || !reason.trim() || uncertain || conflict || proposals.length>0 || Boolean(state.error)} onClick={() => void act(async () => { const key = 'jiejian.studio.maintenance:' + projectId; sessionStorage.setItem(key, 'pending'); const submitted=editorDraftGeneration(draftKey,projectId); let confirmed=false; try {
-        const proposal = await api.createMaintenanceProposal(projectId, { expected_boundary_state_fingerprint: value.boundary_state_fingerprint, actors: value.actors, actions: value.actions, permissions: value.permissions.map(item => ({ ...item, expectation: changes[item.item_id] ?? item.expectation, ...(item.item_id in conditionChanges ? {conditions:conditionChanges[item.item_id]} : {}) })), provenance: reason.trim() });
+      </table></div>{!value.permissions.length && <Empty title="当前没有可调整的访问规则"/>}
+      <ImplementationMappings projectId={projectId} value={value} edits={sourceChanges} disabled={busy||uncertain||proposals.length>0} onChange={setSourceChanges}/>
+      {changed&&<p className="jj-rule-edit-summary jj-small jj-muted">{changedRules.length>0&&<>调整 {changedRules.length} 条规则的要求或适用条件。</>}{changedMappings.length>0&&<>核对 {changedMappings.length} 项角色或操作对应。</>}生成提案后仍需审阅批准。</p>}
+      <label className="jj-field jj-rule-editor-reason"><span>变更理由</span><textarea value={reason} disabled={busy || uncertain} onChange={event => setReason(event.target.value)} placeholder="说明访问要求或对应关系为何需要调整"/></label>
+      <div className="jj-task-actions jj-form-actions">{dirty&&<Button kind="quiet" disabled={busy||uncertain} onClick={()=>{rememberEditorDraft(draftKey,undefined);basis.current=value.boundary_state_fingerprint;setChanges({});setConditionChanges({});setSourceChanges({});setReason('');setExpandedRule(null)}}>放弃本页编辑</Button>}<Button disabled={busy} onClick={onBack}>返回</Button><Button kind="primary" busy={busy} disabled={!changed || !reason.trim() || uncertain || conflict || unknownMapping || proposals.length>0 || Boolean(state.error)} onClick={() => void act(async () => { const key = 'jiejian.studio.maintenance:' + projectId; sessionStorage.setItem(key, 'pending'); const submitted=editorDraftGeneration(draftKey,projectId); let confirmed=false; try {
+        const proposal = await api.createMaintenanceProposal(projectId, { expected_boundary_state_fingerprint: value.boundary_state_fingerprint,
+            actors: value.actors.map(item=>item.item_id in sourceChanges?{...item,source_candidate_ids:sourceChanges[item.item_id]}:item),
+            actions: value.actions.map(item=>item.item_id in sourceChanges?{...item,source_candidate_ids:sourceChanges[item.item_id]}:item),
+            permissions: value.permissions.map(item => ({ ...item, expectation: changes[item.item_id] ?? item.expectation, ...(item.item_id in conditionChanges ? {conditions:conditionChanges[item.item_id]} : {}) })), provenance: reason.trim() });
         assertProject(proposal.proposal.project_id, projectId);
         sessionStorage.removeItem(key);confirmed=true;setProposals([proposal.proposal.proposal_id]);
         clearSubmittedDraft(draftKey,projectId,submitted);

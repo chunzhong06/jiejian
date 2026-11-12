@@ -47,6 +47,11 @@
 .jj-scope-review > header { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
 .jj-scope-review > p { max-width:78ch; line-height:var(--leading-reading); color:var(--muted); }
 .jj-scope-review > .jj-inline-actions { flex-wrap:wrap; justify-content:flex-end; margin-top:8px; }
+.jj-requirement-decision { min-width:0; margin:8px 0 0; padding:0; border:0; }
+.jj-requirement-decision > legend { margin-bottom:12px; color:var(--muted); }
+.jj-requirement-decision > div:first-of-type { display:flex; flex-wrap:wrap; gap:16px 28px; }
+.jj-requirement-decision label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.jj-requirement-decision > .jj-task-actions { margin-top:20px; }
 .jj-approval-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; padding: 24px 0; background: transparent; border-top: 1px solid var(--line); }
 .jj-approval-footer > .jj-notice { width: 100%; }
 .jj-approval-choice { display: grid; gap: 10px; }
@@ -61,6 +66,11 @@
 
 .jj-rule-authoring { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); align-items:start; gap:24px; }
 .jj-rule-authoring[data-preview=false] { grid-template-columns:minmax(0,1fr); }
+.jj-rule-authoring[data-preview=false] > .jj-rule-authoring-editor { background:transparent; border:0; border-radius:0; overflow:visible; }
+.jj-rule-authoring[data-preview=false] > .jj-rule-authoring-editor > .jj-tabs { padding-inline:0; }
+.jj-rule-authoring[data-preview=false] .jj-initial-definitions > header { padding-inline:0; }
+.jj-rule-authoring[data-preview=false] .jj-initial-candidates { padding-inline:0; border-top:0; background:transparent; }
+.jj-rule-authoring[data-preview=false] .jj-initial-empty { padding-inline:0; }
 .jj-rule-authoring-editor { container: rule-editor / inline-size; min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-surface); overflow:hidden; }
 .jj-rule-authoring-editor > .jj-tabs { padding-inline:24px; }
 .jj-initial-rules { border:0; padding:0; margin:0; min-width:0; }

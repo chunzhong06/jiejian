@@ -17,6 +17,7 @@ class RuntimeProvider:
     owns_project: Callable[[str], bool]
     read: Callable[[str], RuntimeReference | None]
     load: Callable[[str, str], RuntimeReference]
+    read_selected: Callable[[str], RuntimeReference | None] | None = None
 
 
 class ProjectRuntimePorts:
@@ -37,6 +38,13 @@ class ProjectRuntimePorts:
     def reference(self, project_id: str) -> RuntimeReference | None:
         owner = self._owner(project_id)
         return None if owner is None else owner.read(project_id)
+
+    def selected_reference(self, project_id: str) -> RuntimeReference | None:
+        """读取本次选中目标的对应；实例管理与交付加载仍使用原所有者。"""
+        owner = self._owner(project_id)
+        if owner is None:
+            return None
+        return (owner.read_selected or owner.read)(project_id)
 
     def load_delivery(self, project_id: str, source_fingerprint: str) -> RuntimeReference:
         owner = self._owner(project_id)

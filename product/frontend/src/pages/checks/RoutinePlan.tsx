@@ -24,6 +24,7 @@ type Pending={operation:string;fingerprint:string;reference:RoutineReference}
 /** 方案只采用准确修订和绑定；未确认绑定的准备视图不能直接提交运行。 */
 export function RoutinePlan({projectId,route,refresh,onError,official}:PageProps){
  const workflow=useWorkflow()
+ const [scopeFocused,setScopeFocused]=useState(false)
  const routineId=route.query.get('routine_id'),revision=Number(route.query.get('routine_revision')),bindingId=route.query.get('binding_id')
  const valid=Boolean(routineId&&/^csp_[0-9a-f]{32}$/.test(routineId)&&Number.isInteger(revision)&&revision>0&&(!bindingId||/^crb_[0-9a-f]{32}$/.test(bindingId)))
  const reference:RoutineReference|undefined=valid&&bindingId?{routine_id:routineId!,revision,binding_id:bindingId}:undefined
@@ -62,11 +63,11 @@ export function RoutinePlan({projectId,route,refresh,onError,official}:PageProps
  if(!state.data||state.error)return <><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(scheme,projectId)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}返回方案继续准备</ActionLink></div><PageError title="准备这次检查" error={state.error}/></>
  const {document,materials,identities,preview}=state.data
  const returnTo='/reports?'+new URLSearchParams({view:'plan',routine_id:routineId!,routine_revision:String(revision),...(bindingId?{binding_id:bindingId}:{}),return_to:origin})
- return <><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,projectId)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(origin)}</ActionLink></div><Heading eyebrow={'第 '+document.revision+' 修订'} title={document.name}></Heading>
+ return <>{!scopeFocused&&<><div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin,projectId)} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}{returnDestinationLabel(origin)}</ActionLink></div><Heading eyebrow={'第 '+document.revision+' 修订'} title={document.name}></Heading></>}
   <PendingRecovery storageKey={key} projectId={projectId}/>{!reference&&workflow?<RoutinePreparation official={official} projectId={projectId} document={document} dirty={false} origin={returnTo} initialSlot={route.query.get('binding_slot')} onBound={binding=>{refresh();go('/reports?'+new URLSearchParams({view:'plan',routine_id:routineId!,routine_revision:String(revision),binding_id:binding.binding_id,return_to:origin}),projectId)}}/>:<>
   {!reference&&<ContextNote label="检查所需材料">这次检查还没有确认使用哪些材料。准备完成后，再回到这里预览和运行。</ContextNote>}
   {pending&&!busy&&<Notice tone="caution">上次提交的结果还未确认。<Button busy={busy} onClick={()=>void act(recover)} busyLabel="正在查询">查看上次提交结果</Button>{notFound&&<span>尚未查到原记录；再次提交沿用同一请求。</span>}</Notice>}
-  {Boolean(state.error)&&<ErrorNote error={state.error}/>}<PlanWorkspace official={official} preview={preview} actions={materials.actions} identities={identities} returnTo={returnTo} changeId={null} initialView={route.query.get('plan_tab')} initialItem={route.query.get('plan_item')}
+  {Boolean(state.error)&&<ErrorNote error={state.error}/>}<PlanWorkspace onScopeFocus={setScopeFocused} inlineScope official={official} preview={preview} actions={materials.actions} identities={identities} returnTo={returnTo} changeId={null} initialView={route.query.get('plan_tab')} initialItem={route.query.get('plan_item')}
    scope={<p>使用“{document.name}”第 {document.revision} 次保存的检查内容。需要修改时，请返回方案保存新的版本。</p>} loading={state.loading} busy={busy} pending={Boolean(pending)&&!notFound} error={false} onSubmit={()=>void act(submit)}
    executionAction={!reference?<ActionLink navigationScope="page" href={'#'+scopedPath(origin,projectId)} kind="primary">返回方案继续准备</ActionLink>:undefined} executionExplanation={!reference?'这里只核对准备，不创建运行任务。':undefined}/>
  </>}</>

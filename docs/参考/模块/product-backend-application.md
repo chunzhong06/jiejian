@@ -106,7 +106,7 @@
 
 ### application_understanding/analysis/analyzer.py
 
-[源码](../../../product/backend/application/application_understanding/analysis/analyzer.py)（172 行）。公开声明：`ApplicationUnderstandingAnalyzer`。
+[源码](../../../product/backend/application/application_understanding/analysis/analyzer.py)（184 行）。公开声明：`ApplicationUnderstandingAnalyzer`。
 
 ### application_understanding/analysis/findings.py
 
@@ -450,7 +450,7 @@
 
 ### preparation/operation_flows.py
 
-[源码](../../../product/backend/application/preparation/operation_flows.py)（235 行）。公开声明：`execution_material`、`OperationFlowService`。
+[源码](../../../product/backend/application/preparation/operation_flows.py)（238 行）。公开声明：`execution_material`、`OperationFlowService`。
 
 ### preparation/operation_sources.py
 
@@ -678,11 +678,11 @@
 
 ### runtime/ports.py
 
-[源码](../../../product/backend/application/runtime/ports.py)（47 行）。公开声明：`RuntimeProvider`、`ProjectRuntimePorts`。
+[源码](../../../product/backend/application/runtime/ports.py)（55 行）。公开声明：`RuntimeProvider`、`ProjectRuntimePorts`。
 
 ### runtime/setup.py
 
-[源码](../../../product/backend/application/runtime/setup.py)（280 行）。公开声明：`NodeStartPreview`、`NodeRuntimeSetup`。
+[源码](../../../product/backend/application/runtime/setup.py)（300 行）。公开声明：`NodeStartPreview`、`NodeRuntimeSetup`。
 
 ## test_identities
 

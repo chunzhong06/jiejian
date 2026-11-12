@@ -21,7 +21,7 @@ import {ObjectTable} from '../../shared/ui/ObjectTable'
 import {Inspector} from '../../shared/ui/Inspector'
 import {SearchField} from '../../shared/ui/SearchField'
 import {ContextNote,Empty,ErrorNote,Loading,Notice,PageError} from '../../shared/ui/feedback'
-import {TestingSections} from './TestingSections'
+import {TestingSections} from '../../shared/ui/SectionNavigation'
 import {RoutinePreparation} from '../../entities/check/ui/RoutinePreparation'
 import './routines.css'
 
@@ -43,8 +43,9 @@ export function CheckRoutines(props:PageProps){
   return value
  })
  if(id&&id!=='new'&&(!Number.isInteger(revision)||revision<1))return <PageError title="检查方案" error={new Error('缺少准确的方案修订，请返回方案目录。')}/>
- if(state.loading||id&&id!=='new'&&document.loading)return <PageSkeleton view="/testing" title="检查方案"/>
- if(!state.data||state.error)return <PageError title="检查方案" error={state.error}/>
+ const navigation=!id?<TestingSections value="plans" projectId={props.projectId}/>:undefined
+ if(state.loading||id&&id!=='new'&&document.loading)return <PageSkeleton view="/testing" title="检查方案" navigation={navigation}/>
+ if(!state.data||state.error)return <PageError title="检查方案" navigation={navigation} error={state.error}/>
  if(id&&id!=='new'&&!document.data)return <PageError title="检查方案" error={document.error}/>
  if(id)return <RoutineEditor key={props.projectId+':'+id+':'+revision} {...props} document={document.data} rules={state.data.rules} scenarios={state.data.scenarios} catalog={state.data.catalog}/>
  return <RoutineDirectory {...props} catalog={state.data.catalog} rules={state.data.rules} scenarios={state.data.scenarios}/>

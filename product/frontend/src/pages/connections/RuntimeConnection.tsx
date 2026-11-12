@@ -65,6 +65,8 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
     const usingRuntime = Boolean(runtimeAddress && confirmedEndpoint === runtimeAddress);
     const panelId = 'runtime-configuration-' + projectId;
     const terminalState = !pending && (outcome ?? state.data?.operation?.state);
+    const staleDraft = dirty && basis.current !== revision;
+    const managedFeedback = currentMethod === 'managed' && Boolean(pending || operation.error || !preview && ['FAILED', 'CANCELLED'].includes(terminalState || ''));
     const act = async (callback: () => Promise<unknown>) => {
         if (lock.current) return;
         lock.current = true;
@@ -104,20 +106,27 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
     };
 
     return <section className="jj-application-runtime" aria-label="应用运行">
-        <header><div><h3>选择应用的运行方式</h3><p className="jj-small jj-muted">使用已运行应用的地址，或由界鉴启动本地源码。</p></div></header>
-        {dirty&&basis.current!==revision&&<Notice tone="caution">应用连接已变化，编辑内容已保留。核对当前运行信息后再继续。<Button kind="quiet" disabled={busy} onClick={()=>{rememberEditorDraft(draftKey,undefined);basis.current=revision;setEndpoint(undefined);setEntry(undefined);setPort(undefined);setSettings(undefined);setPreview(undefined)}}>放弃本页编辑</Button></Notice>}
+        {(staleDraft || managedFeedback || state.error) && <div className="jj-runtime-feedback" role="region" aria-label="应用运行反馈">
+            {staleDraft&&<Notice tone="caution">应用连接已变化，编辑内容已保留。核对当前运行信息后再继续。<Button kind="quiet" disabled={busy} onClick={()=>{rememberEditorDraft(draftKey,undefined);basis.current=revision;setEndpoint(undefined);setEntry(undefined);setPort(undefined);setSettings(undefined);setPreview(undefined)}}>放弃本页编辑</Button></Notice>}
+            {currentMethod === 'managed' && <>
+                {!preview && terminalState === 'FAILED' && <Notice tone="caution" title="本次启动未完成">核对启动设置后重试。检查地址未因本次失败而改变。</Notice>}
+                {!preview && terminalState === 'CANCELLED' && <InlineFeedback>本次启动已取消。</InlineFeedback>}
+                {pending && <Notice tone={operation.data?'accent':'caution'} title={state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'} actions={<><Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>继续上次启动请求</Button>}</>}>离开页面后仍可查询这次启动结果。</Notice>}
+                {operation.error && <ErrorNote error={operation.error}/>}
+            </>}
+            {state.error && <ErrorNote error={state.error}/>}
+        </div>}
         {canStart && <fieldset className="jj-runtime-methods" aria-label="应用运行方式">
             <legend className="jj-sr-only">应用运行方式</legend>
-            <label className="jj-runtime-method"><input type="radio" name={'runtime-method-' + projectId} aria-label="连接已有应用" aria-controls={panelId} checked={currentMethod === 'existing'} disabled={busy || Boolean(pending)} onChange={() => setMethod('existing')}/><span><strong>连接已有应用</strong><small>使用你已启动的应用地址</small></span></label>
-            <label className="jj-runtime-method"><input type="radio" name={'runtime-method-' + projectId} aria-label="由界鉴启动" aria-controls={panelId} checked={currentMethod === 'managed'} disabled={busy || Boolean(pending)} onChange={() => setMethod('managed')}/><span><strong>由界鉴启动</strong><small>启动源码，保留对应的运行记录</small></span></label>
+            <label className="jj-runtime-method"><input type="radio" name={'runtime-method-' + projectId} aria-label="连接已有应用" aria-describedby={panelId+'-existing-help'} aria-controls={panelId} checked={currentMethod === 'existing'} disabled={busy || Boolean(pending)} onChange={() => setMethod('existing')}/><span><strong>连接已有应用</strong><small id={panelId+'-existing-help'}>使用你已启动的应用地址</small></span></label>
+            <label className="jj-runtime-method"><input type="radio" name={'runtime-method-' + projectId} aria-label="由界鉴启动" aria-describedby={panelId+'-managed-help'} aria-controls={panelId} checked={currentMethod === 'managed'} disabled={busy || Boolean(pending)} onChange={() => setMethod('managed')}/><span><strong>由界鉴启动</strong><small id={panelId+'-managed-help'}>预览启动范围，确认后运行源码副本</small></span></label>
         </fieldset>}
         <div className="jj-runtime-panel" id={panelId} key={currentMethod}>
             {currentMethod === 'existing' ? <>
-                <div className="jj-endpoint-form"><Field label="应用地址"><input type="url" disabled={busy} value={endpoint ?? confirmedEndpoint ?? ''} placeholder="http://127.0.0.1:端口" onChange={event => setEndpoint(event.target.value)}/></Field><Button busy={busy} disabled={!(endpoint ?? confirmedEndpoint ?? '').trim()} onClick={() => void act(() => confirmAddress(endpoint ?? confirmedEndpoint ?? ''))}>使用此地址</Button></div>
-                <p className="jj-small jj-muted">用于登录、录制和检查。</p>
+                <div className="jj-runtime-address"><div className="jj-endpoint-form"><Field label="应用地址"><input type="url" aria-describedby={panelId+'-address-help'} disabled={busy} value={endpoint ?? confirmedEndpoint ?? ''} placeholder="http://127.0.0.1:端口" onChange={event => setEndpoint(event.target.value)}/></Field><Button busy={busy} disabled={!(endpoint ?? confirmedEndpoint ?? '').trim()} onClick={() => void act(() => confirmAddress(endpoint ?? confirmedEndpoint ?? ''))}>使用此地址</Button></div><p className="jj-small jj-muted" id={panelId+'-address-help'}>登录、录制和检查将使用此地址。</p></div>
                 {state.data?.running && <div className="jj-runtime-retained"><span>界鉴启动的实例仍在运行</span><Button kind="quiet" onClick={() => setMethod('managed')}>管理运行实例</Button></div>}
             </> : <>
-                {state.loading ? <Loading>正在读取运行实例</Loading> : state.error ? <ErrorNote error={state.error}/> : !pending && state.data?.running ? <div className="jj-runtime-instance">
+                {state.loading ? <Loading>正在读取运行实例</Loading> : state.error ? null : !pending && state.data?.running ? <div className="jj-runtime-instance">
                     <header><ObjectIdentity name={<strong>界鉴启动的应用</strong>} status={<Badge tone={state.data.source_matches ? 'positive' : 'caution'}>{state.data.source_matches ? '正在运行' : '源码已有变化'}</Badge>}/></header>
                     <dl className="jj-facts" data-layout="columns"><div><dt>访问地址</dt><dd>{runtimeAddress}</dd></div><div><dt>入口文件</dt><dd>{state.data.configuration?.entry}</dd></div></dl>
                     <footer>{usingRuntime ? <Badge tone="positive">已用于检查</Badge> : <div className="jj-small jj-muted">{confirmedEndpoint ? <>当前检查地址：<span className="jj-path">{confirmedEndpoint}</span></> : '尚未设置检查地址'}</div>}<div className="jj-inline-actions"><Button kind="quiet" busy={busy} onClick={() => void act(async () => { await api.runtimeStop(projectId, state.data!.operation!.instance_id); setMethod('managed'); state.reload(); onChanged(); })}>停止应用</Button>{!usingRuntime && <Button kind="primary" busy={busy} onClick={() => void act(() => confirmAddress(runtimeAddress!))}>使用此应用</Button>}</div></footer>
@@ -133,12 +142,7 @@ export function RuntimeConnection({ projectId, revision, confirmedEndpoint, canS
                     <label className="jj-checkbox"><input type="checkbox" checked={ack} onChange={event => setAck(event.target.checked)}/><span>允许按上述设置安装依赖、建立测试副本并启动应用</span></label>
                     <footer><Button disabled={busy} onClick={()=>{setPreview(undefined);setAck(false)}}>返回修改</Button><Button kind="primary" busy={busy} disabled={!ack} onClick={() => void act(start)}>启动测试实例</Button></footer>
                 </section>}
-                {!preview && terminalState === 'FAILED' && <Notice tone="caution">本次启动未完成，请重新预览启动范围。检查地址未因启动失败而改变。</Notice>}
-                {!preview && terminalState === 'CANCELLED' && <InlineFeedback>本次启动已取消。</InlineFeedback>}
             </>}
         </div>
-        {currentMethod === 'existing' && state.error && <ErrorNote error={state.error}/>}
-        {operation.error && <ErrorNote error={operation.error}/>}
-        {pending && <Notice tone={operation.data?'accent':'caution'}>{state.data?.preparation?.stage==='INSTALLING'?'正在准备锁定依赖':state.data?.preparation?.stage==='BUILDING'?'正在构建运行文件':'正在启动应用'}。离开页面后仍可查询结果。<Button onClick={operation.reload}>查询启动结果</Button>{operation.data ? <Button busy={busy} onClick={() => void act(() => api.runtimeCancel(projectId, pending.operation).then(operation.reload))}>取消本次启动</Button> : <Button busy={busy} onClick={() => void act(start)}>继续上次启动请求</Button>}</Notice>}
     </section>;
 }

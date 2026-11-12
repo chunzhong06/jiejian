@@ -42,7 +42,7 @@ export function CollaborationArtifactReview({projectId,task,review}:{projectId:s
         {flowReview?<>
             <p className="jj-collaboration-hint">在编辑器中比较候选与当前草稿，再决定是否带入。</p>
             {data.loading?<Loading/>:data.error?<ErrorNote error={data.error}/>:data.data&&<FlowComparison {...data.data}/>}
-        </>:<><p className="jj-collaboration-hint">打开对应配置，核对内容后再确认使用。</p><dl className="jj-facts jj-collaboration-artifact-facts" data-layout="columns"><div><dt>本次目标</dt><dd>{task.goal}</dd></div><div><dt>审阅动作</dt><dd>{review.action_label}</dd></div></dl></>}
+        </>:<><p className="jj-collaboration-hint">打开对应配置，核对内容后再确认使用。</p></>}
         <footer data-milestone-part="actions"><ActionLink kind="primary" href={'#'+scopedPath(destination,projectId)}>{flowReview?'进入流程继续核对':review.action_label}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>
     </div>;
 }

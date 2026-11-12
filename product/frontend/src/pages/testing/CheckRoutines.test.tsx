@@ -21,6 +21,15 @@ beforeEach(()=>{
 })
 afterEach(()=>{vi.restoreAllMocks();discardProjectEditorDrafts(project)})
 
+it('方案目录首次读取失败保留测试分类及当前应用',async()=>{
+ vi.mocked(routinesApi.catalog).mockRejectedValue(new Error('方案目录暂不可读'))
+ const value=props();value.route.query.delete('routine_id');value.route.query.delete('routine_revision')
+ render(<CheckRoutines {...value}/> )
+ expect(await screen.findByRole('alert')).toHaveTextContent('方案目录暂不可读')
+ expect(screen.getByRole('navigation',{name:'测试工作'})).toBeVisible()
+ expect(screen.getByRole('link',{name:'操作与材料'})).toHaveAttribute('href','#/testing?project_id='+project)
+})
+
 it('准备读取失败保留方案、草稿与准确修订回程，不嵌入另一张页面',async()=>{
  vi.mocked(routinesApi.preparation).mockRejectedValue(new Error('准备来源已变化'))
  const value=props();value.route.query.set('section','binding')

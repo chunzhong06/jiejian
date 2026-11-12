@@ -4,6 +4,7 @@ import { assertProject } from '../../shared/model/page';
 import { useRead } from '../../shared/lib/useRead';
 import { type Route } from '../../shared/lib/navigation';
 import {PageError } from "../../shared/ui/feedback";
+import {ActionLink} from '../../shared/ui/actions';
 import { Reports } from './Reports';
 export function ArchivedExample({ route, onError }: {
     route: Route;
@@ -16,6 +17,6 @@ export function ArchivedExample({ route, onError }: {
     if (state.loading)
         return <PageSkeleton view="/archive"/>;
     if (!state.data || state.error)
-        return <PageError title="历史检查" error={state.error}/>;
+        return <PageError title="历史检查" error={state.error} actions={<ActionLink href="#/environment">返回官方示例与归档列表</ActionLink>}/>;
     return <Reports key={id} archive projectId={id} name={state.data.name ?? '数字展馆'} official route={route} refresh={() => { }} onError={onError}/>;
 }

@@ -1,6 +1,6 @@
 import {useWorkflow} from '../../shared/lib/workflow'
 import './styles.css'
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import CodeOutlined from '@ant-design/icons/CodeOutlined';
@@ -30,11 +30,13 @@ import {TaskSurface} from '../../shared/ui/TaskSurface'
 import { RuntimeConnection } from './RuntimeConnection';
 import { Capabilities } from './Capabilities';
 import { useExampleLifecycle } from './exampleLifecycle';
-export function Connect({ selected, environment, mode = 'application', embedded = false, onChanged, onError }: {
+export function Connect({ selected, environment, mode = 'application', embedded = false, onSourceBack, onRuntimeFocus, onChanged, onError }: {
     selected?: ProjectDto;
     environment?: OfficialExperienceDto;
     mode?: 'application' | 'environment';
     embedded?: boolean;
+    onSourceBack?: () => void;
+    onRuntimeFocus?: (active:boolean) => void;
     onChanged: (id: string) => void;
     onError: (error: unknown) => void;
 }) {
@@ -86,7 +88,14 @@ export function Connect({ selected, environment, mode = 'application', embedded 
     const exampleProject = official?.project_id ?? (official?.workspace_retained ? official.history_project_id : undefined);
     const returnTo = returnDestination(route.query.get('return_to'));
     const [runtimeOpen,setRuntimeOpen]=useState(route.query.get('runtime_method')==='managed');
-    return <><div hidden={runtimeOpen}>
+    const [runtimeError,setRuntimeError]=useState<unknown>()
+    const runtimeActive=runtimeOpen&&Boolean(selected&&value)
+    // 运行任务接管标题与返回；父级保留应用分类入口和草稿所有者。
+    useEffect(()=>{onRuntimeFocus?.(runtimeActive)},[onRuntimeFocus,runtimeActive])
+    useEffect(()=>()=>onRuntimeFocus?.(false),[onRuntimeFocus])
+    useEffect(()=>{if(!runtimeOpen)setRuntimeError(undefined)},[runtimeOpen])
+    return <><div hidden={runtimeActive}>
+    {onSourceBack && <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onSourceBack}>返回应用连接</Button></div>}
     {!embedded && mode === 'application' && returnTo?.startsWith('/preparation') && <div className="jj-back-link"><ActionLink href={'#'+scopedPath(returnTo,selected?.project_id)}><ArrowLeftOutlined aria-hidden="true"/>返回结果证明</ActionLink></div>}
     {!embedded && <Heading title={mode === 'environment' ? '官方示例' : '应用连接'} actions={mode === 'application' && selected && !connecting && <Button onClick={() => setConnecting(true)} icon={<FolderOpenOutlined aria-hidden="true"/>}>连接其他应用</Button>}/>}
     {mode === 'application' ? <>
@@ -122,7 +131,7 @@ export function Connect({ selected, environment, mode = 'application', embedded 
       {official?.active && official.project_id === selected?.project_id && <ExampleLab projectId={official.project_id!} onError={onError} onChanged={() => onChanged(official.project_id!)}/>}
     </div>}
     {startConfirm && <Dialog title={startConfirm === 'reset' ? '重新开始示例' : startConfirm === 'stop' ? '停止数字展馆' : '重启运行环境'} onClose={() => setStartConfirm(undefined)} actions={dismiss => <><Button onClick={dismiss}>取消</Button><Button kind={startConfirm === 'stop' ? 'danger' : 'primary'} onClick={() => { const kind = startConfirm; setStartConfirm(undefined); lifecycle.begin(kind); }}>{startConfirm === 'reset' ? '重新开始' : startConfirm === 'stop' ? '停止示例' : '重启运行环境'}</Button></>}><p>{startConfirm === 'reset' ? '创建全新的源码、项目与测试数据。当前示例及其活动检查将停止；旧项目、权限与报告保留在“已归档示例”中。' : startConfirm === 'stop' ? '停止当前运行环境和本示例的活动检查。项目、源码、权限和历史报告保留。' : '停止当前示例及其活动检查，再运行同一份源码。项目、权限和报告保留，登录与证明来源需要重新核对。'}</p></Dialog>}
-  </div>{selected&&value&&<TaskSurface level={embedded?2:1} active={runtimeOpen} title="准备应用的本地运行" context={selected.name} onBack={()=>setRuntimeOpen(false)} backLabel="返回应用连接" description="选择运行方式，预览后确认启动。">{selected && <RuntimeConnection key={selected.project_id} projectId={selected.project_id} revision={value.revision} confirmedEndpoint={value.confirmed_endpoint} canStart={!selected.official_sample && value.source_analysis_authorized} initialMethod={!selected.official_sample&&value.source_analysis_authorized&&route.query.get('runtime_method')==='managed'?'managed':undefined} onChanged={current.reload} onError={onError}/>}</TaskSurface>}</>;
+  </div>{selected&&value&&<TaskSurface active={runtimeOpen} title="准备应用的本地运行" context={selected.name} onBack={()=>setRuntimeOpen(false)} backLabel={embedded?'返回源码设置':'返回应用连接'}>{Boolean(runtimeError)&&<ErrorNote error={runtimeError}/>}{selected && <RuntimeConnection key={selected.project_id} projectId={selected.project_id} revision={value.revision} confirmedEndpoint={value.confirmed_endpoint} canStart={!selected.official_sample && value.source_analysis_authorized} initialMethod={!selected.official_sample&&value.source_analysis_authorized&&route.query.get('runtime_method')==='managed'?'managed':undefined} onChanged={()=>{setRuntimeError(undefined);current.reload()}} onError={setRuntimeError}/>}</TaskSurface>}</>;
 }
 function ExampleManagement({ active = false, disabled, onChoose }: {
     active?: boolean;

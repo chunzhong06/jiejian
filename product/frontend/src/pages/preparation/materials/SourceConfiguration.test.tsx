@@ -103,7 +103,7 @@ it('证明来源按用途切换，核对事实直接可见，管理操作仍需�
     expect(write).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button',{name:'保留授权'}))
     await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button',{name:'返回结果证明'}))
+    fireEvent.click(screen.getByRole('button',{name:'收起读取位置与管理'}))
     expect(screen.getByRole('group',{name:'完整测试参照文件'})).toBeVisible()
     expect(screen.getByText('reference.pdf')).toBeVisible()
     expect(write).not.toHaveBeenCalled()

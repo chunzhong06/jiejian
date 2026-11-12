@@ -161,7 +161,15 @@
 @container operation-path (max-width:480px) { .jj-step-workspace { grid-template-columns: minmax(0,1fr); gap: 16px; } .jj-step-workspace > .jj-operation-steps { display: none; } .jj-step-mobile { display: block; } }
 .jj-record-link { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px; width: 100%; background: transparent; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--ink); text-align: left; }
 .jj-record-link > span:last-child { color: var(--accent-ink); font-size: var(--text-meta); }
-.jj-record-reading { display: flex; flex-direction: column; gap: 20px; min-width: 0; margin-top: 18px; }
+.jj-record-reading { container:record-reading / inline-size; display:flex; flex-direction:column; gap:24px; min-width:0; width:100%; max-width:1040px; margin:18px auto 0; }
+/* 当前值与来源背景分别阅读；收窄后按原文顺序展开，不把两组压成窄侧列。 */
+.jj-record-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(260px,1fr); gap:32px; align-items:start; }
+.jj-record-current { display:grid; gap:20px; min-width:0; }
+.jj-record-basis { display:grid; gap:20px; align-content:start; min-width:0; padding-left:24px; border-left:1px solid var(--line); }
+.jj-record-basis > .jj-record-context { grid-template-columns:minmax(0,1fr); }
+.jj-record-reading[data-has-values=false] > .jj-record-layout { grid-template-columns:minmax(0,1fr); }
+.jj-record-reading[data-has-values=false] .jj-record-basis { border-left:0; padding-left:0; }
+@container record-reading (max-width:820px) { .jj-record-layout { grid-template-columns:minmax(0,1fr); } .jj-record-basis { border-left:0; padding-left:0; border-top:1px solid var(--line); padding-top:20px; } }
 .jj-object-line h3 { min-width: 0; overflow-wrap: anywhere; }
 .jj-record-values { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--inset); }
 .jj-record-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
@@ -206,6 +214,7 @@
 .jj-repair-status { display: block; margin-bottom: 10px; font-size: var(--text-meta); color: var(--muted); }
 
 .jj-record-link + .jj-record-link { margin-top: 10px; }
+.jj-report-object-summary { max-width:78ch; line-height:var(--leading-reading); overflow-wrap:anywhere; }
 .jj-inspector-content[data-view=records] h3 + .jj-record-link { margin-top: 16px; }
 
 .jj-plan-task { display:block; }
@@ -327,6 +336,9 @@
 
 .jj-plan-scope-summary { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px 24px; border-block:1px solid var(--line); padding:16px 0; }
 .jj-plan-scope-summary > p { max-width:76ch; color:var(--muted); line-height:var(--leading-reading); }
+.jj-plan-scope-summary:has(> .jj-plan-inline-scope) { display:block; }
+.jj-plan-inline-scope { margin-top:16px; }
+.jj-plan-inline-scope > p { max-width:76ch; margin-top:12px; color:var(--muted); line-height:var(--leading-reading); }
 .jj-plan-execution { margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
 .jj-plan-review-panel > .jj-plan-execution:first-child { margin-top:0; padding-top:0; border-top:0; }
 .jj-plan-execution[open] > summary { margin-bottom:24px; }

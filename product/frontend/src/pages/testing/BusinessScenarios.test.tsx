@@ -13,6 +13,14 @@ beforeEach(()=>{
 })
 afterEach(()=>vi.restoreAllMocks())
 
+it('场景目录读取失败保留测试分类，场景内容错误不吞掉长期入口',async()=>{
+ vi.mocked(api.list).mockRejectedValue(new Error('场景目录暂不可读'))
+ render(<BusinessScenarios {...props}/> )
+ expect(await screen.findByRole('alert')).toHaveTextContent('场景目录暂不可读')
+ expect(screen.getByRole('navigation',{name:'测试工作'})).toBeVisible()
+ expect(screen.getByRole('link',{name:'检查记录'})).toHaveAttribute('href','#/reports?project_id='+project)
+})
+
 it('目录就近展示实际实验，按准确修订编辑并恢复选择',async()=>{
  const save=vi.spyOn(api,'save'),context=vi.spyOn(api,'context')
  const firstView=render(<BusinessScenarios {...props}/>)

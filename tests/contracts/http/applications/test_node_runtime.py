@@ -1,8 +1,10 @@
 # 普通应用预览不执行；显式启动后真实Worker形成回执，响应丢失与重开不重复启动。
 
 import pytest
+import json
 import socket
 import time
+from urllib.request import urlopen
 from uuid import uuid4
 
 from tests.support.builders.control_plane import TestClient, create_app
@@ -94,5 +96,64 @@ def test_cancel_queued_load_is_idempotent_and_does_not_touch_another_project(tmp
         assert cancelled.json()['data']['state']=='CANCELLED'
         assert client.post(route).json()['data']==cancelled.json()['data']
         assert not client.get(prefix).json()['data']['running']
+
+
+@pytest.mark.level4
+def test_runtime_freezes_page_and_data_resources_and_rejects_asset_drift(tmp_path):
+    var = tmp_path / 'var'
+    source = tmp_path / 'source'
+    app = create_app(var, start_worker=False, environ=runtime_identity_environment(var))
+    with TestClient(app) as client:
+        record = _connect(client, source)
+        (source / 'public').mkdir()
+        (source / 'data').mkdir()
+        (source / 'public/index.html').write_text('<h1>已冻结页面</h1>', encoding='utf-8')
+        (source / 'data/items.json').write_text('{"value":1}', encoding='utf-8')
+        (source / 'app.mjs').write_text(
+            "import http from 'node:http'; import fs from 'node:fs';"
+            "const page=fs.readFileSync(new URL('./public/index.html',import.meta.url),'utf8');"
+            "const data=JSON.parse(fs.readFileSync(new URL('./data/items.json',import.meta.url),'utf8'));"
+            "http.createServer((q,r)=>r.end(JSON.stringify({page,...data})))"
+            ".listen(Number(process.env.PORT),'127.0.0.1');", encoding='utf-8')
+        prefix = f"/api/projects/{record['project_id']}/controlled-runtime"
+        response = _preview(client, record)
+        assert response.status_code == 200, response.text
+        preview = response.json()['data']
+        assert {item['relative_path'] for item in preview['files']} == {
+            'app.mjs', 'public/index.html', 'data/items.json'}
+        payload = {key: preview[key] for key in ('entry', 'port', 'revision', 'preview_fingerprint')}
+        payload.update(operation_id=uuid4().hex, consent_execute=True)
+        (source / 'data/items.json').write_text('{"value":2}', encoding='utf-8')
+        assert client.post(prefix + '/start', json=payload).status_code == 409
+        assert client.get(prefix).json()['data']['operation'] is None
+
+        response = _preview(client, record | {'revision': preview['revision']})
+        assert response.status_code == 200, response.text
+        preview = response.json()['data']
+        payload = {key: preview[key] for key in ('entry', 'port', 'revision', 'preview_fingerprint')}
+        payload.update(operation_id=uuid4().hex, consent_execute=True)
+        response = client.post(prefix + '/start', json=payload)
+        assert response.status_code == 202, response.text
+        operation = response.json()['data']
+        app.state.context.runtime_worker.start()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            state = client.get(prefix).json()['data']
+            if state['operation']['state'] in {'SUCCEEDED', 'FAILED', 'CANCELLED'}:
+                break
+            time.sleep(.1)
+        assert state['operation']['state'] == 'SUCCEEDED', state
+        assert state['running'] and state['source_matches']
+        with urlopen(f"http://127.0.0.1:{preview['port']}/", timeout=3) as response:
+            assert json.load(response) == {'page': '<h1>已冻结页面</h1>', 'value': 2}
+
+        # 工作目录中的页面变化不能混入旧进程，且必须使源码对应失效。
+        (source / 'public/index.html').write_text('<h1>尚未加载的页面</h1>', encoding='utf-8')
+        assert not client.get(prefix).json()['data']['source_matches']
+        with urlopen(f"http://127.0.0.1:{preview['port']}/", timeout=3) as response:
+            assert json.load(response)['page'] == '<h1>已冻结页面</h1>'
+        stopped = client.post(prefix + '/stop', json={'instance_id': operation['instance_id']})
+        assert stopped.status_code == 200, stopped.text
+        assert not stopped.json()['data']['running']
 
 pytestmark = [pytest.mark.level3]

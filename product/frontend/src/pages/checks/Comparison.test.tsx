@@ -27,6 +27,9 @@ it.each([['SAFE','符合规则','positive'],['VULNERABLE','不符合规则','neg
 it('未覆盖的原问题保持证据不足，回到原报告仍携带准确比较对象',async()=>{
  render(<Comparison {...props()}/>)
  expect(await screen.findByText('这次检查未覆盖这项内容')).toBeVisible()
+ expect(screen.getByLabelText('本次比较的两份检查')).toBeVisible()
+ expect(screen.getByText('参照检查',{selector:'dt'})).toBeVisible()
+ expect(screen.getByText('这次检查',{selector:'dt'})).toBeVisible()
  expect(screen.queryByText('已验证修复')).not.toBeInTheDocument()
  expect(screen.queryByRole('link',{name:'阅读这次证据'})).not.toBeInTheDocument()
  const link=screen.getByRole('link',{name:'阅读参照报告'}),url=new URL(link.getAttribute('href')!.slice(1),'http://localhost')

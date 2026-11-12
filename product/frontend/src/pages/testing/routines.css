@@ -36,18 +36,20 @@
 .jj-routine-binding-layout > nav { min-width:0; max-height:520px; overflow:auto; padding-block:12px; }
 .jj-routine-binding-layout .jj-index-item { display:grid; gap:6px; }
 .jj-routine-binding-layout .jj-index-item small { color:var(--muted); font-size:var(--text-meta); }
-/* 详情占满自己的轨道；说明与当前材料成组，操作在自然行高的右下收口。 */
+/* 当前事实与补材料入口相邻；长使用说明按需阅读，避免两列拆散缺口和行动。 */
 .jj-routine-binding-reading { display:flex; flex-direction:column; min-width:0; gap:24px; border-left:1px solid var(--line); padding:24px 28px; container:binding-detail / inline-size; }
 .jj-routine-binding-heading { display:grid; gap:10px; }
-.jj-routine-binding-body { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:32px; }
-.jj-routine-binding-body > section { display:grid; align-content:start; gap:12px; min-width:0; }
-.jj-routine-binding-body p { margin:0; line-height:var(--leading-reading); }
+.jj-routine-binding-current { display:grid; gap:20px; min-width:0; }
+.jj-routine-binding-current p { margin:0; line-height:var(--leading-reading); }
+.jj-routine-binding-requirements { border-top:1px solid var(--line); padding-top:20px; }
+.jj-routine-binding-requirements > summary { color:var(--accent-ink); cursor:pointer; }
+.jj-routine-binding-requirements > div { display:grid; gap:12px; padding-top:16px; }
+.jj-routine-binding-requirements p { margin:0; line-height:var(--leading-reading); }
 .jj-routine-bound-items { display:grid; gap:16px; min-width:0; }
 .jj-routine-bound-items > div { display:grid; gap:8px; min-width:0; }
 .jj-routine-bound-items strong { overflow-wrap:anywhere; font-weight:500; }
 .jj-routine-bound-items summary { color:var(--muted); font-size:var(--text-meta); cursor:pointer; }
-.jj-routine-binding-footer { display:flex; justify-content:flex-end; margin-top:auto; padding-top:20px; border-top:1px solid var(--line); }
-@container binding-detail (max-width:560px) { .jj-routine-binding-body { grid-template-columns:minmax(0,1fr); gap:24px; } }
+.jj-routine-binding-footer { display:flex; justify-content:flex-end; }
 .jj-routine-binding-reading code { display:block; margin-top:12px; overflow-wrap:anywhere; }
 .jj-routine-legacy { margin-top:24px; }
 .jj-routine-legacy > p { margin-block:16px; }

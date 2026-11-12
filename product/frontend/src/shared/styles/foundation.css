@@ -1,8 +1,19 @@
 * { box-sizing: border-box; }
 html { scrollbar-gutter: stable; }
+/* 原生模态可嵌套；任一窗口仍打开时，背景都保持原滚动位置。 */
+html:has(.jj-dialog[open]) { overflow:hidden; }
 /* 使用原生滚动行为；轨道透明，滑块沿用主题。强制对比模式交还系统绘制。 */
 @media (forced-colors:none) {
   * { scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--muted) 45%,transparent) transparent; }
+  /* Chromium 的标准粗细设置会优先于伪元素；交还尺寸后统一滑块并移除系统箭头。 */
+  @supports selector(::-webkit-scrollbar) {
+    * { scrollbar-width:auto; scrollbar-color:auto; }
+    ::-webkit-scrollbar { width:8px; height:8px; }
+    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background:transparent; }
+    ::-webkit-scrollbar-thumb { border:2px solid transparent; border-radius:999px; background:color-mix(in srgb,var(--muted) 45%,transparent); background-clip:padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background-color:color-mix(in srgb,var(--muted) 65%,transparent); }
+    ::-webkit-scrollbar-button { display:none; width:0; height:0; }
+  }
 }
 body { margin: 0; background: var(--bg); color: var(--ink); }
 button, input, select, textarea { font: inherit; }
@@ -77,7 +88,7 @@ summary:hover { color: var(--accent-ink); }
 .jj-badge.is-accent { color: var(--info); background: var(--accent-soft); }
 .jj-heading { min-width:0; }
 .jj-heading > .jj-heading-line { display: flex; justify-content: space-between; gap: 24px; align-items: baseline; }
-.jj-heading .jj-eyebrow { margin-bottom: 7px; }
+.jj-heading .jj-eyebrow { margin-bottom:12px; }
 .jj-heading-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: none; }
 .jj-heading-note { color:var(--muted); font-size:var(--text-body); margin-top:10px; max-width:72ch; line-height:var(--leading-reading); font-weight:400; }
 .jj-eyebrow { font-size: var(--text-meta); color: var(--muted); font-weight: 400; }
@@ -178,6 +189,6 @@ summary:hover { color: var(--accent-ink); }
 /* 隐藏的任务继续保留状态，但退出布局、键盘与辅助技术的阅读顺序。 */
 [hidden] { display:none !important; }
 
-/* 静态标题承接程序焦点；控件的键盘焦点继续沿用主题描边。 */
-:is(h1,h2,h3)[tabindex="-1"]:focus { outline:2px solid var(--focus); outline-offset:6px; border-radius:2px; }
-html[data-input-mode=pointer] :is(h1,h2,h3)[tabindex="-1"]:focus { outline:none; }
+/* 静态标题仍承接程序焦点；首次打开尚无输入方式时不画外框，键盘定位继续可见。 */
+:is(h1,h2,h3)[tabindex="-1"]:focus { outline:none; }
+html[data-input-mode=keyboard] :is(h1,h2,h3)[tabindex="-1"]:focus { outline:2px solid var(--focus); outline-offset:6px; border-radius:2px; }

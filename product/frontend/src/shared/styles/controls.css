@@ -30,7 +30,8 @@
 html[data-input-mode=keyboard] .jj-example-menu.ant-dropdown .ant-dropdown-menu-item:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
 /* 选择器的 DOM 焦点留在输入框，键盘当前候选仍需在浮层中单独标记。 */
 html[data-input-mode=keyboard] .jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { outline:2px solid var(--focus); outline-offset:-2px; }
-.jj-hint .ant-tooltip-inner { background: var(--surface-elevated); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--popover-shadow); padding: 7px 10px; font-size: var(--text-meta); line-height: 1.5; }
+/* 文字提示按内容排版，不继承用于按钮热区的控件最小高度。 */
+.jj-hint .ant-tooltip-inner { min-height:0; background: var(--surface-elevated); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--popover-shadow); padding: 7px 10px; font-size: var(--text-meta); line-height: 1.5; }
 .jj-hint .ant-tooltip-arrow { --antd-arrow-background-color: var(--surface-elevated); }
 /* 危险菜单项沿用语义浅底；第三方默认的白字实底在深色主题下不适配。 */
 :is(.jj-example-menu,.jj-command-menu).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled) { --state-fill:var(--bad-soft); color:var(--bad); }

@@ -11,7 +11,7 @@ from uuid import uuid4
 from pydantic import Field
 
 from product.backend.domain.errors import ErrorCode, JiejianError
-from product.backend.domain.lifecycle import ProjectStatus
+from product.backend.domain.lifecycle import JobState, ProjectStatus
 from product.backend.infrastructure.runtime.process.controlled.artifact import create_node_runtime_artifact, inspect_runtime_files
 from product.backend.infrastructure.runtime.process.controlled.node_owned import node_execution_identity, node_artifact_store, node_reference_matches, read_node_manifest
 from product.backend.application.runtime.load_jobs import RuntimeLoadJobs
@@ -230,6 +230,26 @@ class NodeRuntimeSetup:
     def owns_project(self, project_id):
         with self._uow() as work:
             return work.runtime_loads.latest(project_id) is not None
+
+    def selected_reference(self, project_id):
+        """显式外部环境不借用受控回执；相同实例、未收口加载及官方样例保留核验。"""
+        with self._uow() as work:
+            work.begin_read_snapshot()
+            current=work.application_understanding.get(project_id)
+            sample=work.sample_workspaces.for_project(project_id)
+            request=work.runtime_loads.latest(project_id)
+            operation=None if request is None else self.jobs.read_in_work(work,request)
+            if sample is None and current is not None and current.environment is not None and operation is not None:
+                receipt=operation['receipt']
+                if receipt is None and operation['job'].state in {JobState.FAILED,JobState.CANCELLED}:
+                    return None
+                if receipt is not None:
+                    target=urlsplit(current.environment.target.base_url)
+                    origin=(target.scheme,target.hostname,target.port or (443 if target.scheme=='https' else 80))
+                    if origin!=('http','127.0.0.1',receipt.reference.port):
+                        return None
+        # 未确认失败不授权降级；同地址继续核对真实进程、实例和受控文件。
+        return self.reference(project_id)
 
     def reference(self, project_id):
         # reference核对已加载实例；调用者按本次源码事实比较，避免先运行一轮不会使用结果的源码分析。

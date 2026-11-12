@@ -16,7 +16,7 @@ import {Heading} from '../../shared/ui/layout'
 import {Button,ActionLink} from '../../shared/ui/actions'
 import {Badge,Empty,ErrorNote,PageError} from '../../shared/ui/feedback'
 import './workspace.css'
-import {TestingSections} from './TestingSections'
+import {TestingSections} from '../../shared/ui/SectionNavigation'
 
 const Editor=routePage(()=>import('./TestingEditor').then(module=>({default:module.TestingEditor})),'/testing')
 const Scenarios=routePage(()=>import('./BusinessScenarios').then(module=>({default:module.BusinessScenarios})),'/testing')
@@ -40,8 +40,9 @@ function TestingDirectory({projectId}:{projectId:string}) {
   const setDetailOpen=(detailOpen:boolean)=>directory.update({detailOpen})
   const closeDetails=()=>{collection.current?.querySelector<HTMLButtonElement>('.jj-object-select[aria-pressed=true]')?.focus({preventScroll:true});setDetailOpen(false)}
   const destination=(path:string)=>withReturnDestination(path,'/testing')
-  if(state.loading&&!state.data)return <PageSkeleton view="/testing" title="操作与材料"/>
-  if(!state.data)return <PageError title="操作与材料" error={state.error}/>
+  const navigation=<TestingSections value="materials" projectId={projectId}/>
+  if(state.loading&&!state.data)return <PageSkeleton view="/testing" title="操作与材料" navigation={navigation}/>
+  if(!state.data)return <PageError title="操作与材料" navigation={navigation} error={state.error}/>
   const context=state.data
   const actions=context.actions.filter(item=>item.label.includes(search))
   const selected=actions.find(item=>item.action_id===selectedId)??actions[0]

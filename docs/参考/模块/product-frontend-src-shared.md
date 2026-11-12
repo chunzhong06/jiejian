@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（33 个文件）。
+按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（34 个文件）。
 
 ## api
 
@@ -70,7 +70,7 @@
 
 ### lib/routePage.tsx
 
-[源码](../../../product/frontend/src/shared/lib/routePage.tsx)（35 行）。公开声明：`routePage`。
+[源码](../../../product/frontend/src/shared/lib/routePage.tsx)（42 行）。公开声明：`routePage`。
 
 ### lib/routes.ts
 
@@ -106,7 +106,7 @@
 
 ### styles/controls.css
 
-[源码](../../../product/frontend/src/shared/styles/controls.css)（96 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/controls.css)（97 行）。公开声明：包、内部机制或样式。
 
 ### styles/cross-page.css
 
@@ -114,7 +114,7 @@
 
 ### styles/foundation.css
 
-[源码](../../../product/frontend/src/shared/styles/foundation.css)（183 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/foundation.css)（194 行）。公开声明：包、内部机制或样式。
 
 ### styles/loading.css
 
@@ -130,7 +130,7 @@
 
 ### styles/patterns.css
 
-[源码](../../../product/frontend/src/shared/styles/patterns.css)（127 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/patterns.css)（129 行）。公开声明：包、内部机制或样式。
 
 ### styles/shapes.css
 
@@ -180,7 +180,7 @@
 
 ### ui/feedback.tsx
 
-[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（37 行）。公开声明：`Badge`、`ContextNote`、`Empty`、`ErrorNote`、`FeedbackTone`、`InlineFeedback`、`Loading`、`Notice`等。
+[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（40 行）。公开声明：`Badge`、`ContextNote`、`Empty`、`ErrorNote`、`FeedbackTone`、`InlineFeedback`、`Loading`、`Notice`等。
 
 ### ui/FilePicker.css
 
@@ -228,7 +228,7 @@
 
 ### ui/PageSkeleton.tsx
 
-[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（21 行）。公开声明：`PageSkeleton`、`pageTitle`。
+[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（23 行）。公开声明：`PageSkeleton`、`pageTitle`。
 
 ### ui/PageSurface.tsx
 
@@ -254,6 +254,10 @@
 
 [源码](../../../product/frontend/src/shared/ui/SearchField.tsx)（15 行）。公开声明：`SearchField`。
 
+### ui/SectionNavigation.tsx
+
+[源码](../../../product/frontend/src/shared/ui/SectionNavigation.tsx)（38 行）。公开声明：`TestingSections`、`applicationSections`、`directoryNavigation`。
+
 ### ui/Segmented.tsx
 
 [源码](../../../product/frontend/src/shared/ui/Segmented.tsx)（14 行）。公开声明：`Segmented`。
@@ -264,7 +268,7 @@
 
 ### ui/Tabs.css
 
-[源码](../../../product/frontend/src/shared/ui/Tabs.css)（51 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/ui/Tabs.css)（50 行）。公开声明：包、内部机制或样式。
 
 ### ui/Tabs.tsx
 

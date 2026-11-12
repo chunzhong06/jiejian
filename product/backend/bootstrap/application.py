@@ -315,17 +315,18 @@ class ApplicationCore:
             with factory() as work:
                 sample=work.sample_workspaces.for_project(project_id)
                 return sample is not None and sample['runtime_kind']=='PYTHON'
-        providers=[RuntimeProvider('CONTROLLED_NODE_ESM',self.node_runtime.owns_project,self.node_runtime.reference,self.node_runtime.require_loaded_delivery)]
+        providers=[RuntimeProvider('CONTROLLED_NODE_ESM',self.node_runtime.owns_project,self.node_runtime.reference,
+            self.node_runtime.require_loaded_delivery,self.node_runtime.selected_reference)]
         if self.official_samples.installation.runtime_kind=='PYTHON':
             providers.insert(0,RuntimeProvider('OFFICIAL_SAMPLE',owns_official_project,self.official_experience.runtime_reference,self.official_experience.load_delivery_runtime))
         self.runtime_ports=ProjectRuntimePorts(tuple(providers))
-        self.check_runtime_builder.bind_runtime_readers(reference_reader=self.runtime_ports.reference,
+        self.check_runtime_builder.bind_runtime_readers(reference_reader=self.runtime_ports.selected_reference,
             sources_reader=self.proof_preparation.frozen_sources)
         from product.backend.application.business_boundaries.reading.rule_details import BusinessRuleDetails
         self.rule_details = BusinessRuleDetails(uow_factory=factory,boundaries=self.business_boundaries,
             preparation=self.preparation,results=self.check_results,source_inspector=self.application_understanding.inspect_source_fingerprint,
-            runtime_reader=self.runtime_ports.reference)
-        self.development_reader.bind_runtime_reader(self.runtime_ports.reference)
+            runtime_reader=self.runtime_ports.selected_reference)
+        self.development_reader.bind_runtime_reader(self.runtime_ports.selected_reference)
         from product.backend.application.runtime.activation import RuntimeActivationService
         self.runtime_activation = RuntimeActivationService(uow_factory=factory,
             loader=self.runtime_ports.load_delivery, reader=self.runtime_ports.reference,

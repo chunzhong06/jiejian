@@ -175,6 +175,20 @@ function bundle(){return {project_id:'p1',run_id:'r1',case_id:'c1',items:[{
   index:{project_id:'p1',run_id:'r1',case_id:'c1',action_id:'a1',evidence_id:'ev1',records:[]},
 }]}}
 
+it('独立记录只保留当前层级返回，回到片段列表时保留原报告与回程',async()=>{
+  const response=bundle(),record=recordView();
+  vi.spyOn(currentChecksApi,'evidenceBundle').mockResolvedValue({...response,items:[{...response.items[0],index:{...response.items[0].index,records:[record.record]},record}]} as never);
+  render(<Report {...props(story())} selectedCaseId="c1" tab="records" evidenceId="ev1" recordId="call1" returnPath="/issues?issue=original"/>);
+  expect(await screen.findByText('app.mjs:9')).toBeVisible();
+  expect(screen.queryByRole('button',{name:'全部证明片段'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'返回本项业务结果'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'返回证明片段列表'}));
+  const query=new URLSearchParams(location.hash.split('?')[1]);
+  expect(query.get('run_id')).toBe('r1');expect(query.get('case_id')).toBe('c1');
+  expect(query.get('tab')).toBe('records');expect(query.get('evidence_id')).toBe('ev1');
+  expect(query.has('record_id')).toBe(false);expect(query.get('return_to')).toBe('/issues?issue=original');
+})
+
 it('准确记录与文档一起读取，不再先目录再串行读取详情',async()=>{
   const value=recordView(),response=bundle()
   const item={...response.items[0],index:{...response.items[0].index,records:[value.record]},record:value}

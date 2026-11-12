@@ -55,6 +55,7 @@
 .jj-environment-options > .jj-environment-fields { margin-top:16px; }
 .jj-environment-form > header { display:grid; gap:6px; }
 .jj-environment-form > header > p { color:var(--muted); }
+.jj-application-connections .jj-environment-form:has(> header) { padding-top:24px; border-top:1px solid var(--line); }
 .jj-environment-current { padding-bottom:24px; border-bottom:1px solid var(--line); }
 .jj-environment-current dd { display:flex; flex-wrap:wrap; gap:8px 12px; }
 .jj-environment-current dd > span { color:var(--muted); font-size:var(--text-meta); }

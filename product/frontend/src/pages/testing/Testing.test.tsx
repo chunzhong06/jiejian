@@ -5,6 +5,14 @@ import {operationFlowsApi} from '../../entities/preparation/api/operationFlows'
 import {preparationApi} from '../../entities/preparation/api/preparation'
 
 afterEach(()=>vi.restoreAllMocks())
+it('首次业务资料读取失败仍可通过分类进入其他测试目录',async()=>{
+  vi.spyOn(operationFlowsApi,'summary').mockRejectedValue(new Error('资料暂时不可读'))
+  vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'directory-app',actions:[]} as never)
+  render(<Testing projectId="directory-app" name="订单" official={false} refresh={vi.fn()} onError={vi.fn()} route={{path:'/testing',query:new URLSearchParams()}}/>)
+  expect(await screen.findByRole('alert')).toHaveTextContent('资料暂时不可读')
+  expect(screen.getByRole('navigation',{name:'测试工作'})).toBeVisible()
+  expect(screen.getByRole('link',{name:'检查方案'})).toHaveAttribute('href','#/testing?view=plans&project_id=directory-app')
+})
 it('目录离开后恢复搜索、选中项和焦点，材料入口携带准确回程',async()=>{
   sessionStorage.clear()
   const action={action_id:'read',revision:1,label:'读取订单',state_changing:false,effects:[]}
