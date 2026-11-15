@@ -108,6 +108,7 @@ export type WorkspaceAreaDto = {
 }
 
 export type WorkspaceViewDto = {
+  discovery_coverage?:import('../../permission/api/discovery').DiscoveryCoverage|null
   development?: { task_id: string; context_id: string; title: string; goal: string; revision: number; version: number; client_name: string | null; latest_delivery_id: string | null; latest_change_id: string | null; latest_batch_number: number | null; latest_run_id: string | null; runtime_state: 'MATCHED' | 'NOT_LOADED' | 'UNCONFIRMED' | 'UNSUPPORTED' } | null
   journey?: {
     title: string; primary_task_id: string | null; action_id: string | null; change_id: string | null; run_id: string | null
@@ -119,7 +120,7 @@ export type WorkspaceViewDto = {
   actions: ActionWorkspaceDto[]
   primary_task: PrimaryTaskDto | null
   areas: WorkspaceAreaDto[]
-  latest_result?: { run_id: string; verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE'; summary: string; policy_epoch: number; created_at_us: number } | null
+  latest_result?: {runtime_status?:'MATCHED'|'UNCONFIRMED'|'UNSUPPORTED';unchecked_states?:string[]; run_id: string; verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE'; summary: string; policy_epoch: number; created_at_us: number } | null
   source_change?: { change_id: string; revalidation_status: string; can_execute: boolean; reason: string; created_at_us: number; submitted_by?: string | null } | null
   repair?: ProjectRepair | null
   active_check?: CheckStatus | null

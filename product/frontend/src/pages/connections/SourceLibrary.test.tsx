@@ -90,7 +90,7 @@ it('默认阅读请求，切换时保留关联草稿，保存沿用原修订且�
   fireEvent.mouseDown(screen.getByRole('combobox',{name:'对应业务操作'}))
   fireEvent.click(await screen.findByRole('option',{name:'读取订单'}))
   fireEvent.click(screen.getByRole('button',{name:'保存业务关联'}))
-  await waitFor(()=>expect(save).toHaveBeenCalledWith('app','source','orders','查看订单详情','action',3))
+  await waitFor(()=>expect(save).toHaveBeenCalledWith('app','source','orders','查看订单详情','action',3,2))
   await screen.findByRole('heading',{name:'查看订单详情'})
   expect(screen.queryByLabelText('请求名称')).not.toBeInTheDocument()
   fireEvent.click(screen.getByText('来源信息',{exact:true}))

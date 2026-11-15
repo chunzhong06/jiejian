@@ -205,6 +205,30 @@
     "HttpEntityQuery": {
       "additionalProperties": false,
       "properties": {
+        "condition_state_path": {
+          "anyOf": [
+            {
+              "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition State Path"
+        },
+        "condition_state_values": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Condition State Values",
+          "type": "array"
+        },
         "data_path": {
           "default": "$",
           "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,8}$",

@@ -1,3 +1,4 @@
 .jj-settings-page { display:grid; gap:24px; width:100%; min-width:0; max-width:1080px; margin-inline:auto; }
 .jj-settings-layout { display:grid; gap:28px; min-width:0; }
 .jj-settings-content { display:grid; align-content:start; gap:24px; min-width:0; }
+:is(.jj-settings-page,.jj-settings-content) > .jj-back-link { --return-layout-gap:24px; }

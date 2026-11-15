@@ -5,6 +5,7 @@ import type { DeliverySubmission, DevelopmentReceipt } from './development'
 import type { PermissionReference } from '../../preparation/api/preparation'
 export type RuleChangeTarget = {permission: PermissionReference; repair: RepairReference|null}
 export type SourceChangeViewDto = {
+  continuation?: {fingerprint:string;plan_fingerprint:string|null;requirements:Array<{permission:PermissionReference;current:PermissionReference|null;status:'CURRENT'|'CHANGED'|'REMOVED';action_id:string;action_label:string;classification:'DIRECTLY_AFFECTED'|'MAPPING_REVIEW_REQUIRED'|'NO_DIRECT_EVIDENCE';relevant_paths:string[]}>;added_requirements:PermissionReference[];materials:Array<import('../../preparation/api/preparation').MaterialImpact & {handling:'KEEP'|'ADD'|'RECHECK'|'DECIDE'}>;next_step:string;scope:string}|null
   rule_targets?: RuleChangeTarget[]
   manifest: { change_id: string; project_id: string; reason: string; submitted_by: string; created_at_us: number; claimed_paths: string[]; repair_reference: RepairReference | null }
   change_set: { status: 'COMPARABLE' | 'NO_BASELINE'; added_paths: string[]; modified_paths: string[]; removed_paths: string[] }
@@ -16,7 +17,7 @@ export type RegistrationPreview = { project_id: string; fingerprint: string; pol
 export const sourceChangesApi = {
   registrationPreview: (id: string) => request<RegistrationPreview>(`${base(id)}/registration-preview`),
   register: (id: string, body: { operation_id: string; expected_registration_fingerprint: string; expected_source_fingerprint?: string; reason: string; claimed_paths: string[]; repair_reference: RepairReference | null; rule_targets?: RuleChangeTarget[] }) => request<DevelopmentReceipt>(`${base(id)}/register`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
-  list: (id: string, limit = 50) => request<SourceChangeViewDto[]>(`${base(id)}?limit=${limit}`),
+  list: (id: string, limit = 50, beforeChangeId?:string) => request<SourceChangeViewDto[]>(`${base(id)}?limit=${limit}${beforeChangeId?'&before_change_id='+encodeURIComponent(beforeChangeId):''}`),
   latest: (id: string) => request<SourceChangeViewDto | null>(`${base(id)}/latest`),
   show: (id: string, changeId: string) => request<SourceChangeViewDto>(`${base(id)}/${encodeURIComponent(changeId)}`),
   submit: (id: string, reason: string, paths: string[], reference: RepairReference | null, submission: DeliverySubmission) => request<DevelopmentReceipt>(base(id), { method: 'POST', body: JSON.stringify({ schema_version: '2', ...submission, reason, claimed_paths: paths, repair_reference: reference }) }),

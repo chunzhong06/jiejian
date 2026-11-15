@@ -30,6 +30,7 @@ def _source(var_dir: Path) -> dict[str, str]:
             "JIEJIAN_SERVE_OWNER_TOKEN": "serve-owner",
             "JIEJIAN_CONTROL_ORIGIN": "http://127.0.0.1:9000",
             "PLAYWRIGHT_BROWSERS_PATH": str(var_dir / "browsers"),
+            "PROGRAMDATA": str(var_dir / "system-program-data"),
             "JIEJIAN_FRONTEND_DIST": str(var_dir / "runtime" / "frontend"),
             "JIEJIAN_NODE_EXECUTABLE": "node.exe",
             "JIEJIAN_PLAYWRIGHT_EXECUTABLE": "chromium.exe",
@@ -119,6 +120,9 @@ def test_minimal_environment_is_scoped_by_fixed_role(tmp_path: Path) -> None:
     assert worker["JIEJIAN_SERVE_OWNER_TOKEN"] == "serve-owner"
     assert worker["JIEJIAN_CONTROL_ORIGIN"] == "http://127.0.0.1:9000"
     assert worker["WORKER_SECRET"] == "worker-secret"
+    assert worker['PROGRAMDATA'] == str(tmp_path / 'var' / 'system-program-data')
+    for child in (runner, recording, observer, sample, artifact):
+        assert 'PROGRAMDATA' not in child
     assert worker["PLAYWRIGHT_BROWSERS_PATH"] == str(
         tmp_path / "var" / "browsers"
     )

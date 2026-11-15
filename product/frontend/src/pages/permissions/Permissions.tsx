@@ -7,14 +7,16 @@ import './styles/permissions.css'
 import './styles/rules.css'
 import './workspace.css'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined';
 import { businessBoundariesApi as api, type BoundaryProposalViewDto } from '../../entities/permission/api/businessBoundaries';
 import { ruleCandidatesApi, type RuleCandidateView } from '../../entities/permission/api/ruleCandidates';
 import { RuleEditor } from './RuleEditor';
 import {ProposalReview} from './ProposalReview';
+import {TaskSurface} from '../../shared/ui/TaskSurface';
 import {OfficialRules,OfficialRulesReady,matchesOfficialDraft} from './OfficialRules';
 import {RequirementDecision} from './RequirementDecision'
 import { BusinessIssue } from './BusinessIssue';
+import {ValidationPlanPanel} from '../../entities/permission/ui/ValidationPlan'
+import {ValidationQuestionDecisions} from './ValidationQuestionDecisions'
 import { RuleWorkbench } from './RuleWorkbench';
 import { experienceApi,type OfficialBoundaryDraftDto } from '../../entities/application/api/experience';
 import { assertProject, type PageProps } from '../../shared/model/page';
@@ -23,7 +25,7 @@ import { text } from '../../shared/lib/format';
 import {notAccepted} from '../../shared/lib/operations'
 import { useRead } from '../../shared/lib/useRead';
 import {Button,ActionLink} from '../../shared/ui/actions'
-import { Heading } from "../../shared/ui/layout";
+import { Heading, TaskActions } from "../../shared/ui/layout";
 import {PageError,  Badge, InlineFeedback, Notice, Empty } from "../../shared/ui/feedback";
 // 未知批准由原提案的持续恢复区说明，不重复弹出同一请求的全局错误。
 class ApprovalResultUnknown extends Error {}
@@ -37,6 +39,10 @@ export function Permissions({ projectId, name, official, refresh, onError, route
     const [maintenance, setMaintenance] = useState(false), [proposal, setProposal] = useState<BoundaryProposalViewDto>(), [candidate, setCandidate] = useState<RuleCandidateView>(), [busy, setBusy] = useState(false), [ack, setAck] = useState(false), [uncertain, setUncertain] = useState(false), [notice, setNotice] = useState('');
     const pending = useRef(false), generation = useRef(0);
     const [approvedReceipt,setApprovedReceipt]=useState<string>();
+    const officialApproval=useRef<string|undefined>(undefined);
+    const maintenanceTrigger=useRef<HTMLElement|null>(null),maintenanceScroll=useRef(0),wasMaintenance=useRef(false);
+    // 编辑器返回后，先解除父工作面的隐藏，再恢复原入口的键盘焦点。
+    useLayoutEffect(()=>{if(wasMaintenance.current&&!maintenance){maintenanceTrigger.current?.focus({preventScroll:true});window.scrollTo({top:maintenanceScroll.current,behavior:'instant'});}wasMaintenance.current=maintenance;},[maintenance]);
     const approvalCompletion=useMilestone<HTMLDivElement>('rules:'+projectId,Boolean(approvedReceipt)&&!official,'rules');
     const acceptProposal=(value:BoundaryProposalViewDto)=>{
         assertProject(value.proposal.project_id,projectId);setProposal(value);
@@ -103,11 +109,15 @@ export function Permissions({ projectId, name, official, refresh, onError, route
             try{value=await experienceApi.boundaryProposal(choice);assertProject(value.proposal.project_id,projectId);}
             catch(error){setUncertain(true);throw error;}
             sessionStorage.removeItem('jiejian.studio.official-review:'+projectId);
-            setProposal(value);go(destination('/permissions?proposal_id='+encodeURIComponent(value.proposal.proposal_id)));
+            // 配方批准留在同一状态所有者；提前切到提案路由会卸载本次批准回执。
+            setProposal(value);
             // 只批准刚才完整展示的命令；依据或内容发生变化时留在原提案重新核对。
             if(!matchesOfficialDraft(draft,value.proposal)||value.review?.basis_state!=='COMPLETE'||value.review.current_state_changed||value.proposal.unresolved_questions?.length){
+                go(destination('/permissions?proposal_id='+encodeURIComponent(value.proposal.proposal_id)));
                 onError(new Error('预置规则或其依据已变化，请核对当前提案后再批准。'));return;
             }
+            // 示例首次批准的接续只属于本次完整配方；维护提案和历史回看仍阅读各自变更。
+            officialApproval.current=value.proposal.proposal_id;
             if(value.decision){if(value.decision.decision==='APPROVED'){setApprovedReceipt(value.proposal.proposal_id);editor.reload();refresh();}return;}
             await approveProposal(value);
             sessionStorage.removeItem('jiejian.studio.official-choice:'+projectId);
@@ -132,14 +142,14 @@ export function Permissions({ projectId, name, official, refresh, onError, route
         const blocked = Boolean(!review || review.basis_state !== 'COMPLETE' || review.current_state_changed || proposal.proposal.unresolved_questions?.length);
         const accepted = proposal.decision?.decision === 'APPROVED'||approvedReceipt===proposal.proposal.proposal_id;
         const decided=Boolean(proposal.decision)||accepted;
-        if(official&&accepted)return <OfficialRulesReady projectId={projectId} origin={origin} onRules={()=>{setProposal(undefined);go(destination('/permissions'));}}/>;
-        return <ProposalReview key={proposal.proposal.proposal_id} value={proposal} backLabel={backLabel} onBack={() => { setProposal(undefined); back(); }}>
+        if(official&&accepted&&officialApproval.current===proposal.proposal.proposal_id)return <OfficialRulesReady projectId={projectId} origin={origin} onRules={()=>{setProposal(undefined);go(destination('/permissions'));}}/>;
+        return <ProposalReview key={proposal.proposal.proposal_id} value={proposal} backLabel={backLabel} backDisabled={busy} onBack={() => { setProposal(undefined); back(); }}>
         <footer className="jj-approval-footer">
           {blocked && !decided && <Notice tone="caution">{review?.current_state_changed ? '当前业务已变化，请重新整理提案。' : proposal.proposal.unresolved_questions?.length ? proposal.proposal.unresolved_questions.map(text).join('；') : '原始依据不完整，暂时无法批准。'}</Notice>}
           {decided ? <div ref={approvalCompletion} className="jj-approval-decision"><p data-milestone-part="facts">{accepted ? notice||'这些规则已用于后续检查。返回原检查后，会重新核对所需材料。' : '这份提案未被采用，现有权限保持原样。'}</p><div data-milestone-part="actions"><ActionLink navigationScope="page" href={'#'+scopedPath(origin??(accepted?'/preparation':'/permissions'),projectId)} kind="primary">{origin?returnDestinationLabel(origin):accepted?'准备检查材料':'查看当前规则'}</ActionLink></div></div> : <>
             {uncertain?<Notice tone="caution" title="批准结果待确认" actions={<Button kind="quiet" busy={busy} busyLabel="正在查询" onClick={readDecision}>查询这次批准</Button>}>先查询这份提案的批准决定。查询会保留原提案，不会再次批准。</Notice>:<>
             <div className="jj-approval-choice"><h3>确认整份提案</h3><p>批准后，界鉴会按这些规则检查应用，不会修改应用自身的权限配置。</p>{notice&&<p role="status">{notice}</p>}<label className="jj-checkbox"><input type="checkbox" checked={ack} disabled={busy} onChange={event => setAck(event.target.checked)}/><span>我已核对全部访问规则及业务定义</span></label></div>
-            <div className="jj-review-buttons jj-task-actions"><Button disabled={busy} onClick={() => void act(async () => { const value=await api.reject(projectId, proposal.proposal, '用户放弃本次权限提案'); acceptProposal(value); editor.reload(); refresh(); })}>放弃提案</Button><Button kind="primary" busy={busy} disabled={!ack || blocked} onClick={() => void approved()}>批准权限规则</Button></div>
+            <TaskActions className="jj-review-buttons"><Button disabled={busy} onClick={() => void act(async () => { const value=await api.reject(projectId, proposal.proposal, '用户放弃本次权限提案'); acceptProposal(value); editor.reload(); refresh(); })}>放弃提案</Button><Button kind="primary" busy={busy} disabled={!ack || blocked} onClick={() => void approved()}>批准权限规则</Button></TaskActions>
             </>}
           </>}
         </footer>
@@ -149,7 +159,7 @@ export function Permissions({ projectId, name, official, refresh, onError, route
         return <PageSkeleton view="/permissions"/>;
     if (editor.error || !boundary)
         return <PageError title="权限与覆盖" error={editor.error}/>;
-    if (maintenance)
+    if (maintenance && !boundary.permission_intents.length)
         return <RuleEditor projectId={projectId} onBack={() => setMaintenance(false)} onProposal={openProposal} onError={onError}/>;
     if (candidate)
         return <CandidateReview value={candidate} projectId={projectId} busy={busy} onChange={setCandidate} onRun={act} backLabel={backLabel} onBack={() => {setCandidate(undefined);back()}} onProposal={openProposal}/>;
@@ -157,7 +167,7 @@ export function Permissions({ projectId, name, official, refresh, onError, route
     const requirementQueue=<RequirementQueue items={candidates.data?.candidates??[]} busy={busy} onReview={(id,revision)=>void act(async()=>setCandidate(await ruleCandidatesApi.show(projectId,id,revision)))}/>;
     if(official&&!boundary.permission_intents.length&&!roles.length)return <OfficialRules projectId={projectId} name={name} busy={busy} uncertain={uncertain||Boolean(sessionStorage.getItem('jiejian.studio.official-review:'+projectId))} pending={editor.data?.pending_proposals??[]} onApprove={approveOfficial} onReview={id=>void act(()=>openProposal(id))} onRecover={editor.reload}/>;
     if (boundary.permission_intents.length)
-        return <RuleWorkbench projectId={projectId} boundary={boundary} official={official} route={route} refresh={refresh} onError={onError} onManage={() => setMaintenance(true)} reviewActions={<>{editor.data?.pending_proposals.length ? <ProposalQueue items={editor.data.pending_proposals} busy={busy} onReview={id=>void act(()=>openProposal(id))}/> : null}{requirementQueue}</>}/>;
+        return <><div hidden={maintenance}><RuleWorkbench projectId={projectId} boundary={boundary} official={official} route={route} refresh={refresh} onError={onError} onManage={() => {maintenanceTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null;maintenanceScroll.current=window.scrollY;setMaintenance(true);}} reviewActions={<>{editor.data?.pending_proposals.length ? <ProposalQueue items={editor.data.pending_proposals} busy={busy} onReview={id=>void act(()=>openProposal(id))}/> : null}{requirementQueue}</>}/></div>{maintenance&&<RuleEditor projectId={projectId} onBack={()=>setMaintenance(false)} onProposal={openProposal} onError={onError}/>}</>;
     return <><Heading eyebrow={`权限版本 ${boundary.policy_epoch}`} title="权限规则"/>{notice && <InlineFeedback tone="positive">{notice}<ActionLink navigationScope="page" href={'#'+scopedPath('/preparation')} kind="quiet">准备检查</ActionLink></InlineFeedback>}
     <ProposalQueue items={editor.data!.pending_proposals} busy={busy} onReview={id=>void act(()=>openProposal(id))}/>
     <Empty title="先写清楚访问要求" action={<Button kind="primary" onClick={()=>setMaintenance(true)}>编写权限要求</Button>}>已有业务名称会在编写时沿用。确认谁可以对哪些数据做什么后，再开始准备检查。</Empty>
@@ -176,11 +186,11 @@ function CandidateReview({ value, projectId, busy, onChange, onRun, onBack, onPr
 }) {
     const candidate = value.candidate;
     usePageRefresh(()=>onRun(async()=>onChange(await ruleCandidatesApi.show(projectId,candidate.candidate_id))),!busy);
-    return <><div><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{backLabel??'全部权限规则'}</Button></div><Heading eyebrow="整理业务要求" title="先澄清规则，再确认权限"/><section className="jj-panel"><p>{text(candidate.content.original_text)}</p>{value.issues.length>0&&<Notice tone="caution" title="仍需澄清的内容"><ul>{value.issues.map((issue,index)=><li key={index}>{text(issue.message)}</li>)}</ul></Notice>}{value.boundary_reviews?.map(issue => <BusinessIssue key={candidate.revision + ':' + issue.issue_id} projectId={projectId} value={value} issue={issue} busy={busy} onChange={onChange} onRun={onRun}/>)}{candidate.content.scenarios?.map(scenario => <RequirementDecision key={candidate.revision+':'+scenario.scenario_id} label={text(scenario.question)} options={scenario.options.map(option=>[option.option_id,text(option.label)] as const)} confirmLabel="确认业务含义" busy={busy} onConfirm={optionId=>void onRun(async()=>onChange(await ruleCandidatesApi.decide(projectId,candidate.candidate_id,candidate.revision,candidate.basis_id,crypto.randomUUID(),{scenario_id:scenario.scenario_id,scenario_fingerprint:scenario.scenario_fingerprint,action:'SELECT',option_id:optionId})))}/>)}{value.scope_review?.map(item => <article className="jj-review-rule jj-scope-review" key={item.source.requirement_id}><header><div className="jj-object-line"><h3>{text(item.source.title)}</h3><Badge>{item.status === 'CONFIRMED' ? '已确认' : '待确认范围'}</Badge></div></header><p>{text(item.source.interpretation)}</p>{item.status !== 'CONFIRMED' && <RequirementDecision key={candidate.revision+':'+item.fingerprint} label="这项要求的处理方式" options={[['IN_SCOPE','纳入检查'],['PREPARATION','准备条件'],['OUT_OF_SCOPE','本次不覆盖'],['DEFER','稍后决定']]} confirmLabel="确认范围" busy={busy} onConfirm={disposition=>void onRun(async()=>onChange(await ruleCandidatesApi.scope(projectId,candidate.candidate_id,candidate.revision,candidate.basis_id,crypto.randomUUID(),{requirement_id:item.source.requirement_id,requirement_fingerprint:item.fingerprint,disposition:disposition as 'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE'|'DEFER',requirement:item.source.interpretation,reason:'用户在业务要求审阅中明确选择范围',time_scope:'CHECK_WINDOW'})))}/>}</article>)}<div className="jj-task-actions">{value.proposal_id ? <Button kind="primary" busy={busy} onClick={() => void onRun(() => onProposal(value.proposal_id!))}>审阅权限提案</Button> : <Button kind="primary" busy={busy} disabled={value.assessment !== 'REVIEWABLE'} onClick={() => void onRun(async () => { const key = `jiejian.studio.propose:${projectId}:${candidate.candidate_id}:${candidate.revision}`, saved = sessionStorage.getItem(key); if (saved) {
+    return <TaskSurface width="wide" context="整理业务要求" title="先澄清规则，再确认权限" onBack={onBack} backLabel={backLabel??'全部权限规则'} backDisabled={busy}><div className="jj-candidate-review"><details className="jj-candidate-original"><summary>业务描述原文</summary><p>{text(candidate.content.original_text)}</p></details><ValidationQuestionDecisions projectId={projectId} value={value} busy={busy} onChange={onChange} onRun={onRun}/>{value.issues.length>0&&<Notice tone="caution" title="仍需澄清的内容"><ul>{value.issues.map((issue,index)=><li key={index}>{text(issue.message)}</li>)}</ul></Notice>}{value.boundary_reviews?.map(issue => <BusinessIssue key={candidate.revision + ':' + issue.issue_id} projectId={projectId} value={value} issue={issue} busy={busy} onChange={onChange} onRun={onRun}/>)}{candidate.content.scenarios?.map(scenario => <RequirementDecision key={candidate.revision+':'+scenario.scenario_id} label={text(scenario.question)} options={scenario.options.map(option=>[option.option_id,text(option.label)] as const)} confirmLabel="确认业务含义" busy={busy} onConfirm={optionId=>void onRun(async()=>onChange(await ruleCandidatesApi.decide(projectId,candidate.candidate_id,candidate.revision,candidate.basis_id,crypto.randomUUID(),{scenario_id:scenario.scenario_id,scenario_fingerprint:scenario.scenario_fingerprint,action:'SELECT',option_id:optionId})))}/>)}{value.scope_review?.filter(item=>!item.source.source_excerpt.startsWith('权限边界核对 ')).map(item => <article className="jj-review-rule jj-scope-review" key={item.source.requirement_id}><header><div className="jj-object-line"><h3>{text(item.source.title)}</h3><Badge>{item.status === 'CONFIRMED' ? '已确认' : '待确认范围'}</Badge></div></header><p>{text(item.source.interpretation)}</p>{item.status !== 'CONFIRMED' && <RequirementDecision key={candidate.revision+':'+item.fingerprint} label="这项要求的处理方式" options={[['IN_SCOPE','纳入检查'],['PREPARATION','准备条件'],['OUT_OF_SCOPE','本次不覆盖'],['DEFER','稍后决定']]} confirmLabel="确认范围" busy={busy} onConfirm={disposition=>void onRun(async()=>onChange(await ruleCandidatesApi.scope(projectId,candidate.candidate_id,candidate.revision,candidate.basis_id,crypto.randomUUID(),{requirement_id:item.source.requirement_id,requirement_fingerprint:item.fingerprint,disposition:disposition as 'IN_SCOPE'|'PREPARATION'|'OUT_OF_SCOPE'|'DEFER',requirement:item.source.interpretation,reason:'用户在业务要求审阅中明确选择范围',time_scope:'CHECK_WINDOW'})))}/>}</article>)}<ValidationPlanPanel projectId={projectId} reference={{candidate_id:candidate.candidate_id,revision:candidate.revision}}/><div className="jj-task-actions">{value.proposal_id ? <Button kind="primary" busy={busy} onClick={() => void onRun(() => onProposal(value.proposal_id!))}>审阅权限提案</Button> : <Button kind="primary" busy={busy} disabled={value.assessment !== 'REVIEWABLE'} onClick={() => void onRun(async () => { const key = `jiejian.studio.propose:${projectId}:${candidate.candidate_id}:${candidate.revision}`, saved = sessionStorage.getItem(key); if (saved) {
         const receipt = await ruleCandidatesApi.receipt(projectId, saved);
         if (receipt.candidate)
             onChange(receipt.candidate);
         return;
     } const operation = crypto.randomUUID(); sessionStorage.setItem(key, operation); const next = await ruleCandidatesApi.propose(projectId, candidate.candidate_id, candidate.revision, operation); sessionStorage.removeItem(key); onChange(next); if (next.proposal_id)
-        await onProposal(next.proposal_id); })}>生成权限提案</Button>}</div></section></>;
+        await onProposal(next.proposal_id); })}>生成权限提案</Button>}</div></div></TaskSurface>;
 }

@@ -1,9 +1,14 @@
 import {cloneElement,isValidElement,useId,type HTMLAttributes,type ReactElement,type ReactNode,type Ref} from 'react'
 
+/** 同类独立任务共用内容轴；业务组合仍拥有标题、草稿、焦点和命令生命周期。 */
+export function TaskFrame({as:Root='div',width='reading',className='',...props}:HTMLAttributes<HTMLElement>&{as?:'div'|'section';width?:'reading'|'wide'}){
+  return <Root {...props} className={'jj-task-frame '+className} data-width={width}/>
+}
+
 // 图标跟随标题首行的行盒；说明增长或标题换行时，不以整个正文高度或像素偏移校准。
 function TitleContent({title,icon}:{title:ReactNode;icon?:ReactNode}){return icon?<><span className="jj-heading-icon" aria-hidden="true">{icon}</span><span>{title}</span></>:title}
 
-export function Heading({eyebrow,title,titleIcon,children,actions,level=1,id,titleRef}:{eyebrow?:ReactNode;title:string;titleIcon?:ReactNode;children?:ReactNode;actions?:ReactNode;level?:1|2;id?:string;titleRef?:Ref<HTMLHeadingElement>}){const Title=level===1?'h1':'h2';return <header className="jj-heading">{eyebrow&&<div className="jj-eyebrow">{eyebrow}</div>}<div className="jj-heading-line"><Title id={id} ref={titleRef} tabIndex={titleRef?-1:undefined} data-motion-text className={titleIcon?'jj-icon-heading':undefined}><TitleContent title={title} icon={titleIcon}/></Title>{actions&&<div className="jj-heading-actions">{actions}</div>}</div>{children&&<div className="jj-heading-note">{children}</div>}</header>}
+export function Heading({eyebrow,title,titleIcon,status,children,actions,level=1,id,titleRef}:{eyebrow?:ReactNode;title:string;titleIcon?:ReactNode;status?:ReactNode;children?:ReactNode;actions?:ReactNode;level?:1|2;id?:string;titleRef?:Ref<HTMLHeadingElement>}){const Title=level===1?'h1':'h2';return <header className="jj-heading">{eyebrow&&<div className="jj-eyebrow">{eyebrow}</div>}<div className="jj-heading-line"><div className="jj-object-line"><Title id={id} ref={titleRef} tabIndex={titleRef?-1:undefined} data-motion-text className={titleIcon?'jj-icon-heading':undefined}><TitleContent title={title} icon={titleIcon}/></Title>{status}</div>{actions&&<div className="jj-heading-actions">{actions}</div>}</div>{children&&<div className="jj-heading-note">{children}</div>}</header>}
 
 /** 收口只安排说明与命令；业务决定动作顺序、可用条件和实际提交，不由布局推断完成。 */
 export function TaskActions({children,note,separated=false,className='',...props}:HTMLAttributes<HTMLElement>&{note?:ReactNode;separated?:boolean}){
@@ -17,8 +22,8 @@ export function SectionHeading({title,level=2,appearance='collection',meta,actio
 }
 
 /** 对象标题保持内部层级，装饰图标按标题首行居中；页面只安排外围留白。 */
-export function ObjectHeading({title,status,caption,description,meta,icon,level=2,id}:{title:ReactNode;status?:ReactNode;caption?:ReactNode;description?:ReactNode;meta?:ReactNode;icon?:ReactNode;level?:1|2|3;id?:string}){
-  const Title=level===1?'h1':level===3?'h3':'h2'
+export function ObjectHeading({title,status,caption,description,meta,icon,level=2,id}:{title:ReactNode;status?:ReactNode;caption?:ReactNode;description?:ReactNode;meta?:ReactNode;icon?:ReactNode;level?:1|2|3|4;id?:string}){
+  const Title=level===1?'h1':level===3?'h3':level===4?'h4':'h2'
   const content=<><div className="jj-object-line"><Title id={id} data-motion-text>{title}</Title>{status}</div>{description&&<div className="jj-object-description">{description}</div>}{meta&&<div className="jj-object-meta">{meta}</div>}</>
   return icon?<div className="jj-object-heading" data-icon data-level={level}>{caption&&<p className="jj-eyebrow">{caption}</p>}<span className="jj-heading-icon" aria-hidden="true">{icon}</span><div className="jj-object-heading-copy">{content}</div></div>:<div className="jj-object-heading">{caption&&<p className="jj-eyebrow">{caption}</p>}{content}</div>
 }
@@ -33,10 +38,16 @@ export function FormColumns({children}:{children:ReactNode}){
   return <div className="jj-form-columns"><div className="jj-form-columns-layout">{children}</div></div>
 }
 
-export function Field({label,children,hint,error,status,hidden=false}:{label:string;children:ReactNode;hint?:string;error?:string;status?:ReactNode;hidden?:boolean}){
+/** 左侧组间留白由此组合统一安排；业务将同一对象的标题与事实包成一组，右侧承载当前处理。 */
+export function TaskStage({context,children,className=''}:{context:ReactNode;children:ReactNode;className?:string}){
+  return <div className={'jj-task-stage '+className}><div className="jj-task-stage-layout"><div className="jj-task-stage-context">{context}</div><div className="jj-task-stage-current">{children}</div></div></div>
+}
+
+/** measure 由表单按字段角色显式选择；未指定时保留现有容器契约，同组字段使用同一档位。 */
+export function Field({label,children,hint,error,status,hidden=false,measure}:{label:string;children:ReactNode;hint?:string;error?:string;status?:ReactNode;hidden?:boolean;measure?:'compact'|'short'|'medium'|'standard'|'long'}){
   const id=useId(),control=isValidElement(children)?children as ReactElement<{id?:string;'aria-labelledby'?:string;'aria-describedby'?:string;'aria-invalid'?:boolean|'true'|'false'}>:null
   const describedBy=[control?.props['aria-describedby'],hint?id+'-hint':undefined,error?id+'-error':undefined].filter(Boolean).join(' ')||undefined
   const input=control?cloneElement(control,{id:control.props.id??id,'aria-labelledby':control.props['aria-labelledby']??id+'-label','aria-describedby':describedBy,'aria-invalid':error?true:control.props['aria-invalid']}):children
   // 状态只与实际控件对齐，标签及多行说明不参与它的垂直定位。
-  return <div className="jj-field" hidden={hidden} data-invalid={Boolean(error)||undefined}><label data-motion-text id={id+'-label'} htmlFor={control?.props.id??id}>{label}</label>{status?<div className="jj-field-with-status">{input}<span className="jj-field-status">{status}</span></div>:input}{hint&&<small id={id+'-hint'}>{hint}</small>}{error&&<small id={id+'-error'} className="jj-field-error" role="alert">{error}</small>}</div>
+  return <div className="jj-field" hidden={hidden} data-measure={measure} data-invalid={Boolean(error)||undefined}><label data-motion-text id={id+'-label'} htmlFor={control?.props.id??id}>{label}</label>{status?<div className="jj-field-with-status">{input}<span className="jj-field-status">{status}</span></div>:input}{hint&&<small id={id+'-hint'}>{hint}</small>}{error&&<small id={id+'-error'} className="jj-field-error" role="alert">{error}</small>}</div>
 }

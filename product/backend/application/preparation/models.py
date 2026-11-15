@@ -37,6 +37,7 @@ class IdentitySlotPreparationView(PreparationItemView):
     requirement: IdentityRequirementSlot
     actor_display_name: str
     test_identity_id: str | None = None
+    selection_basis: Literal['CURRENT_MATERIAL'] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class IdentityPreparationView(PreparationItemView):
@@ -86,6 +87,8 @@ class PreparationView(BoundaryModel):
 
 
 class MaterialImpactView(BoundaryModel):
+    slot_id: str | None = None
+    prerequisites: tuple[str, ...] = ()
     action_id: str
     action_label: str
     kind: Literal['identity','execution','resource','evidence','recovery']
@@ -94,6 +97,10 @@ class MaterialImpactView(BoundaryModel):
     permission_ids: tuple[str, ...]
     member_id: str | None = None
     member_label: str = ''
+    handling: Literal['KEEP', 'ADD', 'RECHECK', 'DECIDE']
+    handler: Literal['SYSTEM', 'USER', 'AGENT_AND_USER']
+    explanation: str
+    next_step: str
     reuse_basis: Literal['CURRENT_SOURCE','VERIFIED_SOURCE_CONTRACT'] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 

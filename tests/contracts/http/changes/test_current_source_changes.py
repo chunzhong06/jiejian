@@ -34,6 +34,9 @@ def test_current_source_change_routes_preserve_project_and_reject_client_scope(t
         assert client.get(path + "/" + change_id).json()["data"] == value
         assert client.get(path + "/latest").json()["data"] == value
         assert client.get(path + "?limit=101").status_code == 422
+        assert client.get(path, params={'before_change_id':change_id}).json()['data'] == []
+        assert client.get(path, params={'before_change_id':'x'*65}).status_code == 422
+        assert client.get('/api/projects/foreign/source-changes', params={'before_change_id':change_id}).status_code == 409
         assert client.get(f"/api/projects/foreign/source-changes/{change_id}").status_code != 200
         assert client.post(path, json={"schema_version": "1", "reason": "旧无键写入"}).status_code == 422
         assert client.post(path, json={"schema_version": "1", "reason": "拒绝代填权限", "permission_ids": []}).status_code == 422

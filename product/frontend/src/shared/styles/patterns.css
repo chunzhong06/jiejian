@@ -1,4 +1,7 @@
 /* 共同模式拥有内部识别规则；业务只安排外部位置并提供已确认的状态。 */
+/* 整行展开仍属于前一记录；连续边线与内缩表达归属，不升级为集合级工作面。 */
+:is(section,aside).jj-row-detail { min-width:0; padding:20px 24px 24px; border:0; border-inline-start:3px solid var(--accent); border-radius:0; background:var(--inset); }
+@media(max-width:650px) { :is(section,aside).jj-row-detail { padding:20px 16px; } }
 .jj-stage-guide { container:stage-guide / inline-size; min-width:0; }
 .jj-stage-guide > ol { display:flex; align-items:start; gap:16px; list-style:none; margin:0; padding:0; }
 .jj-stage-guide li { display:flex; align-items:start; gap:16px; flex:1 1 0; min-width:0; }
@@ -10,8 +13,8 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-stage-marker { display:grid; place-items:center; width:24px; height:24px; flex:none; border:1px solid var(--line-strong); border-radius:50%; font-size:var(--text-meta); line-height:1; font-variant-numeric:tabular-nums; }
 .jj-stage-marker .anticon { font-size:12px; }
 .jj-stage-copy { display:grid; gap:4px; min-width:0; }
-.jj-stage-label { font-size:var(--text-body); line-height:24px; font-weight:500; overflow-wrap:anywhere; }
-.jj-stage-copy small { color:var(--muted); font-weight:400; }
+.jj-stage-label { font-size:var(--text-body); line-height:24px; font-weight:var(--weight-medium); overflow-wrap:anywhere; }
+.jj-stage-copy small { color:var(--muted); font-weight:var(--weight-regular); }
 .jj-stage-guide [data-state=current] .jj-stage-item { color:var(--accent-ink); }
 .jj-stage-guide [data-state=current] .jj-stage-marker { background:var(--selected); border-color:var(--selection-mark); color:var(--selected-ink); }
 .jj-stage-guide [data-state=complete] .jj-stage-marker { background:var(--good-soft); border-color:transparent; color:var(--good); }
@@ -50,7 +53,7 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-object-meta:not(th,td) { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:var(--text-meta); }
 .jj-object-identity { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; min-width:0; }
 .jj-object-name { min-width:0; overflow-wrap:anywhere; font-size:var(--text-body); line-height:var(--leading-body); }
-.jj-status { display:inline-flex; align-items:center; gap:6px; font-size:var(--text-meta); line-height:var(--leading-meta); font-weight:400; color:var(--neutral); }
+.jj-status { display:inline-flex; align-items:center; gap:6px; font-size:var(--text-meta); line-height:var(--leading-meta); font-weight:var(--weight-regular); color:var(--neutral); }
 .jj-status.is-positive { color:var(--good); }
 .jj-status.is-negative { color:var(--bad); }
 .jj-status.is-caution { color:var(--warn); }
@@ -63,9 +66,8 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-result-overview .jj-result-summary { justify-content:flex-start; align-items:baseline; gap:8px 12px; }
 .jj-result-overview .jj-result-label { color:var(--ink); font-size:var(--text-body); line-height:var(--leading-body); }
 .jj-result-overview .jj-badge { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
-.jj-task-surface { width:100%; max-width:1040px; margin-inline:auto; min-width:0; }
+.jj-task-frame { --task-reading-width:1040px; width:100%; max-width:var(--task-reading-width); margin-inline:auto; min-width:0; }
 /* 返回属于导航，名称和标题属于当前对象；所有聚焦任务共用这两级间距。 */
-.jj-task-surface > .jj-back-link { margin-bottom:24px; }
 .jj-task-surface > .jj-heading { margin-bottom:32px; }
 .jj-task-surface-body { min-width:0; }
 .jj-task-actions[data-separated=true] { margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
@@ -75,14 +77,24 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-task-actions > .jj-action-note { flex:1 1 240px; color:var(--muted); font-size:var(--text-meta); line-height:var(--leading-reading); }
 .jj-task-actions[data-composed] { column-gap:24px; row-gap:16px; }
 .jj-task-commands { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:10px; margin-left:auto; }
+.jj-task-stage { container:task-stage / inline-size; min-width:0; }
+.jj-task-stage-layout { display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:32px;align-items:start; }
+.jj-task-stage-context,.jj-task-stage-current { min-width:0; }
+.jj-task-stage-context { display:grid;align-content:start;gap:32px;padding-block:8px; }
+.jj-task-stage-current { display:grid;gap:24px;align-content:start;padding:28px;background:var(--surface);border-radius:var(--radius-surface); }
+.jj-task-stage-current > :is(p,.jj-object-heading,.jj-facts,.jj-task-actions) { margin:0; }
+.jj-task-stage-current > p { line-height:var(--leading-reading); }
+.jj-task-stage-current > .jj-task-actions { margin-top:4px; }
+@container task-stage (max-width:700px) { .jj-task-stage-layout { grid-template-columns:minmax(0,1fr);gap:24px; }.jj-task-stage-current { padding:24px; } }
+@container task-stage (max-width:400px) { .jj-task-stage-current { padding:20px; } }
 
 /* 外层可组织事实组的位置；标签和值的字级、列宽及换行只在这里定义。 */
 .jj-facts { container:facts / inline-size; display:grid; gap:14px; min-width:0; }
 .jj-facts:has(> dt) { grid-template-columns:100px minmax(0,1fr); gap:8px 12px; }
 .jj-facts.is-stacked:has(> dt) { grid-template-columns:minmax(0,1fr); gap:6px; }
 .jj-facts > div { display:grid; grid-template-columns:100px minmax(0,1fr); gap:8px 12px; min-width:0; align-content:start; }
-.jj-facts dt { margin:0; color:var(--muted); font-size:var(--text-label); font-weight:400; line-height:20px; }
-.jj-facts dd { margin:0; min-width:0; color:var(--ink); font-size:var(--text-body); font-weight:400; line-height:var(--leading-body); overflow-wrap:anywhere; }
+.jj-facts dt { margin:0; color:var(--muted); font-size:var(--text-label); font-weight:var(--weight-regular); line-height:20px; }
+.jj-facts dd { margin:0; min-width:0; color:var(--ink); font-size:var(--text-body); font-weight:var(--weight-regular); line-height:var(--leading-body); overflow-wrap:anywhere; }
 .jj-facts dd > small { display:block; margin-top:5px; color:var(--muted); }
 .jj-facts.is-stacked > div,.jj-facts[data-layout=columns] > div { grid-template-columns:minmax(0,1fr); gap:6px; }
 .jj-facts[data-layout=columns] { grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:20px 28px; }
@@ -95,24 +107,29 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-compare-intro { display:grid; gap:12px; margin-top:16px; max-width:80ch; }
 .jj-compare-intro p { margin:0; line-height:var(--leading-reading); }
 .jj-compare-intro + .jj-compare-pair { margin-top:24px; }
-.jj-compare-columns > section { display:flex; flex-direction:column; align-items:stretch; gap:16px; min-width:0; overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:24px; }
+.jj-compare-columns > section { display:flex; flex-direction:column; align-items:stretch; gap:16px; min-width:0; overflow-wrap:anywhere; }
 .jj-compare-columns > section > :is(h3,.jj-eyebrow) { margin:0 0 2px; }
 .jj-compare-columns > section > p { margin:0; line-height:var(--leading-reading); }
 .jj-compare-columns > section > details { margin-top:6px; }
 @container compare-pair (max-width:600px) { .jj-compare-pair > .jj-compare-columns { grid-template-columns:minmax(0,1fr); } }
 .jj-comparison-data { width:100%; table-layout:fixed; }
 .jj-comparison-data :is(th,td) { text-align:start; vertical-align:top; overflow-wrap:anywhere; white-space:pre-wrap; }
-.jj-comparison-data thead th { color:var(--muted); font-size:var(--text-meta); font-weight:500; }
-.jj-comparison-data tbody th { font-size:var(--text-label); font-weight:500; }
+.jj-comparison-data thead th { color:var(--muted); font-size:var(--text-meta); font-weight:var(--weight-medium); }
+.jj-comparison-data tbody th { font-size:var(--text-label); font-weight:var(--weight-medium); }
 .jj-comparison-data [data-changed=true] td:last-child { border-left:2px solid var(--selection-mark); }
 .jj-content-table { --table-cell-block:16px; --table-cell-inline:24px; }
 .jj-content-table[data-density=compact] { --table-cell-block:12px; --table-cell-inline:16px; }
 .jj-content-table :is(th,td) { padding:var(--table-cell-block) var(--table-cell-inline); border-bottom:1px solid var(--line); vertical-align:middle; }
-.jj-content-table thead th { padding-block:12px; color:var(--muted); font-size:var(--text-meta); line-height:20px; font-weight:500; background:transparent; }
-.jj-content-table tbody th { font-weight:500; }
+/* 对象主列保持连续阅读，其余比较字段与各自表头共用中心轴。 */
+.jj-content-table :where(tr) > :not(:first-child) { text-align:center; }
+.jj-content-table.jj-comparison-data :is(th,td) { text-align:start;vertical-align:top; }
+.jj-content-table thead th { padding-block:12px; color:var(--muted); font-size:var(--text-meta); line-height:20px; font-weight:var(--weight-medium); background:transparent; }
+.jj-content-table tbody th { font-weight:var(--weight-medium); }
 .jj-content-table tbody tr:last-child > * { border-bottom:0; }
 .jj-content-table .jj-table-state { text-align:center; vertical-align:middle; }
 .jj-content-table .jj-table-choice { display:inline-flex; width:min(200px,100%); vertical-align:middle; }
+.jj-content-table .jj-table-choice.jj-compact-choice { width:min(var(--field-compact),100%); }
+.jj-content-table .jj-table-choice.jj-short-choice { width:min(var(--field-short),100%); }
 .jj-content-table .jj-table-actions { text-align:end; }
 .jj-content-table tr.jj-expanded-row > td { padding:0; }
 /* 紧凑密度只压缩单元格内部；有边界的表格仍与所属工作面的阅读边线对齐。 */
@@ -124,6 +141,5 @@ button.jj-stage-item:disabled { color:var(--disabled-ink); }
 .jj-operation-selector { width:min(520px,100%); }
 @media(max-width:600px) { .jj-content-table { --table-cell-block:14px; --table-cell-inline:16px; } .jj-scroll-table > .jj-content-table[data-density=compact] { --table-edge-inline:16px; } }
 @media(prefers-reduced-motion:reduce) { .jj-progress-activity { transform:translateX(116%); } }
-.jj-task-surface[data-width=wide] { max-width:none; }
-.jj-form-columns-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px 40px; align-items:start; }
+.jj-task-frame[data-width=wide] { max-width:none; }
 .jj-task-surface-body > .jj-field-stack { max-width:760px; }

@@ -1,9 +1,18 @@
 # 预设开发演练只读投影：推进依赖同源码、同权限的真实发布结果，不按版本名称推断结论。
+import hashlib
+import json
 from typing import Literal
+from pydantic import computed_field
 from product.backend.application.examples.preset_delivery import preset_change_id
 
 from product.backend.domain.errors import JiejianError
 from product.protocols.checks.execution_request import WireModel
+
+
+class OfficialChangeOption(WireModel):
+    version: Literal['VULNERABLE', 'EXPOSE_REVOKE']
+    available: bool
+    reason: str | None = None
 
 
 class OfficialDevelopmentJourney(WireModel):
@@ -16,6 +25,45 @@ class OfficialDevelopmentJourney(WireModel):
     can_optimize: bool = False
     evidence_limited: bool = False
     reason: str
+    policy_epoch: int | None = None
+    source_fingerprint: str | None = None
+    current_change_id: str | None = None
+    has_active_tasks: bool = False
+
+    @computed_field
+    @property
+    def transition_basis(self) -> str:
+        """绑定用户刚审阅的项目、源码与结果；写入口仍独立重读并核对。"""
+        facts = self.model_dump(mode='json', exclude_computed_fields=True)
+        return hashlib.sha256(json.dumps(facts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+    @computed_field
+    @property
+    def change_options(self) -> tuple[OfficialChangeOption, ...]:
+        blocked = ('先等待或停止当前任务。' if self.has_active_tasks else
+                   '源码已由外部修改，请在原开发任务中继续。' if self.implementation == 'CUSTOM' else
+                   '当前依据尚未读取完整，请重新读取。' if self.policy_epoch is None else None)
+        return tuple(OfficialChangeOption(version=version, available=reason is None, reason=reason)
+                     for version, reason in (
+                         ('VULNERABLE', blocked or (None if self.can_optimize else '本工作区已进入后续修改，可从修改历史查看此前交付。' if self.implementation != 'BASELINE' else '先完成正常起点的真实检查。')),
+                         ('EXPOSE_REVOKE', blocked or (None if self.implementation == 'VULNERABLE' and self.verdict == 'BLOCK' else '先检查内部包限制被移除后的实际结果。')),
+                     ))
+
+    @computed_field
+    @property
+    def stage(self) -> Literal['STATE_UNAVAILABLE', 'REQUIREMENTS', 'BASELINE_CHECK', 'BASELINE_RESULT', 'CHANGED_CHECK', 'CHECK_RESULT', 'CUSTOM']:
+        """只说明当前阅读任务；阶段不授权转换，也不决定权限或修复结论。"""
+        if self.policy_epoch is None:
+            return 'STATE_UNAVAILABLE'
+        if self.implementation == 'CUSTOM':
+            return 'CUSTOM'
+        if self.policy_epoch == 0:
+            return 'REQUIREMENTS'
+        if self.run_id is None:
+            return 'BASELINE_CHECK' if self.implementation == 'BASELINE' else 'CHANGED_CHECK'
+        if self.implementation == 'BASELINE' and self.can_optimize:
+            return 'BASELINE_RESULT'
+        return 'CHECK_RESULT'
 
 
 def build_development_journey(current, *, reader, understanding, boundaries, repairs, development=None):
@@ -30,6 +78,7 @@ def build_development_journey(current, *, reader, understanding, boundaries, rep
             values["implementation"] = "CUSTOM"
             values["delivery_source"] = "EXTERNAL_CODE"
         epoch = boundaries.view(current.project_id).policy_epoch
+        values['policy_epoch'] = epoch
         records = reader.list_for_project(current.project_id)
         repair_change = current.repair_change_id
         if not external and current.scenario_version.value != "BASELINE" and development is not None:

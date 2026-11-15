@@ -8,9 +8,10 @@ from product.backend.application.recording.source import require_recording_sourc
 
 
 class AgentWorkflowContext:
-    def __init__(self, *, projects, rules, preparation, batches, recordings, results, uow_factory):
+    def __init__(self, *, projects, rules, preparation, batches, recordings, results, uow_factory, material_reader):
         self.projects, self.rules, self.preparation = projects, rules, preparation
         self.batches, self.recordings, self.results, self.uow = batches, recordings, results, uow_factory
+        self.material_reader = material_reader
 
     def read(self, project_id, stage='RULES', *, recording_id=None, run_id=None, case_id=None):
         """引用必须属于当前项目；材料和录制保留自己的依据，结果固定到不可变run。"""
@@ -30,6 +31,8 @@ class AgentWorkflowContext:
             context = self.preparation.context(project_id)
             facts = {'basis_id':context['basis_id'], 'guidance':context['guidance'],
                 'batch':self.batches.show(project_id)}
+            facts['materials'] = self.material_reader(project_id)
+            facts['validation_plan'] = self.rules.validation_plan(project_id)
             tools = ['jiejian_preparation_context','jiejian_preparation_suggestion_save','jiejian_proof_source_save',
                 'jiejian_preparation_batch_plan','jiejian_preparation_batch_status']
             note = '读取材料缺口，保存可用建议和来源。用户在界鉴确认清单后，后台继续准备；缺少的登录或文件含义请说明。'

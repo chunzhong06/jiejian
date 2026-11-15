@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[根目录](#根目录)（9 个文件）、[applications](#applications)（2 个文件）、[boundaries](#boundaries)（11 个文件）、[changes](#changes)（2 个文件）、[checks](#checks)（6 个文件）、[identities](#identities)（2 个文件）、[preparation](#preparation)（4 个文件）、[recording](#recording)（2 个文件）、[reports](#reports)（2 个文件）、[verification](#verification)（8 个文件）、[verification/breakpoints](#verificationbreakpoints)（5 个文件）、[verification/permissions](#verificationpermissions)（4 个文件）。
+按目录定位：[根目录](#根目录)（9 个文件）、[applications](#applications)（2 个文件）、[boundaries](#boundaries)（11 个文件）、[changes](#changes)（2 个文件）、[checks](#checks)（7 个文件）、[identities](#identities)（2 个文件）、[preparation](#preparation)（4 个文件）、[recording](#recording)（2 个文件）、[reports](#reports)（2 个文件）、[verification](#verification)（8 个文件）、[verification/breakpoints](#verificationbreakpoints)（5 个文件）、[verification/permissions](#verificationpermissions)（4 个文件）。
 
 ## 根目录
 
@@ -128,7 +128,11 @@
 
 ### checks/repair.py
 
-[源码](../../../product/backend/domain/checks/repair.py)（289 行）。公开声明：`CurrentRepairReference`、`RepairCaseIdentity`、`repair_case_identity`、`repair_evidence_standards`、`RepairCaseRequirement`、`CurrentRepairContract`、`repair_context`、`current_request_permissions`等。
+[源码](../../../product/backend/domain/checks/repair.py)（300 行）。公开声明：`CurrentRepairReference`、`RepairCaseIdentity`、`repair_case_identity`、`repair_evidence_standards`、`RepairCaseRequirement`、`CurrentRepairContract`、`repair_context`、`current_request_permissions`等。
+
+### checks/repair_challenge.py
+
+[源码](../../../product/backend/domain/checks/repair_challenge.py)（71 行）。公开声明：`repair_challenge_reason`。
 
 ### checks/scenarios.py
 

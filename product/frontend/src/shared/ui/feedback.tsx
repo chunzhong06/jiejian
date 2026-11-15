@@ -1,8 +1,10 @@
 import type {HTMLAttributes,ReactNode} from 'react'
-import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
+import {ActivityDots} from './ActivityDots'
 import ExclamationCircleOutlined from '@ant-design/icons/ExclamationCircleOutlined';
 import {Heading} from './layout'
 import {ApiError} from '../api/http'
+import {Button} from './actions'
+import {refreshCurrentPage} from '../lib/pageRefresh'
 
 export type FeedbackTone='neutral'|'positive'|'negative'|'caution'|'accent'
 
@@ -16,18 +18,20 @@ export function ResultSummary({label,status}:{label:ReactNode;status:ReactNode})
 /** 成组核对结果按可用宽度排列，名称与自身状态保持相邻；状态仍由业务提供。 */
 export function ResultList({items,label}:{items:Array<{label:ReactNode;status:ReactNode}>;label:string}){return <div className="jj-result-overview" role="list" aria-label={label}>{items.map((item,index)=><div role="listitem" key={index}><ResultSummary {...item}/></div>)}</div>}
 
-/** 已有页面标题或分类边界时使用 section，沿当前内容轴呈现，不再次居中整组内容。 */
-export function Empty({title,children,action,layout='page'}:{title:string;children?:ReactNode;action?:ReactNode;layout?:'page'|'section'}){return <section className="jj-empty" data-layout={layout}><div className="jj-empty-copy"><h2>{title}</h2>{children&&<p>{children}</p>}</div>{action&&<div className="jj-empty-actions">{action}</div>}</section>}
+/** 已命名的集合使用 section：空态是集合的当前情况，不另建第二个任务标题。 */
+export function Empty({title,children,action,layout='page'}:{title:string;children?:ReactNode;action?:ReactNode;layout?:'page'|'section'}){return <section className="jj-empty" data-layout={layout}><div className="jj-empty-copy">{layout==='section'?<strong className="jj-empty-title">{title}</strong>:<h2>{title}</h2>}{children&&<p>{children}</p>}</div>{action&&<div className="jj-empty-actions">{action}</div>}</section>}
 
-export function Loading({children='正在读取',page=false}:{children?:ReactNode;page?:boolean}){return <div className="jj-loading" role="status" data-page-pending={page||undefined}><LoadingOutlined aria-hidden="true" spin/>{children}</div>}
+export function Loading({children='正在读取',page=false}:{children?:ReactNode;page?:boolean}){return <div className="jj-loading" role="status" data-page-pending={page||undefined}><ActivityDots/>{children}</div>}
 
-export function ErrorNote({error,actions}:{error:unknown;actions?:ReactNode}){
-  const copy=<><span>{error instanceof Error?error.message:'请求未完成，请重新读取。'}</span>{error instanceof ApiError&&error.traceId&&<small className="jj-small">诊断编号：{error.traceId}</small>}</>;
-  return <div className="jj-notice is-negative" role="alert">{actions?<><div className="jj-notice-copy">{copy}</div><div className="jj-notice-actions">{actions}</div></>:copy}</div>;
+/** 重读必须由原读取所有者显式提供；写入失败继续查询原回执，不在展示层推断重试。 */
+export function ErrorNote({error,actions,onRetry,retryLabel='重新读取'}:{error:unknown;actions?:ReactNode;onRetry?:()=>void;retryLabel?:string}){
+  const recovery=actions??(onRetry?<Button onClick={onRetry}>{retryLabel}</Button>:undefined)
+  // 首层保留原因和恢复；诊断引用按需读取，不要求用户从编号判断下一步。
+  return <div className="jj-notice is-negative" role="alert"><div className="jj-notice-copy"><p>{error instanceof Error?error.message:'请求未完成，请重新读取。'}</p>{error instanceof ApiError&&error.traceId&&<details className="jj-error-diagnostic"><summary>诊断信息</summary><p>诊断编号：<code>{error.traceId}</code></p></details>}</div>{recovery&&<div className="jj-notice-actions">{recovery}</div>}</div>;
 }
 
 export function PageError({title,error,actions,navigation}:{title:string;error:unknown;actions?:ReactNode;navigation?:ReactNode}){
-  return <section className="jj-page-state"><Heading title={title}/>{navigation}<div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>请根据下面的原因处理，或返回原入口重新选择。</p><ErrorNote error={error}/>{actions&&<div className="jj-form-actions">{actions}</div>}</div></div></section>
+  return <section className="jj-page-state"><Heading title={title}/>{navigation}<div className="jj-page-state-content"><span className="jj-page-state-icon" aria-hidden="true"><ExclamationCircleOutlined/></span><div><h2>当前内容未能读取</h2><p>请根据下面的原因处理，或返回原入口重新选择。</p><ErrorNote error={error}/><div className="jj-form-actions jj-page-recovery-actions">{actions??<Button kind="primary" onClick={()=>void refreshCurrentPage()}>重新读取当前内容</Button>}</div></div></div></section>
 }
 
 /** 长期需要核对的原因与恢复动作成组；普通简短消息仍保留行内表达。 */

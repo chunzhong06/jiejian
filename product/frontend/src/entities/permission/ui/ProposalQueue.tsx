@@ -1,4 +1,3 @@
-import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined'
 import type {BoundaryEditorDto} from '../api/businessBoundaries'
 import type {RuleCandidateContext} from '../api/ruleCandidates'
 import {Button} from '../../../shared/ui/actions'
@@ -20,7 +19,7 @@ export function ProposalQueue({items,busy=false,onReview}:{items:BoundaryEditorD
         if(definitions)parts.push(`调整 ${definitions} 项业务定义`)
       }
       return <Button kind="quiet" className="jj-proposal-queue-row" key={item.proposal_id} disabled={busy} onClick={()=>onReview(item.proposal_id)}>
-        <span><strong>{parts.join('，')||'核对权限与业务定义的变更'}</strong><small>第 {index+1} 份 · {new Date(item.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</small></span><span>审阅<ArrowRightOutlined aria-hidden="true"/></span>
+        <span><strong>{parts.join('，')||'核对权限与业务定义的变更'}</strong><small>第 {index+1} 份 · {new Date(item.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</small></span><span>审阅</span>
       </Button>
     })}</div>
   </section>
@@ -30,5 +29,5 @@ export function ProposalQueue({items,busy=false,onReview}:{items:BoundaryEditorD
 export function RequirementQueue({items,busy=false,onReview}:{items:RuleCandidateContext['candidates'];busy?:boolean;onReview:(id:string,revision:number)=>void}){
   const pending=items.filter(item=>!item.decision&&!item.visibility?.archived)
   if(!pending.length)return null
-  return <section className="jj-proposal-queue" aria-label="待整理的业务要求"><SectionHeading title="待整理的业务要求" appearance="group" meta={pending.length+' 项'}/><div>{pending.map(item=><Button kind="quiet" className="jj-proposal-queue-row" key={item.candidate_id} disabled={busy} onClick={()=>onReview(item.candidate_id,item.revision)}><span><strong>{item.original_text.trim()||'核对业务访问要求'}</strong><small>第 {item.revision} 修订 · {new Date(item.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</small></span><span>整理<ArrowRightOutlined aria-hidden="true"/></span></Button>)}</div></section>
+  return <section className="jj-proposal-queue" aria-label="待整理的业务要求"><SectionHeading title="待整理的业务要求" appearance="group" meta={pending.length+' 项'}/><div>{pending.map(item=><Button kind="quiet" className="jj-proposal-queue-row" key={item.candidate_id} disabled={busy} onClick={()=>onReview(item.candidate_id,item.revision)}><span><strong>{item.original_text.trim()||'核对业务访问要求'}</strong><small>第 {item.revision} 修订 · {new Date(item.created_at_us/1000).toLocaleString('zh-CN',{hour12:false})}</small></span><span>整理</span></Button>)}</div></section>
 }

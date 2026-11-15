@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.domain.boundaries.entities import boundary_sha256
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.application.agent_access.handoff import EditorHandoff
+from product.protocols.runtime.collaboration import CollaborationBrief, QuestionPresentation
 
 _TASK_GROWTH_BYTES=8*1024*1024
 
@@ -24,6 +25,7 @@ class CreateCollaboration(TaskInput):
     purpose: str = Field(pattern=r'^(CHECK|CHECK_AND_REPAIR|REPAIR|SETUP|RULES|UNDERSTAND|MAINTENANCE)$')
     references: dict[str, str] = Field(default_factory=dict, max_length=12)
     editor: EditorHandoff | None = None
+    brief: CollaborationBrief | None = None
 
 
 class CollaborationAction(TaskInput):
@@ -37,6 +39,7 @@ class CollaborationQuestion(TaskInput):
     question_id: str = Field(pattern=r'^[0-9a-f]{32}$')
     question: str = Field(min_length=1, max_length=1000)
     options: list[str] = Field(default_factory=list, max_length=8)
+    presentation: QuestionPresentation | None = None
 
 
 class CollaborationFollowup(CreateCollaboration):
@@ -59,7 +62,7 @@ class CollaborationTasks:
     def create(self, project, command: CreateCollaboration):
         self.projects.get(project)
         task_id = 'ctk_' + command.operation_id
-        fingerprint = boundary_sha256(command.model_dump(exclude={'editor'} if command.editor is None else set()))
+        fingerprint = boundary_sha256(command.model_dump(exclude={key for key in ('editor','brief') if getattr(command,key) is None}))
         with self.uow() as work:
             work.acquire_write_lock()
             value = work.collaboration.get(project, task_id)
@@ -73,6 +76,7 @@ class CollaborationTasks:
                 created_at_us=now, updated_at_us=now, request_fingerprint=fingerprint,
                 goal=command.goal, purpose=command.purpose, references=command.references,
                 editor=None if command.editor is None else command.editor.model_dump(mode='json'),
+                **({'brief':command.brief.model_dump(mode='json')} if command.brief is not None else {}),
                 operations=[], questions=[], events=[], execution=None)
             self._event(value, 'USER', '已建立协作任务', 'WAITING_AGENT')
             self._growth_allowed(value)
@@ -99,7 +103,7 @@ class CollaborationTasks:
         if value is None:
             return None
         current = self._view(project, value, include_check=False)
-        return {key: current[key] for key in ('task_id', 'goal', 'state', 'revision', 'updated_at_us')}
+        return {key: current[key] for key in ('task_id', 'goal', 'purpose', 'state', 'revision', 'updated_at_us','brief') if key in current}
 
     def activity(self, project, task):
         value = self.show(project, task)
@@ -123,7 +127,7 @@ class CollaborationTasks:
         self._routine_context(project,command.references)
         def update(value):
             followups = value.setdefault('followups', [])
-            fingerprint = boundary_sha256(command.model_dump(exclude={'editor'} if command.editor is None else set()))
+            fingerprint = boundary_sha256(command.model_dump(exclude={key for key in ('editor','brief') if getattr(command,key) is None}))
             existing = next((item for item in followups if item['operation_id'] == command.operation_id), None)
             if existing:
                 if existing['fingerprint'] != fingerprint:
@@ -136,10 +140,13 @@ class CollaborationTasks:
             followups.append(dict(operation_id=command.operation_id, fingerprint=fingerprint,
                 goal=command.goal, purpose=command.purpose, references=command.references,
                 editor=None if command.editor is None else command.editor.model_dump(mode='json'),
-                previous={key:value.get(key) for key in ('goal','purpose','references','editor')}))
+                previous={key:value.get(key) for key in ('goal','purpose','references','editor','brief')}))
             value['references'] = command.references
             value.update(goal=command.goal, purpose=command.purpose)
             value['editor'] = None if command.editor is None else command.editor.model_dump(mode='json')
+            # 补充目标可能改变任务范围，旧简明说明不能沿用到新目标。
+            value.pop('brief',None)
+            if command.brief is not None:value['brief']=command.brief.model_dump(mode='json')
             value['goal_operation_baseline'] = len(value['operations'])
             value.pop('read_reports', None)
             value.pop('application_read', None)
@@ -153,7 +160,7 @@ class CollaborationTasks:
             if value['state'] in ('PAUSED', 'CANCELLED', 'COMPLETED'):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先恢复当前任务')
             value['execution'] = execution
-            self._event(value, 'SYSTEM', '已接受本地 Agent 启动请求', self._next_state(value))
+            self._event(value, 'SYSTEM', '已保留业务任务并改用新的模型会话' if execution.get('replaced_session_id') else '已接受本地 Agent 启动请求', self._next_state(value))
         return self._update(project, task, update)
 
     def execution_progress(self, project, task, operation_id, **changes):
@@ -321,11 +328,13 @@ class CollaborationTasks:
             existing = next((item for item in value['questions'] if item['question_id'] == command.question_id), None)
             if existing and (existing['question'] != command.question or existing['options'] != command.options):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '原问题已经用于其他内容')
+            if existing and existing.get('presentation') != (command.presentation.model_dump(mode='json') if command.presentation else None):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '原问题的说明已经确定，请保留原问题并另行补充')
             if not existing:
                 if len(value['questions'])>=512:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION,'本次任务的问题记录已满，请处理已有问题后建立新任务')
-                value['questions'].append(command.model_dump() | dict(answer=None))
-                self._event(value, 'AGENT', command.question, 'WAITING_USER')
+                value['questions'].append(command.model_dump(exclude_none=True) | dict(answer=None))
+                self._event(value, 'AGENT', command.presentation.title if command.presentation else command.question, 'WAITING_USER')
                 self._growth_allowed(value)
             else:return False
         return self._update(project, task, update)

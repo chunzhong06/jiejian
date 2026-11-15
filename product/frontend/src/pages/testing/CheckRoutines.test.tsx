@@ -21,6 +21,31 @@ beforeEach(()=>{
 })
 afterEach(()=>{vi.restoreAllMocks();discardProjectEditorDrafts(project)})
 
+it('历史方案展示保存事实并禁止覆盖，只提供当前修订入口',async()=>{
+ vi.mocked(routinesApi.catalog).mockResolvedValue({project_id:project,routines:[{routine_id:id,revision:2,name:'当前订单',scope_kind:'PERMISSIONS',permission_count:1,created_at_us:2}],legacy_selections:[]})
+ const save=vi.spyOn(routinesApi,'save')
+ render(<CheckRoutines {...props()}/> )
+ expect(await screen.findByRole('textbox',{name:'方案名称'})).toHaveValue('订单日常')
+ expect(screen.getByRole('textbox',{name:'方案名称'})).toBeDisabled()
+ expect(screen.getByRole('checkbox',{name:/成员不能读取他人订单/})).toBeDisabled()
+ expect(screen.getByRole('link',{name:'查看当前方案'})).toHaveAttribute('href',expect.stringContaining('routine_revision=2'))
+ expect(screen.queryByRole('button',{name:'保存修改'})).not.toBeInTheDocument()
+ expect(save).not.toHaveBeenCalled()
+})
+
+it('后台资料刷新失败保留本地草稿，重新读取后恢复编辑',async()=>{
+ render(<CheckRoutines {...props()}/> )
+ const name=await screen.findByRole('textbox',{name:'方案名称'})
+ fireEvent.change(name,{target:{value:'刷新期间保留'}})
+ vi.mocked(routinesApi.catalog).mockRejectedValueOnce(new Error('暂时离线'))
+ fireEvent(window,new Event('online'))
+ const reload=await screen.findByRole('button',{name:'重新读取方案资料'})
+ expect(name).toHaveValue('刷新期间保留');expect(name).toBeDisabled()
+ fireEvent.click(reload)
+ await waitFor(()=>expect(name).not.toBeDisabled())
+ expect(name).toHaveValue('刷新期间保留')
+})
+
 it('方案目录首次读取失败保留测试分类及当前应用',async()=>{
  vi.mocked(routinesApi.catalog).mockRejectedValue(new Error('方案目录暂不可读'))
  const value=props();value.route.query.delete('routine_id');value.route.query.delete('routine_revision')
@@ -73,9 +98,9 @@ it('离开后恢复未保存名称、约束和分类，绑定分类不运行草�
  const value=props(),bind=vi.spyOn(routinesApi,'bind')
  const first=render(<CheckRoutines {...value}/>)
  fireEvent.change(await screen.findByRole('textbox',{name:'方案名称'}),{target:{value:'本地草稿'}})
- fireEvent.change(screen.getByRole('spinbutton',{name:'最多检查场景'}),{target:{value:'12'}})
+ fireEvent.change(screen.getByRole('spinbutton',{name:'最多检查项'}),{target:{value:'12'}})
  first.unmount();const restored=render(<CheckRoutines {...value}/>)
- expect(await screen.findByRole('spinbutton',{name:'最多检查场景'})).toHaveValue(12)
+ expect(await screen.findByRole('spinbutton',{name:'最多检查项'})).toHaveValue(12)
 
  expect(screen.getByRole('textbox',{name:'方案名称'})).toHaveValue('本地草稿')
  restored.rerender(<CheckRoutines {...value} route={{...value.route,query:new URLSearchParams({...Object.fromEntries(value.route.query),section:'binding'})}}/>)

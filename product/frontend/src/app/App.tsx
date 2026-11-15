@@ -6,6 +6,7 @@ import {commitPageTransition} from '../shared/lib/pageTransition'
 import {PageSurface} from '../shared/ui/PageSurface'
 import {PageSkeleton} from '../shared/ui/PageSkeleton'
 import {readRoute} from '../shared/lib/navigation'
+import {refreshCurrentPage} from '../shared/lib/pageRefresh'
 import {trackInputMode} from '../shared/lib/inputMode'
 import {normalizedPath,pageTransitionKey,navigationDirection} from './Navigation'
 import {RouteContent} from './Router'
@@ -43,10 +44,10 @@ export default function App(){
   return <UIProvider appearance={appearance}>
     <AppShell route={route} current={current} project={project} projects={projects.data} choose={application.choose} appearance={appearance} toggleAppearance={toggle}>
       {Boolean(error)&&<div className="jj-global-error"><ErrorNote error={error}/><Button kind="quiet" aria-label="关闭错误提示" icon={<CloseOutlined aria-hidden="true"/>} onClick={()=>setError(undefined)}/></div>}
-      {projects.error&&<ErrorNote error={projects.error}/>}
+      {projects.error&&project&&<ErrorNote error={projects.error} onRetry={projects.reload} retryLabel="重新读取应用列表"/>}
       <PageSurface route={route.path+(route.query.size?'?'+route.query.toString():'')} transitionKey={key} view={current+(route.query.has('proposal_id')?'/review':route.query.get('view')==='plan'?'/plan':route.query.has('run_id')?'/result':'')}>
         <RouteBoundary key={key}>
-          {projects.error&&!project?<ErrorNote error={projects.error}/>:application.resolutionError?<ErrorNote error={application.resolutionError}/>:application.resolving?<PageSkeleton view={current}/>:<><div aria-live="polite">{workspace.error&&workspace.data&&<ErrorNote error={new Error('应用状态更新失败，当前显示上次读取的内容。可使用右上角刷新重试。')}/>}</div><RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} workspaceError={workspace.error} environment={environment.data} onConnected={application.connected} onError={setError}/></>}
+          {projects.error&&!project?<ErrorNote error={projects.error} onRetry={projects.reload} retryLabel="重新读取应用列表"/>:application.resolutionError?<ErrorNote error={application.resolutionError} onRetry={()=>void refreshCurrentPage()} retryLabel="重新读取当前应用"/>:application.resolving?<PageSkeleton view={current}/>:<><div aria-live="polite">{workspace.error&&workspace.data&&<ErrorNote error={new Error('应用状态更新失败，当前显示上次读取的内容。')} onRetry={workspace.reload} retryLabel="重新读取应用状态"/>}</div><RouteContent current={current} route={route} context={context} project={project} loading={projects.loading} workspace={workspace.data??null} workspaceError={workspace.error} environment={environment.data} onConnected={application.connected} onError={setError}/></>}
         </RouteBoundary>
       </PageSurface>
     </AppShell>

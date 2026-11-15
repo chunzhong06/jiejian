@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator, model_validator
 
 from product.protocols.web.base import ProtocolModel
+from product.protocols.web.hosts import target_host, target_address
 
 
 class WebTargetScope(ProtocolModel):
@@ -33,9 +34,9 @@ class WebTargetScope(ProtocolModel):
         if not normalized or any(not value for value in normalized):
             raise ValueError("allowed_hosts must contain explicit hosts")
         try:
-            return tuple(str(ipaddress.IPv4Address(value)) for value in normalized)
+            return tuple(target_host(value) for value in normalized)
         except ipaddress.AddressValueError as exc:
-            raise ValueError("allowed_hosts must be IPv4 literals") from exc
+            raise ValueError("allowed_hosts must be IPv4 literals or localhost") from exc
 
     @field_validator("allowed_ports")
     @classmethod
@@ -65,9 +66,9 @@ class WebTargetScope(ProtocolModel):
             raise ValueError("base_url must be an origin without path, query, or fragment")
         try:
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
-            host = str(ipaddress.IPv4Address(parsed.hostname.lower()))
+            host = target_host(parsed.hostname)
         except (ValueError, ipaddress.AddressValueError) as exc:
-            raise ValueError("base_url must use an IPv4 literal and valid port") from exc
+            raise ValueError("base_url must use an IPv4 literal or localhost and valid port") from exc
         if host not in self.allowed_hosts or port not in self.allowed_ports:
             raise ValueError("base_url is outside the declared host or port allowlist")
         origins: list[str] = []
@@ -89,16 +90,16 @@ class WebTargetScope(ProtocolModel):
                 origin_port = origin.port or (
                     443 if origin.scheme == "https" else 80
                 )
-                origin_host = str(ipaddress.IPv4Address(origin.hostname.lower()))
+                origin_host = target_host(origin.hostname)
             except (ValueError, ipaddress.AddressValueError) as exc:
                 raise ValueError(
-                    "allowed_origins must use IPv4 literals and valid ports"
+                    "allowed_origins must use IPv4 literals or localhost and valid ports"
                 ) from exc
             origins.append(f"{origin.scheme}://{origin_host}:{origin_port}")
         normalized_origins = tuple(dict.fromkeys(origins))
         if f"{parsed.scheme}://{host}:{port}" not in normalized_origins:
             raise ValueError("base_url origin is outside allowed_origins")
-        if not self.allow_private_network and not ipaddress.IPv4Address(host).is_global:
+        if not self.allow_private_network and not target_address(host).is_global:
             raise ValueError(
                 "private or local base_url requires explicit authorization"
             )

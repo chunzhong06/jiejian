@@ -74,3 +74,8 @@
   .jj-system-update .jj-update-workspace { grid-template-columns:minmax(0,1fr); gap:20px; }
   .jj-system-update .jj-update-current { grid-template-columns:minmax(0,1fr); gap:4px; }
 }
+
+.jj-system-priority{display:grid;gap:20px;padding:24px;background:var(--surface);border-inline-start:3px solid var(--warn)}
+.jj-system-priority>p{max-width:62ch;line-height:var(--leading-reading)}
+.jj-system-healthy{margin-top:28px}
+.jj-system-healthy[open]>.jj-system-components{margin-top:20px}

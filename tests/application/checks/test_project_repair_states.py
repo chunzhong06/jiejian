@@ -13,7 +13,7 @@ def test_project_repair_projects_exact_linked_state(state):
     source = package()
     deny = next(item for item in source.result.case_results if item.verdict == "VULNERABLE")
     contract = build_current_repair_contract(source, deny.case_id)
-    boundary = N(policy_epoch=2 if state == "STALE" else 1, permission_intents=contract.original_intents)
+    boundary = N(policy_epoch=2, permission_intents=() if state == "STALE" else contract.original_intents)
     entries = [] if state is None else [N(run=N(run_id=source.result.run_id, created_at_us=1), result_integrity="VALID")]
     current = package(forbidden=False, run_id="run_" + "2" * 32)
     change_id = "chg_" + "3" * 32
@@ -112,7 +112,8 @@ def test_problem_history_keeps_failed_attempt_resolution_and_recurrence():
         repairs=N(contracts_from_verified_package=lambda item: tuple(build_current_repair_contract(item, case.case_id)
             for case in item.result.case_results if case.verdict == 'VULNERABLE'),
             verification_for_contract=lambda item, original: verify_current_repair(original, request=item.request,
-                bundle=item.bundle, result=item.result, evidence=item.evidence, expected_change_context=item.request.change_context)),
+                bundle=item.bundle, result=item.result, evidence=item.evidence, expected_change_context=item.request.change_context,
+                original_request=source.request,original_bundle=source.bundle)),
         changes=N(repair_references=lambda _, change: refs[change], targets=lambda *_: (), latest_for_repair=lambda *_: None),
         boundaries=N(view=lambda _: N(policy_epoch=1, permission_intents=contract.original_intents)), pending_request_reader=None)
     task = service.evaluate(source.request.project_id).tasks[0]
@@ -155,7 +156,8 @@ def test_explicit_repair_of_repeated_discovery_resolves_same_problem_and_keeps_f
         for index,item in enumerate(values)),package=lambda run,**_:next(item for item in values if item.result.run_id==run)),
         repairs=N(contracts_from_verified_package=lambda item:(contracts[item.result.run_id],),
             verification_for_contract=lambda item,contract:verify_current_repair(contract,request=item.request,
-                bundle=item.bundle,result=item.result,evidence=item.evidence,expected_change_context=item.request.change_context)),
+                bundle=item.bundle,result=item.result,evidence=item.evidence,expected_change_context=item.request.change_context,
+                original_request=repeated.request,original_bundle=repeated.bundle)),
         changes=N(repair_references=lambda *_:(original.reference(),),targets=lambda *_:(),latest_for_repair=lambda *_:None),
         boundaries=N(view=lambda _:N(policy_epoch=1,permission_intents=original.original_intents)),pending_request_reader=None)
     task=service.evaluate(first.request.project_id).tasks[0]

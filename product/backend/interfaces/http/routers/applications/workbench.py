@@ -48,14 +48,28 @@ class SourceAnnotation(ApiModel):
     label: str = Field(min_length=1, max_length=256)
     action_id: str | None = Field(default=None, pattern=r'^bac_[0-9a-f]{32}$')
     expected_revision: int = Field(ge=0)
+    expected_source_revision: int | None = Field(default=None, ge=1)
 
 
 class SourceProposal(ApiModel):
     expected_revision: int = Field(ge=0)
 
 
+class SourceReview(SourceProposal):
+    expected_source_revision: int = Field(ge=1)
+    decision: Literal['PROPOSED', 'REJECTED']
+
+
 def build_workbench_router(context):
     router = APIRouter()
+
+    @router.get('/api/projects/{project_id}/discovery-coverage', response_model=ApiResponse)
+    def discovery_coverage(project_id: str, source_id: str | None = Query(None,pattern=r'^src_[0-9a-f]{32}$'),
+        request_id: str | None = Query(None,pattern=r'^req_[0-9a-f]{32}$')):
+        if (source_id is None)!=(request_id is None):
+            raise JiejianError(ErrorCode.INPUT_INVALID,'请同时指定来源与请求')
+        focus=None if source_id is None else (source_id,request_id)
+        return data_response(context.business_boundaries.discovery(project_id,focus_request=focus))
 
     @router.post('/api/applications', response_model=ApiResponse)
     def create_application(body: CreateApplication):
@@ -113,6 +127,10 @@ def build_workbench_router(context):
 
     @router.post('/api/projects/{project_id}/api-sources/{source_id}/requests/{item_id}/candidate', response_model=ApiResponse)
     def source_candidate(project_id: str, source_id: str, item_id: str, body: SourceProposal):
+        return data_response(context.application_sources.propose_action(project_id, source_id, item_id, **body.model_dump()))
+
+    @router.put('/api/projects/{project_id}/api-sources/{source_id}/requests/{item_id}/review', response_model=ApiResponse)
+    def review_source_request(project_id: str, source_id: str, item_id: str, body: SourceReview):
         return data_response(context.application_sources.propose_action(project_id, source_id, item_id, **body.model_dump()))
 
     return router

@@ -13,6 +13,17 @@ from product.protocols.checks.routine_reference import RoutineReference
 checks_group = typer.Typer(help='通过当前本机服务运行已批准的准确检查方案', no_args_is_help=True)
 
 
+@checks_group.command('report')
+def report(project: str = typer.Option(...), run: str = typer.Option(...),
+           endpoint: str = typer.Option('http://127.0.0.1:8765')):
+    """读取同一 Run 的正式结果与交付摘要，不提交检查。"""
+    try:
+        with CheckClient(endpoint) as client:
+            emit_command('check-report', client.report(project, run))
+    except JiejianError as exc:
+        fail(exc)
+
+
 def _reference(plan, revision, binding):
     try:
         return RoutineReference(routine_id=plan, revision=revision, binding_id=binding)

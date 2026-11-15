@@ -25,7 +25,7 @@ export function RuleConditionsEditor({value, relation, disabled, onChange}: {
     </details>;
 }
 
-// 新建表单和规则表的整行编辑区共用字段，展开方式由各自的工作面决定。
+// 新建表单与规则维护共用条件字段，选择和展开方式由各自的工作面决定。
 export function RuleConditionFields({value, relation, disabled, onChange}: {
     value?: PermissionConditions | null; relation: string; disabled: boolean;
     onChange: (value: PermissionConditions | null) => void;
@@ -40,13 +40,13 @@ export function RuleConditionFields({value, relation, disabled, onChange}: {
     };
     return <>
         <div className="jj-condition-fields">
-            <Field label="访问身份"><Choice value={current.principal} disabled={disabled} onValueChange={principal => change({principal:principal as PermissionConditions['principal'], ...(principal === 'ANONYMOUS' ? {tenant:null,relationships:[]} : {})})}>
+            <Field measure="short" label="访问身份"><Choice measure="short" value={current.principal} disabled={disabled} onValueChange={principal => change({principal:principal as PermissionConditions['principal'], ...(principal === 'ANONYMOUS' ? {tenant:null,relationships:[]} : {})})}>
                 <option value="AUTHENTICATED">已登录账号</option><option value="ANONYMOUS" disabled={relation !== 'OTHER_ROLE'}>未登录访客</option>
             </Choice></Field>
-            <Field label="与资源的租户关系"><Choice value={current.tenant ?? ''} disabled={disabled || current.principal === 'ANONYMOUS'} onValueChange={tenant => change({tenant:tenant ? tenant as PermissionConditions['tenant'] : null})}>
+            <Field measure="short" label="与资源的租户关系"><Choice measure="short" value={current.tenant ?? ''} disabled={disabled || current.principal === 'ANONYMOUS'} onValueChange={tenant => change({tenant:tenant ? tenant as PermissionConditions['tenant'] : null})}>
                 <option value="">不限定</option><option value="SAME">同一租户</option><option value="DIFFERENT" disabled={relation === 'OWNS'}>不同租户</option>
             </Choice></Field>
-            <Field label="仅检查这些数据状态（选填）"><input disabled={disabled} value={states} placeholder="例如 OPEN、ARCHIVED" onChange={event => setStates(event.target.value)} onBlur={() => change({resource_states:[...new Set(states.split(/[、,，]/).map(item => item.trim()).filter(Boolean))]})}/></Field>
+            <Field measure="standard" label="仅检查这些数据状态（选填）"><input disabled={disabled} value={states} placeholder="例如 OPEN、ARCHIVED" onChange={event => setStates(event.target.value)} onBlur={() => change({resource_states:[...new Set(states.split(/[、,，]/).map(item => item.trim()).filter(Boolean))]})}/></Field>
         </div>
         {current.principal!=='ANONYMOUS'&&<RelationshipConditions value={current.relationships??[]} disabled={disabled} onChange={relationships=>change({relationships})}/>}
     </>;
@@ -59,19 +59,19 @@ function RelationshipConditions({value,disabled,onChange}:{value:RelationshipReq
         {value.map((item,index)=><div className="jj-relationship-condition" key={item.kind}>
             <header><strong>{relationshipNames[item.kind]}</strong><Button kind="quiet" disabled={disabled} onClick={()=>onChange(value.filter((_,i)=>i!==index))}>移除条件</Button></header>
             <div className="jj-form-grid">
-                <Field label="适用状态"><Choice value={item.state} disabled={disabled} onValueChange={state=>update(index,{state:state as RelationshipRequirement['state']})}>
+                <Field measure="short" label="适用状态"><Choice measure="short" value={item.state} disabled={disabled} onValueChange={state=>update(index,{state:state as RelationshipRequirement['state']})}>
                     <option value="ACTIVE">关系有效</option><option value="ABSENT">不存在该关系</option>
                     {['SHARING','DELEGATION'].includes(item.kind)&&<><option value="EXPIRED">授权已到期</option><option value="REVOKED">授权已撤销</option></>}
                 </Choice></Field>
-                {item.kind==='ORGANIZATION'&&<Field label="组织范围"><Choice value={item.organization_scope} disabled={disabled} onValueChange={organization_scope=>update(index,{organization_scope:organization_scope as RelationshipRequirement['organization_scope']})}>
+                {item.kind==='ORGANIZATION'&&<Field measure="standard" label="组织范围"><Choice value={item.organization_scope} disabled={disabled} onValueChange={organization_scope=>update(index,{organization_scope:organization_scope as RelationshipRequirement['organization_scope']})}>
                     <option value="SAME">属于资源所在组织</option><option value="SUBJECT_ANCESTOR">操作人组织是资源组织的上级</option><option value="RESOURCE_ANCESTOR">资源组织是操作人组织的上级</option>
                 </Choice></Field>}
-                {item.kind==='ROLE_INHERITANCE'&&<Field label="需要继承的业务角色"><input value={item.inherited_role??''} disabled={disabled} onChange={event=>update(index,{inherited_role:event.target.value})}/></Field>}
-                {(['ROLE_INHERITANCE'].includes(item.kind)||item.kind==='ORGANIZATION'&&item.organization_scope!=='SAME')&&<Field label="最多经过的层级"><input type="number" min={1} max={8} value={item.max_depth} disabled={disabled} onChange={event=>update(index,{max_depth:Number(event.target.value)})}/></Field>}
+                {item.kind==='ROLE_INHERITANCE'&&<Field measure="standard" label="需要继承的业务角色"><input value={item.inherited_role??''} disabled={disabled} onChange={event=>update(index,{inherited_role:event.target.value})}/></Field>}
+                {(['ROLE_INHERITANCE'].includes(item.kind)||item.kind==='ORGANIZATION'&&item.organization_scope!=='SAME')&&<Field measure="short" label="最多经过的层级"><input type="number" min={1} max={8} value={item.max_depth} disabled={disabled} onChange={event=>update(index,{max_depth:Number(event.target.value)})}/></Field>}
             </div>
         </div>)}
-        {available.length>0&&<Field label="补充关系条件"><Choice value="" disabled={disabled} placeholder="选择需要核对的关系" onValueChange={kind=>onChange([...value,{kind:kind as RelationshipRequirement['kind'],state:'ACTIVE',organization_scope:'SAME',inherited_role:kind==='ROLE_INHERITANCE'?'':null,max_depth:1}])}>
-            <option value="" disabled>选择需要核对的关系</option>
+        {available.length>0&&<Field measure="short" label="补充关系条件"><Choice measure="short" value="" disabled={disabled} placeholder="选择关系条件" onValueChange={kind=>onChange([...value,{kind:kind as RelationshipRequirement['kind'],state:'ACTIVE',organization_scope:'SAME',inherited_role:kind==='ROLE_INHERITANCE'?'':null,max_depth:1}])}>
+            <option value="" disabled>选择关系条件</option>
             {available.map(kind=><option key={kind} value={kind}>{relationshipNames[kind]}</option>)}
         </Choice></Field>}
     </section>;

@@ -5,11 +5,9 @@
 from __future__ import annotations
 
 import hashlib
-import http.client
 import json
 import os
 import re
-import socket
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Literal
@@ -128,7 +126,7 @@ ProbeFunction = Callable[[str, EndpointDiscoveryLimits], EndpointProbeObservatio
 
 
 def normalize_loopback_endpoint(value: str) -> str:
-    """将明确 localhost 规范为 loopback，并拒绝任何非本机授权范围。"""
+    """保存明确本机地址与域名；DNS 核验由发出请求的运行边界承担。"""
 
     try:
         parsed = urlsplit(value.strip())
@@ -145,38 +143,12 @@ def normalize_loopback_endpoint(value: str) -> str:
             "本地应用地址必须是完整的 HTTP(S) loopback 地址",
         ) from None
     host = parsed.hostname.casefold()
-    if host == "localhost":
-        try:
-            resolved = {
-                item[4][0]
-                for item in socket.getaddrinfo(
-                    "localhost",
-                    port,
-                    type=socket.SOCK_STREAM,
-                )
-            }
-        except OSError:
-            raise JiejianError(
-                ErrorCode.APPLICATION_ENDPOINT_INVALID,
-                "localhost 无法安全解析为本机地址",
-            ) from None
-        if not resolved or not resolved.issubset({"127.0.0.1", "::1"}):
-            raise JiejianError(
-                ErrorCode.APPLICATION_ENDPOINT_INVALID,
-                "localhost 解析结果超出 loopback 范围",
-            )
-        if "127.0.0.1" not in resolved:
-            raise JiejianError(
-                ErrorCode.APPLICATION_ENDPOINT_INVALID,
-                "当前 Web 执行仅支持 IPv4 loopback，请使用 127.0.0.1 启动应用",
-            )
-        host = "127.0.0.1"
     if host == "::1":
         raise JiejianError(
             ErrorCode.APPLICATION_ENDPOINT_INVALID,
             "当前 Web 执行仅支持 IPv4 loopback，请使用 127.0.0.1 启动应用",
         )
-    if host != "127.0.0.1":
+    if host not in {"127.0.0.1", "localhost"}:
         raise JiejianError(
             ErrorCode.APPLICATION_ENDPOINT_INVALID,
             "自动接入只允许 127.0.0.1 或安全解析的 localhost",
@@ -393,46 +365,16 @@ class TargetEndpointDiscovery:
         endpoint: str,
         limits: EndpointDiscoveryLimits,
     ) -> EndpointProbeObservation:
+        from product.backend.infrastructure.execution.web.probe import probe_endpoint
+        from product.protocols.web.target import WebTargetScope
         parsed = urlsplit(endpoint)
-        connection_type = (
-            http.client.HTTPSConnection
-            if parsed.scheme == "https"
-            else http.client.HTTPConnection
-        )
-        connection = connection_type(
-            parsed.hostname,
-            parsed.port,
-            timeout=limits.timeout_seconds,
-        )
+        port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+        origin = f'{parsed.scheme}://{parsed.hostname}:{port}'
+        scope = WebTargetScope(base_url=origin, allowed_origins=(origin,), allowed_hosts=(parsed.hostname,),
+            allowed_ports=(port,), allow_private_network=True, timeout_seconds=limits.timeout_seconds,
+            max_requests=1, max_response_bytes=limits.max_response_bytes)
         try:
-            connection.request(
-                "GET",
-                parsed.path or "/",
-                headers={"Accept": "text/html,application/json", "User-Agent": "Jiejian-Endpoint-Discovery"},
-            )
-            response = connection.getresponse()
-            response.read(limits.max_response_bytes)
-            if 300 <= response.status < 400:
-                location = response.getheader("Location")
-                if location:
-                    redirected = urljoin(endpoint + "/", location)
-                    try:
-                        normalize_loopback_endpoint(redirected)
-                    except JiejianError:
-                        return EndpointProbeObservation(
-                            reachable=False,
-                            status_code=response.status,
-                            detail="重定向离开 loopback，已拒绝",
-                        )
-            return EndpointProbeObservation(
-                reachable=True,
-                status_code=response.status,
-                detail="本地服务已响应",
-            )
-        except (OSError, TimeoutError, http.client.HTTPException):
-            return EndpointProbeObservation(
-                reachable=False,
-                detail="本地服务未在探测预算内响应",
-            )
-        finally:
-            connection.close()
+            status = probe_endpoint(scope, parsed.path or '/')
+            return EndpointProbeObservation(reachable=True, status_code=status, detail='本地服务已响应')
+        except JiejianError:
+            return EndpointProbeObservation(reachable=False, detail='本地服务未通过范围核对或探测预算')

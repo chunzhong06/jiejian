@@ -5,6 +5,7 @@ from mcp.types import ToolAnnotations
 
 from product.backend.application.agent_access.service import MCPAccessLevel
 from product.backend.application.agent_access.handoff import EditorHandoff
+from product.protocols.runtime.collaboration import CollaborationBrief, QuestionPresentation
 from product.backend.application.agent_access.tasks import (
     CreateCollaboration, CollaborationAction, CollaborationQuestion,
 )
@@ -25,9 +26,10 @@ def register_collaboration_tools(server, core, access, *, require_level, invoke)
     @server.tool(name='jiejian_collaboration_create', structured_output=True)
     def create(ctx: Context, project_id: str, operation_id: OperationId, goal: str,
         purpose: Literal['CHECK','CHECK_AND_REPAIR','REPAIR','SETUP','RULES','UNDERSTAND','MAINTENANCE']='CHECK',
-        references: dict[str, str] | None=None, editor: EditorHandoff | None=None) -> dict[str, Any]:
+        references: dict[str, str] | None=None, editor: EditorHandoff | None=None,
+        brief: CollaborationBrief | None=None) -> dict[str, Any]:
         require_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        command = invoke(lambda: CreateCollaboration(operation_id=operation_id, goal=goal, purpose=purpose, references=references or {}, editor=editor), input_model=CreateCollaboration, input_root='task')
+        command = invoke(lambda: CreateCollaboration(operation_id=operation_id, goal=goal, purpose=purpose, references=references or {}, editor=editor, brief=brief), input_model=CreateCollaboration, input_root='task')
         return invoke(lambda: core.collaboration.create(project_id, command))
 
     @server.tool(name='jiejian_collaboration_context', structured_output=True, annotations=read)
@@ -63,9 +65,10 @@ def register_collaboration_tools(server, core, access, *, require_level, invoke)
 
     @server.tool(name='jiejian_collaboration_question', structured_output=True)
     def question(ctx: Context, project_id: str, task_id: str, question_id: QuestionId,
-        question: str, options: list[str] | None=None) -> dict[str, Any]:
+        question: str, options: list[str] | None=None, presentation: QuestionPresentation | None=None) -> dict[str, Any]:
+        """只询问读取后仍需用户决定的事项。presentation 提供具体业务问题与用途，question 保留完整依据；不借回答取得执行授权。"""
         require_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        command = invoke(lambda: CollaborationQuestion(question_id=question_id, question=question, options=options or []), input_model=CollaborationQuestion, input_root='question')
+        command = invoke(lambda: CollaborationQuestion(question_id=question_id, question=question, options=options or [], presentation=presentation), input_model=CollaborationQuestion, input_root='question')
         return invoke(lambda: core.collaboration.ask(project_id, task_id, command))
 
     @server.tool(name='jiejian_collaboration_receipt', structured_output=True)

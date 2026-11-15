@@ -87,8 +87,9 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
     def source_change_list(
         project_id: str,
         limit: int = Query(default=50, ge=1, le=100),
+        before_change_id: str | None = Query(default=None, min_length=1, max_length=64),
     ):
-        views = context.source_changes.list(project_id, limit=limit)
+        views = context.source_changes.list(project_id, limit=limit, before_change_id=before_change_id)
         return data_response([view.model_dump(mode="json") for view in views])
 
     @router.get(

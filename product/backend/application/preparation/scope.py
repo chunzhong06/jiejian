@@ -21,7 +21,7 @@ def check_preparation(boundary, preparation, selected_permissions):
                       for item in action.identity_requirements.slots if item.requirement.slot_id in requirements)
         identity = action.identity_requirements.model_copy(update={
             'slots': slots,
-            'status': PreparationStatus.BLOCKED if contract.status is AssuranceStatus.BLOCKED else
+            'status': PreparationStatus.BLOCKED if contract.status is AssuranceStatus.BLOCKED or any(item.status is PreparationStatus.BLOCKED for item in slots) else
                 PreparationStatus.SATISFIED if all(item.status is PreparationStatus.SATISFIED for item in slots) else PreparationStatus.NEEDS_USER,
             'reason_codes': tuple(dict.fromkeys(code for item in slots for code in item.reason_codes)),
         })

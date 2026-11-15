@@ -48,7 +48,7 @@ export function Breadcrumbs({route,projectName,projectId}:{route:Route;projectNa
   const setting=settingsSection(route)
   const collaboration=route.path==='/workspace'&&route.query.get('view')==='collaboration'
   const current=normalizedPath(route),section=routeDefinition(current)
-  const detail=current==='/reports'?route.query.get('view')==='compare'?'本轮变化':route.query.has('run_id')?'报告详情':route.query.get('view')==='plan'?'检查范围':undefined
+  const detail=current==='/reports'?route.query.get('view')==='compare'?'本轮变化':route.query.has('run_id')?'报告详情':route.query.get('view')==='plan'?'检查准备':undefined
     :current==='/permissions'&&route.query.has('proposal_id')?'审阅权限变更'
     :current==='/permissions'&&route.query.has('rule_id')?'规则详情'
     :current==='/preparation'?route.query.has('identities')?'测试账号':route.query.has('proof_sources')||route.query.has('source_id')?'证明来源':undefined

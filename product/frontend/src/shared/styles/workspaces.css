@@ -35,18 +35,19 @@
 .jj-object-select:focus-visible { outline:none; }
 .jj-object-table tbody tr:has(.jj-object-select:focus-visible) { outline:2px solid var(--focus); outline-offset:-2px; }
 .jj-object-table tbody tr:has(.jj-object-select:active) > * { background:var(--selected); }
-.jj-object-select strong { display:block; font-size:var(--text-object); font-weight:500; line-height:22px; }
-.jj-object-select small { display:block; font-weight:400; color:var(--muted); margin-top:5px; line-height:1.7; }
+.jj-object-select strong { display:block; font-size:var(--text-object); font-weight:var(--weight-medium); line-height:22px; }
+.jj-object-select small { display:block; font-weight:var(--weight-regular); color:var(--muted); margin-top:5px; line-height:1.7; }
 .jj-collection[data-detail-open=true] .jj-object-summary { display:none; }
 .jj-object-table .jj-object-meta { font-size:var(--text-meta); color:var(--muted); }
 .jj-object-table .jj-table-state { white-space:nowrap; }
 .jj-page-state { width:100%; display:grid; gap:24px; }
 .jj-page-state-content { display:grid; grid-template-columns:40px minmax(0,1fr); gap:16px; padding:28px 24px; max-width:880px; }
-.jj-page-state-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:8px; background:var(--bad-soft); color:var(--bad); font-size:20px; }
+.jj-page-state-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:8px; background:var(--bad); color:var(--on-bad); font-size:22px; }
 .jj-page-state-content h2 {  margin-bottom:8px; }
-.jj-page-state-content p { max-width:70ch; color:var(--muted); font-size:var(--text-object); line-height:var(--leading-reading); font-weight:400; }
+.jj-page-state-content > div > p { max-width:70ch; color:var(--muted); font-size:var(--text-body); line-height:var(--leading-reading); font-weight:var(--weight-regular); }
 .jj-page-state-content .jj-notice { margin-top:18px; }
 .jj-page-state-content .jj-form-actions { margin-top:18px; }
+.jj-page-state-content .jj-page-recovery-actions { justify-content:flex-end; }
 .jj-notice + :is(.jj-panel,.jj-collection,.jj-source-workspace),:is(.jj-panel,.jj-collection,.jj-source-workspace) + .jj-notice { margin-top:16px; }
 @media(max-width:900px) { .jj-collection-layout { grid-template-columns:minmax(0,1fr); } .jj-collection-main { padding-right:0; } .jj-inspector { border-left:0; border-top:1px solid var(--line); padding:24px 0; } }
 @media(max-width:600px) { .jj-page-state-content { grid-template-columns:minmax(0,1fr); padding:22px; } }
@@ -59,15 +60,17 @@
 .jj-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px; }
 .jj-form-section { display:grid; gap:20px; min-width:0; }
 .jj-form-columns { container:form-columns / inline-size; min-width:0; }
-.jj-form-columns-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; align-items:start; }
+.jj-form-columns-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px 40px; align-items:start; }
 .jj-form-columns-layout > * { min-width:0; }
 .jj-field-stack { display:grid; gap:20px; min-width:0; }
 .jj-field-stack > .jj-section-header { margin-bottom:0; }
 @container form-columns (max-width:720px) { .jj-form-columns-layout { grid-template-columns:minmax(0,1fr); gap:28px; } }
 @media(max-width:650px) { .jj-form-grid { grid-template-columns:minmax(0,1fr); } }
+/* 返回与对象标题共用一个距离；布局已提供的行距由其所有者声明，避免重复相加。 */
+.jj-back-link { margin-block-end:calc(var(--return-heading-gap) - var(--return-layout-gap,0px)); }
 .jj-back-link > .jj-button { margin-left:-12px; min-height:var(--control-compact); padding-block:5px; font-size:var(--text-body); }
 
 /* 只给计数、时间和进度等数值角色固定数字宽度；不改变正文及业务名称。 */
-:where(time, progress, .jj-badge, .jj-pagination, .jj-testing-count, .jj-rule-directory-summary, .jj-source-toolbar p, .jj-inspector .jj-facts dd) { font-variant-numeric:tabular-nums; }
+:where(time, progress, .jj-badge, .jj-pagination, .jj-testing-count, .jj-rule-directory-summary, .jj-source-toolbar p, .jj-inspector .jj-facts dd, .jj-run-count, .jj-home-task-progress, .jj-loading, .jj-environment-progress) { font-variant-numeric:tabular-nums; }
 .jj-inspector-heading > .jj-button { width:var(--control-compact); min-height:var(--control-compact); padding:0; margin-top:-6px; }
 @media(max-width:700px) { .jj-collection[data-detail-open=true] .jj-collection-main { display:none; } .jj-collection[data-detail-open=true] .jj-inspector { border-top:0; padding:24px 0; } }

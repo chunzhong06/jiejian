@@ -74,7 +74,7 @@ def test_new_pass_after_replacing_reference_does_not_verify_original_repair():
     current=package(forbidden=False,run_id='run_'+'2'*32);current.bundle=source.bundle
     change=ChangeContext(change_id='chg_'+'3'*32,impact_fingerprint='4'*64,required_intent_ids=tuple(sorted(ref.intent_id for ref in contract.original_intents)))
     current.request=current.request.model_copy(update={'change_context':change,'repair_context':repair_context(contract)})
-    def verify():return verify_current_repair(contract,request=current.request,bundle=current.bundle,result=current.result,evidence=current.evidence,expected_change_context=change)
+    def verify():return verify_current_repair(contract,request=current.request,bundle=current.bundle,result=current.result,evidence=current.evidence,expected_change_context=change,original_request=source.request,original_bundle=source.bundle)
     assert verify().status=='VERIFIED'
     config=current.bundle.proof_sources[0].config
     config=config.model_copy(update={'reference_artifact':config.reference_artifact.model_copy(update={'asset_id':'pai_'+'4'*32})})

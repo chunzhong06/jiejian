@@ -4,11 +4,13 @@ from uuid import uuid4
 import time
 import json
 from product.backend.application.preparation.proofs.commands import SaveProofSource, GrantProofScope, StartProofPreflight, AdoptProofSource
+from product.backend.application.business_boundaries.models import BoundaryMaintenanceCommand
+from product.protocols.checks.execution_request import PermissionReference
 from tests.support.builders.runtime.managed_records import ordinary_application, source_configuration, wait_for, reload_ordinary_policy
 
 
-@pytest.mark.parametrize('complex_flow',[False,True])
-def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,complex_flow):
+@pytest.mark.parametrize(('complex_flow','unrelated_rule'),[(False,False),(True,False),(False,True)],ids=['ordinary','relationships','unrelated-rule'])
+def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,complex_flow,unrelated_rule):
     def driver(text):
         return text.replace("{id:'bob',role:roles[1]}","{id:'bob',role:roles[1],organizations:['team']}").replace(
             "{state:'draft',title:'unit-a',summary:'value-a'}","{state:'draft',title:'unit-a',summary:'value-a',organization:'team',scope_complete:true}")
@@ -18,6 +20,8 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,c
             field_mutation=dict(path=['state'],operation='ASSIGN',expected_value='published'))
     harness = ordinary_application(tmp_path,edit_driver=driver if complex_flow else None,edit_proposal=proposal if complex_flow else None)
     core,project,service = harness.core,harness.project_id,harness.core.proof_preparation
+    original_rules=tuple(PermissionReference(intent_id=item.intent_id,revision=item.revision,intent_hash=item.intent_hash)
+        for item in core.business_boundaries.view(project).permission_intents)
     def configuration():
         config=source_configuration(harness).model_dump(mode='json')
         if complex_flow:config['relationship_mapping']=dict(application_action='publish',scope_complete_path=['scope_complete'],
@@ -37,6 +41,24 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,c
         stages=[(0,'PASS'),(1,'BLOCK'),(2,'BLOCK'),(3,'PASS')] if complex_flow else [(0,'PASS'),(1,'BLOCK'),(2,'PASS')]
         for stage,expected in stages:
             change_id=None
+            if unrelated_rule and stage==2:
+                draft=core.business_boundaries.maintenance_draft(project)
+                independent=draft.actions[0].model_dump(mode='json')
+                withdrawal=next(item for item in core.application_understanding.get(project).action_candidates
+                    if item.canonical_key=='POST /api/resources/{resource_id}/withdraw')
+                independent.update(item_id='pactn_'+uuid4().hex[:16],action_id=None,expected_current_revision=None,
+                    display_name='撤回资料',description='将已发布资料撤回草稿',source_candidate_ids=[withdrawal.candidate_id])
+                for effect in independent['effects']:
+                    effect.update(item_id='peff_'+uuid4().hex[:16],effect_id=None,business_label='资料回到草稿',expected_state='draft')
+                extra=next(item for item in draft.permissions if item.expectation=='ALLOW').model_dump(mode='json')
+                extra.update(item_id='pperm_'+uuid4().hex[:16],intent_id=None,expected_current_revision=None,
+                    business_action_item_id=independent['item_id'],protected_effect_item_ids=[item['item_id'] for item in independent['effects']])
+                command=draft.model_dump(mode='json',include={'actors','actions','permissions'})
+                command.update(expected_boundary_state_fingerprint=draft.boundary_state_fingerprint,
+                    actions=[*command['actions'],independent],permissions=[*command['permissions'],extra],provenance='新增撤回业务，保留原发布业务的检查材料')
+                proposal=core.business_boundaries.create_maintenance_proposal(project,BoundaryMaintenanceCommand.model_validate_json(json.dumps(command)))
+                core.business_boundaries.approve(project,proposal.proposal.proposal_id,
+                    expected_fingerprint=proposal.proposal.proposal_fingerprint,reason='新增独立要求，保留原题及正常对照')
             if stage:
                 policy = 'true' if stage==1 or complex_flow and stage==2 else "actor.role === 'owner' && actor.id === ownerId"
                 change_id=reload_ordinary_policy(harness,policy,repair_reference=repair_reference if stage>=2 else None)
@@ -70,6 +92,8 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,c
             scope=dict(scenario_reference=scenario_reference) if complex_flow and stage<2 else dict(change_id=change_id)
             preview = core.checks.preview(project,**scope)
             assert not preview.gaps,preview
+            if unrelated_rule and stage>=2:
+                assert preview.selection is not None and len(preview.selection.omitted)==1
             with core.uow_factory() as work:
                 adoption = work.proof_sources.adoption(project,source)
             frozen = service.frozen_sources(project)
@@ -98,6 +122,8 @@ def test_two_source_changes_reuse_materials_and_keep_original_results(tmp_path,c
             if stage>=2:
                 assert story.repair_verification.status==('NOT_VERIFIED' if expected=='BLOCK' else 'VERIFIED'),story.repair_verification
                 assert story.repair_verification.source_run_id==old_runs[1][0]
+                if unrelated_rule:
+                    assert story.policy_epoch>1 and len(core.business_boundaries.view(project).permission_intents)>len(original_rules)
             old_runs.append((submitted.run.run_id,status.run.verdict))
             with core.uow_factory() as work:
                 assert work.action_preparation.execution(harness.action.action_id,1)==original_execution

@@ -263,7 +263,9 @@ class ProofPreparationService:
                 reference_recovery_gaps=self._capture_gaps(work,project_id),
                 allow_permissions=[dict(intent_id=item.intent_id,action_id=item.business_action_id,
                     action_revision=item.action_revision,subject_actor_id=item.subject_actor_id,
-                    owner_actor_id=item.resource_owner_actor_id,relation=item.relation.value)
+                    owner_actor_id=item.resource_owner_actor_id,relation=item.relation.value,
+                    protected_effect_ids=item.protected_effect_ids,
+                    conditions=None if item.conditions is None else item.conditions.model_dump(mode='json'))
                     for item in boundary.permission_intents if item.expectation.value=='ALLOW' and item.effective_state.value=='ACTIVE'],
                 reference_preparation=dict(candidate_without_file=True,execute_from='LOCAL_GUI',
                     note='没有参照时，可先保存REFERENCE_FILE来源候选，reference_artifact和reference_origin为空；文件取得后再更新候选，执行正常取样只能由人在界面确认。'),

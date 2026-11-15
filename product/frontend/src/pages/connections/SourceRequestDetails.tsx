@@ -9,18 +9,25 @@ import {Button,ActionLink} from '../../shared/ui/actions'
 import {Field} from '../../shared/ui/layout'
 import {Choice} from '../../shared/ui/Choice'
 import {Badge,Notice} from '../../shared/ui/feedback'
+import type {DiscoveryItem} from '../../entities/permission/api/discovery'
 
 // 草稿保留开始编辑时的修订；切换请求后仍按原修订提交。
 export type SourceDraft={label:string;action:string;revision:number}
 const locations={PATH:'路径',QUERY:'查询参数',HEADER:'请求头',BODY:'请求正文'}
 
-export function SourceRequestDetails({projectId,source,request,annotation,actions,businessReady,draft,onDraft,onSave,onUpdate,act,busy}:{
+export function SourceRequestDetails({projectId,source,request,annotation,actions,businessReady,draft,onDraft,onSave,onUpdate,onReviewed,review,act,busy}:{
   projectId:string;source:ApiSource;request:SourceRequest;annotation?:SourceAnnotation;draft?:SourceDraft;
   actions:BusinessActionRevisionDto[];businessReady:boolean;
   onDraft:(value:SourceDraft|undefined)=>void;onSave:(draft:SourceDraft)=>Promise<void>;onUpdate:()=>void;
   act:(task:()=>Promise<void>)=>Promise<void>;busy:boolean;
+  review?:DiscoveryItem;onReviewed?:()=>void;
 }) {
-  const linked=actions.find(item=>item.action_id===annotation?.action_id)
+  const linked=actions.find(item=>item.action_id===(annotation?.action_id??review?.action_id))
+  const decide=(decision:'REJECTED'|'PROPOSED')=>void act(async()=>{
+    const current=await projectsApi.understanding(projectId)
+    await api.review(projectId,source.source_id,request.item_id,current.revision,source.revision,decision)
+    onReviewed?.()
+  })
   const edit=()=>onDraft({label:annotation?.label??request.label,action:annotation?.action_id??'',revision:annotation?.revision??0})
   const propose=()=>void act(async()=>{
     const current=await projectsApi.understanding(projectId)
@@ -28,19 +35,21 @@ export function SourceRequestDetails({projectId,source,request,annotation,action
     go('/application?view=business',projectId)
   })
   return <section className="jj-request-detail" aria-label="请求详情">
-    <ActionLink navigationScope="page" href={'#'+scopedPath('/application?view=sources')} className="jj-source-back" kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}返回请求列表</ActionLink>
+    <div className="jj-back-link jj-source-back"><ActionLink navigationScope="page" href={'#'+scopedPath('/application?view=sources')} kind="quiet"><ArrowLeftOutlined aria-hidden="true"/>返回请求列表</ActionLink></div>
     <header className="jj-request-header">
       <h2>{annotation?.label??request.label}</h2>
       <div className="jj-request-endpoint"><span className="jj-request-method">{request.method}</span><code>{request.path}</code></div>
     </header>
     <section className="jj-request-purpose">
+      {review?.status==='EXCLUDED'&&<p className="jj-small">这条接口线索已明确不纳入当前要求；它没有取得权限检查结论。<Button kind="quiet" disabled={busy} onClick={()=>decide('PROPOSED')}>重新核对</Button></p>}
+      {review?.status==='RECHECK'&&<p className="jj-small">来源或关联已有变化，请按当前接口重新核对业务要求。</p>}
       <div className="jj-request-purpose-heading"><div className="jj-object-line"><h3>业务关联</h3>{(!businessReady||linked||annotation?.action_id)&&<Badge tone="neutral">{!businessReady?'关联待核对':linked?'已关联':'需重新关联'}</Badge>}</div></div>
       {draft?<form className="jj-source-link-editor" onSubmit={event=>{event.preventDefault();void act(async()=>{
         await onSave(draft)
       })}}>
         {draft.revision!==(annotation?.revision??0)&&<Notice tone="caution">这条请求的业务关联已有更新，编辑内容已保留。当前名称为“{annotation?.label??request.label}”，{linked?`关联业务操作为“${linked.display_name}”`:'尚未关联业务操作'}。<Button kind="quiet" disabled={busy} onClick={()=>onDraft({...draft,revision:annotation?.revision??0})}>已核对当前业务关联</Button></Notice>}
-        <Field label="请求名称"><input maxLength={256} value={draft.label} disabled={busy} onChange={event=>onDraft({...draft,label:event.target.value})}/></Field>
-        {(actions.length>0||draft.action)&&<Field label="对应业务操作"><Choice disabled={busy} value={draft.action} onValueChange={action=>onDraft({...draft,action})}><option value="">尚未关联</option>{actions.map(item=><option key={item.action_id} value={item.action_id}>{item.display_name}</option>)}</Choice></Field>}
+        <Field measure="standard" label="请求名称"><input maxLength={256} value={draft.label} disabled={busy} onChange={event=>onDraft({...draft,label:event.target.value})}/></Field>
+        {(actions.length>0||draft.action)&&<Field measure="standard" label="对应业务操作"><Choice disabled={busy} value={draft.action} onValueChange={action=>onDraft({...draft,action})}><option value="">尚未关联</option>{actions.map(item=><option key={item.action_id} value={item.action_id}>{item.display_name}</option>)}</Choice></Field>}
         <div className="jj-task-actions"><Button kind="quiet" disabled={busy} onClick={()=>onDraft(undefined)}>取消修改</Button><Button kind="primary" type="submit" busy={busy} disabled={!businessReady||!draft.label.trim()||draft.revision!==(annotation?.revision??0)}>{actions.length||draft.action?'保存业务关联':'保存请求名称'}</Button></div>
       </form>:<>
         {linked&&<p className="jj-request-business-name">{linked.display_name}</p>}
@@ -50,6 +59,7 @@ export function SourceRequestDetails({projectId,source,request,annotation,action
           {linked?<ActionLink navigationScope="page" href={'#'+scopedPath('/testing?'+new URLSearchParams({action_id:linked.action_id,source_id:source.source_id,request_id:request.item_id,return_to:'/application?view=sources&source_id='+source.source_id+'&request_id='+request.item_id}))} kind="primary">整理接口流程</ActionLink>:actions.length?<Button kind="primary" disabled={busy||!businessReady} onClick={edit}>关联业务操作</Button>:<Button kind="primary" busy={busy} disabled={!businessReady} onClick={propose}>整理业务操作</Button>}
         </div>
         {!linked&&actions.length>0&&<Button kind="quiet" className="jj-source-new-action" busy={busy} onClick={propose}>新增业务操作线索</Button>}
+        {!linked&&review?.status!=='EXCLUDED'&&<Button kind="quiet" disabled={busy||!businessReady} onClick={()=>decide('REJECTED')}>此线索不纳入当前要求</Button>}
       </>}
     </section>
     <section className="jj-request-parameters"><div className="jj-request-section-heading"><h3>参数</h3><span>{request.parameters.length} 项</span></div>

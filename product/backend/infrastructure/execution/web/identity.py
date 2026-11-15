@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from product.backend.infrastructure.execution.web.pinned_transport import PinnedLoopbackTransport
 
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.protocols.web.identity import (
@@ -51,7 +52,7 @@ class HttpIdentityRuntime:
         self.binding = binding
         self._resolve_secret = resolve_secret
         self.business_origin = _normalize_origin(business_origin)
-        self.client = httpx.Client(follow_redirects=False, trust_env=False)
+        self.client = httpx.Client(follow_redirects=False, trust_env=False, transport=PinnedLoopbackTransport())
         self._bootstrapped = binding.kind in {
             HttpIdentityKind.BEARER,
             HttpIdentityKind.STATIC_HEADERS,

@@ -8,12 +8,29 @@ class BusinessScenarioService:
         self._uow,self._checks=uow_factory,checks
         self._clock=clock_us or (lambda:time.time_ns()//1000)
 
-    def context(self,project_id):
+    def context(self,project_id,*,scenario_id=None,revision=None):
+        if (scenario_id is None)!=(revision is None):
+            raise JiejianError(ErrorCode.INPUT_INVALID,'请同时指定场景及准确修订')
+        document=None if scenario_id is None else self.read(project_id,scenario_id,revision)
         listing=self.listing(project_id)
         preview=self._checks.preview(project_id)
         with self._uow() as work:
             identities=[dict(identity_id=item.identity_id,label=item.label) for item in work.test_identities.list_for_project(project_id)]
             actions=[]
+            requirements=[]
+            # 阅读已有实验时，要求来自其准确规则修订；材料失效不会抹去原业务要求。
+            if document is not None:
+                seen=set()
+                for experiment in document.experiments:
+                    for invocation in experiment.invocations:
+                        for item in invocation.items:
+                            reference=item.permission
+                            key=(reference.intent_id,reference.revision,reference.intent_hash)
+                            if key in seen:continue
+                            seen.add(key)
+                            permission=work.permission_intents.get_revision(reference.intent_id,reference.revision)
+                            matched=permission is not None and permission.project_id==project_id and permission.intent_hash==reference.intent_hash
+                            requirements.append(dict(permission=reference.model_dump(mode='json'),expectation=permission.expectation.value if matched else None))
             for item in preview.actions:
                 revision=work.business_boundaries.action_revision(item.action_id,item.action_revision)
                 execution=work.action_preparation.execution(item.action_id,item.action_revision)
@@ -23,7 +40,8 @@ class BusinessScenarioService:
                     trial_flow=trial_flow,creates_resource=execution is not None and execution.resource_injection.consumer.value.startswith('RESPONSE_')))
         return dict(project_id=project_id,documents=listing['documents'],
             actions=actions,identities=identities,
-            gaps=[item.model_dump(mode='json') for item in preview.gaps])
+            gaps=[item.model_dump(mode='json') for item in preview.gaps],
+            **({} if document is None else {'scenario':{'id':document.id,'revision':document.revision},'requirements':requirements}))
 
     def listing(self,project_id):
         with self._uow() as work:

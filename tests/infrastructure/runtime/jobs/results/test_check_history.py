@@ -118,7 +118,7 @@ def test_combined_reading_keeps_integrity_and_rechecks_files_on_next_request(pac
 
 
 @pytest.mark.parametrize("context_kind", ["change", "repair"])
-def test_history_copies_references_only_from_verified_request(worker_services, tmp_path, context_kind):
+def test_history_copies_references_only_from_verified_request(worker_services, tmp_path, context_kind, monkeypatch):
     from product.protocols.checks.execution_request import ExecutionRequest
     change_id, source_run_id = "change_history", "run_" + "f" * 32
 
@@ -151,10 +151,21 @@ def test_history_copies_references_only_from_verified_request(worker_services, t
     assert item.status.result_integrity == "VALID"
     assert item.change_id == (change_id if context_kind == "change" else None)
     assert item.source_run_id == (source_run_id if context_kind == "repair" else None)
+    assert item.change_reason is None
+    from product.backend.infrastructure.storage.changes.source_changes import SourceChangeRepository
+    lookups = []
+    def descriptions(_self, project, ids):
+        lookups.append((project, ids))
+        return {change_id: dict(reason='允许下载后撤回内部包访问', submitted_by='LOCAL_GUI')} if change_id in ids else {}
+    monkeypatch.setattr(SourceChangeRepository, 'change_descriptions', descriptions)
+    named = reader.history(job.project_id).items[0]
+    assert named.change_reason == ('允许下载后撤回内部包访问' if context_kind == 'change' else None)
+    assert lookups == [(job.project_id, (change_id,) if context_kind == 'change' else ())]
     (package.directory / "request.json").write_bytes(b"{}")
     invalid = reader.history(job.project_id).items[0]
     assert invalid.status.result_integrity == "INVALID"
     assert invalid.change_id is None and invalid.source_run_id is None
+    assert invalid.change_reason is None
 
 
 @pytest.mark.parametrize("lifecycle", [RunLifecycle.QUEUED, RunLifecycle.RUNNING, RunLifecycle.FAILED,

@@ -56,6 +56,7 @@ class WorkspaceService:
             status=project.status, target_type=project.target_type), connection=connection, actors=actors, actions=actions,
             primary_task=primary_task, areas=area_views(boundary_attention, preparation.preparation_complete),
             latest_result=latest_result, source_change=source_change, repair=repair, active_check=active_check,
+            discovery_coverage=self._business_boundaries.discovery(project_id),
             development=development, journey=journey_view(connection, boundary_attention, preparation.preparation_complete,
                 primary_task, latest_result, source_change, active_check))
 

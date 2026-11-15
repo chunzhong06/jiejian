@@ -1,4 +1,8 @@
 /* 索引延伸到详情分隔线；原有间距归入索引宽度，详情起点保持不变。 */
+.jj-issue-page:not([hidden]) { display:grid; gap:28px; }
+.jj-issue-page > .jj-back-link { --return-layout-gap:28px; }
+.jj-issue-workspace[data-single=true] { grid-template-columns:minmax(0,1fr); border-top:0; }
+.jj-issue-workspace[data-single=true] > .jj-issue-reading { border-left:0; padding:0; }
 .jj-issue-workspace { display:grid; grid-template-columns:280px minmax(0,1fr); border-top:1px solid var(--line); }
 .jj-issue-index { display:grid; align-content:start; padding-top:8px; }
 .jj-issue-index > button { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
@@ -10,7 +14,7 @@
 .jj-issue-comparison > section { padding:0; }
 .jj-issue-comparison > section + section { border:0; }
 .jj-issue-comparison h3 {  color:var(--muted); margin-bottom:12px; }
-.jj-issue-comparison p { line-height:var(--leading-reading); font-size:var(--text-object); font-weight:400; }
+.jj-issue-comparison p { line-height:var(--leading-reading); font-size:var(--text-object); font-weight:var(--weight-regular); }
 .jj-issue-comparison small { display:block; color:var(--muted); margin-top:8px; }
 .jj-issue-comparison .jj-button { margin-top:12px; }
 .jj-issue-verification { margin-top:28px; }
@@ -20,9 +24,6 @@
 .jj-issue-history li { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; border-bottom:1px solid var(--line); }
 .jj-issue-history li > div { display:flex; align-items:center; gap:8px 16px; flex-wrap:wrap; }
 .jj-issue-history time { color:var(--muted); font-size:var(--text-meta); }
-.jj-issue-verification th:first-child { width:54%; }
-.jj-issue-verification td > strong, .jj-issue-verification td > small { display:block; }
-.jj-issue-verification td > small { margin-top:5px; color:var(--muted); font-size:var(--text-meta); line-height:1.7; }
 .jj-issue-reading #issue-work-panel > footer { display:grid; gap:14px; margin-top:24px; }
 .jj-issue-reading #issue-work-panel > footer > p { font-size:var(--text-meta); color:var(--muted); }
 .jj-issue-reading #issue-work-panel > footer > div { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }

@@ -17,5 +17,5 @@
 .jj-activity > .jj-button[data-attention=true] > .anticon:first-child { color: var(--warn); }
 .jj-activity > .jj-button > .anticon:last-child { color: var(--muted); }
 .jj-activity-label { display: grid; gap: 3px; min-width: 0; }
-.jj-activity-label strong { font-weight: 500; }
-.jj-activity-label small { color: var(--muted); font-size: var(--text-meta); font-weight: 400; }
+.jj-activity-label strong { font-weight:var(--weight-medium); }
+.jj-activity-label small { color: var(--muted); font-size: var(--text-meta); font-weight:var(--weight-regular); }

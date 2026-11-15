@@ -331,6 +331,10 @@ def test_current_sdk_exact_tools_real_submit_cancel_change_and_grant_reset(tmp_p
                         collaboration = await client.call_tool('jiejian_agent_context',{'project_id':project,'stage':stage})
                         assert not collaboration.is_error
                         assert collaboration.structured_content['context_id'].startswith('awc_')
+                        if stage == 'MATERIALS':
+                            facts = collaboration.structured_content['facts']
+                            assert facts['materials']['project_id'] == project
+                            assert facts['validation_plan']['project_id'] == project
                     rule = app.state.context.business_boundaries.view(project).permission_intents[0]
                     preview = await client.call_tool("jiejian_rule_preview", {"project_id": project,
                         "reference": {"kind": "APPROVED", "rules": [{"intent_id": rule.intent_id, "revision": rule.revision}]},

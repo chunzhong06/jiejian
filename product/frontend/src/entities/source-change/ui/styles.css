@@ -3,7 +3,7 @@
 .jj-change-preview ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 8px 24px; margin: 0; padding: 0; }
 .jj-change-preview li { display: flex; gap: 10px; align-items: start; min-width: 0; }
 .jj-change-preview .jj-path { overflow-wrap: anywhere; }
-.jj-runtime-activation { padding:24px 26px; border-bottom:1px solid var(--line); display:grid; gap:24px; background:var(--inset); container:runtime-activation / inline-size; }
+.jj-runtime-activation { padding:24px 26px; display:grid; gap:24px; background:var(--inset); container:runtime-activation / inline-size; }
 .jj-runtime-activation-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:end; gap:24px 32px; }
 .jj-runtime-activation-copy { display:grid; gap:12px; min-width:0; }
 .jj-runtime-activation-copy > header { margin:0; }
@@ -18,22 +18,22 @@
 .jj-change-registration > header p { margin-top: 8px; color: var(--muted); font-size: var(--text-meta); }
 .jj-change-registration.is-embedded { border:0; border-radius:0; box-shadow:none; background:transparent; }
 .jj-change-registration.is-embedded > .jj-registration-fields { padding:0 0 28px; }
-.jj-change-registration.is-embedded > footer { padding-inline:0; background:transparent; }
 .jj-registration-fields { display: grid; grid-template-columns: minmax(240px,.85fr) minmax(0,1.15fr); gap: 28px; padding: 24px 26px; align-items: start; }
 .jj-registration-fields fieldset { border: 0; min-width: 0; padding: 0; margin: 0; }
-.jj-registration-fields legend { font-weight:600; font-size:var(--text-group); margin-bottom: 12px; line-height:24px; }
-.jj-registration-fields legend span { margin-left: 12px; color: var(--muted); font-weight: 400; }
+.jj-registration-fields legend { font-weight:var(--weight-semibold); font-size:var(--text-group); margin-bottom: 12px; line-height:24px; }
+.jj-registration-fields legend span { margin-left: 12px; color: var(--muted); font-weight:var(--weight-regular); }
 .jj-registration-targets { border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; }
 .jj-registration-targets label { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:center; gap:12px; padding:16px; cursor:pointer; }
 .jj-registration-targets label + label { border-top: 1px solid var(--line); }
 .jj-registration-targets label[data-selected=true] { --ink:var(--selected-ink); --muted:var(--selected-ink); color:var(--selected-ink); background:var(--selected); }
 .jj-registration-targets label > span { min-width: 0; }
-.jj-registration-targets strong { display: block; font-size:var(--text-object); font-weight:500; line-height:22px; }
+.jj-registration-targets strong { display: block; font-size:var(--text-object); font-weight:var(--weight-medium); line-height:22px; }
 .jj-registration-targets small { display: block; margin-top: 5px; color: var(--muted); }
-.jj-change-registration > footer { padding: 20px 26px; border-top: 1px solid var(--line); background: var(--inset); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
 .jj-change-registration > .jj-notice { margin: 20px 26px; }
 @media(max-width:800px) { .jj-registration-fields { grid-template-columns: minmax(0,1fr); padding: 20px; } .jj-change-registration > header, .jj-change-registration > footer { padding: 20px; } }
 
 .jj-registration-targets label:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 .jj-registration-targets label > input { align-self:start; margin-top:max(0px,calc((1lh - 18px)/2)); }
+.jj-change-registration > .jj-task-actions { margin-inline:26px; margin-bottom:24px; }
+.jj-change-registration.is-embedded > .jj-task-actions { margin-inline:0; margin-bottom:0; }

@@ -33,3 +33,14 @@ it('多目标登记丢失响应后，跨入口查询原操作，不重复登记'
     expect(register).toHaveBeenCalledTimes(1);
     expect(preview).toHaveBeenCalledTimes(1);
 });
+
+it('不同原题的未提交说明分别保留，返回同一原题继续编辑',()=>{
+    const props={projectId:'app',options:[],onClose:vi.fn(),onSaved:vi.fn(),onError:vi.fn()};
+    let view=render(<ChangeRegistration {...props} draftScope="original-a"/>);
+    fireEvent.change(screen.getByLabelText('修改说明'),{target:{value:'修复原题A的读取授权'}});
+    view.unmount();view=render(<ChangeRegistration {...props} draftScope="original-b"/>);
+    expect(screen.getByLabelText('修改说明')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('修改说明'),{target:{value:'修复原题B的编辑授权'}});
+    view.unmount();render(<ChangeRegistration {...props} draftScope="original-a"/>);
+    expect(screen.getByLabelText('修改说明')).toHaveValue('修复原题A的读取授权');
+});

@@ -4,12 +4,19 @@ import {fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import type {ReactNode} from 'react'
 import {Permissions} from './Permissions'
+import {OfficialRulesReady} from './OfficialRules'
 import {businessBoundariesApi as api} from '../../entities/permission/api/businessBoundaries'
 import {ruleCandidatesApi} from '../../entities/permission/api/ruleCandidates'
 import {ApiError} from '../../shared/api/http'
 
 vi.mock('./ProposalReview',()=>({ProposalReview:({children}:{children:ReactNode})=><section>{children}</section>}))
 const original='/reports?view=plan&scope_id=limited&plan_item=proof'
+
+it.each(['/workspace',original])('示例批准后从概览进入准备，原检查则接续准确范围：%s',origin=>{
+ render(<OfficialRulesReady projectId="app" origin={origin} onRules={vi.fn()}/>)
+ const link=screen.getByRole('link',{name:origin==='/workspace'?'准备示例材料':'返回检查范围'})
+ expect(link).toHaveAttribute('href',expect.stringContaining(origin==='/workspace'?'prepare_example=1':'scope_id=limited'))
+})
 const proposal={proposal:{project_id:'app',proposal_id:'proposal',unresolved_questions:[]},review:{basis_state:'COMPLETE',current_state_changed:false},decision:null}
 const boundary={project_id:'app',actors:[],actions:[],permission_intents:[]}
 beforeEach(()=>{
@@ -20,6 +27,13 @@ beforeEach(()=>{
 afterEach(()=>{vi.restoreAllMocks();sessionStorage.clear()})
 const show=(onError=vi.fn())=>render(<Permissions projectId="app" name="订单" official={false} refresh={vi.fn()} onError={onError} route={{path:'/permissions',query:new URLSearchParams({proposal_id:'proposal',return_to:original})}}/>)
 const approve=async()=>{fireEvent.click(await screen.findByRole('checkbox',{name:'我已核对全部访问规则及业务定义'}));fireEvent.click(screen.getByRole('button',{name:'批准权限规则'}))}
+
+it('示例中的已批准维护记录仍阅读原提案，不切回首次准备向导',async()=>{
+ vi.mocked(api.proposal).mockResolvedValue({...proposal,decision:{decision:'APPROVED'}} as never)
+ render(<Permissions projectId="app" name="示例" official refresh={vi.fn()} onError={vi.fn()} route={{path:'/permissions',query:new URLSearchParams({proposal_id:'proposal'})}}/>);
+ expect(await screen.findByRole('link',{name:'准备检查材料'})).toBeVisible()
+ expect(screen.queryByRole('heading',{name:'示例规则已确认'})).not.toBeInTheDocument()
+})
 const returned=()=>{const url=new URL(screen.getByRole('link',{name:'返回检查范围'}).getAttribute('href')!.slice(1),'http://localhost');expect(url.searchParams.get('scope_id')).toBe('limited');expect(url.searchParams.get('plan_item')).toBe('proof')}
 
 it('批准成功后读取失败仍保留回执和原检查，不重复批准',async()=>{
@@ -85,5 +99,15 @@ it.each([false,true])('示例先展示完整规则，批准前核对服务端实
  fireEvent.click(screen.getByRole('button',{name:'批准规则并继续'}))
  await waitFor(()=>expect(create).toHaveBeenCalledOnce())
  if(changed){await waitFor(()=>expect(error).toHaveBeenCalled());expect(submit).not.toHaveBeenCalled()}
- else{expect(await screen.findByRole('heading',{name:'示例规则已确认'})).toBeVisible();expect(submit).toHaveBeenCalledOnce();expect(screen.getByRole('link',{name:'准备示例材料'})).toHaveAttribute('href',expect.stringContaining('prepare_example=1'))}
+ else{expect(await screen.findByRole('heading',{name:'示例规则已确认'})).toBeVisible();expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);expect(screen.queryByRole('heading',{name:'访问规则已生效'})).not.toBeInTheDocument();expect(submit).toHaveBeenCalledOnce();expect(screen.getByRole('link',{name:'准备示例材料'})).toHaveAttribute('href',expect.stringContaining('prepare_example=1'))}
+})
+
+it('预置规则读取失败时不显示启动成功事实，并保留返回示例入口',async()=>{
+ vi.spyOn(experienceApi,'boundaryDraft').mockRejectedValue(new Error('官方示例体验当前未运行'))
+ vi.mocked(api.editor).mockResolvedValue({project_id:'app',boundary,pending_proposals:[]} as never)
+ render(<Permissions projectId="app" name="示例" official refresh={vi.fn()} onError={vi.fn()} route={{path:'/permissions',query:new URLSearchParams()}}/>);
+ expect(await screen.findByText('官方示例体验当前未运行')).toBeVisible()
+ expect(screen.queryByText(/示例已启动/)).not.toBeInTheDocument()
+ expect(screen.getByRole('link',{name:'返回官方示例'})).toHaveAttribute('href',expect.stringContaining('/environment'))
+ expect(screen.queryByRole('button',{name:'批准规则并继续'})).not.toBeInTheDocument()
 })

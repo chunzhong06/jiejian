@@ -1,0 +1,16 @@
+.jj-example-change-body { padding:24px 28px;display:grid;gap:24px; }
+.jj-example-change { margin-top:24px;padding:28px;background:var(--surface);border-radius:var(--radius-surface);min-width:0;container:example-change / inline-size; }
+.jj-example-change > .jj-object-heading .jj-object-description { max-width:64ch; }
+.jj-example-change-reading { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px 40px;margin-top:32px;align-items:start; }
+.jj-example-change-reading section { min-width:0;display:grid;gap:12px; }
+.jj-example-change-reading h3 { font-size:var(--text-label);line-height:20px;font-weight:var(--weight-medium);color:var(--muted); }
+.jj-example-change-question p { font-size:var(--text-feature);line-height:var(--leading-feature);font-weight:var(--weight-medium);text-wrap:pretty; }
+.jj-example-change-requirement ul { margin:0;padding-left:20px;display:grid;gap:10px;font-size:var(--text-body);line-height:var(--leading-reading); }
+.jj-example-change .jj-task-actions { margin-top:28px; }
+.jj-example-change .jj-action-note { max-width:64ch; }
+.jj-example-deeper { margin-top:24px; }
+/* 深入示例保留完整内容，主体验只突出当前待验证的问题。 */
+.jj-example-change:not([data-primary]) { background:transparent;padding-inline:0; }
+.jj-example-change:not([data-primary]) .jj-example-change-question p { font-size:var(--text-object);line-height:var(--leading-reading); }
+@container example-change (max-width:620px) { .jj-example-change-reading { grid-template-columns:minmax(0,1fr);gap:28px; } }
+@media(max-width:760px) { .jj-example-change { padding:24px 20px; }.jj-example-change-body { padding:22px 20px; } }

@@ -161,6 +161,9 @@ class ProductCapabilities:
             lambda p, a, o: core.application_progress.readiness(p))
         add('rules.context', '读取权限要求与候选说明', '权限规则', 'READ', Empty,
             lambda p, a, o: core.rule_candidates.context(p))
+        add('rules.validation', '核对要求的验证方式与准备条件', '权限规则', 'READ',
+            parameters('RuleValidationReference', candidate_id=(str | None, None), revision=(int | None, Field(default=None, ge=1)), intent_id=(str | None, None)),
+            lambda p, a, o: core.rule_candidates.validation_plan(p, **a.model_dump()))
         add('rules.save', '整理权限候选', '权限规则', 'PREPARE', RuleCandidateSave,
             lambda p, a, o: core.rule_candidates.save(p, a, submitted_via='MCP'))
         add('rules.candidate', '读取候选和待审要求', '权限规则', 'READ', CandidateReference,
@@ -418,12 +421,45 @@ class ProductCapabilities:
                 selected_scope=operation['arguments'].get('selected_permissions') is not None,
                 revalidation=operation['arguments'].get('change_id') is not None)
 
+    def _check_delivery_gap(self, project, refs, check):
+        """只在终态收口读取正式产物；页面进度继续使用轻量 latest_check。"""
+        if refs.get('run_id') and refs['run_id'] != check['run_id']:
+            return '最近检查与指定报告不同，请回到本次目标报告'
+        try:
+            story=self.core.check_story.build(check['run_id'],project_id=project,include_repair=False)
+        except JiejianError:
+            # 发布未完成或 reader 拒绝时保留原 Run 供恢复，不能用数据库旧结论收口。
+            return '正式报告暂不可读取，请核对原检查的发布与完整性'
+        if story.project_id!=project or story.run_id!=check['run_id'] or story.verdict.value!=check['verdict']:
+            return '正式报告与本任务的项目、检查或结果引用不一致'
+        rule=refs.get('rule_id') or refs.get('intent_id')
+        if rule and not any(item.permission.intent_id==rule for item in story.actions):
+            return '本次报告尚未包含目标权限要求'
+        if rule and refs.get('intent_hash') and not any(item.permission.intent_id==rule
+            and item.permission.intent_hash==refs['intent_hash'] for item in story.actions):
+            return '本次报告与目标要求的内容身份不同'
+        if refs.get('case_id') and not any(item.case_id==refs['case_id'] for item in story.actions):
+            return '本次报告尚未包含指定检查样本'
+        if refs.get('action_id') and not any(item.action_id==refs['action_id'] for item in story.actions):
+            return '本次报告尚未包含目标业务操作'
+        if refs.get('change_id') and (story.change_context is None or story.change_context.change_id!=refs['change_id']):
+            return '本次报告尚未对应指定源码变化'
+        if refs.get('routine_id'):
+            routine=story.routine
+            if routine is None or routine.routine_id!=refs['routine_id']:
+                return '本次报告尚未对应指定检查方案'
+            if refs.get('routine_revision') and str(routine.revision)!=refs['routine_revision']:
+                return '本次报告使用的方案修订与目标不同'
+            if refs.get('binding_id') and routine.binding_id!=refs['binding_id']:
+                return '本次报告使用的材料绑定与目标不同'
+        return None
+
     def goal_outcome(self, project, task):
         """完成依据来自原业务所有者；协作结束和安全通过始终分开。"""
         task = {**task, 'operations':task['operations'][task.get('goal_operation_baseline',0):]}
         purpose, refs = task['purpose'], task['references']
         check = self.latest_check(project, task['operations'])
-        if purpose in ('CHECK','UNDERSTAND') and refs.get('run_id') and not check:
+        if purpose in ('CHECK','UNDERSTAND') and refs.get('run_id') and (purpose=='UNDERSTAND' or not check):
             read = refs['run_id'] in task.get('read_reports', [])
             return dict(fulfilled=read, title='指定报告已读取' if read else '等待读取指定报告',
                 destination='/reports?run_id='+refs['run_id'])
@@ -435,7 +471,8 @@ class ProductCapabilities:
                         run = work.runs.get(operation['result']['run_id'])
                         if run and run.verdict and run.verdict.value=='BLOCK': sources.add(run.run_id)
             if purpose=='CHECK_AND_REPAIR' and not sources:
-                ready = bool(check and check['lifecycle']=='COMPLETED' and check['verdict']=='PASS')
+                ready = bool(check and check['lifecycle']=='COMPLETED' and check['verdict']=='PASS'
+                    and self._check_delivery_gap(project, refs, check) is None)
                 return dict(fulfilled=ready, title='本次检查未发现权限问题' if ready else '等待检查及必要的问题处理',
                     destination='/reports?run_id='+check['run_id'] if check else '/reports?plan=1')
             repair = self.core.project_repair.evaluate(project)
@@ -444,8 +481,10 @@ class ProductCapabilities:
             return dict(fulfilled=verified, title='原问题已解决，正常功能保留' if verified else '原问题仍需取得完整复验依据',
                 destination='/reports?run_id='+check['run_id'] if check else '/changes')
         if purpose == 'CHECK':
-            ready = check is not None and check['lifecycle'] == 'COMPLETED' and check['verdict'] is not None
-            return dict(fulfilled=ready, title='本次检查报告已形成' if ready else '等待本次检查报告',
+            candidate = bool(check is not None and check['lifecycle'] == 'COMPLETED' and check['verdict'] is not None)
+            gap = self._check_delivery_gap(project, refs, check) if candidate else None
+            ready = candidate and gap is None
+            return dict(fulfilled=ready, title='本次检查报告已形成' if ready else gap or '等待本次检查报告',
                 destination='/reports?run_id='+check['run_id'] if check else '/reports?plan=1')
         if purpose == 'RULES':
             saved = any(item['capability'] == 'rules.save' and item['state'] == 'SUCCEEDED' for item in task['operations'])
@@ -477,7 +516,10 @@ class ProductCapabilities:
                 return dict(fulfilled=ready, title='本次结果证明已核对并采用' if ready else '等待结果证明补全及审阅采用',
                     destination='/preparation?proof_sources=1&action_id='+editor['action_id'])
             preview = self.core.checks.preview(project)
-            return dict(fulfilled=preview.can_execute, title='本次检查材料已齐备' if preview.can_execute else '检查材料仍有缺口', destination='/preparation')
+            # 旧材料可执行不表示本任务新提交的产物已经审阅。
+            reviews = self.pending_reviews(project, task['operations'])
+            ready = preview.can_execute and not reviews
+            return dict(fulfilled=ready, title='准备产物等待审阅' if reviews else '本次检查材料已齐备' if ready else '检查材料仍有缺口', destination='/preparation')
         if purpose == 'UNDERSTAND':
             ready = task.get('application_read', False)
             return dict(fulfilled=ready, title='应用业务内容已读取' if ready else '等待读取应用业务内容', destination='/application')
@@ -511,7 +553,10 @@ class ProductCapabilities:
                 if operation['capability']=='scenarios.save' and operation['state']=='SUCCEEDED':
                     result=operation['result']
                     if result['revision']==latest_scenarios[result['id']] and work.business_scenarios.reviewed_revision(project,result['id'])<result['revision']:
-                        reviews.append(dict(id=result['id']+'@'+str(result['revision']),title='核对 Agent 整理的业务实验',
+                        document=work.business_scenarios.get(project,result['id'],result['revision'])
+                        if document is None:
+                            raise JiejianError(ErrorCode.STORAGE_STATE,'协作任务的场景关联不完整')
+                        reviews.append(dict(id=result['id']+'@'+str(result['revision']),title=document.label+'：业务实验',
                             action_label='审阅场景与正常对照',destination='/testing?'+urlencode(dict(scenario=result['id'],revision=result['revision']))))
                 if operation['capability']=='proofs.save' and operation['state']=='SUCCEEDED':
                     result=operation['result']
@@ -522,7 +567,11 @@ class ProductCapabilities:
                         raise JiejianError(ErrorCode.STORAGE_STATE,'协作任务的证明关联不完整')
                     adoption=work.proof_sources.adoption(project,source.source_id)
                     if adoption is None or adoption.revision!=source.revision:
-                        reviews.append(dict(id=source.source_id,title='核对 Agent 整理的结果判断依据',action_label='审阅判断方式与读取范围',
+                        # 名称来自该产物的正式业务对象；不让多个独立结果在目录中看起来相同。
+                        action=work.business_boundaries.action_revision(source.config.action_id,source.config.action_revision)
+                        effect=next((item for item in action.effect_catalog if item.effect_id==source.config.effect_id),None) if action is not None and action.project_id==project else None
+                        title=effect.business_label+'：结果判断依据' if effect is not None and source.revision==result['revision'] else '核对原修订的结果判断依据'
+                        reviews.append(dict(id=source.source_id,title=title,action_label='审阅判断方式与读取范围',
                             destination='/preparation?'+urlencode(dict(proof_sources='1',source_id=source.source_id,revision=result['revision']))))
                 if operation['capability'] == 'flows.save' and operation['state'] == 'SUCCEEDED':
                     result = operation['result']
@@ -534,7 +583,9 @@ class ProductCapabilities:
                     used=work.action_preparation.execution(document.business_action_id,document.action_revision)
                     adopted=used is not None and used.operation_flow_id==document.id and used.operation_flow_revision>=document.revision
                     if not adopted:
-                        reviews.append(dict(id=document.id+'@'+str(document.revision), title='核对 Agent 整理的执行与恢复步骤',
+                        action=work.business_boundaries.action_revision(document.business_action_id,document.action_revision)
+                        title=action.display_name+'：执行与恢复步骤' if action is not None and action.project_id==project else '核对原修订的执行与恢复步骤'
+                        reviews.append(dict(id=document.id+'@'+str(document.revision), title=title,
                             action_label='比较并审阅流程', destination='/testing?'+urlencode(dict(action_id=document.business_action_id,
                             flow_id=document.id, revision=document.revision, review='1'))))
                 if operation['capability'] != 'recordings.start' or operation['state'] != 'SUCCEEDED':

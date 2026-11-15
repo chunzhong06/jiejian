@@ -18,6 +18,7 @@ from product.backend.domain.boundaries.candidate_scenarios import RuleCandidateD
 from product.backend.domain.boundaries.candidate_reviews import ContextualBoundaryReviewCommand as BoundaryReviewCommand
 from product.backend.domain.boundaries.candidate_scope import ScopeDecisionCommand, ScopeBatchCommand, ScopeBatchChoice, CoverageLinkCommand, CoverageTarget
 from product.backend.domain.boundaries.rule_preview import RulePreviewCommand
+from product.backend.application.business_boundaries.validation import ValidationPlan, OpenValidationQuestion
 from product.backend.application.business_boundaries import (
     BoundaryMaintenanceActionItem,
     BoundaryMaintenanceActorItem,
@@ -164,6 +165,19 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
 
     router = APIRouter()
     prefix = "/api/projects/{project_id}/business-boundaries"
+
+    @router.get(f"{prefix}/validation-plan", response_model=ApiResponse[ValidationPlan])
+    def validation_plan(project_id: str, candidate_id: str | None = None, revision: int | None = None, intent_id: str | None = None):
+        return data_response(context.rule_candidates.validation_plan(project_id,
+            candidate_id=candidate_id, revision=revision, intent_id=intent_id))
+
+    @router.post(f"{prefix}/validation-questions/{{requirement_id}}", response_model=ApiResponse, status_code=201)
+    def open_validation_question(project_id: str, requirement_id: str, body: OpenValidationQuestion):
+        return data_response(jsonable_encoder(context.rule_candidates.open_validation_question(project_id, requirement_id, body)), status_code=201)
+
+    @router.post(f"{prefix}/validation-plan/preview", response_model=ApiResponse[ValidationPlan])
+    def preview_validation(project_id: str, body: BoundaryMaintenanceCreateRequest):
+        return data_response(context.rule_candidates.preview_validation(project_id, _request_command(body)))
 
     @router.post(f"{prefix}/rule-preview", response_model=ApiResponse)
     def rule_preview(project_id: str, body: RulePreviewRequest):

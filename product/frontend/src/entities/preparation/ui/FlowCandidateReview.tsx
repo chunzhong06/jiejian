@@ -21,6 +21,11 @@ export function FlowCandidateReview({candidate,previous,accounts,onApply,onKeep}
 
 export type FlowComparisonBaseline=Pick<FlowEditorDraft,'steps'|'target'|'subject'|'owner'|'resource'|'entityEvidence'|'recovery'|'restoreMethod'>
 
+/** 对照交接修订和当前采用修订共用结构转换，比较仍不展示参数原值。 */
+export function flowComparisonBaseline(flow:OperationFlow):FlowComparisonBaseline{
+  return {steps:decodeSteps(flow.workflow.steps),target:flow.workflow.target_step_id,subject:flow.subject_test_identity_id,owner:flow.resource_owner_test_identity_id,resource:flow.actual_resource_id,entityEvidence:flow.entity_evidence??[],recovery:flow.recovery?.relative_path??'',restoreMethod:flow.recovery?.method??'POST'}
+}
+
 /** 只比较可交接的流程结构，不展示固定值、请求正文或恢复正文。 */
 export function FlowComparison({candidate,previous,accounts,baselineLabel='当前草稿'}:{candidate:OperationFlow;previous?:FlowComparisonBaseline;accounts:{identity_id:string;label:string}[];baselineLabel?:string}) {
   const [mode,setMode]=useState<'changed'|'all'>(previous?'changed':'all')
@@ -32,20 +37,31 @@ export function FlowComparison({candidate,previous,accounts,baselineLabel='当�
   }).join('\n')||'没有额外参数'
   let candidateSteps:EditableStep[]
   try{candidateSteps=decodeSteps(candidate.workflow.steps)}catch{return <p role="status">这份候选包含当前编辑器不支持的结构，请在原流程中核对。</p>}
-  const rows=[
+  const groups=[
+    {title:'执行安排',rows:[
     ['执行请求',previous?.steps.map(step=>step.method+' '+step.path).join('\n')??'尚无草稿',candidate.workflow.steps.map(step=>step.request_template.method+' '+step.request_template.path).join('\n')],
     ['受检步骤',previous?String(previous.steps.findIndex(step=>step.id===previous.target)+1):'未选择',String(candidate.workflow.steps.findIndex(step=>step.id===candidate.workflow.target_step_id)+1)],
+    ['参数与取值来源',inputs(previous?.steps??[]),inputs(candidateSteps)],
+    ]},
+    {title:'账号与测试数据',rows:[
     ['操作账号',previous?accountLabel(previous.subject):'没有交接基准',accountLabel(candidate.subject_test_identity_id)],
     ['资源所有者',previous?accountLabel(previous.owner):'没有交接基准',accountLabel(candidate.resource_owner_test_identity_id)],
     ['测试数据',previous?.resource||'未填写',candidate.actual_resource_id],
+    ]},
+    {title:'结果核对与恢复',rows:[
     ['结果查询',previous?.entityEvidence.map(item=>String(item.query.request.path)+' · '+item.query.data_path).join('\n')||'未设置',candidate.entity_evidence?.map(item=>String(item.query.request.path)+' · '+item.query.data_path).join('\n')||'未设置'],
-    ['参数与取值来源',inputs(previous?.steps??[]),inputs(candidateSteps)],
     ['恢复请求',previous?.recovery?previous.restoreMethod+' '+previous.recovery:'未设置',candidate.recovery?candidate.recovery.method+' '+candidate.recovery.relative_path:'未设置'],
+    ]},
   ]
+  const rows=groups.flatMap(group=>group.rows)
   const changed=rows.filter(([,before,after])=>before!==after)
   const visible=previous&&mode==='changed'?changed:rows
   return <section className="jj-flow-comparison" aria-label="流程结构对照">
-    <header><p className="jj-small jj-muted">{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'没有可读取的比较基准，以下展示候选内容。'}</p><p className="jj-small jj-muted">此处只比较结构。固定值和请求正文请在编辑器中核对；带入后仍需保存并确认使用。</p>{previous&&changed.length>0&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
-    {visible.length?<div className="jj-scroll-table jj-flow-candidate-diff"><table className="jj-content-table jj-comparison-data" data-density="compact"><thead><tr><th>内容</th>{previous&&<th>{baselineLabel}</th>}<th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead><tbody>{visible.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th>{previous&&<td>{before}</td>}<td>{after}</td></tr>)}</tbody></table></div>:<p className="jj-flow-comparison-unchanged">流程结构没有变化。</p>}
+    <header><div className="jj-flow-comparison-intro"><strong>{previous?`与${baselineLabel}比较，${changed.length} 项结构不同`:'核对这份流程候选'}</strong><p className="jj-small jj-muted">{previous?'按执行安排、账号与数据、结果核对与恢复分组阅读。':'没有可读取的比较基准，以下展示候选内容。'}</p></div>{previous&&<Segmented label="对照范围" value={mode} onValueChange={setMode} items={[{value:'changed',label:'只看变化 '+changed.length},{value:'all',label:'完整流程'}]}/>}</header>
+    {visible.length?<div className="jj-scroll-table jj-flow-candidate-diff"><table className="jj-content-table jj-comparison-data" data-density="compact"><thead><tr><th>核对内容</th>{previous&&<th>{baselineLabel}</th>}<th>Agent 候选 · 第 {candidate.revision} 修订</th></tr></thead>{groups.map(group=>{
+      const items=previous&&mode==='changed'?group.rows.filter(([,before,after])=>before!==after):group.rows
+      return items.length>0&&<tbody key={group.title}><tr className="jj-flow-comparison-group"><th scope="rowgroup" colSpan={previous?3:2}>{group.title}</th></tr>{items.map(([label,before,after])=><tr key={label} data-changed={Boolean(previous)&&before!==after}><th scope="row">{label}</th>{previous&&<td>{before}</td>}<td>{after}</td></tr>)}</tbody>
+    })}</table></div>:<p className="jj-flow-comparison-unchanged">流程结构没有变化。</p>}
+    <p className="jj-flow-comparison-boundary jj-small jj-muted">此处只比较结构。固定值和请求正文请在编辑器中核对；带入后仍需保存并确认使用。</p>
   </section>
 }

@@ -20,6 +20,7 @@ class StartAgent(TaskInput):
     operation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
     allow_changes: bool = False
     continuous: bool = False
+    new_session: bool = False
     max_turns: int = Field(default=8, ge=1, le=8)
     max_seconds: int = Field(default=1800, ge=30, le=1800)
 
@@ -85,6 +86,14 @@ class AgentExecution:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先恢复当前任务')
             if previous and previous['state'] == 'RUNNING':
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '原 Agent 回合尚未收口，请先核对原任务')
+            if command.new_session:
+                if not previous or previous['state'] != 'FAILED' or not previous.get('session_id'):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '只有已结束的失败回合可以改用新模型会话')
+                if any(item['state'] in ('UNKNOWN', 'RUNNING') for item in value['operations']):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '请先核对原业务操作的结果，再建立新模型会话')
+                progress = self.core.agent_capabilities.operation_progress(project, value['operations'], limit=None)
+                if any(item['phase'] not in ('SUCCEEDED', 'FAILED', 'CANCELLED') for item in progress):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '原后台业务尚未结束，请先等待原操作收口')
             working_directory = understanding.source_root
             if working_directory is None:
                 # 无源码调查只使用私有运行目录；目标源码写入仍由 allow_changes 和原授权限制。
@@ -93,12 +102,15 @@ class AgentExecution:
                 working_directory = str(working)
             profile = self.connections.prepare_managed_profile(task)
             stop = Event()
-            session = previous.get('session_id') if previous else None
+            session = None if command.new_session else previous.get('session_id') if previous else None
             execution = dict(operation_id=command.operation_id, state='RUNNING', session_id=session,
                 allow_changes=command.allow_changes, message='正在连接本地 Agent', continuous=command.continuous,
                 max_turns=command.max_turns, max_seconds=command.max_seconds, turn_count=1,
                 operation_baseline=len(value['operations']),
                 access_level=self.access.level_for(project).value, started_at_us=time.time_ns()//1000)
+            if command.new_session:
+                # 只替换模型上下文；原任务、操作编号、问题和审阅决定继续由业务仓储持有。
+                execution['replaced_session_id'] = previous['session_id']
             self.core.collaboration.execution_started(project, task, execution)
             thread = Thread(target=self._run, args=(project, task, executable, working_directory,
                 str(profile), command.allow_changes, session, stop, command), name='jiejian-agent-worker', daemon=True)
@@ -231,6 +243,8 @@ class AgentExecution:
 已有事实通过 jiejian_collaboration_read 读取，写入通过 jiejian_collaboration_action 提交。
 通过同一任务协调接入、业务理解、规则候选、运行、账号、操作流程、证明、检查、修改与复验、恢复和维护。
 读取已有值并复用；缺少业务意图用 jiejian_collaboration_question 提出具体问题。
+提问前读取已有运行声明、来源和相关对象，能在已授权范围查明的技术问题继续查证，不把工具返回为空直接交给用户排错，也不把某种数据库作为未经核对的必选方案。
+提问时提供 presentation：title 只问一个具体业务决定，reason 简述为什么需要，answer_hint 说明如何回答；完整工具依据放 question，不在标题堆砌接口名、内部编号和执行指令。普通回答不代替读取授权、采用或执行批准。
 上下文中的 editor 是用户当前未保存草稿的结构，不是执行授权。先沿用其中的动作、流程编号与修订，再读取已有来源和材料。
 草稿没有交接原始参数值或凭据；不能推测这些值，必要时提问。流程候选经 flows.candidate 整理、flows.save 保存，交由用户比较并采用，不覆盖旧修订。
 需要确认时等待用户在界鉴处理，并结束本轮；下轮仍读取同一任务，不另建重复请求。
@@ -258,6 +272,8 @@ class AgentExecution:
             return result
         except Exception as error:
             code = error.code if isinstance(error, JiejianError) else 'AGENT_EXECUTION_FAILED'
+            history_unavailable = isinstance(error, JiejianError) and error.to_dict()['details'].get('agent_history') == 'UNAVAILABLE'
             self.core.collaboration.execution_progress(project, task, operation_id,
-                state='FAILED', message='本轮未完成，已形成的业务记录保留', error_code=code)
+                state='FAILED', message='原模型历史无法恢复，当前任务和业务产物仍保留' if history_unavailable else '本轮未完成，已形成的业务记录保留',
+                error_code=code, history_unavailable=history_unavailable)
             return dict(state='FAILED')

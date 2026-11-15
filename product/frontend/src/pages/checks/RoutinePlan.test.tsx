@@ -33,6 +33,8 @@ it('尚未确认环境绑定时只能准备，不把可执行预览冒充方案�
 it('执行始终带准确方案与绑定，报告回程不丢失原对象',async()=>{
  const submit=vi.spyOn(currentChecksApi,'submit').mockResolvedValue({run:{run_id:'run-result',project_id:project}} as never)
  render(<RoutinePlan {...props(true)}/>)
+ fireEvent.click(await screen.findByRole('button',{name:'预览这次检查'}))
+ expect(submit).not.toHaveBeenCalled()
  fireEvent.click(await screen.findByRole('button',{name:'开始检查'}))
  await waitFor(()=>expect(submit).toHaveBeenCalledTimes(1))
  expect(submit.mock.calls[0][7]).toEqual(reference)

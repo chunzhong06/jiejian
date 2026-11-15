@@ -54,6 +54,21 @@ def validate_frozen_facts(evidence,bundle,started_at_us,completed_at_us):
     case_proofs={proof.proof_fingerprint:proof for proof in case.proof_requirements}
     observations={(item.proof_fingerprint,item.observer_id,item.phase):item for item in evidence.observations}
     references={(item.proof_fingerprint,item.observer_id,item.phase):item for item in evidence.fact_references}
+    for condition in evidence.outcome.condition_observations:
+        requirement=case_proofs.get(condition.proof_fingerprint)
+        if requirement is None:raise ValueError('condition has no frozen proof')
+        proof=runtime_proofs[requirement.binding_fingerprint]
+        if proof.rule=='HTTP_ENTITY_QUERY':
+            from product.protocols.checks.conditions import condition_source_reference
+            if (condition.source_id,condition.source_fingerprint)!=condition_source_reference(requirement):
+                raise ValueError('condition query differs from frozen proof')
+            if (condition.subject_tenant is not None or condition.owner_tenant is not None or condition.resource_tenant is not None
+                    or condition.relationships or condition.resource_state is not None and condition.resource_state not in proof.entity_query.condition_state_values):
+                raise ValueError('http entity condition exceeds its finite declaration')
+        else:
+            source=sources.get(condition.source_id)
+            if source is None or source.source_fingerprint!=condition.source_fingerprint or proof.observer_id!='json_'+source.source_id[4:]:
+                raise ValueError('condition source differs from frozen proof')
     # 时间、来源修订和已采用参照共同限定归属；摘要有效也不能接受超出运行窗口或来源不符的事实。
     for fact in evidence.business_facts:
         if not started_at_us<=fact.observed_at_us<=completed_at_us:raise ValueError('fact outside run window')

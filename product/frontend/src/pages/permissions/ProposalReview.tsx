@@ -1,16 +1,15 @@
 import {ComparePair} from '../../shared/ui/ComparePair'
 import {ObjectTable} from '../../shared/ui/ObjectTable'
 import {useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react'
-import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
 import CheckOutlined from '@ant-design/icons/CheckOutlined'
 import CloseOutlined from '@ant-design/icons/CloseOutlined'
 import type {BoundaryProposalViewDto,BoundaryReviewValueDto} from '../../entities/permission/api/businessBoundaries'
 import {conditionLabels} from '../../entities/permission/ui/RuleConditions'
 import {fieldMutationLabel} from '../../entities/permission/ui/FieldMutation'
 import {text} from '../../shared/lib/format'
-import {Button} from '../../shared/ui/actions'
 import {Badge,Notice} from '../../shared/ui/feedback'
-import {Heading,SectionHeading} from '../../shared/ui/layout'
+import {SectionHeading} from '../../shared/ui/layout'
+import {TaskSurface} from '../../shared/ui/TaskSurface'
 import {Inspector} from '../../shared/ui/Inspector'
 import {Tabs} from '../../shared/ui/Tabs'
 
@@ -25,7 +24,7 @@ function itemLabel(item:ReviewItem){
 }
 
 /** 仅持有阅读选择；整份提案的批准、未知回执和确认仍由 Permissions 持有。 */
-export function ProposalReview({value,onBack,children,backLabel}:{value:BoundaryProposalViewDto;onBack:()=>void;children:ReactNode;backLabel?:string}){
+export function ProposalReview({value,onBack,children,backLabel,backDisabled=false}:{value:BoundaryProposalViewDto;onBack:()=>void;children:ReactNode;backLabel?:string;backDisabled?:boolean}){
   const [view,setView]=useState('rules'),[ruleId,setRuleId]=useState(''),[definitionId,setDefinitionId]=useState(''),[detailOpen,setDetailOpen]=useState(false)
   const collection=useRef<HTMLElement>(null),returnFocus=useRef<HTMLButtonElement|null>(null)
   const panelId=useId(),tabId=useId()
@@ -34,6 +33,7 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
   const items=view==='definitions'?definitions:rules
   const current=items.find(item=>item.item_id===(view==='definitions'?definitionId:ruleId))??items[0]
   const select=(id:string)=>{(view==='definitions'?setDefinitionId:setRuleId)(id);setDetailOpen(true)}
+  const selectChange=(item:ReviewItem)=>{(item.entity_kind==='PERMISSION'?setRuleId:setDefinitionId)(item.item_id);setDetailOpen(true)}
   const close=()=>{returnFocus.current=collection.current?.querySelector<HTMLButtonElement>('.jj-object-select[aria-pressed=true]')??null;setDetailOpen(false)}
   useLayoutEffect(()=>{
     // 窄窗关闭详情后先恢复概览，再把键盘焦点交还原条目。
@@ -45,6 +45,8 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
     const group=view==='definitions'?(item.entity_kind==='ACTOR'?'业务角色':'业务操作与结果'):text(item.after.action??item.before?.action??'访问规则')
     groups.set(group,[...(groups.get(group)??[]),item])
   }
+  const affected=value.review?.items.filter(item=>item.change_kind!=='REFERENCE')??[]
+  const changeEntry=(item:ReviewItem)=><li key={item.item_id}><button type="button" className="jj-object-select" onClick={()=>{setView(item.entity_kind==='PERMISSION'?'rules':'definitions');selectChange(item)}}><strong>{changes[item.change_kind]} · {itemLabel(item)}</strong></button></li>
   const accepted=value.decision?.decision==='APPROVED'
   const status=value.decision?(accepted?'已批准':'已放弃'):'尚未生效'
   const rows=(group:ReviewItem[])=>group.map(item=><tr key={item.item_id} data-selected={detailOpen&&current?.item_id===item.item_id}>
@@ -52,12 +54,10 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
     <td className="jj-proposal-summary-column">{view==='rules'?item.after.protected_effects.map((effect,index)=><p key={index}>{text(effect)}</p>):text(item.after.description||item.after.effects.map(effect=>effect.business_label).join('、'))||'未补充说明'}</td>
     <td className="jj-table-state"><span className="jj-proposal-change-label">{changes[item.change_kind]}</span></td>
   </tr>)
-  return <>
-    <div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={onBack}>{backLabel??'全部权限规则'}</Button></div>
-    <Heading eyebrow={value.decision?'权限变更记录':'权限审阅'} title={value.decision?'查看这次权限变更':'核对规则将如何改变'}>
-      <div className="jj-proposal-summary"><Badge tone={value.decision?(accepted?'positive':'neutral'):'accent'}>{status}</Badge><span>{rules.length} 条访问规则</span><span>{definitions.length} 项业务定义</span></div>
-    </Heading>
+  return <TaskSurface width="wide" context={value.decision?'权限变更记录':'权限审阅'} title={value.decision?'查看这次权限变更':'核对规则将如何改变'} onBack={onBack} backLabel={backLabel??'全部权限规则'} backDisabled={backDisabled} status={<Badge tone={value.decision?(accepted?'positive':'neutral'):'accent'}>{status}</Badge>} description={<div className="jj-proposal-summary"><span>{rules.length} 条访问规则</span><span>{definitions.length} 项业务定义</span></div>}>
     <div className="jj-proposal-review">
+      {value.review && <section className="jj-proposal-focus" aria-label="本次变更重点"><SectionHeading title="这份提案实际改变什么" appearance="group"/><p>{value.review.items.filter(item=>item.change_kind!=='REFERENCE').length} 项新增、调整或停用；{value.review.items.filter(item=>item.change_kind==='REFERENCE').length} 项沿用。批准时仍采用整份提案。</p><ul>{affected.slice(0,4).map(changeEntry)}</ul>{affected.length>4&&<details><summary>其余 {affected.length-4} 项变化</summary><ul>{affected.slice(4).map(changeEntry)}</ul></details>}</section>}
+
       <Tabs label="权限提案内容" value={view} onValueChange={setView} divider={false} panelId={panelId} idPrefix={tabId} items={[{value:'rules',label:`访问规则 ${rules.length}`},{value:'definitions',label:`业务定义 ${definitions.length}`}]}/>
       <section id={panelId} role="tabpanel" aria-labelledby={tabId+'-'+view} className="jj-proposal-panel">
         <section ref={collection} className="jj-collection jj-proposal-workspace" data-view={view} data-detail-open={Boolean(current)&&detailOpen} aria-label={view==='rules'?'访问规则概览':'业务定义概览'}>
@@ -71,16 +71,16 @@ export function ProposalReview({value,onBack,children,backLabel}:{value:Boundary
           </Inspector>}</div>
         </section>
       </section>
-      <details className="jj-proposal-source"><summary>提案来源</summary><p>{text(value.proposal.provenance)}</p></details>
+      <details className="jj-proposal-source jj-reading-disclosure"><summary>提案来源</summary><p>{text(value.proposal.provenance)}</p></details>
       {children}
     </div>
-  </>
+  </TaskSurface>
 }
 
 function ReviewChange({item,accepted}:{item:ReviewItem;accepted:boolean}){
   if(item.change_kind==='UPDATE'||item.change_kind==='RETIRE')return <ComparePair className="jj-rule-compare">
-    <section><p className="jj-eyebrow">现在</p>{item.basis_available&&item.before?<RuleMeaning value={item.before} retiredLabel="已停用"/>:<Notice tone="caution">原版本不可用，无法核对变化。</Notice>}</section>
-    <section><p className="jj-eyebrow">批准后</p><RuleMeaning value={item.after} retiredLabel={accepted?'已停用':'将停用'}/></section>
+    <section><p className="jj-eyebrow">提案依据的原版本</p>{item.basis_available&&item.before?<RuleMeaning value={item.before} retiredLabel="已停用"/>:<Notice tone="caution">原版本不可用，无法核对变化。</Notice>}</section>
+    <section><p className="jj-eyebrow">{accepted?'本次批准内容':'拟生效内容'}</p><RuleMeaning value={item.after} retiredLabel={accepted?'已停用':'将停用'}/></section>
   </ComparePair>
   return <RuleMeaning value={item.after} retiredLabel={accepted?'已停用':'将停用'}/>
 }

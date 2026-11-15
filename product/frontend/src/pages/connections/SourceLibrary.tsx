@@ -16,6 +16,7 @@ import {Empty,ErrorNote,InlineFeedback,Loading,Notice} from '../../shared/ui/fee
 import {SearchField} from '../../shared/ui/SearchField'
 import {SourceRequestDetails,type SourceDraft} from './SourceRequestDetails'
 import {businessBoundariesApi} from '../../entities/permission/api/businessBoundaries'
+import {discoveryApi} from '../../entities/permission/api/discovery'
 import {useDirectoryState} from '../../shared/lib/directoryState'
 import {editorDraft,rememberEditorDraft,editorDraftGeneration,clearSubmittedDraft,useDraftProtection} from '../../entities/runtime/model/handoff'
 
@@ -57,6 +58,7 @@ export function SourceLibrary({projectId}:{projectId:string}) {
   // 明确链接的对象优先于筛选；失效链接不能静默展示另一条请求。
   const selected=explicit?requested:selectedSource?visible.find(item=>item.source.source_id===selectedSource):visible.find(item=>item.source.source_id+':'+item.request.item_id===lastSelected)??visible[0]
   const selectedKey=selected?selected.source.source_id+':'+selected.request.item_id:''
+  const discovery=useRead('source-discovery:'+projectId+':'+selectedKey,signal=>selected?discoveryApi.current(projectId,signal,{source_id:selected.source.source_id,request_id:selected.request.item_id}):Promise.resolve(null))
   const hiddenSelection=Boolean(requested&&!visible.includes(requested))
   const draftKey=(key:string)=>'source-request:'+projectId+':'+key
   useDraftProtection(rows.some(item=>{const draft=editorDraft<SourceDraft>(draftKey(item.source.source_id+':'+item.request.item_id),projectId);return Boolean(draft&&(draft.label!==(item.annotation?.label??item.request.label)||draft.action!==(item.annotation?.action_id??'')))}))
@@ -65,23 +67,23 @@ export function SourceLibrary({projectId}:{projectId:string}) {
     if(!selected)throw new Error('请先定位需要保存的请求。')
     const sourceId=selected.source.source_id,requestId=selected.request.item_id
     const key=draftKey(selectedKey),generation=editorDraftGeneration(key,projectId)
-    const saved=await api.annotate(projectId,sourceId,requestId,draft.label,draft.action||null,draft.revision)
+    const saved=await api.annotate(projectId,sourceId,requestId,draft.label,draft.action||null,draft.revision,selected.source.revision)
     // 迟到回执只收束提交时的草稿；其他请求与之后的输入仍由各自代次持有。
     clearSubmittedDraft(key,projectId,generation);refreshDraft(value=>value+1)
-    setAccepted(undefined);setLinkedReceipt({sourceId,requestId,label:saved.label,revision:saved.revision});state.reload()
+    setAccepted(undefined);setLinkedReceipt({sourceId,requestId,label:saved.label,revision:saved.revision});state.reload();discovery.reload()
   }
   const openImport=(source?:string)=>{setImportSource(source);setImporting(true)}
   return <section ref={root} className="jj-source-library" aria-label="接口来源工作面" data-page-pending={state.loading&&!state.data||business.loading&&!business.data||undefined}>
-    <header className="jj-source-toolbar"><div><h2>接口请求</h2>{rows.length>0&&<p><strong>{rows.length}</strong> 个请求 · {sources.length} 份来源</p>}</div>{rows.length>0&&!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入资料</Button>}</header>
+    <header className="jj-source-toolbar"><div><h2>接口请求</h2>{rows.length>0&&<p><strong>{rows.length}</strong> 个请求 · {sources.length} 份来源</p>}</div>{rows.length>0&&!recovery&&<Button onClick={()=>openImport()}>导入资料</Button>}</header>
     {recovery&&!importing&&<Notice tone="caution">有一份来源修订的保存结果需要核对。<Button onClick={()=>openImport()}>查看上次保存结果</Button></Notice>}
     {accepted&&<InlineFeedback tone="positive">已保存“{accepted.name}”第 {accepted.revision} 修订。{state.error?'来源目录尚未更新，可重试读取。':'可继续关联其中的请求。'}<Button kind="quiet" onClick={()=>{state.reload();(workflow?.open??go)('/application?view=sources&source_id='+accepted.source_id+(accepted.requests[0]?'&request_id='+accepted.requests[0].item_id:''))}}>查看已保存的来源</Button></InlineFeedback>}
     {linkedReceipt&&<InlineFeedback tone="positive">已保存“{linkedReceipt.label}”的业务关联。{state.error?'请求目录尚未更新，保存回执已保留。':''}<Button kind="quiet" onClick={()=>{state.reload();(workflow?.open??go)('/application?view=sources&source_id='+linkedReceipt.sourceId+'&request_id='+linkedReceipt.requestId)}}>查看此请求</Button></InlineFeedback>}
     {hiddenSelection&&<InlineFeedback>当前请求被筛选条件隐藏，仍保留其详情。<Button kind="quiet" onClick={()=>setSearch('')}>清除筛选</Button></InlineFeedback>}
     {explicit&&!requested&&state.data&&<Notice tone="caution">这条链接对应的请求已不可用，请返回来源目录重新选择。</Notice>}
-    {business.error&&<ErrorNote error={business.error}/>}
-    {state.error&&state.data&&<ErrorNote error={state.error}/>}
+    {business.error&&<ErrorNote error={business.error} onRetry={business.reload} retryLabel="重新读取来源资料"/>}
+    {state.error&&state.data&&<ErrorNote error={state.error} onRetry={state.reload} retryLabel="重新读取来源资料"/>}
     {Boolean(error)&&<ErrorNote error={error}/>}
-    {state.loading&&!state.data?<Loading/>:state.error&&!state.data?<ErrorNote error={state.error}/>:rows.length?
+    {state.loading&&!state.data?<Loading/>:state.error&&!state.data?<ErrorNote error={state.error} onRetry={state.reload} retryLabel="重新读取来源资料"/>:rows.length?
       <div className="jj-source-workspace" data-request-open={requestOpen}>
         <aside className="jj-request-index" aria-label="请求索引">
           <div className="jj-request-search"><SearchField embedded label="查找请求" value={search} onValueChange={setSearch} placeholder="搜索名称、方法或路径"/></div>
@@ -92,12 +94,12 @@ export function SourceLibrary({projectId}:{projectId:string}) {
                 <span className="jj-request-item-line"><span className="jj-request-method">{request.method}</span><strong title={annotation?.label??request.label}>{annotation?.label??request.label}</strong></span>
                 <code title={request.path}>{request.path}</code>
               </button>)}
-            </section>}):<Empty title="没有匹配的请求" action={<Button onClick={()=>setSearch('')}>清除筛选</Button>}/>}
+            </section>}):<Empty layout="section" title="没有匹配的请求" action={<Button onClick={()=>setSearch('')}>清除筛选</Button>}/>}
           </IndexSelection>
         </aside>
-        {selected?<SourceRequestDetails key={selectedKey} projectId={projectId} {...selected} actions={actions} businessReady={Boolean(business.data)&&!business.error&&!state.error} draft={editorDraft<SourceDraft>(draftKey(selectedKey),projectId)} onDraft={value=>{rememberEditorDraft(draftKey(selectedKey),value,projectId);refreshDraft(value=>value+1)}} onSave={saveAssociation} onUpdate={()=>openImport(selected.source.source_id)} act={act} busy={busy}/>:<div className="jj-source-no-selection"><p>调整搜索条件，查看已有请求。</p></div>}
+        {selected?<SourceRequestDetails key={selectedKey} projectId={projectId} {...selected} review={discovery.data?.items.find(item=>item.source_id===selected.source.source_id&&item.request_id===selected.request.item_id)} onReviewed={()=>{state.reload();discovery.reload()}} actions={actions} businessReady={Boolean(business.data)&&!business.error&&!state.error} draft={editorDraft<SourceDraft>(draftKey(selectedKey),projectId)} onDraft={value=>{rememberEditorDraft(draftKey(selectedKey),value,projectId);refreshDraft(value=>value+1)}} onSave={saveAssociation} onUpdate={()=>openImport(selected.source.source_id)} act={act} busy={busy}/>:<div className="jj-source-no-selection"><p>调整搜索条件，查看已有请求。</p></div>}
       </div>:<Empty layout="section" title="尚未导入接口资料" action={!recovery&&<Button kind="primary" onClick={()=>openImport()}>导入接口资料或请求</Button>}>导入接口文档或浏览器请求记录，选取要整理为业务操作的请求。</Empty>}
-    {importing&&<SourceImport projectId={projectId} sources={sources} initialSource={importSource} onClose={()=>{setRecovery(pendingImport(projectId));setImporting(false)}} onAccepted={source=>{setLinkedReceipt(undefined);setAccepted(source);setRecovery(undefined);setImporting(false);state.reload()}}/>}
+    {importing&&<SourceImport projectId={projectId} sources={sources} initialSource={importSource} onClose={()=>{setRecovery(pendingImport(projectId));setImporting(false)}} onAccepted={source=>{setLinkedReceipt(undefined);setAccepted(source);setRecovery(undefined);setImporting(false);state.reload();discovery.reload()}}/>}
   </section>
 }
 
@@ -109,7 +111,7 @@ function SourceImport({projectId,sources,initialSource,onClose,onAccepted}:{proj
   const [preview,setPreview]=useState<ImportPreview|undefined>(pending?.preview),[file,setFile]=useState<File>()
   const {busy,error,run:act}=useCommand('source-import:'+projectId)
   return <Dialog closeDisabled={busy} title="导入接口资料" onClose={onClose} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button>{preview?<Button kind="primary" busy={busy} disabled={!name.trim()} onClick={()=>void act(async()=>{const input=pending??{sourceId:sourceId||newId,name:name.trim(),preview};if(pending){const actual=await api.sourceRevision(projectId,input.sourceId,input.preview.previous_revision+1);if(actual){if(actual.name!==input.name||JSON.stringify(actual.requests)!==JSON.stringify(input.preview.requests))throw new Error('此修订已有其他内容，请查看来源历史后处理。');savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted(actual);return}}savePending(pendingImportKey(projectId),input);setPending(input);const accepted=await api.accept(projectId,input.sourceId,input.name,input.preview);savePending(pendingImportKey(projectId),undefined);setPending(undefined);onAccepted(accepted)},'write')}>{pending?'查看上次保存结果':'保存这次导入'}</Button>:<Button kind="primary" busy={busy} disabled={!raw} onClick={()=>void act(async()=>setPreview(await api.preview(projectId,raw,kind,sourceId||undefined)))}>预览导入内容</Button>}</>}>
-    <div className="jj-form-grid"><Field label="资料类型"><Choice disabled={Boolean(pending)||busy} value={kind} onValueChange={value=>{setKind(value as ApiSource['kind']);setPreview(undefined)}}><option value="OPENAPI">OpenAPI 3.0 / 3.1</option><option value="HAR">HAR 网络请求</option><option value="POSTMAN">Postman Collection 2.1</option></Choice></Field><Field label="保存到"><Choice disabled={Boolean(pending)||busy} value={sourceId} onValueChange={value=>{setSourceId(value);const item=sources.find(item=>item.source_id===value);if(item){setName(item.name);setKind(item.kind)}setPreview(undefined)}}><option value="">新的来源</option>{sources.map(item=><option key={item.source_id} value={item.source_id}>更新 {item.name}</option>)}</Choice></Field></div><Field label="来源名称"><input disabled={Boolean(pending)||busy} value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="JSON 文件" hint="原始内容只用于本次解析，不写入来源资产。"><FilePicker label="JSON 文件" file={file} disabled={Boolean(pending)||busy} accept=".json,.har,application/json" formats="JSON / HAR" maxBytes={4194304} onFileChange={next=>act(async()=>{const content=next?await next.text():'';setRaw(content);setFile(next);setPreview(undefined);if(next&&!name)setName(next.name.slice(0,128))})}/></Field>
+    <div className="jj-form-grid"><Field measure="standard" label="资料类型"><Choice disabled={Boolean(pending)||busy} value={kind} onValueChange={value=>{setKind(value as ApiSource['kind']);setPreview(undefined)}}><option value="OPENAPI">OpenAPI 3.0 / 3.1</option><option value="HAR">HAR 网络请求</option><option value="POSTMAN">Postman Collection 2.1</option></Choice></Field><Field measure="standard" label="保存到"><Choice disabled={Boolean(pending)||busy} value={sourceId} onValueChange={value=>{setSourceId(value);const item=sources.find(item=>item.source_id===value);if(item){setName(item.name);setKind(item.kind)}setPreview(undefined)}}><option value="">新的来源</option>{sources.map(item=><option key={item.source_id} value={item.source_id}>更新 {item.name}</option>)}</Choice></Field></div><Field measure="standard" label="来源名称"><input disabled={Boolean(pending)||busy} value={name} onChange={event=>setName(event.target.value)}/></Field><Field measure="standard" label="JSON 文件" hint="原始内容只用于本次解析，不写入来源资产。"><FilePicker label="JSON 文件" file={file} disabled={Boolean(pending)||busy} accept=".json,.har,application/json" formats="JSON / HAR" maxBytes={4194304} onFileChange={next=>act(async()=>{const content=next?await next.text():'';setRaw(content);setFile(next);setPreview(undefined);if(next&&!name)setName(next.name.slice(0,128))})}/></Field>
     {preview&&<section className="jj-source-preview"><h3>本次变化</h3><p>新增 {preview.added.length} · 改变 {preview.changed.length} · 来源中缺失 {preview.removed.length}</p><p className="jj-small">导入会保留人工说明和业务关联。资料中缺失的项目不会删除已确认的业务要求。</p>{preview.warnings.length>0&&<Notice tone="caution" title="导入内容需要核对"><ul>{[...new Set(preview.warnings)].map(warning=><li key={warning}>{warning}</li>)}</ul></Notice>}<details><summary>查看 {preview.requests.length} 个请求定义</summary>{preview.requests.map(item=><p className="jj-small jj-mono" key={item.item_id}>{item.method} {item.path}</p>)}</details></section>}
     {Boolean(error)&&<ErrorNote error={error}/>}
   </Dialog>

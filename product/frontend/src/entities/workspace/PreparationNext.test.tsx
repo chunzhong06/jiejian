@@ -33,6 +33,18 @@ it('没有材料任务时仍可就地核对权限缺口，不留下无动作的�
  fireEvent.click(screen.getByRole('button',{name:'核对待准备事项'}));expect(onReview).toHaveBeenCalledOnce()
 })
 
+it('独立准备页复用准确建议与回程；旧基线只沿用当前可见缺口',()=>{
+ const preview={project_id:'app',plan_fingerprint:'current',preparation_work:{project_id:'app',plan_fingerprint:'current',impacts:[],primary_task:task({action_revision:4,identity_slot_id:'member-2'})}} as unknown as CheckPreview
+ const fallback={destination:'/preparation?action_id=fallback&return_to=original',label:'当前缺口'}
+ const {rerender}=render(<PreparationNext compact preview={preview} returnTo="/reports?view=plan&plan_item=read" fallback={fallback} onReview={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'准备账号'}))
+ let query=new URLSearchParams(location.hash.split('?')[1]);expect(query.get('action_id')).toBe('read');expect(query.get('account_slot')).toBe('member-2')
+ expect(query.get('return_to')).toBe('/reports?view=plan&plan_item=read')
+ rerender(<PreparationNext compact preview={{...preview,plan_fingerprint:'new'}} returnTo="/reports?view=plan" fallback={fallback} onReview={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'当前缺口'}));query=new URLSearchParams(location.hash.split('?')[1])
+ expect(query.get('action_id')).toBe('fallback');expect(query.get('return_to')).toBe('original')
+})
+
 it('新预览不能借用旧基线建议，相同动作ID也不例外',()=>{
  const open=vi.fn(),review=vi.fn()
  const preview={project_id:'app',plan_fingerprint:'new',actions:[],gaps:[],preparation_work:{project_id:'app',plan_fingerprint:'old',impacts:[],primary_task:task({title:'旧建议',action_label:'旧动作'})}} as unknown as CheckPreview

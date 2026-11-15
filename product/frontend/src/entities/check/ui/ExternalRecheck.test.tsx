@@ -9,10 +9,26 @@ const contract:RepairContract={project_id:'app',source_run_id:'source',source_ca
 const preview:CheckPreview={project_id:'app',can_execute:true,plan_fingerprint:'a'.repeat(64),action_count:1,case_count:2,gaps:[],actions:[]}
 const mount=()=>render(<ExternalRecheck projectId="app" contract={contract} comparison={[]} endpoint="http://127.0.0.1:8080" onClose={vi.fn()}/> )
 
+it('复验材料不足时返回准确操作与原问题，保持开始门禁',async()=>{
+  vi.spyOn(api,'externalPreview').mockResolvedValue({...preview,can_execute:false,gaps:[{action_id:'read',action_revision:1,reason:'IDENTITY_NOT_PREPARED'}]})
+  const submit=vi.spyOn(api,'submit')
+  mount()
+  expect(screen.getAllByRole('button',{name:'返回问题'})).toHaveLength(1)
+  fireEvent.change(screen.getByLabelText('本次部署或处理说明'),{target:{value:'已部署读取授权修改'}})
+  fireEvent.click(screen.getByRole('button',{name:'预览原问题与正常对照'}))
+  const link=await screen.findByRole('link',{name:'核对原问题材料'})
+  const query=new URLSearchParams(link.getAttribute('href')!.split('?')[1])
+  expect(query.get('action_id')).toBe('read')
+  expect(new URLSearchParams(query.get('return_to')!.split('?')[1]).get('source_case_id')).toBe('deny')
+  expect(screen.getByRole('button',{name:'确认范围并开始'})).toBeDisabled()
+  expect(submit).not.toHaveBeenCalled()
+})
+
 it('预览只读，修改部署说明后须重新预览，不自动提交',async()=>{
   const read=vi.spyOn(api,'externalPreview').mockResolvedValue(preview)
   const submit=vi.spyOn(api,'submit')
   mount()
+  expect(screen.getAllByRole('button',{name:'返回问题'})).toHaveLength(1)
   fireEvent.change(screen.getByLabelText('本次部署或处理说明'),{target:{value:'已调整订单可见范围'}})
   fireEvent.click(screen.getByRole('button',{name:'预览原问题与正常对照'}))
   expect(await screen.findByRole('button',{name:'确认范围并开始'})).toBeEnabled()

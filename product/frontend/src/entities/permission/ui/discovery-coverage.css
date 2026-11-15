@@ -1,0 +1,12 @@
+.jj-discovery-coverage{min-width:0;container:discovery-coverage / inline-size;}
+.jj-discovery-overview{display:flex;align-items:baseline;flex-wrap:wrap;gap:12px 24px;margin-bottom:12px;}
+.jj-discovery-context{min-width:0;}
+.jj-discovery-coverage > .jj-task-actions{margin-top:20px;}
+.jj-discovery-copy{min-width:0;}
+.jj-discovery-coverage h3{margin:0;font-size:var(--text-group);}
+.jj-discovery-coverage p{margin:8px 0 0;}
+.jj-discovery-copy > p:first-child{margin-top:0;}
+.jj-discovery-coverage details{margin:16px 0 0;padding:0;}
+.jj-discovery-coverage details>.jj-scroll-table{margin-block-start:16px;}
+.jj-discovery-coverage td small{display:block;margin-block-start:6px;}
+.jj-discovery-summary{display:flex;flex-wrap:wrap;gap:4px 16px;margin:12px 0 0;}

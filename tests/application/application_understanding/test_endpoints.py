@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import http.client
 import json
 import socket
 from pathlib import Path
@@ -125,30 +124,11 @@ def test_non_loopback_and_unspecified_bind_addresses_are_never_candidates(
         assert error.value.code == ErrorCode.APPLICATION_ENDPOINT_INVALID.value
 
 
-def test_localhost_requires_and_normalizes_ipv4_loopback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        socket,
-        "getaddrinfo",
-        lambda *_args, **_kwargs: [
-            (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("::1", 5173, 0, 0)),
-            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 5173)),
-        ],
-    )
-    assert normalize_loopback_endpoint("http://localhost:5173/app/") == (
-        "http://127.0.0.1:5173/app"
-    )
-
-    monkeypatch.setattr(
-        socket,
-        "getaddrinfo",
-        lambda *_args, **_kwargs: [
-            (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("::1", 5173, 0, 0))
-        ],
-    )
-    with pytest.raises(JiejianError, match="仅支持 IPv4 loopback"):
-        normalize_loopback_endpoint("http://localhost:5173")
+def test_localhost_retains_its_origin_without_control_plane_dns(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError('解析由实际请求边界核对')
+    monkeypatch.setattr(socket, 'getaddrinfo', forbidden)
+    assert normalize_loopback_endpoint('http://localhost:5173/app/') == 'http://localhost:5173/app'
 
 
 def test_probe_request_count_never_exceeds_budget_or_scans_other_ports(
@@ -172,48 +152,34 @@ def test_probe_request_count_never_exceeds_budget_or_scans_other_ports(
     assert any(item.probe_detail == "未探测：已达到请求预算" for item in result.candidates)
 
 
-def test_default_probe_enforces_timeout_body_budget_and_external_redirect(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    observed: dict[str, object] = {}
+def test_default_probe_enforces_timeout_body_budget_and_external_redirect(monkeypatch):
+    import httpx
+    from product.backend.infrastructure.execution.web import probe
+    original=httpx.Client
+    observed={}
+    def configure(**kwargs):
+        observed.update(timeout=kwargs['timeout'], redirects=kwargs['follow_redirects'], proxy=kwargs['trust_env'])
+        kwargs['transport']=httpx.MockTransport(lambda request:httpx.Response(302,headers={'Location':'https://example.com/outside'}))
+        return original(**kwargs)
+    monkeypatch.setattr(probe.httpx,'Client',configure)
+    result=TargetEndpointDiscovery._request_endpoint('http://127.0.0.1:4555',EndpointDiscoveryLimits(timeout_seconds=0.25,max_response_bytes=512))
+    assert 0 < observed['timeout'] <= .25
+    assert not observed['redirects'] and not observed['proxy']
+    assert not result.reachable
+    assert '范围核对' in result.detail
 
-    class Response:
-        status = 302
 
-        def read(self, amount: int) -> bytes:
-            observed["read"] = amount
-            return b"x" * amount
+def test_probe_accepts_large_pages_after_reading_only_the_bounded_prefix(monkeypatch):
+    import httpx
+    from product.backend.infrastructure.execution.web import probe
+    class PrefixOnly(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'x' * 512
+            raise AssertionError('接入探测不得读取预算以后的正文')
+    monkeypatch.setattr(probe, 'PinnedLoopbackTransport', lambda: httpx.MockTransport(
+        lambda request: httpx.Response(200, headers={'Content-Length':'6000'}, stream=PrefixOnly())))
+    result=TargetEndpointDiscovery._request_endpoint('http://127.0.0.1:4555',EndpointDiscoveryLimits(max_response_bytes=512))
+    assert result.reachable and result.status_code == 200
 
-        @staticmethod
-        def getheader(name: str) -> str | None:
-            return "https://example.com/outside" if name == "Location" else None
-
-    class Connection:
-        def __init__(self, host: str, port: int, timeout: float) -> None:
-            observed.update(host=host, port=port, timeout=timeout)
-
-        def request(self, method: str, path: str, headers: dict[str, str]) -> None:
-            observed.update(method=method, path=path, headers=headers)
-
-        @staticmethod
-        def getresponse() -> Response:
-            return Response()
-
-        @staticmethod
-        def close() -> None:
-            return None
-
-    monkeypatch.setattr(http.client, "HTTPConnection", Connection)
-    limits = EndpointDiscoveryLimits(timeout_seconds=0.25, max_response_bytes=512)
-    result = TargetEndpointDiscovery._request_endpoint(
-        "http://127.0.0.1:4555",
-        limits,
-    )
-
-    assert observed["timeout"] == 0.25
-    assert observed["read"] == 512
-    assert observed["method"] == "GET"
-    assert result.reachable is False
-    assert result.detail == "重定向离开 loopback，已拒绝"
 
 pytestmark = [pytest.mark.level3]

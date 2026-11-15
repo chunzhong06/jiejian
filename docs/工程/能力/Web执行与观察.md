@@ -58,6 +58,14 @@ builder只读核对Flow/Draft/绑定hash，不为补配置访问目标，也不�
 
 每Case只执行一次TARGET。SETUP与精确资源恢复使用冻结的合法身份，恢复保留历史，不能用全局reset冒充业务撤销。请求marker把本Case、资源、Task、Audit、Queue和最终对象关联在同一实验窗口中；恢复失败不得抹除已确认禁止后果。
 
+### 本机域名的授权与实际连接
+
+当前新增域名范围仅为显式授权的`localhost`。业务、身份与录制逐次解析，要求地址集合包含127.0.0.1且只含127.0.0.1/::1；同一Guard内解析集合漂移即停止。系统DNS等待受scope超时约束，观察deadline在解析后重新核对。超时的系统调用在无秘密的后台线程结束，迟到结果不产生网络请求；隔离Runner退出负责最终收口。
+
+实际连接经`PinnedLoopbackTransport`固定到127.0.0.1，保留逻辑Origin、Host、Cookie域与TLS的localhost主机名，继续启用证书校验。越界解析、控制面地址别名、重定向、请求/响应预算沿原拒绝边界处理；不支持任意外部域名、IPv6目标或默认跳过TLS。
+
+接入探测复用同一Guard与传输，只做无凭据的一次GET并读取有界前缀。页面大于前缀预算仍可判定服务响应，截断正文不进入Evidence；正式执行仍要求完整有界响应，二者由不同入口表达。
+
 ### HTTP分类
 
 `HttpOutcomeClassifier`只产生ACCEPTED/DENIED/UNKNOWN，不产生安全Verdict。冲突、不足、网络或解析失败不能伪装成拒绝或安全。

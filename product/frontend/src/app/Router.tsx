@@ -42,7 +42,7 @@ type Props = {
 };
 export function RouteContent({ current, route, context, project, loading, workspace, workspaceError, environment, onConnected, onError }: Props) {
     if (current === '/workspace' && route.query.get('view') === 'collaboration' && context && route.query.get('task_id'))
-        return <Collaboration key={route.query.get('task_id')} projectId={context.projectId} taskId={route.query.get('task_id')!}/>;
+        return <Collaboration key={route.query.get('task_id')} projectId={context.projectId} taskId={route.query.get('task_id')!} initialView={route.query.get('task_view')} initialItem={route.query.get('task_item')}/>;
     if (current === '/workspace' && route.query.get('view') === 'collaboration' && context)
         return <CollaborationHub projectId={context.projectId}/>;
     const setting=settingsSection(route)
@@ -74,4 +74,4 @@ export function RouteContent({ current, route, context, project, loading, worksp
         return <Changes key={context.projectId} {...context} workspace={workspace}/>;
     return <Empty title="从当前应用继续" action={<ActionLink navigationScope="page" href={'#'+scopedPath('/workspace')}  kind="default">打开应用概览</ActionLink>}/>;
 }
-function Welcome() { return <><Heading eyebrow="界鉴" title="检查应用的访问权限"/><div className="jj-welcome-grid"><section className="jj-welcome-main"><span className="jj-line-symbol" aria-hidden="true">[ ]</span><h2>从你的应用开始</h2><p>先明确谁可以操作哪些数据，再用测试账号验证实际行为。每次检查都会保留结果与判断依据。</p><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/application')} kind="primary">连接应用</ActionLink></footer></section><section className="jj-welcome-example"><p className="jj-eyebrow">首次使用</p><h2>先试一次完整检查</h2><p>使用内置数字展馆走完一次权限检查，无需准备自己的应用。</p><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/environment')}  kind="default">打开示例</ActionLink></footer></section></div></>; }
+function Welcome() { return <><Heading eyebrow="界鉴" title="让权限要求经得起实际操作"/><div className="jj-welcome-grid"><section className="jj-welcome-main"><p className="jj-eyebrow">官方示例 · 数字展馆</p><h2>体验一次权限问题的发现与修复</h2><p>评审可以访问公开资料，但不应取得内部完整包。一次代码修改，会不会打破这条要求？</p><ol className="jj-welcome-journey"><li>确认资料的访问要求</li><li>检查修改后的实际业务结果</li><li>复验修复，同时保留正常访问</li></ol><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/environment')} kind="primary">体验官方示例</ActionLink></footer></section><section className="jj-welcome-example"><p className="jj-eyebrow">自己的项目</p><h2>检查你的应用</h2><p>连接已授权的应用，确认谁能操作哪些数据，再准备账号、操作与结果证明。</p><footer className="jj-welcome-actions"><ActionLink navigationScope="page" href={'#'+scopedPath('/application')} kind="default">连接应用</ActionLink></footer></section></div></>; }

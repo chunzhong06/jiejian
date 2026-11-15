@@ -25,11 +25,12 @@ export type CheckStatus = {
 }
 export type CheckSelection = { selected: PermissionReference[]; added_controls: PermissionReference[]; omitted: PermissionReference[]; uncovered_requirements: string[]; pending_review_ids: string[] }
 export type CheckPreview = {
+  discovery_coverage?:import('../../permission/api/discovery').DiscoveryCoverage|null
   scenario?:FrozenBusinessScenario|null
   selection?: CheckSelection | null
   omitted_review_gaps?: BoundaryReviewGap[]
   project_id: string; can_execute: boolean; plan_fingerprint: string; action_count: number; case_count: number
-  preparation_work?: {project_id:string;plan_fingerprint:string;primary_task:import('../../workspace/api/workspace').PrimaryTaskDto|null;preparation_complete:boolean;actions:Array<{action_id:string;action_revision:number;label:string;preparation_complete:boolean}>;impacts:Array<{action_id:string;action_label:string;kind:'identity'|'execution'|'resource'|'evidence'|'recovery';status:string;reason_codes:string[];permission_ids:string[];member_id?:string|null;member_label?:string}>}
+  preparation_work?: {project_id:string;plan_fingerprint:string;primary_task:import('../../workspace/api/workspace').PrimaryTaskDto|null;preparation_complete:boolean;actions:Array<{action_id:string;action_revision:number;label:string;preparation_complete:boolean}>;impacts:import('../../preparation/api/preparation').MaterialImpact[]}
   gaps: Array<{ action_id: string; action_revision: number; reason: string; intent_id?: string | null; effect_id?: string | null }>
   boundary_review_gaps?: BoundaryReviewGap[]
   requirement_scope?: RequirementScope[]
@@ -84,6 +85,11 @@ export type StoryProofCoverage = {
   observed_state: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'
   evidence_refs: string[]; supporting_evidence_refs: string[]; limitations: string[]
 }
+export type RequirementCoverage = {
+  permission: PermissionReference; applicable_states: string[]; observed_states: string[]; concluded_states: string[]
+  unchecked_states: string[]; unknown_case_ids: string[]
+  samples: Array<{case_id:string;resource_id:string;subject_identity_id:string|null;case_verdict:string;conditions:ObservedConditions[];evidence_refs:string[]}>
+}
 export type ActionResultStory = {
   scenario_context?:{scenario_label:string;experiment_label:string;experiment_kind:string;invocation_label:string;item_index:number;item_count:number;same_resource_occurrences:number;batch_strategy:'ATOMIC'|'PER_ITEM'|null;expected_effect:'PRESENT'|'ABSENT'}|null
   reason_codes?: string[]
@@ -103,7 +109,7 @@ export type ActionResultStory = {
   activity_error?: string | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { routine?: import('./routines').RoutineReference | null; environment?: import('./routines').RunEnvironment | null; external_recheck?:{deployment_statement:string;source_environment_fingerprint:string}; selection?: CheckSelection | null; run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
+export type ResultStory = { sample_coverage?:RequirementCoverage[]; delivery_summary?:Array<{review_url?:string|null;source_key?:string|null;historical_name_available?:boolean;kind:'PERMISSION'|'NORMAL'|'REPAIR'|'UNCHECKED'|'UNRESOLVED'|'RUNTIME';label:string;result:string;case_ids:string[];permission:PermissionReference|null;source_run_id:string|null;source_case_id:string|null}>; discovery_coverage?:import('../../permission/api/discovery').DiscoveryCoverage|null; routine?: import('./routines').RoutineReference | null; environment?: import('./routines').RunEnvironment | null; external_recheck?:{deployment_statement:string;source_environment_fingerprint:string}; selection?: CheckSelection | null; run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; repair_comparison?: RepairComparisonRow[]; repair_reviews?: Array<{reference: import('./repairs').RepairReference; verification: RepairVerification; comparison: RepairComparisonRow[]}>; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null;requirement_scope?:RequirementScope[] }
 export type CheckEvidence = {
   schema_version: '1' | '2' | '3'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]
@@ -123,7 +129,7 @@ export type HistoryCoverage={project_id:string;checkpoint:number;generation:numb
 export type RuleHistoryItem=RuleHistoryReference & {expectation:'ALLOW'|'DENY';effective_state:string;relation:string;action_label:string;subject_label:string;owner_label:string;latest_run_id:string|null;case_results:Array<{case_id:string;verdict:'SAFE'|'VULNERABLE'|'INCONCLUSIVE'}>;result_integrity:string;index_matches:boolean}
 export type RuleHistoryPage={project_id:string;items:RuleHistoryItem[];next_cursor:string|null;coverage:HistoryCoverage}
 export type HistoryMaintenanceReceipt={project_id:string;operation_id:string;checkpoint:number;processed:number;failed:number;complete:boolean}
-export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; source_run_id: string | null;matching_cases?:string[];matching_verdicts?:string[] }
+export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; change_reason?:string|null; change_label?:string|null; source_run_id: string | null;matching_cases?:string[];matching_verdicts?:string[] }
 export type CheckHistoryPage = { project_id: string; items: CheckHistoryItem[]; next_cursor: CheckHistoryCursor | null }
 export type CheckHistoryQuery = { query?: string; verdict?: CheckVerdict; lifecycle?: CheckStatus['run']['lifecycle']; cursor?: CheckHistoryCursor | null;rule?:RuleHistoryReference }
 const statusReads = new Map<string, Promise<CheckStatus>>()

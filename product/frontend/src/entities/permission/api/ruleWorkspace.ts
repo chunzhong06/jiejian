@@ -2,14 +2,15 @@ import { request } from '../../../shared/api/http'
 import type {PermissionConditions} from './businessBoundaries'
 import type { ProjectRepair } from '../../check/api/repairs'
 import type { RuleChangeTarget } from '../../source-change/api/sourceChanges'
+import type {RequirementCoverage} from '../../check/api/currentChecks'
 
 export type RuleState = 'UNCONFIRMED' | 'UNTESTED' | 'STALE' | 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE' | 'REPAIR_PENDING'
-export type RuleHistory = { run_id: string; created_at_us: number; case_ids: string[]; verdict: 'SAFE'|'VULNERABLE'|'INCONCLUSIVE'; case_count: number; current: boolean; change_id: string|null }
+export type RuleHistory = { run_id: string; created_at_us: number; case_ids: string[]; verdict: 'SAFE'|'VULNERABLE'|'INCONCLUSIVE'; case_count: number; current: boolean; change_id: string|null;runtime_status?:'MATCHED'|'UNCONFIRMED'|'UNSUPPORTED';result_integrity?:string;applicability?:'CURRENT'|'RECHECK';sample_coverage?:RequirementCoverage[] }
 export type RuleItem = {
   conditions?:PermissionConditions|null
   permission: {intent_id: string; revision: number; intent_hash: string}
   title: string; expectation: 'ALLOW'|'DENY'; subject: string; action: string; resource_scope: string
-  state: RuleState; latest: RuleHistory|null; issues: ProjectRepair['tasks']
+  state: RuleState; latest: RuleHistory|null; repair_pending?:boolean; issues: ProjectRepair['tasks']
   changes: Array<{change_id: string; reason: string; created_at_us: number; file_count: number; targets: RuleChangeTarget[]}>
   history: RuleHistory[]; history_has_more: boolean
 }

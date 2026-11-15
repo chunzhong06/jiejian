@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Query
+from pydantic import model_validator
 
 from product.backend.interfaces.http.envelope import ApiModel, ApiResponse, data_response
 from product.backend.bootstrap import ApplicationCore
@@ -97,6 +98,7 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
             context.official_experience.switch_version(
                 version=OfficialScenarioVersion(body.version),
                 repair_reference=body.repair_reference,
+                **({'expected_project_id':body.project_id,'expected_basis':body.expected_basis} if body.project_id is not None else {}),
             ).model_dump(mode="json")
         )
 
@@ -121,6 +123,14 @@ class OfficialSampleVersionRequest(ApiModel):
     schema_version: Literal["1"]
     version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED", "EXPOSE_REVOKE", "PREVIEW_CHANGED"]
     repair_reference: CurrentRepairReference | None = None
+    project_id: str | None = None
+    expected_basis: str | None = None
+
+    @model_validator(mode='after')
+    def paired_basis(self):
+        if (self.project_id is None) != (self.expected_basis is None):
+            raise ValueError('项目与所审阅依据必须一起提供')
+        return self
 
 
 class OfficialBoundaryChoice(ApiModel):

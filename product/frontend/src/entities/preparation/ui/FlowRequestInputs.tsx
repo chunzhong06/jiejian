@@ -27,20 +27,20 @@ export function FlowRequestInputs({step,previous,busy,onChange}:{step:EditableSt
       {rows.map(({value:item,index})=>{
         const prior=item.source.startsWith('PRIOR_STEP_')
         return <div className="jj-flow-input-row" key={item.slotId+':'+index} role="group" aria-label={locations[location]+'：'+(item.name||'新参数')}>
-          <Field label={location==='PATH'?'路径占位名称':'参数名称'}><input value={item.name} disabled={busy} onChange={event=>{
+          <Field measure="medium" label={location==='PATH'?'路径占位名称':'参数名称'}><input value={item.name} disabled={busy} onChange={event=>{
             const next={...item,name:event.target.value}
             change(index,sensitiveParameter(next.name)&&next.source==='LITERAL'?{...chooseSource(next,'PRIOR_STEP_JSON_PATH'),value:''}:next)
           }}/></Field>
-          <Field label="数据来源"><Choice disabled={busy} value={item.source} onValueChange={value=>change(index,chooseSource(item,value as InputSource))}>
+          <Field measure="standard" label="数据来源"><Choice disabled={busy} value={item.source} onValueChange={value=>change(index,chooseSource(item,value as InputSource))}>
             {Object.entries(sources).map(([value,label])=><option key={value} value={value} disabled={value==='LITERAL'&&sensitiveParameter(item.name)||value==='CASE_RESOURCE_ID'&&location==='HEADER'}>{label}</option>)}
           </Choice></Field>
           <Button kind="quiet" className="jj-flow-input-remove" disabled={busy} icon={<DeleteOutlined aria-hidden="true"/>} aria-label={'移除参数：'+(item.name||'新参数')} onClick={()=>onChange({...step,parameters:step.parameters.filter((_,i)=>i!==index)})}/>
-          {item.source==='LITERAL'&&<div className="jj-flow-input-value"><Field label="发送的值"><input disabled={busy} value={item.value} onChange={event=>change(index,{...item,value:event.target.value})}/></Field></div>}
-          {prior&&<><Field label="前序请求"><Choice disabled={busy} value={item.producer} onValueChange={producer=>change(index,{...item,producer})}><option value="" disabled>选择此前的请求</option>{previous.map((candidate,i)=><option key={candidate.id} value={candidate.id}>第 {i+1} 步 · {candidate.method} {candidate.path}</option>)}</Choice></Field>
-            {item.source!=='PRIOR_STEP_LOCATION'&&<Field label={item.source==='PRIOR_STEP_JSON_PATH'?'JSON 字段位置':item.source==='PRIOR_STEP_HEADER'?'响应头名称':'Cookie 名称'}><input disabled={busy} value={item.path} onChange={event=>change(index,{...item,path:event.target.value})}/></Field>}</>}
+          {item.source==='LITERAL'&&<div className="jj-flow-input-value"><Field measure="standard" label="发送的值"><input disabled={busy} value={item.value} onChange={event=>change(index,{...item,value:event.target.value})}/></Field></div>}
+          {prior&&<><Field measure="standard" label="前序请求"><Choice disabled={busy} value={item.producer} onValueChange={producer=>change(index,{...item,producer})}><option value="" disabled>选择此前的请求</option>{previous.map((candidate,i)=><option key={candidate.id} value={candidate.id}>第 {i+1} 步 · {candidate.method} {candidate.path}</option>)}</Choice></Field>
+            {item.source!=='PRIOR_STEP_LOCATION'&&<Field measure="standard" label={item.source==='PRIOR_STEP_JSON_PATH'?'JSON 字段位置':item.source==='PRIOR_STEP_HEADER'?'响应头名称':'Cookie 名称'}><input disabled={busy} value={item.path} onChange={event=>change(index,{...item,path:event.target.value})}/></Field>}</>}
           {item.source==='CASE_RESOURCE_ID'&&<p className="jj-flow-input-value jj-small jj-muted">执行时使用本次测试数据编号；正式检查按规则选择对应资源。</p>}
           {item.source==='CASE_SUBJECT_ID'&&<p className="jj-flow-input-value jj-small jj-muted">传入界鉴测试账号的引用编号，不代替应用中的真实主体核验。</p>}
-          {prior&&<div className="jj-flow-input-type"><Field label="值的类型"><Choice disabled={busy} value={item.slot?.value_type as string??'STRING'} onValueChange={value=>change(index,{...item,slot:{...item.slot,value_type:value}})}>{['STRING','INTEGER','BOOLEAN','JSON'].map(value=><option key={value} value={value}>{({STRING:'文本',INTEGER:'整数',BOOLEAN:'布尔值',JSON:'JSON'})[value as 'STRING']}</option>)}</Choice></Field></div>}
+          {prior&&<div className="jj-flow-input-type"><Field measure="short" label="值的类型"><Choice measure="short" disabled={busy} value={item.slot?.value_type as string??'STRING'} onValueChange={value=>change(index,{...item,slot:{...item.slot,value_type:value}})}>{['STRING','INTEGER','BOOLEAN','JSON'].map(value=><option key={value} value={value}>{({STRING:'文本',INTEGER:'整数',BOOLEAN:'布尔值',JSON:'JSON'})[value as 'STRING']}</option>)}</Choice></Field></div>}
           {prior&&location!=='PATH'&&item.source!=='PRIOR_STEP_LOCATION'&&<label className="jj-checkbox"><input type="checkbox" disabled={busy||sensitiveParameter(item.name)&&item.secret} checked={item.secret} onChange={event=>change(index,{...item,secret:event.target.checked})}/><span>敏感值，仅在本次执行内存中传递</span></label>}
           {location==='JSON_BODY'&&item.source==='LITERAL'&&<label className="jj-checkbox jj-flow-input-value"><input type="checkbox" disabled={busy} checked={item.json} onChange={event=>change(index,{...item,json:event.target.checked})}/><span>按数字、布尔值或 JSON 读取</span></label>}
         </div>

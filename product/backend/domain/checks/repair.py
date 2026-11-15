@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 from product.backend.domain.lifecycle import CaseVerdict
 from product.backend.domain.verification.breakpoints import BreakpointResult
 from product.backend.domain.verification.checks import project_check_effect_facts
+from product.backend.domain.checks.repair_challenge import repair_challenge_reason
 from product.protocols.checks.execution_request import ActorId, EffectId, FrozenPermission, Hash, IdentityId, LogicalId, PermissionReference, RepairContext, WireModel, content_hash
 
 
@@ -192,9 +193,13 @@ def current_request_permissions(request) -> tuple[PermissionReference, ...]:
         for identity,revision,digest in sorted(values))
 
 
-def repair_policy_matches(contract, *, policy_epoch, permissions) -> bool:
-    """原题的全部规则必须保持原修订；同一权限版本下的额外检查不使局部原题失效。"""
-    return policy_epoch == contract.original_policy_epoch and all(item in permissions for item in contract.original_intents)
+def repair_policy_matches(contract, *, permissions) -> bool:
+    """按原题的精确规则依赖接续；全局版本变化仍由本次提交负责并发核对。
+
+    新增无关规则不改变原题，原规则缺失、换修订或语义摘要变化仍使其失效。
+    账号、正常对照及证明标准随后由原题比较逐项核验，不能仅凭此判断完成修复。
+    """
+    return all(item in permissions for item in contract.original_intents)
 
 
 class CurrentRepairVerification(WireModel):
@@ -206,28 +211,28 @@ class CurrentRepairVerification(WireModel):
     reason_codes: tuple[str, ...] = Field(max_length=16)
 
 
-def verify_current_repair(contract, *, request, bundle, result, evidence, expected_change_context, linked_repair_references=()) -> CurrentRepairVerification:
+def verify_current_repair(contract, *, request, bundle, result, evidence, expected_change_context, linked_repair_references=(), original_request=None, original_bundle=None) -> CurrentRepairVerification:
     """只派生修复事实；两份发布包完整性由调用方 Reader 检验，不在此重算 Verdict。"""
     def answer(status, reason):
         return CurrentRepairVerification(repair_reference=contract.repair_fingerprint,
             source_run_id=contract.source_run_id,run_id=result.run_id,status=status,reason_codes=(reason,))
-    if not repair_policy_matches(contract,policy_epoch=request.policy_epoch,permissions=current_request_permissions(request)):
+    if not repair_policy_matches(contract,permissions=current_request_permissions(request)):
         return answer("STALE","REPAIR_POLICY_CHANGED")
     if (result.run_id == contract.source_run_id or request.project_id != contract.project_id
         or (request.repair_context != repair_context(contract) and contract.reference() not in linked_repair_references) or expected_change_context is None
         or request.change_context != expected_change_context):
         return answer("INCONCLUSIVE","REPAIR_CONTEXT_MISMATCH")
     return _compare_repair_cases(contract,request=request,bundle=bundle,result=result,evidence=evidence,
-        answer=answer,require_runtime=True)
+        answer=answer,require_runtime=True,original_request=original_request,original_bundle=original_bundle)
 
 
-def verify_external_recheck(contract, *, request, bundle, result, evidence, source_environment):
+def verify_external_recheck(contract, *, request, bundle, result, evidence, source_environment, original_request=None, original_bundle=None):
     """验证同一环境中再次观察的原题行为；不推导源码修复或部署版本对应。"""
     def answer(status,reason):
         return CurrentRepairVerification(repair_reference=contract.repair_fingerprint,
             source_run_id=contract.source_run_id,run_id=result.run_id,status=status,reason_codes=(reason,),
             verification_scope='EXTERNAL_OBSERVATION')
-    if not repair_policy_matches(contract,policy_epoch=request.policy_epoch,permissions=current_request_permissions(request)):
+    if not repair_policy_matches(contract,permissions=current_request_permissions(request)):
         return answer('STALE','REPAIR_POLICY_CHANGED')
     context=request.external_recheck
     if (context is None or source_environment is None or request.environment is None
@@ -238,10 +243,10 @@ def verify_external_recheck(contract, *, request, bundle, result, evidence, sour
         or request.project_id != contract.project_id or request.repair_context != repair_context(contract)):
         return answer('INCONCLUSIVE','EXTERNAL_RECHECK_CONTEXT_MISMATCH')
     return _compare_repair_cases(contract,request=request,bundle=bundle,result=result,evidence=evidence,
-        answer=answer,require_runtime=False)
+        answer=answer,require_runtime=False,original_request=original_request,original_bundle=original_bundle)
 
 
-def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer, require_runtime):
+def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer, require_runtime, original_request, original_bundle):
     candidates = {}
     for action in request.actions:
         for case in action.cases:
@@ -252,6 +257,9 @@ def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer
     # 禁止效果仍出现优先于其他路径观察缺口，但身份与原题匹配仍需可信。
     if len(matches) == 1:
         _, case = matches[0]
+        reason=repair_challenge_reason(original_request=original_request,original_bundle=original_bundle,
+            request=request,bundle=bundle,source_case_id=contract.deny.source_case_id,case_id=case.case_id)
+        if reason:return answer('INCONCLUSIVE',reason)
         case_result = results.get(case.case_id)
         if case_result is not None:
             outcome = case_result.outcome
@@ -270,6 +278,9 @@ def _compare_repair_cases(contract, *, request, bundle, result, evidence, answer
         if len(matches) != 1:
             return answer("INCONCLUSIVE","REPAIR_CASE_NOT_UNIQUELY_MATCHED")
         action,case = matches[0]
+        reason=repair_challenge_reason(original_request=original_request,original_bundle=original_bundle,
+            request=request,bundle=bundle,source_case_id=requirement.source_case_id,case_id=case.case_id)
+        if reason:return answer('INCONCLUSIVE',reason)
         current = results.get(case.case_id)
         if current is None or current.verdict is not CaseVerdict.SAFE:
             return answer("INCONCLUSIVE","REPAIR_REQUIRED_CASE_NOT_SAFE")

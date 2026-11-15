@@ -1,5 +1,5 @@
 import {afterEach,expect,test,vi} from 'vitest'
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {FlowTrialPanel} from './FlowTrialPanel'
 import {flowTrialsApi as api,type FlowTrial,type TrialPlan,type TrialReport} from '../api/flowTrials'
 import {operationFlowsApi,type OperationFlow} from '../api/operationFlows'
@@ -10,18 +10,46 @@ vi.mock('../api/flowTrials',()=>({flowTrialsApi:{history:vi.fn(),preview:vi.fn()
 afterEach(()=>{cleanup();vi.resetAllMocks();sessionStorage.clear()})
 const flow:OperationFlow={id:'ofl_example',revision:2,business_action_id:'action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',provenance:'MANUAL',source_recording_id:null,source_fingerprint:null,actual_resource_id:'order-1',recovery:null,workflow:{target_step_id:'read',steps:[{id:'read',identity_id:'CASE_SUBJECT',purpose:'TARGET',request_template:{method:'GET',path:'/orders/{id}',body:{kind:'EMPTY'}},classifier:{accepted:[],denied:[]},depends_on_step_ids:[]}]}}
 const plan:TrialPlan={flow,case:{subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',resource_id:'order-1'},state_changing:false,mode:'TRIAL',runtime:{target:{base_url:'http://127.0.0.1:18081'},budget:{max_requests:4,max_duration_us:20000000}}}
-const props={projectId:'app',flow,accounts:[{identity_id:'owner',label:'负责人'}],onResume:vi.fn()}
+const props={projectId:'app',flow,actionLabel:'读取订单',accounts:[{identity_id:'owner',label:'负责人'}],onResume:vi.fn()}
 const receipt=(operation:string):FlowTrial=>({request:{operation_id:operation,trial_id:'ftr_original',created_at_us:1000000,plan},job_id:'job_original',state:'RUNNING',report:null,operation_may_have_run:true,recovery_pending:false})
+
+test('恢复记录展示实际恢复账号与恢复步骤，不把原受检请求当作再次执行',async()=>{
+ const item=receipt('restore')
+ item.state='SUCCEEDED'
+ item.request.plan={...plan,mode:'RESTORE',flow:{...flow,recovery:{method:'POST',relative_path:'/restore/{case_resource_id}',json_body:{}}},case:{...plan.case,subject_test_identity_id:'member'}}
+ item.report={identity_status:'MATCH',recovery:'REQUEST_ACCEPTED',steps:[{step_id:'restore',purpose:'RESTORE',status_code:200,response_bytes:0,classification:'ACCEPTED',error_code:null}],target_attempted:false,flow_attempted:false,error_code:null}
+ vi.mocked(api.history).mockResolvedValue([item])
+ render(<FlowTrialPanel {...props} accounts={[...props.accounts,{identity_id:'member',label:'成员'}]}/> )
+ expect(await screen.findByRole('heading',{name:'负责人 · order-1'})).toBeVisible()
+ fireEvent.click(screen.getByText('查看本次提交的执行步骤'))
+ expect(screen.getByText('POST /restore/{case_resource_id}')).toBeVisible()
+ expect(screen.queryByText('GET /orders/{id}')).not.toBeInTheDocument()
+ expect(api.start).not.toHaveBeenCalled()
+})
 
 test('业务场景传入的账号和资源用于预览，未确认前不执行',async()=>{
   vi.mocked(api.history).mockResolvedValue([])
   vi.mocked(api.preview).mockResolvedValue({plan,plan_hash:'b'.repeat(64)})
   const selection={flow_id:flow.id,revision:flow.revision,subject_identity_id:'member',resource_owner_identity_id:'owner',resource_id:'order-2'}
   render(<FlowTrialPanel {...props} onResume={undefined} accounts={[...props.accounts,{identity_id:'member',label:'成员'}]} initialSelection={selection}/>)
+  await waitFor(()=>expect(screen.getByRole('button',{name:'预览试运行'})).toBeEnabled())
   fireEvent.click(screen.getByRole('button',{name:'预览试运行'}))
   await screen.findByRole('button',{name:'确认执行一次'})
   expect(api.preview).toHaveBeenCalledWith('app',selection)
   expect(api.start).not.toHaveBeenCalled()
+})
+
+test('历史读取失败提供原处重读，不显示假空记录或允许新执行',async()=>{
+ vi.mocked(api.history).mockRejectedValueOnce(new Error('本次记录不可读')).mockResolvedValue([])
+ render(<FlowTrialPanel {...props} mode="history"/>)
+ const retry=await screen.findByRole('button',{name:'重新读取试运行记录'})
+ expect(screen.queryByText(/还没有试运行记录/)).not.toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'准备新的试运行'})).not.toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'预览试运行'})).not.toBeInTheDocument()
+ fireEvent.click(retry)
+ fireEvent.click(await screen.findByRole('button',{name:'准备新的试运行'}))
+ await waitFor(()=>expect(screen.getByRole('button',{name:'预览试运行'})).toBeEnabled())
+ expect(api.preview).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
 })
 
 test('未知提交回执和重新打开只查询原操作，不重新发送场景',async()=>{
@@ -31,6 +59,7 @@ test('未知提交回执和重新打开只查询原操作，不重新发送场�
   vi.mocked(api.start).mockImplementation(async(_project,_selection,_preview,operation)=>{original=receipt(operation);throw new TypeError('连接中断')})
   const first=render(<FlowTrialPanel {...props}/>)
   expect(screen.queryByRole('alert')).toBeNull()
+  await waitFor(()=>expect(screen.getByRole('button',{name:'预览试运行'})).toBeEnabled())
   fireEvent.click(screen.getByRole('button',{name:'预览试运行'}))
   fireEvent.click(await screen.findByRole('button',{name:'确认执行一次'}))
   await waitFor(()=>expect(api.start).toHaveBeenCalledTimes(1))
@@ -82,6 +111,25 @@ function editorContext(){
   vi.spyOn(operationFlowsApi,'context').mockResolvedValue({project_id:'app',source_fingerprint:null,endpoint:null,recordings:[],actions:[{action_id:'action',revision:1,label:'读取订单',state_changing:false,effects:[]}],flows:[{document:flow,adopted:true,in_use:true,configuration_current:true}]})
   vi.spyOn(testIdentitiesApi,'list').mockResolvedValue([{identity_id:'owner',label:'负责人',auth_method:'COOKIE'}] as never)
 }
+
+test('采用任务核对准确修订，返回不写入，确认成功才接续原流程',async()=>{
+  editorContext()
+  const adopt=vi.spyOn(operationFlowsApi,'adopt').mockResolvedValue({adopted:true})
+  render(<OperationFlowEditor projectId="adopt-app" actionId="action" initialFlow={flow} onBack={vi.fn()}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'确认用于检查'}))
+  expect(screen.getByRole('heading',{name:'将这份流程用于后续检查'})).toBeVisible()
+  expect(screen.queryByRole('tablist',{name:'流程维护'})).not.toBeInTheDocument()
+  expect(within(screen.getByRole('region',{name:'将这份流程用于后续检查'})).getByText('order-1')).toBeVisible()
+  expect(adopt).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'返回流程核对'}))
+  expect(screen.getByRole('tablist',{name:'流程维护'})).toBeVisible()
+  expect(adopt).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'确认用于检查'}))
+  fireEvent.click(screen.getByRole('button',{name:'确认用于检查'}))
+  await waitFor(()=>expect(adopt).toHaveBeenCalledWith('adopt-app',flow))
+  expect(await screen.findByRole('heading',{name:'操作已准备好'})).toBeVisible()
+  expect(api.start).not.toHaveBeenCalled()
+})
 
 test('保存状态与流程命令分开命名，进入试运行仍需预览和明确确认',async()=>{
   editorContext();vi.mocked(api.preview).mockResolvedValue({plan,plan_hash:'a'.repeat(64)});

@@ -1,7 +1,7 @@
 .jj-understanding-workspace { display:grid; gap:24px; min-width:0; }
 .jj-business-introduction { max-width:70ch; color:var(--muted); font-size:var(--text-object); line-height:var(--leading-reading); }
 .jj-business-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-.jj-business-toolbar .jj-toggle-group > button > span { margin-left:8px; font-size:var(--text-meta); font-weight:400; }
+.jj-business-toolbar .jj-toggle-group > button > span { margin-left:8px; font-size:var(--text-meta); font-weight:var(--weight-regular); }
 /* 名称、采用决定和来源是可比较的短字段，直接共享表头与列，不再另占空详情栏。 */
 .jj-business-table-wrap { min-width:0; }
 .jj-business-table-wrap .jj-business-table { min-width:0; width:100%; table-layout:fixed; border-collapse:collapse; }
@@ -12,8 +12,7 @@
 .jj-business-table :is(th,td):last-child { padding-right:24px; }
 .jj-business-table input { max-width:400px; }
 .jj-understanding-workspace[data-kind=ROLE] .jj-business-table input { max-width:320px; }
-.jj-business-table .jj-choice { max-width:240px; }
-.jj-business-source { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 12px; min-height:44px; padding-block:10px; font-size:var(--text-meta); color:var(--muted); overflow-wrap:anywhere; }
+.jj-business-source { display:flex; justify-content:center; align-items:baseline; flex-wrap:wrap; gap:6px 12px; min-height:44px; padding-block:10px; font-size:var(--text-meta); color:var(--muted); overflow-wrap:anywhere; }
 .jj-business-source code { color:var(--ink); white-space:normal; }
 .jj-business-source details { flex-basis:100%; padding-top:6px; }
 .jj-business-source details p { margin-top:8px; }
@@ -27,13 +26,13 @@
  .jj-business-table thead { display:none; }
  .jj-business-table tr { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; padding:20px; border-block-start:1px solid var(--line); }
  .jj-business-table tr:first-child { border-block-start:0; }
- .jj-business-table td { display:block; border:0; padding:0; }
+ .jj-content-table.jj-business-table td { display:block; border:0; padding:0; text-align:start; }
  .jj-business-table td.jj-table-state { text-align:start; }
  .jj-business-table td::before { display:block; margin-bottom:8px; color:var(--muted); font-size:var(--text-meta); }
  .jj-business-table td:nth-child(1)::before { content:'业务名称'; }
  .jj-business-table td:nth-child(2)::before { content:'用于权限检查'; }
  .jj-business-table td:nth-child(3)::before { content:'来源依据'; }
- .jj-business-source { padding:0; min-height:0; }
+ .jj-business-source { justify-content:flex-start; padding:0; min-height:0; }
 }
 
 .jj-business-table .jj-table-state{text-align:center;vertical-align:middle}

@@ -118,6 +118,33 @@ def test_a_confirmed_effect_is_only_attributed_to_a_rule_whose_conditions_match(
     assert evaluate_check_case(facts).verdict is expected
 
 
+def test_http_condition_facts_reject_changed_source_proof_and_duplicate_observations():
+    from pydantic import ValidationError
+    from product.protocols.codec import content_hash
+    from product.protocols.checks.conditions import condition_source_reference
+    from product.protocols.checks.execution_request import EffectProofRequirement
+    case = next(item for item in plan(conditioned_preparation()).actions[0].cases if item.permission.expectation=='DENY')
+    document = case.proof_requirements[0].model_dump(mode='json', exclude={'proof_fingerprint'})
+    document.update(rule='HTTP_ENTITY_QUERY', reference=dict(kind='OPERATION_HTTP_ENTITY',
+        flow_id='ofl_'+'a'*32, revision=1, query_fingerprint='b'*64))
+    proof = EffectProofRequirement(**document, proof_fingerprint=content_hash('EffectProofRequirement', document))
+    case = case.model_copy(update={'proof_requirements':(proof,), 'permission':case.permission.model_copy(
+        update={'conditions':PermissionConditions(resource_states=('OPEN',))})})
+    source_id, source_fingerprint = condition_source_reference(proof)
+    observed = ObservedPermissionConditions(proof_fingerprint=proof.proof_fingerprint,
+        source_id=source_id, source_fingerprint=source_fingerprint, principal='AUTHENTICATED',resource_state='OPEN')
+    values = dict(case=case, execution='DENIED', actual_identity='MATCH',run_correlated=True,
+        resource_correlated=True,baseline_trusted=True,recovery_verified=True,allow_control_verdict=CaseVerdict.SAFE,
+        effects=(CheckEffectFact(effect_id=proof.effect_id,proof_fingerprint=proof.proof_fingerprint,state='CONFIRMED',
+            complete=True,reliable=True,correlated=True,authoritative=True,closure='CLOSED'),))
+    assert evaluate_check_case(CheckDecisionInput(**values,condition_observations=(observed,))).verdict == CaseVerdict.VULNERABLE
+    for field, value in [('source_id','psr_'+'f'*32),('source_fingerprint','f'*64),('proof_fingerprint','f'*64)]:
+        with pytest.raises(ValidationError, match='frozen independent source'):
+            CheckDecisionInput(**values,condition_observations=(observed.model_copy(update={field:value}),))
+    with pytest.raises(ValidationError, match='frozen independent source'):
+        CheckDecisionInput(**values,condition_observations=(observed,observed))
+
+
 def test_relationship_graph_respects_direction_budget_and_rejects_cycles():
     snapshot = RelationshipSnapshot(subject_id='alice', owner_id='bob', resource_id='ticket', action='read',
         observed_at_us=100, subject_organizations=('headquarters',), resource_organization='team',

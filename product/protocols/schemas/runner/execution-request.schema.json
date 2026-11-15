@@ -167,6 +167,184 @@
       "title": "ChangeContext",
       "type": "object"
     },
+    "DiscoveryCoverage": {
+      "additionalProperties": false,
+      "description": "总数和指纹覆盖完整清单，摘要最多128条；详情优先携带指定请求，省略数量明确显示。",
+      "properties": {
+        "excluded_count": {
+          "minimum": 0,
+          "title": "Excluded Count",
+          "type": "integer"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/DiscoveryItem"
+          },
+          "maxItems": 128,
+          "title": "Items",
+          "type": "array"
+        },
+        "omitted_count": {
+          "minimum": 0,
+          "title": "Omitted Count",
+          "type": "integer"
+        },
+        "pending_count": {
+          "minimum": 0,
+          "title": "Pending Count",
+          "type": "integer"
+        },
+        "recheck_count": {
+          "minimum": 0,
+          "title": "Recheck Count",
+          "type": "integer"
+        },
+        "related_count": {
+          "minimum": 0,
+          "title": "Related Count",
+          "type": "integer"
+        },
+        "unexecuted_request_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unexecuted Request Count"
+        }
+      },
+      "required": [
+        "fingerprint",
+        "pending_count",
+        "related_count",
+        "excluded_count",
+        "recheck_count",
+        "items",
+        "omitted_count"
+      ],
+      "title": "DiscoveryCoverage",
+      "type": "object"
+    },
+    "DiscoveryItem": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Id"
+        },
+        "candidate_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Id"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "in_execution": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In Execution"
+        },
+        "key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "ROLE",
+            "ACTION",
+            "REQUEST"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "status": {
+          "enum": [
+            "PENDING",
+            "RELATED",
+            "EXCLUDED",
+            "RECHECK"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "label",
+        "status",
+        "fingerprint"
+      ],
+      "title": "DiscoveryItem",
+      "type": "object"
+    },
     "EffectProofRequirement": {
       "additionalProperties": false,
       "properties": {
@@ -1793,6 +1971,17 @@
       "pattern": "^[0-9a-f]{64}$",
       "title": "Config Fingerprint",
       "type": "string"
+    },
+    "discovery_coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DiscoveryCoverage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "document_type": {
       "const": "jiejian.execution-request",

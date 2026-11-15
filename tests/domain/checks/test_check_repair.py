@@ -18,7 +18,7 @@ def test_repair_empty_history_never_removes_new_control_requirement(historical_s
     assert bool(contract.regressions) is historical_safe
     assert bool(repair_context(contract).allow_regression_case_fingerprints) is historical_safe
     result = verify_current_repair(contract,request=current.request,bundle=current.bundle,result=current.result,
-        evidence=current.evidence,expected_change_context=change)
+        evidence=current.evidence,expected_change_context=change,original_request=current.original.request,original_bundle=current.original.bundle)
     assert result.status == expected
 
 
@@ -32,7 +32,9 @@ def test_repair_rejects_wrong_run_context_policy_or_standard(fault):
     elif fault == "change":
         change = change.model_copy(update={"change_id":"chg_"+"f"*32})
     elif fault == "policy":
-        current.request = current.request.model_copy(update={"policy_epoch":current.request.policy_epoch+1})
+        action = current.request.actions[0]
+        changed = tuple(case.model_copy(update={"permission":case.permission.model_copy(update={"revision":case.permission.revision+1})}) for case in action.cases)
+        current.request = current.request.model_copy(update={"actions":(action.model_copy(update={"cases":changed}),)})
     elif fault == "runtime":
         current.result.runtime_correspondence = None
     else:
@@ -40,7 +42,7 @@ def test_repair_rejects_wrong_run_context_policy_or_standard(fault):
         proof = action.proofs[0].model_copy(update={"exclusive_resource_window":not action.proofs[0].exclusive_resource_window})
         current.bundle = current.bundle.model_copy(update={"actions":(action.model_copy(update={"proofs":(proof,)}),)})
     result = verify_current_repair(contract,request=current.request,bundle=current.bundle,result=current.result,
-        evidence=current.evidence,expected_change_context=change)
+        evidence=current.evidence,expected_change_context=change,original_request=current.original.request,original_bundle=current.original.bundle)
     assert result.status == ("STALE" if fault == "policy" else "INCONCLUSIVE")
 
 
@@ -59,7 +61,16 @@ def test_partial_original_is_not_stale_when_other_unchanged_rules_exist():
     contract,current,change=contract_and_new()
     original=contract.original_intents[0]
     extra=original.model_copy(update={'intent_id':'pin_'+'f'*32})
-    assert repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=(*contract.original_intents,extra))
-    assert not repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=(extra,))
+    assert repair_policy_matches(contract,permissions=(*contract.original_intents,extra))
+    assert not repair_policy_matches(contract,permissions=(extra,))
     changed=tuple(item.model_copy(update={'revision':item.revision+1}) if item==original else item for item in contract.original_intents)
-    assert not repair_policy_matches(contract,policy_epoch=contract.original_policy_epoch,permissions=changed)
+    assert not repair_policy_matches(contract,permissions=changed)
+
+
+def test_original_repair_survives_an_unrelated_policy_version_change():
+    contract,current,change = contract_and_new()
+    current.request = current.request.model_copy(update={"policy_epoch":current.request.policy_epoch+1})
+    result = verify_current_repair(contract,request=current.request,bundle=current.bundle,result=current.result,
+        evidence=current.evidence,expected_change_context=change,original_request=current.original.request,original_bundle=current.original.bundle)
+    assert result.status == "VERIFIED"
+    assert current.request.repair_context.original_policy_epoch == contract.original_policy_epoch

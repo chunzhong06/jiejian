@@ -44,7 +44,7 @@ class OfficialScenario:
         proposal=self.request('POST','/api/experience/official-sample/boundary-proposal',{'exhibition_download':True})['proposal']
         self.request('POST',f'/api/projects/{self.project_id}/business-boundaries/proposals/{proposal["proposal_id"]}/approve',{'schema_version':'1','expected_fingerprint':proposal['proposal_fingerprint'],'reason':'独立官方场景核对访问要求'})
 
-    def check(self,version,change_id=None):
+    def check(self,version,change_id=None,*,selected=None):
         project=self.project_id
         plan=self.request('POST',f'/api/projects/{project}/proof-preparation/batches/preview?mode=OFFICIAL')
         operation=uuid4().hex
@@ -53,10 +53,12 @@ class OfficialScenario:
         assert batch['state']=='SUCCEEDED',f'准备批次终止于 {batch["state"]}'
         assert self.request('GET',f'/api/projects/{project}/preparation')['preparation_complete']
         suffix='?change_id='+change_id if change_id else ''
-        preview=self.request('GET',f'/api/projects/{project}/check-preview'+suffix)
+        preview=(self.request('POST',f'/api/projects/{project}/check-preview'+suffix,{'selected_permissions':selected})
+            if selected is not None else self.request('GET',f'/api/projects/{project}/check-preview'+suffix))
         assert preview['can_execute']
         command={'schema_version':'2','expected_plan_fingerprint':preview['plan_fingerprint'],'idempotency_key':uuid4().hex}
         if change_id:command['change_id']=change_id
+        if selected is not None:command['selected_permissions']=selected
         submitted=self.request('POST',f'/api/projects/{project}/runs',command)
         run_id=submitted['run']['run_id']
         status=until(lambda:self.request('GET',f'/api/runs/{run_id}'),lambda value:value['run']['lifecycle'] not in {'QUEUED','RUNNING'},seconds=120)

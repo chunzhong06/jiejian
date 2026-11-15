@@ -72,6 +72,9 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
             if message is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, 'Agent 协议连接已断开，原任务保留')
             if 'error' in message:
+                if message.get('id') == 2 and session_id and 'no rollout' in str(message['error'].get('message', '')).lower():
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '原模型历史无法恢复，当前任务和业务产物仍保留',
+                        details={'agent_history':'UNAVAILABLE'})
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, 'Agent 未能接受本次请求，请核对客户端或账号状态')
             if message.get('id') == 1 and 'result' in message:
                 send(dict(method='initialized'))
@@ -115,9 +118,15 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
                 restricted = True
         raise JiejianError(ErrorCode.STATE_PRECONDITION, '本轮 Agent 已达到运行时限，请核对原任务后继续')
     finally:
-        # Windows Job Object / POSIX 进程组同时覆盖连接器等后代，不遗留后台执行者。
+        # stdio EOF 让客户端完成会话落盘；终态通知之后仍可能有收尾写入。
+        # 正常退出也继续回收受控树，超时不遗留连接器或其他后代。
         closed.set()
-        terminate_process_tree(process, timeout=5)
+        try:
+            process.stdin.close()
+            process.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        terminate_process_tree(process, timeout=3)
         if reader.ident is not None:
             reader.join(timeout=.5)
 

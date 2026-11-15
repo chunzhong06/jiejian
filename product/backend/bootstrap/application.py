@@ -182,7 +182,7 @@ class ApplicationCore:
         from product.backend.application.preparation.business_scenarios import BusinessScenarioService
         self.business_scenarios=BusinessScenarioService(factory,self.checks,clock_us=clock_us)
         self.check_history = CheckHistoryService(self.check_results,factory)
-        self.check_story = CheckStoryBuilder(self.check_results)
+        self.check_story = CheckStoryBuilder(self.check_results, uow_factory=factory)
         self.check_comparison = CheckComparisonService(self.check_results, self.check_story)
         from product.backend.application.changes import CurrentSourceChangeService
         from product.backend.application.checks.repairs.repair import CurrentRepairService
@@ -301,7 +301,7 @@ class ApplicationCore:
                 understanding=self.application_understanding,boundaries=self.business_boundaries,identities=self.test_identities,
                 identity_preparations=self.identity_preparations,
                 preparation=self.preparation,proofs=self.proof_preparation,artifacts=self.proof_artifacts,installer=self.official_scenario,changes=self.development,development_reader=self.development_reader,
-                reader=self.check_results,repairs=self.project_repair,uow_factory=factory,
+                reader=self.check_results,repairs=self.project_repair,repair_resolver=self.check_repairs.resolve,uow_factory=factory,
                 archive_project=self.project_lifecycle.archive,cancel_check=self.checks.cancel,clock_us=clock_us)
         else:
             self.official_experience = OfficialSampleExperience(self.official_samples, understanding=self.application_understanding,
@@ -343,7 +343,7 @@ class ApplicationCore:
         from product.backend.application.agent_access.workflow import AgentWorkflowContext
         self.agent_workflow = AgentWorkflowContext(projects=self.projects, rules=self.rule_candidates,
             preparation=self.preparation_guidance, batches=self.preparation_batches, recordings=self.recording_lifecycle,
-            results=self.check_results, uow_factory=factory)
+            results=self.check_results, uow_factory=factory, material_reader=self.preparation.get)
         from product.backend.application.agent_access.capabilities import ProductCapabilities
         from product.backend.application.agent_access.tasks import CollaborationTasks
         from product.backend.application.agent_access.github_issues import IssueCollaboration

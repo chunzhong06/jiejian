@@ -39,6 +39,28 @@ def test_claimed_path_is_only_hint_and_stale_mapping_never_auto_rebinds(harness)
     assert service.inspect_revalidation(project,value.manifest.change_id).status == "SOURCE_STALE"
 
 
+def test_history_cursor_keeps_equal_time_order_and_rejects_foreign_anchor(harness):
+    current, _ = harness
+    core, project = current.core, current.project_id
+    service = CurrentSourceChangeService(uow_factory=core.uow_factory,
+        understanding=core.application_understanding, boundaries=core.business_boundaries, clock_us=lambda:123)
+    # 同一时间的真实登记仍需稳定翻页；随后新登记不能挤走游标之后的旧记录。
+    ids = [service.submit(project, reason=f'历史登记{index}').manifest.change_id for index in range(3)]
+    expected = sorted(ids, reverse=True)
+    first = service.list(project, limit=1)
+    assert [item.manifest.change_id for item in first] == expected[:1]
+    newer = CurrentSourceChangeService(uow_factory=core.uow_factory,
+        understanding=core.application_understanding, boundaries=core.business_boundaries, clock_us=lambda:124)
+    newer.submit(project, reason='翻页后新增登记')
+    rest = service.list(project, before_change_id=expected[0])
+    assert [item.manifest.change_id for item in rest] == expected[1:]
+    assert service.list(project, before_change_id=expected[-1]) == ()
+    with pytest.raises(JiejianError):
+        service.list('foreign', before_change_id=expected[0])
+    with pytest.raises(JiejianError):
+        service.list(project, before_change_id='chg_'+'0'*32)
+
+
 def test_failed_aggregate_transaction_keeps_no_half_change(harness,monkeypatch):
     current,service = harness
     before = current.core.application_understanding.get(current.project_id)

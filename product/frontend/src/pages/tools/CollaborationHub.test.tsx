@@ -15,7 +15,7 @@ it('筛选无匹配保留任务事实，清除条件后恢复原范围',async()=
   fireEvent.click(screen.getByRole('button',{name:'全部任务'}))
   const input=screen.getByRole('searchbox',{name:'查找协作任务'})
   fireEvent.change(input,{target:{value:'没有这个目标'}})
-  expect(screen.getByRole('heading',{name:'没有符合条件的协作任务'})).toBeVisible()
+  expect(screen.getByText('没有符合条件的协作任务',{exact:true})).toBeVisible()
   expect(screen.queryByText('当前没有进行中的任务')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'清除筛选'}))
   expect(screen.getByRole('link',{name:/解释上次检查/})).toBeVisible()

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 from product.backend.domain.checks.repair import CurrentRepairReference
+from product.protocols.checks.discovery import DiscoveryCoverage
 from product.backend.application.preparation.models import MaterialImpactView
 
 from typing import Literal
@@ -159,6 +160,8 @@ from product.backend.application.projects.repair import ProjectRepair
 
 
 class WorkspaceLatestResult(WorkspaceModel):
+    runtime_status: Literal['MATCHED','UNCONFIRMED','UNSUPPORTED'] = 'UNSUPPORTED'
+    unchecked_states: tuple[str, ...] = ()
     run_id: str
     verdict: Literal["PASS","BLOCK","INCONCLUSIVE"]
     policy_epoch: int = Field(ge=0)
@@ -218,6 +221,7 @@ class WorkspaceView(WorkspaceModel):
     active_check: CheckRunStatus | None = None
     journey: WorkspaceJourney | None = None
     development: WorkspaceDevelopment | None = None
+    discovery_coverage: DiscoveryCoverage | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 __all__ = [

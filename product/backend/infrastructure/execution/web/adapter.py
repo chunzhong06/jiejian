@@ -9,8 +9,11 @@ import hashlib
 import secrets
 import json
 import ipaddress
+import socket
 import re
 import time
+from concurrent.futures import Future, TimeoutError as ResolutionTimeout
+from threading import Thread
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
@@ -23,6 +26,7 @@ from product.backend.domain.redaction import redact_known_secrets
 from product.backend.domain.verification.facts import ExecutionFact, ExecutionOutcome, TargetType
 from product.protocols.web.identity import AuthTargetScope
 from product.protocols.web.target import WebTargetDefinition, WebTargetScope
+from product.backend.infrastructure.execution.web.pinned_transport import PinnedLoopbackTransport
 from product.protocols.web.workflow import EmptyBody, FormUrlEncodedBody, HTTP_TEMPLATE_MAX_BYTES, HttpOutcomeClassifier, HttpParameter, HttpRequestTemplate, JsonBody, MultipartBody, ResponseExtractor, ResponseExtractorKind, ValueSlot
 
 if TYPE_CHECKING:
@@ -62,6 +66,24 @@ class AuthorizedTarget:
     addresses: tuple[str, ...]
 
 
+def _resolve_localhost(port: int, timeout: float) -> frozenset[str]:
+    """限制系统解析等待；超时后不连接，后台系统调用随隔离进程退出收口。"""
+    result = Future()
+
+    def resolve() -> None:
+        try:
+            result.set_result(frozenset(item[4][0] for item in socket.getaddrinfo(
+                'localhost', port, type=socket.SOCK_STREAM)))
+        except Exception as exc:
+            result.set_exception(exc)
+
+    Thread(target=resolve, daemon=True, name='jiejian-localhost-resolution').start()
+    try:
+        return result.result(timeout=timeout)
+    except ResolutionTimeout:
+        raise JiejianError(ErrorCode.EXEC_TIMEOUT, '本机域名解析超时') from None
+
+
 class WebTargetGuard:
     """在 HTTP 适配器边界内执行 scope、自检、重定向和私网安全校验。"""
 
@@ -74,14 +96,15 @@ class WebTargetGuard:
         self.target = target
         self.scope = target.scope if isinstance(target, WebTargetDefinition) else target
         self.reserved_origins = frozenset(reserved_origins)
+        self._localhost_resolution = None
 
-    def authorize_path(self, path: str) -> AuthorizedTarget:
+    def authorize_path(self, path: str, *, timeout: float | None = None) -> AuthorizedTarget:
         parsed = urlsplit(path)
         if not path.startswith("/") or parsed.scheme or parsed.netloc:
             raise JiejianError(ErrorCode.SCOPE_URL, "请求路径必须是当前目标下的绝对路径引用")
-        return self.authorize_url(f"{self.scope.base_url}{path}")
+        return self.authorize_url(f"{self.scope.base_url}{path}", timeout=timeout)
 
-    def authorize_url(self, url: str) -> AuthorizedTarget:
+    def authorize_url(self, url: str, *, timeout: float | None = None) -> AuthorizedTarget:
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"}:
             raise JiejianError(ErrorCode.SCOPE_URL, "只允许 HTTP 或 HTTPS 目标")
@@ -99,7 +122,7 @@ class WebTargetGuard:
         if port not in self.scope.allowed_ports:
             raise JiejianError(ErrorCode.SCOPE_PORT, "目标端口不在授权范围")
         origin = f"{parsed.scheme}://{host}:{port}"
-        if origin in self.reserved_origins:
+        if origin in self.reserved_origins or host == 'localhost' and f'{parsed.scheme}://127.0.0.1:{port}' in self.reserved_origins:
             raise JiejianError(
                 ErrorCode.SELF_TARGET_FORBIDDEN,
                 "执行目标不得指向界鉴自身服务",
@@ -107,7 +130,16 @@ class WebTargetGuard:
         if origin not in self.scope.allowed_origins:
             raise JiejianError(ErrorCode.SCOPE_HOST, "目标 origin 不在授权范围")
         try:
-            address = ipaddress.IPv4Address(host)
+            if host == 'localhost':
+                resolved = _resolve_localhost(port, min(self.scope.timeout_seconds, timeout) if timeout is not None else self.scope.timeout_seconds)
+                if not resolved or '127.0.0.1' not in resolved or not resolved <= {'127.0.0.1', '::1'}:
+                    raise JiejianError(ErrorCode.SCOPE_HOST, '本机域名解析超出已授权环回地址')
+                if self._localhost_resolution is not None and self._localhost_resolution != resolved:
+                    raise JiejianError(ErrorCode.SCOPE_HOST, '本轮域名解析已变化，请重新核对环境')
+                self._localhost_resolution = resolved
+            address = ipaddress.IPv4Address('127.0.0.1' if host == 'localhost' else host)
+        except OSError as exc:
+            raise JiejianError(ErrorCode.SCOPE_HOST, '无法核对本机域名解析') from exc
         except ipaddress.AddressValueError as exc:
             raise JiejianError(ErrorCode.SCOPE_HOST, "可执行目标必须使用 IPv4 字面量") from exc
         if address in _METADATA_ADDRESSES or address.is_link_local or address.is_multicast or address.is_reserved or address.is_unspecified:
@@ -152,6 +184,7 @@ class HttpExecutionAdapter:
         self.guard = WebTargetGuard(target, reserved_origins=reserved_origins)
         self.requests_used = 0
         self.auth_requests_used: dict[str, int] = {}
+        self.auth_guards: dict[AuthTargetScope, WebTargetGuard] = {}
         self.cleanup_reserve = cleanup_reserve
         self.known_secrets = known_secrets
         self.cancellation_requested = cancellation_requested or (lambda: False)
@@ -159,6 +192,7 @@ class HttpExecutionAdapter:
         self.fixture_artifacts = dict(fixture_artifacts or {})
         self.request_marker = request_marker
         self.client = httpx.Client(
+            transport=PinnedLoopbackTransport(),
             follow_redirects=False,
             timeout=self.guard.scope.timeout_seconds,
             trust_env=False,
@@ -302,8 +336,18 @@ class HttpExecutionAdapter:
             raise JiejianError(ErrorCode.EXEC_TIMEOUT,'观察已超过等待预算')
         rendered_query = _render_parameters(query, slot_values or {})
         rendered_headers = _render_parameters(headers, slot_values or {})
-        guard = self.guard if auth_scope is None else WebTargetGuard(auth_scope)
-        target = guard.authorize_path(path)
+        guard = self.guard
+        if auth_scope is not None:
+            # 同一冻结认证范围保留DNS对照，并继承执行器的控制面地址禁令。
+            guard = self.auth_guards.get(auth_scope)
+            if guard is None:
+                guard = WebTargetGuard(auth_scope, reserved_origins=self.guard.reserved_origins)
+                self.auth_guards[auth_scope] = guard
+        target = guard.authorize_path(path, timeout=remaining)
+        # DNS 也消耗观察预算；解析结束后重新核对，不能用旧剩余量发送请求。
+        remaining = None if deadline_ns is None else (deadline_ns-time.monotonic_ns())/1_000_000_000
+        if remaining is not None and remaining <= 0:
+            raise JiejianError(ErrorCode.EXEC_TIMEOUT, '观察已超过等待预算')
         # 普通请求不能占用清理预留，保证异常或取消后仍能恢复测试状态。
         if auth_scope is None:
             remaining_for_normal = self.guard.scope.max_requests - self.cleanup_reserve
@@ -347,6 +391,7 @@ class HttpExecutionAdapter:
                 target.url,
                 params=rendered_query,
                 headers=request_headers,
+                extensions={'jiejian_authorized_address': target.addresses[0]},
                 timeout=guard.scope.timeout_seconds if remaining is None else min(guard.scope.timeout_seconds,remaining),
                 **request_kwargs,
             ) as response:

@@ -13,6 +13,7 @@ from playwright.sync_api import BrowserContext, Request
 from product.protocols.web.target import WebTargetScope
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.execution.web.adapter import WebTargetGuard
+from product.backend.infrastructure.execution.web.pinned_transport import PinnedLoopbackTransport
 
 _HOP_BY_HOP_HEADERS = {
     "connection",
@@ -59,7 +60,7 @@ class BoundedRouteTransport:
     ) -> BoundedHTTPResponse:
         """发送一个禁用自动重定向的授权请求，并返回完整有界响应。"""
 
-        guard.authorize_url(request.url)
+        authorized = guard.authorize_url(request.url)
         headers = self._end_to_end_headers(request.headers)
         # 仅在原请求未显式携带 Cookie 时补齐当前 BrowserContext 的会话语义。
         if "cookie" not in headers:
@@ -76,6 +77,7 @@ class BoundedRouteTransport:
         timeout = httpx.Timeout(self._scope.timeout_seconds)
         try:
             with httpx.Client(
+                transport=PinnedLoopbackTransport(),
                 follow_redirects=False,
                 timeout=timeout,
                 trust_env=False,
@@ -85,6 +87,7 @@ class BoundedRouteTransport:
                     request.url,
                     headers=headers,
                     content=request.post_data_buffer,
+                    extensions={'jiejian_authorized_address': authorized.addresses[0]},
                 ) as response:
                     response_headers = self._validate_headers(
                         request.url,

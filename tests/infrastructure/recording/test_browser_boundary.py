@@ -285,17 +285,18 @@ def test_intercepted_login_preserves_cookie_path_without_expanding_host_scope(mo
             assert {item['name'] for item in context.cookies('http://app.example.test/private/one')} == {'root_session', 'private_session'}
             from types import SimpleNamespace
             observed = []
-            client_type = httpx.Client
             def receive(request):
                 observed.append(request.headers.get('cookie'))
                 return httpx.Response(200, stream=httpx.ByteStream(b'{}'), headers={'Content-Type':'application/json','Content-Length':'2'})
-            monkeypatch.setattr(httpx,'Client',lambda **kwargs:client_type(transport=httpx.MockTransport(receive),**kwargs))
+            monkeypatch.setattr('product.backend.infrastructure.recording.transport.PinnedLoopbackTransport',lambda:httpx.MockTransport(receive))
+            guard = Mock()
+            guard.authorize_url.return_value.addresses = ('127.0.0.1',)
             request = SimpleNamespace(url='http://app.example.test/private-other',headers={},method='GET',post_data_buffer=None)
-            BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,Mock())
+            BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,guard)
             assert observed == ['root_session=temporary-root']
             for host in ('sub.app.example.test','other.example.test'):
                 request.url = 'http://'+host+'/service/tickets'
-                BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,Mock())
+                BoundedRouteTransport(SimpleNamespace(timeout_seconds=5,max_response_bytes=1024)).fetch(request,context,guard)
             assert observed[1:] == [None,None]
             root = next(item for item in context.cookies() if item['name'] == 'root_session')
             assert root['path'] == '/' and root['httpOnly'] and root['sameSite'] == 'Strict'

@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,within} from '@testing-library/react'
+import {fireEvent,render,screen,within,waitFor} from '@testing-library/react'
 import {expect,it,vi} from 'vitest'
 import {WorkflowSteps,type WorkflowStep} from './WorkflowSteps'
 import {ActionLink} from './actions'
@@ -15,14 +15,15 @@ it('嵌入任务继承父工作面的标题层级',()=>{
   expect(screen.getByRole('heading',{level:2,name:'调整检查范围'})).toBeVisible();
 })
 
-it('聚焦任务退出后保留输入，返回触发位置且不把关闭当作完成',()=>{
+it('聚焦任务退出后保留输入，返回触发位置且不把关闭当作完成',async()=>{
   const completed=vi.fn()
-  function Work(){const [active,setActive]=useState(false);return <><button onClick={()=>setActive(true)}>打开当前任务</button><TaskSurface active={active} title="核对当前对象" onBack={()=>setActive(false)}><input aria-label="当前草稿"/><button onClick={completed}>确认处理</button></TaskSurface></>}
+  function Work(){const [active,setActive]=useState(false);return <main><button onClick={()=>setActive(true)}>打开当前任务</button><TaskSurface active={active} title="核对当前对象" onBack={()=>setActive(false)}><input aria-label="当前草稿"/><button onClick={completed}>确认处理</button></TaskSurface></main>}
   render(<Work/>);
   const trigger=screen.getByRole('button',{name:'打开当前任务'});trigger.focus();fireEvent.click(trigger);
   fireEvent.change(screen.getByRole('textbox',{name:'当前草稿'}),{target:{value:'保留的内容'}});
   fireEvent.click(screen.getByRole('button',{name:'返回原工作'}));
-  expect(trigger).toHaveFocus();expect(screen.queryByRole('textbox',{name:'当前草稿'})).not.toBeInTheDocument();
+  // 正式工作面解除隐藏后，下一帧接续原入口；夹具保持真实 main 宿主与时序。
+  await waitFor(()=>expect(trigger).toHaveFocus());expect(screen.queryByRole('textbox',{name:'当前草稿'})).not.toBeInTheDocument();
   fireEvent.click(trigger);expect(screen.getByRole('textbox',{name:'当前草稿'})).toHaveValue('保留的内容');
   expect(completed).not.toHaveBeenCalled();
 })

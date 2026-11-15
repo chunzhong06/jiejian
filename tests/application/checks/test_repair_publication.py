@@ -143,7 +143,8 @@ def test_real_published_superset_and_empty_regressions_keep_original_control(che
         check_target[1].update(deny_effect=fault == "forbidden", allow_effect=new_safe)
         current = publish(container, check_target, request, bundle)
         verification = verify_current_repair(contract, request=current.request, bundle=current.bundle,
-            result=current.result, evidence=current.evidence, expected_change_context=request.change_context)
+            result=current.result, evidence=current.evidence, expected_change_context=request.change_context,
+            original_request=source.request,original_bundle=source.bundle)
         assert verification.status == expected, verification.model_dump_json()
         if fault is None:
             assert verification.reason_codes == ('REPAIR_RUNTIME_NOT_CONFIRMED',)

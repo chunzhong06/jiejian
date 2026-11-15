@@ -6,17 +6,22 @@ const titles:Record<string,string>={'/workspace':'工作台','/permissions':'权
 /** 模块加载和业务读取共用基础页面身份；具体子任务可提供自己的标题。 */
 export function pageTitle(view:string){return titles[view]??'当前工作'}
 
-export function PageSkeleton({view='/workspace',title,navigation}:{view?:string;title?:string;navigation?:ReactNode}){
+type SkeletonLayout='collection'|'directory'|'report'|'form'|'overview'
+
+// 首屏只预留该类工作面的结构，不提前虚构对象、数量或业务状态。
+const layouts:Record<string,SkeletonLayout>={'/workspace':'overview','/permissions':'collection','/preparation':'directory','/application':'form','/testing':'collection','/system':'overview','/tools':'form'}
+export function PageSkeleton({view='/workspace',title,navigation,layout}:{view?:string;title?:string;navigation?:ReactNode;layout?:SkeletonLayout}){
   const label=title??pageTitle(view)
-  const preparation=view==='/preparation'
-  return <section className="jj-page-skeleton" role="status" aria-label={'正在读取'+label} data-page-pending="true">
+  const structure=layout??layouts[view]??'collection'
+  return <section className="jj-page-skeleton" role="status" aria-label={'正在读取'+label} data-page-pending="true" data-layout={structure}>
     <Heading title={label}/>
     {navigation}
     <div aria-hidden="true">
       <div className="jj-skeleton-toolbar"><span/><span/><span/></div>
-      <div className={'jj-skeleton-surface'+(preparation?' is-preparation':'')}>
-        {preparation&&<aside>{Array.from({length:5},(_,i)=><span key={i}/>)}</aside>}
-        <div className="jj-skeleton-reading">{Array.from({length:3},(_,i)=><div className="jj-skeleton-row" key={i}><span/><span/></div>)}</div>
+      <div className="jj-skeleton-surface">
+        {structure==='directory'&&<aside><span/><span/><span/></aside>}
+        <div className="jj-skeleton-reading">{Array.from({length:3},(_,i)=><div className="jj-skeleton-row" key={i}><span/><span/>{structure==='collection'&&<span/>}</div>)}</div>
+        {structure==='report'&&<aside><span/><span/></aside>}
       </div>
     </div>
   </section>

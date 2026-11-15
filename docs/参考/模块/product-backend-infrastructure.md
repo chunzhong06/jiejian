@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[根目录](#根目录)（2 个文件）、[artifacts](#artifacts)（7 个文件）、[artifacts/checks](#artifactschecks)（6 个文件）、[execution](#execution)（5 个文件）、[execution/web](#executionweb)（6 个文件）、[identity](#identity)（4 个文件）、[integrations](#integrations)（1 个文件）、[maintenance](#maintenance)（4 个文件）、[observers](#observers)（5 个文件）、[observers/adapters](#observersadapters)（8 个文件）、[observers/checks](#observerschecks)（15 个文件）、[observers/records](#observersrecords)（10 个文件）、[recording](#recording)（10 个文件）、[runtime](#runtime)（14 个文件）、[runtime/capture_runner](#runtimecapture_runner)（4 个文件）、[runtime/check_runner](#runtimecheck_runner)（4 个文件）、[runtime/jobs](#runtimejobs)（15 个文件）、[runtime/process](#runtimeprocess)（7 个文件）、[runtime/process/controlled](#runtimeprocesscontrolled)（13 个文件）、[runtime/process/records](#runtimeprocessrecords)（3 个文件）、[runtime/proof_runner](#runtimeproof_runner)（4 个文件）、[runtime/trial_runner](#runtimetrial_runner)（4 个文件）、[runtime/worker](#runtimeworker)（4 个文件）、[samples](#samples)（2 个文件）、[samples/official](#samplesofficial)（5 个文件）、[secrets](#secrets)（5 个文件）、[storage](#storage)（7 个文件）、[storage/applications](#storageapplications)（5 个文件）、[storage/boundaries](#storageboundaries)（4 个文件）、[storage/changes](#storagechanges)（4 个文件）、[storage/execution](#storageexecution)（6 个文件）、[storage/preparation](#storagepreparation)（14 个文件）、[storage/results](#storageresults)（4 个文件）、[storage/runtime](#storageruntime)（5 个文件）、[storage/settings](#storagesettings)（2 个文件）。
+按目录定位：[根目录](#根目录)（2 个文件）、[artifacts](#artifacts)（7 个文件）、[artifacts/checks](#artifactschecks)（6 个文件）、[execution](#execution)（5 个文件）、[execution/web](#executionweb)（8 个文件）、[identity](#identity)（4 个文件）、[integrations](#integrations)（1 个文件）、[maintenance](#maintenance)（4 个文件）、[observers](#observers)（5 个文件）、[observers/adapters](#observersadapters)（8 个文件）、[observers/checks](#observerschecks)（15 个文件）、[observers/records](#observersrecords)（10 个文件）、[recording](#recording)（10 个文件）、[runtime](#runtime)（14 个文件）、[runtime/capture_runner](#runtimecapture_runner)（4 个文件）、[runtime/check_runner](#runtimecheck_runner)（4 个文件）、[runtime/jobs](#runtimejobs)（15 个文件）、[runtime/process](#runtimeprocess)（7 个文件）、[runtime/process/controlled](#runtimeprocesscontrolled)（13 个文件）、[runtime/process/records](#runtimeprocessrecords)（3 个文件）、[runtime/proof_runner](#runtimeproof_runner)（4 个文件）、[runtime/trial_runner](#runtimetrial_runner)（4 个文件）、[runtime/worker](#runtimeworker)（4 个文件）、[samples](#samples)（2 个文件）、[samples/official](#samplesofficial)（5 个文件）、[secrets](#secrets)（5 个文件）、[storage](#storage)（7 个文件）、[storage/applications](#storageapplications)（5 个文件）、[storage/boundaries](#storageboundaries)（4 个文件）、[storage/changes](#storagechanges)（4 个文件）、[storage/execution](#storageexecution)（6 个文件）、[storage/preparation](#storagepreparation)（14 个文件）、[storage/results](#storageresults)（4 个文件）、[storage/runtime](#storageruntime)（5 个文件）、[storage/settings](#storagesettings)（2 个文件）。
 
 ## 根目录
 
@@ -68,7 +68,7 @@
 
 ### artifacts/checks/fact_validation.py
 
-[源码](../../../product/backend/infrastructure/artifacts/checks/fact_validation.py)（113 行）。公开声明：`validate_scenario_bindings`、`validate_frozen_facts`。
+[源码](../../../product/backend/infrastructure/artifacts/checks/fact_validation.py)（128 行）。公开声明：`validate_scenario_bindings`、`validate_frozen_facts`。
 
 ### artifacts/checks/scenario_progress.py
 
@@ -104,7 +104,7 @@
 
 ### execution/web/adapter.py
 
-[源码](../../../product/backend/infrastructure/execution/web/adapter.py)（644 行）。公开声明：`HttpResponse`、`AuthorizedTarget`、`WebTargetGuard`、`HttpExecutionAdapter`、`extract_response_value`。
+[源码](../../../product/backend/infrastructure/execution/web/adapter.py)（689 行）。公开声明：`HttpResponse`、`AuthorizedTarget`、`WebTargetGuard`、`HttpExecutionAdapter`、`extract_response_value`。
 
 ### execution/web/batch.py
 
@@ -120,7 +120,15 @@
 
 ### execution/web/identity.py
 
-[源码](../../../product/backend/infrastructure/execution/web/identity.py)（260 行）。公开声明：`IdentityTokenState`、`HttpIdentityRuntime`。
+[源码](../../../product/backend/infrastructure/execution/web/identity.py)（261 行）。公开声明：`IdentityTokenState`、`HttpIdentityRuntime`。
+
+### execution/web/pinned_transport.py
+
+[源码](../../../product/backend/infrastructure/execution/web/pinned_transport.py)（25 行）。公开声明：`PinnedLoopbackTransport`。
+
+### execution/web/probe.py
+
+[源码](../../../product/backend/infrastructure/execution/web/probe.py)（37 行）。公开声明：`probe_endpoint`。
 
 ## identity
 
@@ -260,7 +268,7 @@
 
 ### observers/checks/http_entity.py
 
-[源码](../../../product/backend/infrastructure/observers/checks/http_entity.py)（72 行）。公开声明：`selected`、`entity_fields`、`observe_http_entity`。
+[源码](../../../product/backend/infrastructure/observers/checks/http_entity.py)（86 行）。公开声明：`selected`、`entity_fields`、`observe_http_entity`。
 
 ### observers/checks/managed_trace.py
 
@@ -360,7 +368,7 @@
 
 ### recording/transport.py
 
-[源码](../../../product/backend/infrastructure/recording/transport.py)（251 行）。公开声明：`BoundedHTTPResponse`、`is_file_response`、`BoundedRouteTransport`。
+[源码](../../../product/backend/infrastructure/recording/transport.py)（254 行）。公开声明：`BoundedHTTPResponse`、`is_file_response`、`BoundedRouteTransport`。
 
 ### recording/ui_capture.py
 
@@ -374,7 +382,7 @@
 
 ### runtime/agent_process.py
 
-[源码](../../../product/backend/infrastructure/runtime/agent_process.py)（131 行）。公开声明：`run_codex`。
+[源码](../../../product/backend/infrastructure/runtime/agent_process.py)（140 行）。公开声明：`run_codex`。
 
 ### runtime/diagnostics.py
 
@@ -534,7 +542,7 @@
 
 ### runtime/process/environment.py
 
-[源码](../../../product/backend/infrastructure/runtime/process/environment.py)（585 行）。公开声明：`ProcessEnvironmentRole`、`process_environment_failure_summary`、`minimal_process_environment`、`confirmed_python_executable`、`python_module_command`、`spawn_python_module`、`run_python_module`。
+[源码](../../../product/backend/infrastructure/runtime/process/environment.py)（587 行）。公开声明：`ProcessEnvironmentRole`、`process_environment_failure_summary`、`minimal_process_environment`、`confirmed_python_executable`、`python_module_command`、`spawn_python_module`、`run_python_module`。
 
 ### runtime/process/exclusive_file.py
 
@@ -592,7 +600,7 @@
 
 ### runtime/process/controlled/npm.py
 
-[源码](../../../product/backend/infrastructure/runtime/process/controlled/npm.py)（189 行）。公开声明：`npm_plan`、`dependency_files`、`prepare_dependencies`、`execution_fingerprint`、`verify_dependencies`。
+[源码](../../../product/backend/infrastructure/runtime/process/controlled/npm.py)（196 行）。公开声明：`npm_plan`、`dependency_files`、`prepare_dependencies`、`execution_fingerprint`、`verify_dependencies`。
 
 ### runtime/process/controlled/sqlite_capture.mjs
 
@@ -814,7 +822,7 @@
 
 ### storage/changes/source_changes.py
 
-[源码](../../../product/backend/infrastructure/storage/changes/source_changes.py)（428 行）。公开声明：`SourceRevisionSnapshotRow`、`ChangeManifestRow`、`SourceChangeSetRow`、`ChangeImpactAssessmentRow`、`RuleChangeTargetRow`、`SourceChangeRepository`。
+[源码](../../../product/backend/infrastructure/storage/changes/source_changes.py)（438 行）。公开声明：`SourceRevisionSnapshotRow`、`ChangeManifestRow`、`SourceChangeSetRow`、`ChangeImpactAssessmentRow`、`RuleChangeTargetRow`、`SourceChangeRepository`。
 
 ## storage/execution
 
@@ -926,7 +934,7 @@
 
 ### storage/runtime/collaboration.py
 
-[源码](../../../product/backend/infrastructure/storage/runtime/collaboration.py)（135 行）。公开声明：`CollaborationRow`、`CollaborationRepository`。
+[源码](../../../product/backend/infrastructure/storage/runtime/collaboration.py)（138 行）。公开声明：`CollaborationRow`、`CollaborationRepository`。
 
 ### storage/runtime/environment_operations.py
 

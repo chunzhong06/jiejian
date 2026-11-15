@@ -4,7 +4,7 @@ import { systemApi } from '../entities/runtime/api/system';
 import { Button } from "../shared/ui/actions";
 import { Dialog } from "../shared/ui/Dialog";
 import { ErrorNote, Loading } from "../shared/ui/feedback";
-export function Shutdown({compact=false}:{compact?:boolean}={}) {
+export function Shutdown({compact=false,showLabel=false}:{compact?:boolean;showLabel?:boolean}={}) {
     const [open, setOpen] = useState(false);
     const [state, setState] = useState<'idle' | 'sending' | 'accepted' | 'unknown'>('idle');
     const [error, setError] = useState<unknown>();
@@ -25,7 +25,7 @@ export function Shutdown({compact=false}:{compact?:boolean}={}) {
         }
     };
     return <>
-    <Button kind="quiet" className={compact?'jj-shutdown-entry':'jj-nav-item'} aria-label="退出界鉴" tip={compact?'退出界鉴':undefined} icon={<PoweroffOutlined aria-hidden="true"/>} onClick={() => setOpen(true)}>{!compact&&'退出界鉴'}</Button>
+    <Button kind="quiet" className={compact?'jj-shutdown-entry':'jj-nav-item'} aria-label="退出界鉴" tip={compact?'退出界鉴':undefined} icon={<PoweroffOutlined aria-hidden="true"/>} onClick={() => setOpen(true)}>{compact?showLabel&&<span className="jj-shutdown-label">退出</span>:'退出界鉴'}</Button>
     {open && <Dialog title={state === 'accepted' ? '正在退出界鉴' : '退出界鉴？'} onClose={() => setOpen(false)} actions={state === 'idle' ? dismiss => <>
       <Button onClick={dismiss}>继续使用</Button>
       <Button kind="danger" onClick={() => void quit()}>退出界鉴</Button>

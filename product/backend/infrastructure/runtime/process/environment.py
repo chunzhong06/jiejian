@@ -85,6 +85,8 @@ _ROLE_POLICIES = MappingProxyType(
                     "JIEJIAN_SERVE_OWNER_TOKEN",
                     # Worker 是 Recording 的受信启动中介，必须保留非秘密浏览器运行时根路径。
                     "PLAYWRIGHT_BROWSERS_PATH",
+                    # 原生依赖构建通过系统安装目录发现编译器；不传给 Runner 或目标。
+                    "PROGRAMDATA",
                 }
             ),
             allows_secrets=True,

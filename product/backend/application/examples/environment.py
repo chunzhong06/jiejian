@@ -389,12 +389,14 @@ class OfficialSampleExperience:
             expected_fingerprint=None if previous is None else previous.fingerprint)
         return references
 
-    def switch_version(self, *, version, repair_reference=None):
+    def switch_version(self, *, version, repair_reference=None, expected_project_id=None, expected_basis=None):
         if version in {OfficialScenarioVersion.EXPOSE_REVOKE,OfficialScenarioVersion.PREVIEW_CHANGED}:
             raise JiejianError(ErrorCode.INPUT_INVALID,"这个预设属于Node展馆示例，不能用于旧Python样例")
         with self._lock:
             current=self._require_active()
             self._require_idle(current.project_id)
+            if expected_project_id is not None and (current.project_id != expected_project_id or self.development_journey().transition_basis != expected_basis):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'示例项目或检查依据已改变，请重新读取')
             if version is OfficialScenarioVersion.EVIDENCE_LIMITED:
                 return self.set_observation(available=False)
             if version is current.scenario_version:

@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
@@ -158,7 +159,14 @@ class ApplicationUnderstandingService:
         before = self.get(project_id)
         self._require_revision(before, revision)
         normalized_input = normalize_loopback_endpoint(endpoint)
-        if normalized_input == self._reserved_control_origin:
+        endpoint_origin = urlsplit(normalized_input)
+        control_origin = urlsplit(self._reserved_control_origin or '')
+        is_control_alias = (endpoint_origin.hostname in {'localhost', '127.0.0.1'}
+            and control_origin.hostname in {'localhost', '127.0.0.1'}
+            and endpoint_origin.scheme == control_origin.scheme
+            and (endpoint_origin.port or (443 if endpoint_origin.scheme == 'https' else 80))
+                == (control_origin.port or (443 if control_origin.scheme == 'https' else 80)))
+        if is_control_alias:
             raise JiejianError(
                 ErrorCode.SELF_TARGET_FORBIDDEN,
                 "当前地址是界鉴自身服务，请填写实际被检查应用地址",
@@ -606,7 +614,7 @@ class ApplicationUnderstandingService:
                 values = replacement.model_dump(mode="python")
                 values.update(
                     display_name=previous.display_name,
-                    decision=previous.decision,
+                    decision=CandidateDecision.REVIEW_REQUIRED if previous.decision is CandidateDecision.REJECTED and previous.evidence != replacement.evidence else previous.decision,
                     origin=previous.origin,
                     stale=False,
                 )
@@ -626,16 +634,22 @@ class ApplicationUnderstandingService:
         fresh = {item.canonical_key: item for item in detected}
         merged: list[ActionCandidate] = []
         for previous in current:
+            # 接口资产由来源修订更新；源码扫描未找到它，不表示该资产或人工决定已消失。
+            imported = tuple(item for item in previous.evidence if item.detector == 'API_SOURCE')
+            source_evidence = tuple(item for item in previous.evidence if item.detector != 'API_SOURCE')
             replacement = fresh.pop(previous.canonical_key, None)
             if replacement is not None:
                 values = replacement.model_dump(mode="python")
                 values.update(
                     display_name=previous.display_name,
-                    decision=previous.decision,
+                    evidence=(*replacement.evidence,*(item for item in imported if item not in replacement.evidence)),
+                    decision=CandidateDecision.REVIEW_REQUIRED if previous.decision is CandidateDecision.REJECTED and source_evidence != replacement.evidence else previous.decision,
                     origin=previous.origin,
                     stale=False,
                 )
                 merged.append(ActionCandidate.model_validate(values))
+            elif imported:
+                merged.append(previous.model_copy(update={"evidence":imported,"stale":False}))
             elif previous.origin is CandidateOrigin.MANUAL:
                 merged.append(previous.model_copy(update={"stale": False}))
             elif previous.decision is not CandidateDecision.PROPOSED:

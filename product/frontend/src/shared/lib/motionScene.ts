@@ -95,7 +95,8 @@ export function connectMotionScene(root:HTMLElement){
     }
     const additions=[...incoming].filter(node=>visible(node)&&!ownsContent(node))
     const top=additions.filter(node=>!additions.some(parent=>parent!==node&&parent.contains(node)))
-    top.forEach((node,index)=>revealContent(node,Math.min(index*18,72),node.matches('tr')?0:4))
+    // 异步补入只交接可见性，不按区块逐个上浮；对象切换与展开由各自交互所有者编排。
+    top.forEach(node=>revealContent(node,0,0))
     for(const node of states){
       const next=signature(node),previous=signatures.get(node);signatures.set(node,next)
       if(next===previous)continue

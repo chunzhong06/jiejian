@@ -118,7 +118,7 @@ class CheckObserverRuntime:
             if proof.rule == 'HTTP_ENTITY_QUERY':
                 from product.backend.infrastructure.observers.checks.http_entity import observe_http_entity
                 return observe_http_entity(self, case=case, action_id=action_id, proof=proof, phase=phase, common=common,
-                    source_identity=source_identity, cleanup=cleanup)
+                    source_identity=source_identity, cleanup=cleanup, requirement=requirement)
             if proof.rule != "REGISTERED_EFFECT":
                 response = self.web.request(proof.request, case=case, action_id=action_id,
                     identity_id=proof.observation_identity_id, cleanup=cleanup)

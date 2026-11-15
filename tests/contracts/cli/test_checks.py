@@ -19,6 +19,20 @@ def response(data):
     return httpx.Response(200, json={'schema_version':'1', 'data':data})
 
 
+def test_report_reads_the_gui_story_after_verifying_the_project():
+    story=dict(run_id='run_fixture',project_id='orders',delivery_summary=[dict(kind='RUNTIME',result='尚未核对')])
+    calls=[]
+    def server(request):
+        calls.append(request.url.path)
+        if request.url.path=='/':return httpx.Response(200,headers={'Set-Cookie':'jiejian_control_session=ephemeral; Path=/api'})
+        if request.url.path.endswith('/result-story'):return response(story)
+        return response({'run':{'project_id':'orders'}})
+    with CheckClient(ORIGIN,transport=httpx.MockTransport(server)) as client:
+        assert client.report('orders','run_fixture')==story
+        with pytest.raises(JiejianError):client.report('another','run_fixture')
+    assert calls.count('/api/runs/run_fixture/result-story')==1
+
+
 def test_check_client_gets_current_session_and_never_replays_unknown_write():
     requests, accepted = [], {}
 

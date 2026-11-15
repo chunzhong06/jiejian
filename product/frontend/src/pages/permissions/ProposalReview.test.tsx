@@ -11,6 +11,14 @@ function proposal():BoundaryProposalViewDto{return {
   review:{basis_state:'COMPLETE',current_state_changed:false,items:[item('owner',rule()),item('reviewer',rule({subject:'评审',relation:'OTHER_ROLE',expectation:'DENY',protected_effects:['内部资料已接收','内部访问权被开放']})),{...item('definition',rule({expectation:null,action:null,description:'下载已有资料，不改变业务状态',effects:[]})),entity_kind:'ACTION'}]},
 }}
 
+it('从变化重点直接定位对应业务定义，仍保留整份提案审阅',()=>{
+ render(<ProposalReview value={proposal()} onBack={vi.fn()}><footer>整份提案的确认区域</footer></ProposalReview>)
+ fireEvent.click(screen.getByRole('button',{name:'新增 · 下载资料'}))
+ expect(screen.getByRole('tab',{name:'业务定义 1'})).toHaveAttribute('aria-selected','true')
+ expect(within(screen.getByRole('complementary')).getByText('下载已有资料，不改变业务状态')).toBeVisible()
+ expect(screen.getByText('整份提案的确认区域')).toBeVisible()
+})
+
 it('概览保留全部规则，单项详情与分类切换保留阅读对象',()=>{
   const back=vi.fn()
   render(<ProposalReview value={proposal()} onBack={back}><footer>整份提案的确认区域</footer></ProposalReview>)
@@ -44,9 +52,9 @@ it('调整保留准确的前后规则，原版本不可用时明确保留核对�
   const rendered=render(<ProposalReview value={value} onBack={vi.fn()}>确认</ProposalReview>)
   fireEvent.click(screen.getByRole('button',{name:/^负责人可以下载资料/}))
   const detail=within(screen.getByRole('complementary'))
-  expect(detail.getByText('现在')).toBeVisible()
+  expect(detail.getByText('提案依据的原版本')).toBeVisible()
   expect(detail.getByText('旧的接收范围')).toBeVisible()
-  expect(detail.getByText('批准后')).toBeVisible()
+  expect(detail.getByText('拟生效内容')).toBeVisible()
   expect(detail.getByText('资料已接收')).toBeVisible()
   first.basis_available=false
   rendered.rerender(<ProposalReview value={value} onBack={vi.fn()}>确认</ProposalReview>)

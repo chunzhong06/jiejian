@@ -1,0 +1,2 @@
+/* 标题在窄窗换行后，辅助入口仍在所属标题行右侧收口。 */
+.jj-heading-actions > .jj-agent-assist { margin-inline-start:auto; }

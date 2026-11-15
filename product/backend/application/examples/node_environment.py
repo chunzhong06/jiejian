@@ -8,6 +8,7 @@ from threading import RLock, Thread
 from uuid import uuid4
 from urllib.parse import urlsplit
 from product.backend.domain.errors import ErrorCode,JiejianError
+from product.backend.domain.checks.repair import CurrentRepairReference
 from product.backend.domain.identities.models import AuthenticationProfile,IdentityVerificationConfig
 from product.backend.infrastructure.runtime.process.tree import kernel_tree_has_exited
 from product.backend.application.examples.environment import OfficialBoundaryDraft,OfficialExperienceView,OfficialScenarioVersion
@@ -17,13 +18,14 @@ from product.backend.application.examples.gallery_recipe import ACTION_ROUTES,ga
 
 
 class NodeOfficialSampleExperience:
-    def __init__(self,manager,*,runtime,understanding,boundaries,identities,identity_preparations,preparation,proofs,artifacts,installer,changes,reader,repairs,
+    def __init__(self,manager,*,runtime,understanding,boundaries,identities,identity_preparations,preparation,proofs,artifacts,installer,changes,reader,repairs,repair_resolver,
                  uow_factory,archive_project,cancel_check,clock_us=None,development_reader=None):
         self.manager,self.runtime,self.understanding,self.boundaries=manager,runtime,understanding,boundaries
         self.identities,self.preparation,self.proofs,self.installer=identities,preparation,proofs,installer
         self.identity_preparations=identity_preparations
         self.artifacts=artifacts
         self.changes,self.reader,self.repairs=changes,reader,repairs
+        self.repair_resolver=repair_resolver
         self.development_reader=development_reader
         self._uow,self.archive,self.cancel_check=uow_factory,archive_project,cancel_check
         self.clock=clock_us or (lambda:time.time_ns()//1000)
@@ -88,7 +90,9 @@ class NodeOfficialSampleExperience:
         return None
 
     @staticmethod
-    def _key(workspace,stage):return hashlib.sha256(('gallery:'+workspace+':'+stage).encode()).hexdigest()[:32]
+    def _key(workspace,stage):
+        from product.backend.application.examples.change_labels import gallery_operation_key
+        return gallery_operation_key(workspace,stage)
 
     def start(self,*,consent,operation_id=None,wait=True):
         if consent is not True:raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,'启动示例需要明确同意')
@@ -243,25 +247,39 @@ class NodeOfficialSampleExperience:
             if any(item.state.value in {'PENDING','RUNNING','RETRY_WAIT'} for item in work.jobs.list_for_project(project)):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'当前仍有任务，请等待或停止后再修改示例')
 
-    def switch_version(self,*,version,repair_reference=None):
+    def switch_version(self,*,version,repair_reference=None,expected_project_id=None,expected_basis=None):
         with self._lock:
             current=self._active(lightweight=True);workspace=self._workspace();self._idle(current.project_id)
+            if expected_project_id is not None and expected_project_id != current.project_id:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'示例项目已改变，请重新读取当前任务')
             version=OfficialScenarioVersion(version)
             if version is OfficialScenarioVersion.EVIDENCE_LIMITED:return self.set_observation(available=False)
+            reference=None
+            if version is OfficialScenarioVersion.FIXED:
+                if repair_reference is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'修复必须携带准确原题')
+                reference=CurrentRepairReference.model_validate(repair_reference)
+                # 在替换源码前核对原题，拒绝的引用不能留下未登记的预置修复。
+                self.repair_resolver(current.project_id,reference)
             saved=self.development_reader.receipt(current.project_id,'DELIVER',self._key(workspace['workspace_id'],version.value))
-            if saved is not None:return self.status()
+            if saved is not None:
+                if reference is not None:
+                    with self._uow() as work:previous=work.source_changes.current_change(current.project_id,saved.change_id)
+                    if previous is None or previous[0].repair_reference!=reference:
+                        raise JiejianError(ErrorCode.STATE_PRECONDITION,'这份预置修复已关联另一原题，请继续原修改或登记新的修改')
+                return self.status()
             journey=self.development_journey()
+            if expected_basis is not None and expected_basis != journey.transition_basis:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,'源码、规则或检查依据已改变，请重新读取后确认')
             if journey.implementation=='CUSTOM':raise JiejianError(ErrorCode.STATE_PRECONDITION,'源码已由外部修改，不能覆盖为预设实现')
             if version is OfficialScenarioVersion.VULNERABLE and not journey.can_optimize:raise JiejianError(ErrorCode.STATE_PRECONDITION,'先完成起始实现的真实检查')
             if version is OfficialScenarioVersion.EXPOSE_REVOKE and not (workspace['scenario_version']=='VULNERABLE' and journey.verdict=='BLOCK'):raise JiejianError(ErrorCode.STATE_PRECONDITION,'先核对错误交付这次修改的实际结果')
-            if version is OfficialScenarioVersion.FIXED and repair_reference is None:raise JiejianError(ErrorCode.STATE_PRECONDITION,'修复必须携带准确原题')
             if version is OfficialScenarioVersion.PREVIEW_CHANGED and not journey.repair_verified:raise JiejianError(ErrorCode.STATE_PRECONDITION,'先完成原题复验，再继续后续修改')
             if version not in {OfficialScenarioVersion.VULNERABLE,OfficialScenarioVersion.EXPOSE_REVOKE,OfficialScenarioVersion.FIXED,OfficialScenarioVersion.PREVIEW_CHANGED}:raise JiejianError(ErrorCode.INPUT_INVALID,'不支持该预设修改')
             source=Path(workspace['source_root']);name='preview.mjs' if version is OfficialScenarioVersion.PREVIEW_CHANGED else 'delivery.mjs'
             content={OfficialScenarioVersion.VULNERABLE:VULNERABLE,OfficialScenarioVersion.EXPOSE_REVOKE:EXPOSE_REVOKE,OfficialScenarioVersion.FIXED:BASELINE,OfficialScenarioVersion.PREVIEW_CHANGED:PREVIEW_CHANGED}[version]
             (source/name).write_text(content,encoding='utf-8')
             preview=self.changes.registration_preview(current.project_id)
-            self.changes.register_change(current.project_id,operation_id=self._key(workspace['workspace_id'],version.value),expected_registration_fingerprint=preview['fingerprint'],reason='预设演示：'+version.value,claimed_paths=(name,),repair_reference=repair_reference,submitted_by='预设演示 · 本机用户')
+            self.changes.register_change(current.project_id,operation_id=self._key(workspace['workspace_id'],version.value),expected_registration_fingerprint=preview['fingerprint'],reason='预设演示：'+version.value,claimed_paths=(name,),repair_reference=reference,submitted_by='预设演示 · 本机用户')
             workspace['scenario_version']=version.value
             with self._uow() as work:work.sample_workspaces.save(workspace);work.commit()
             state=self.runtime.state(current.project_id)
@@ -274,6 +292,7 @@ class NodeOfficialSampleExperience:
         change_id=self._change_id(project,(workspace['scenario_version'],))
         delivery_run_id=None
         with self._uow() as work:
+            has_active_tasks=any(item.state.value in {'PENDING','RUNNING','RETRY_WAIT'} for item in work.jobs.list_for_project(project))
             if workspace['scenario_version']=='BASELINE':
                 initial=work.runtime_loads.operation(project,self._key(workspace['workspace_id'],'start'))
                 expected=None if initial is None else initial.source_fingerprint
@@ -304,7 +323,8 @@ class NodeOfficialSampleExperience:
                 run_id=item.run.run_id;verdict=item.run.verdict.value;break
         return OfficialDevelopmentJourney(project_id=project,implementation='CUSTOM' if external else workspace['scenario_version'],delivery_source='EXTERNAL_CODE' if external else 'PRESET_DEMONSTRATION',
             run_id=run_id,verdict=verdict,repair_verified=verified,can_optimize=not external and workspace['scenario_version']=='BASELINE' and verdict=='PASS',
-            evidence_limited=False,reason='按原要求核对内部资料限制、公开预览与负责人导出，结论以本次真实证据为准。')
+            evidence_limited=False,policy_epoch=policy_epoch,source_fingerprint=fingerprint,current_change_id=change_id,has_active_tasks=has_active_tasks,
+            reason='按原要求核对内部资料限制、公开预览与负责人导出，结论以本次真实证据为准。')
 
     def set_observation(self,*,available):
         raise JiejianError(ErrorCode.STATE_PRECONDITION,'此示例的来源在检查材料中管理；来源缺失会明确显示证据不足，不切换伪造观察条件')

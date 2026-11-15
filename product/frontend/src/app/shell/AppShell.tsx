@@ -42,9 +42,11 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
         <Button kind="quiet" className="jj-mobile-toggle" aria-label="打开导航" icon={<MenuOutlined aria-hidden="true"/>} onClick={()=>setMobile(true)}/>
         <Breadcrumbs route={route} projectName={project?.name} projectId={project?.project_id}/>
         <nav className="jj-toolbar" aria-label="全局工具">
-          <Button kind="quiet" aria-label="刷新当前界面" tip="刷新当前界面" busy={refreshing} icon={<ReloadOutlined aria-hidden="true"/>} onClick={()=>{setRefreshing(true);void refreshCurrentPage().finally(()=>setRefreshing(false))}}/>
+          <div className="jj-toolbar-actions" role="group" aria-label="显示与刷新">
           <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/>
-          <Shutdown compact/>
+          <Button kind="quiet" aria-label="刷新当前界面" tip="刷新当前界面" busy={refreshing} icon={<ReloadOutlined aria-hidden="true"/>} onClick={()=>{setRefreshing(true);void refreshCurrentPage().finally(()=>setRefreshing(false))}}/>
+          </div>
+          <div className="jj-toolbar-exit"><Shutdown compact showLabel/></div>
         </nav>
       </header>
       <main id="jj-content" tabIndex={-1} className="jj-content">{children}</main>

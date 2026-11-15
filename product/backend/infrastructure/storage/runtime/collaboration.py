@@ -9,6 +9,7 @@ from product.backend.domain.identifiers import PROJECT_ID_PATTERN
 from product.protocols.codec import decode_json
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from typing import Literal, Any
+from product.protocols.runtime.collaboration import CollaborationBrief, QuestionPresentation
 
 
 class _StoredOperation(BaseModel):
@@ -30,6 +31,7 @@ class _StoredQuestion(BaseModel):
     question:str
     options:list[str]
     answer:str|None
+    presentation:QuestionPresentation|None=None
 
 
 class _StoredTask(BaseModel):
@@ -51,6 +53,7 @@ class _StoredTask(BaseModel):
     events:list[dict]
     execution:dict|None
     editor:dict|None=None
+    brief:CollaborationBrief|None=None
     followups:list[dict]=Field(default_factory=list)
     goal_operation_baseline:int|None=None
     read_reports:list[str]=Field(default_factory=list)

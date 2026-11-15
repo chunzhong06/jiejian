@@ -9,10 +9,11 @@ def report_ready(page,evidence_label='查看依据'):
     expect(page.get_by_text('本次检查的适用范围',exact=True)).to_be_visible()
     settled(page)
 
-def capture_workflow(page,origin,output,run_id,*,evidence_label='查看依据'):
+def capture_workflow(page,origin,output,run_id,*,project_id,evidence_label='查看依据'):
     captures=[]
     def capture(name,path,kind):
-        page.goto(origin+'/#'+path,wait_until='domcontentloaded')
+        # hash改变早于React提交；先确认目标工作面，防止拿旧页表格冒充新页就绪。
+        navigate(page,origin,path+('&' if '?' in path else '?')+'project_id='+project_id)
         if kind=='permissions':expect(page.get_by_role('table')).to_be_visible()
         elif kind=='preparation':
             expect(page.get_by_text('所需材料',exact=True)).to_be_visible()
@@ -33,7 +34,7 @@ def capture_workflow(page,origin,output,run_id,*,evidence_label='查看依据'):
     navigation=page.get_by_role('navigation',name='应用工作区',exact=True)
     for title in ('权限与覆盖','测试','问题','工作台'):
         navigation.get_by_role('link',name=title,exact=True).click()
-    expect(page.get_by_role('heading',name='数字展馆协作空间',exact=True)).to_be_visible()
+    expect(page.get_by_role('heading',name='工作台',exact=True)).to_be_visible()
     return captures
 
 
@@ -49,5 +50,6 @@ def navigate(page, origin, path):
     expect(page.locator('.jj-page')).to_have_attribute('data-route', route)
     expect(page.locator('[data-page-pending=true]')).to_have_count(0)
     expect(page.locator('main .jj-loading')).to_have_count(0)
-    expect(page.locator('main h1')).to_have_count(1)
+    # 聚焦任务保留隐藏父工作面的草稿；只计算当前可见任务的标题。
+    expect(page.locator('main h1:visible')).to_have_count(1)
     settled(page)

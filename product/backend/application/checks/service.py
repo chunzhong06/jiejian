@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 from pydantic import Field
 
 from product.backend.domain.checks.plan import ActionCheckPlan, CheckPlanGap
-from product.backend.domain.checks.repair import CurrentRepairReference
+from product.backend.domain.checks.repair import CurrentRepairReference, current_request_permissions, repair_policy_matches
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.boundaries.candidate_reviews import BoundaryReviewGap
 from product.backend.application.reading import projection_read
@@ -26,6 +26,8 @@ from product.backend.application.workspace.models import CheckPreparationWork, P
 from product.backend.infrastructure.runtime.workflow_timing import timed_workflow, workflow_phase, link_workflow
 from product.backend.application.business_boundaries.candidates.reviews import project_review_gaps
 from product.backend.application.business_boundaries.candidates.coverage import frozen_requirement_scope
+from product.backend.application.business_boundaries.discovery import discovery_coverage
+from product.protocols.checks.discovery import DiscoveryCoverage
 from product.backend.infrastructure.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
 from product.backend.infrastructure.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infrastructure.runtime.jobs.models import SubmitJob
@@ -50,15 +52,18 @@ class CheckPreview(WireModel):
     actions: tuple[ActionCheckPlan, ...]
     boundary_review_gaps: tuple[BoundaryReviewGap, ...] = ()
     requirement_scope: tuple[FrozenRequirementScope, ...] = ()
+    discovery_coverage: DiscoveryCoverage | None = Field(default=None, exclude_if=lambda value: value is None)
     selection: FrozenCheckSelection | None = None
     omitted_review_gaps: tuple[BoundaryReviewGap, ...] = ()
     scenario: FrozenBusinessScenario | None = Field(default=None,exclude_if=lambda value:value is None)
     preparation_work: CheckPreparationWork | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
-def _preview_fingerprint(plan, scope, selection):
+def _preview_fingerprint(plan, scope, selection, discovery=None):
     fingerprint = content_hash('ScopedCheckPreview', {'plan': plan,
         'scope': tuple(item.model_dump(mode='json') for item in scope)}) if scope else plan
+    if discovery is not None:
+        fingerprint = content_hash('DiscoveryCheckPreview', {'preview': fingerprint, 'discovery': discovery.model_dump(mode='json')})
     return content_hash('SelectedCheckPreview', {'preview': fingerprint,
         'selection': selection.model_dump(mode='json')}) if selection is not None else fingerprint
 
@@ -178,7 +183,7 @@ class CheckService:
             if job is None:
                 return None
             request = self._store.load(job.job_id, expected_hash=job.request_hash)
-            fingerprint = _preview_fingerprint(request.plan_fingerprint, request.requirement_scope, request.selection)
+            fingerprint = _preview_fingerprint(request.plan_fingerprint, request.requirement_scope, request.selection, request.discovery_coverage)
             original_change = request.change_context.change_id if request.change_context else None
             matches = original_change == change_id
             if routine_reference is not None:
@@ -319,6 +324,13 @@ class CheckService:
             original_selection=next(iter(selections.values()),None)
             if original_selection is not None:
                 selected_permissions=original_selection.selected
+            elif frozen:
+                # “当时全部规则”也有冻结范围；新业务材料不应成为旧问题复验的附加前提。
+                original_scopes={tuple((item.intent_id,item.revision,item.intent_hash)
+                    for item in current_request_permissions(request)) for request in frozen}
+                if len(original_scopes)>1:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,'这些原问题当时的完整检查范围不同，请分别保留原题复验')
+                selected_permissions=current_request_permissions(frozen[0])
             if len(scenarios)>1:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'这些原问题来自不同业务场景，请分别保留原题复验')
             if scenarios:
@@ -391,7 +403,8 @@ class CheckService:
                 omitted=references({permission_key(item) for item in current}-included), uncovered_requirements=uncovered,
                 pending_review_ids=tuple(sorted({item.issue_id for item in omitted_reviews})))
         # 预览指纹还覆盖人工确认的要求范围，避免执行计划相同却漏掉新确认的业务要求。
-        preview_fingerprint = _preview_fingerprint(plan.plan_fingerprint, requirement_scope, selection)
+        discovery = discovery_coverage(work, project_id, self._boundaries.view(project_id, work=work), plan=plan, bundle=bundle)
+        preview_fingerprint = _preview_fingerprint(plan.plan_fingerprint, requirement_scope, selection, discovery)
         # 未纳入正式权限的真实要求没有action_id，不伪造Case；完整检查在冻结前阻塞。
         can_execute = bundle is not None and not gaps and not boundary_gaps and bool(plan.actions) and count > 0
         request = None
@@ -404,8 +417,8 @@ class CheckService:
                     scenario=plan.scenario.model_dump(mode='json'),plan_fingerprint=plan.plan_fingerprint)
                 request=type(request).model_validate_json(json.dumps(values))
             from product.protocols.checks.execution_request import ExecutionRequest
-            request = ExecutionRequest(**request.model_dump(exclude={"requirement_scope"}),
-                requirement_scope=requirement_scope, selection=selection)
+            request = ExecutionRequest(**request.model_dump(exclude={"requirement_scope", "selection", "discovery_coverage"}),
+                requirement_scope=requirement_scope, selection=selection, discovery_coverage=discovery)
             if request.environment != bundle.environment:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '执行环境已变化，请重新预览')
             if request.plan_fingerprint != plan.plan_fingerprint:
@@ -432,7 +445,7 @@ class CheckService:
                 values["change_context"] = context.model_dump(mode="json")
                 if manifest.repair_reference is not None:
                     contract = self._repairs.resolve(project_id,manifest.repair_reference)
-                    if contract.original_policy_epoch != request.policy_epoch:
+                    if not repair_policy_matches(contract, permissions=current_request_permissions(request)):
                         raise JiejianError(ErrorCode.STATE_PRECONDITION,"原权限已变化，修复要求已失效")
                     values["repair_context"] = repair_context(contract).model_dump(mode="json")
                 request = type(request).model_validate_json(json.dumps(values))
@@ -442,7 +455,7 @@ class CheckService:
             if change_id is not None:
                 raise JiejianError(ErrorCode.INPUT_INVALID,'外部原题复验不能混入源码变更或缩小原检查范围')
             contract, source_environment = self._repairs.external_source(project_id,external_recheck.reference)
-            if contract.original_policy_epoch != plan.policy_epoch:
+            if not repair_policy_matches(contract, permissions=current_request_permissions(plan)):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,'原权限已变化，请重新确认问题要求')
             context=ExternalRecheckContext(source_environment_fingerprint=source_environment.fingerprint,
                 deployment_statement=external_recheck.deployment_statement)
@@ -477,6 +490,6 @@ class CheckService:
                     preparation_complete=prepared.preparation_complete, impacts=prepared.impacts)
         return CheckPreview(project_id=project_id, can_execute=can_execute, gaps=tuple(gaps),
             boundary_review_gaps=boundary_gaps,
-            requirement_scope=requirement_scope, selection=selection, omitted_review_gaps=omitted_reviews,
+            requirement_scope=requirement_scope, discovery_coverage=discovery, selection=selection, omitted_review_gaps=omitted_reviews,
             plan_fingerprint=preview_fingerprint, action_count=len(plan.actions), case_count=count,
             actions=plan.actions,scenario=plan.scenario,preparation_work=preparation_work), request, bundle

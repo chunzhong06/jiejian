@@ -9,6 +9,16 @@ const document={routine_id:'csp_'+'d'.repeat(32),revision:1,requirements:[{kind:
 const props={projectId:'binding-ui',document:document as never,assets:[],origin:'/testing?view=plans&routine_id='+document.routine_id+'&routine_revision=1&section=binding',dirty:false}
 afterEach(()=>vi.restoreAllMocks())
 
+it('同名资源按准确业务操作区分，不合并不同准备槽位',()=>{
+ const other='bac_'+'f'.repeat(32)
+ const requirements=[...document.requirements,{kind:'FLOW',slot:other+'@1',label:'下载订单',minimum_count:1,action:{action_id:other,revision:1}},
+  {kind:'RESOURCE',slot:'resource-read',label:'订单 · 成员',minimum_count:1,action:{action_id:action,revision:1}},
+  {kind:'RESOURCE',slot:'resource-download',label:'订单 · 成员',minimum_count:1,action:{action_id:other,revision:1}}]
+ render(<RoutineBindingRequirements {...props} document={{...document,requirements} as never}/> )
+ expect(screen.getByRole('button',{name:'订单 · 成员 · 读取订单 测试资源 · 需要准备'})).toBeVisible()
+ expect(screen.getByRole('button',{name:'订单 · 成员 · 下载订单 测试资源 · 需要准备'})).toBeVisible()
+})
+
 it('只缺结果证明时，已有账号和步骤继续保留，不要求重新准备',()=>{
  const complete=[{kind:'ACCOUNT',slot:required,status:'PRESENT',count:2,minimum_count:2,reason_codes:[]},{kind:'FLOW',slot:action+'@1',status:'PRESENT',count:1,minimum_count:1,reason_codes:[]}]
  const current={...document,requirements:[...document.requirements,{kind:'PROOF',slot:'proof',label:'订单备注',minimum_count:1,action:{action_id:action,revision:1},effect_id:'note'}]}

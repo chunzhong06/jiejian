@@ -4,5 +4,10 @@
 .jj-flow-comparison { min-width:0; }
 .jj-flow-comparison > header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin:20px 0; }
 .jj-flow-comparison > header > p { margin:0; }
+.jj-flow-comparison-intro { display:grid;gap:8px;min-width:0; }
+.jj-flow-comparison-intro > strong { font-size:var(--text-object);font-weight:var(--weight-medium); }
+.jj-flow-comparison-intro > p { margin:0;line-height:var(--leading-reading); }
+.jj-flow-candidate-diff .jj-flow-comparison-group > th { padding:24px 16px 12px;background:var(--bg);color:var(--muted);font-size:var(--text-meta);text-align:left;border-bottom:0; }
+.jj-flow-comparison-boundary { margin:20px 0 0;max-width:72ch; }
 .jj-flow-comparison > p { line-height:var(--leading-reading); }
 .jj-flow-comparison-unchanged { padding:24px 0; }

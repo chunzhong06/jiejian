@@ -10,7 +10,7 @@
 .jj-testing-directory .jj-object-meta > small { display:block; margin-top:5px; }
 .jj-testing-count { padding:20px 12px; color:var(--muted); font-size:var(--text-meta); }
 .jj-scenario-editor { border:0; margin:0; padding:0; min-width:0; }
-.jj-scenario-toolbar { display:flex; align-items:end; gap:24px; margin-top:28px; flex-wrap:wrap; }
+.jj-scenario-toolbar { display:flex; align-items:end; gap:24px; margin-top:32px; flex-wrap:wrap; }
 .jj-scenario-toolbar>.jj-tabs { flex:1; min-width:0; }
 .jj-scenario-toolbar>div:last-child { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
 .jj-scenario-layout { display:grid; grid-template-columns:272px minmax(0,1fr); margin-top:28px; }
@@ -28,12 +28,29 @@
 .jj-scenario-resource-table th:first-child { width:28%; }
 .jj-scenario-resource-table .jj-object-select { padding:8px 0; overflow-wrap:anywhere; }
 .jj-scenario-local-actions { display:flex; justify-content:flex-end; }
-.jj-scenario-debug { display:grid; gap:16px; padding-top:24px; border-top:1px solid var(--line); }
-.jj-scenario-debug > .jj-section-header { margin:0; }
-.jj-scenario-debug > .jj-field { width:min(480px,100%); }
-.jj-scenario-debug footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
-.jj-scenario-debug p { max-width:72ch; }
+.jj-scenario-experiment { display:flex; align-items:start; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; margin-top:20px; }
+.jj-scenario-experiment p { margin:0; color:var(--muted); line-height:var(--leading-reading); }
+.jj-scenario-advanced, .jj-scenario-debug { padding-top:20px; border-top:1px solid var(--line); }
+.jj-scenario-advanced > summary, .jj-scenario-debug > summary { color:var(--accent-ink); cursor:pointer; line-height:var(--leading-reading); }
+.jj-scenario-advanced[open] > .jj-form-grid, .jj-scenario-debug[open] > section { margin-top:20px; }
+.jj-scenario-debug > section { display:grid; gap:16px; }
+.jj-scenario-debug .jj-section-header { margin:0; }
+.jj-scenario-debug-controls { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 24px;align-items:start; }
+.jj-scenario-debug-controls > .jj-button { margin-top:28px; }
+.jj-scenario-trial-scope { margin-bottom:28px; }
+.jj-scenario-trial-lifecycle { margin-top:24px; }
+@media(max-width:600px) { .jj-scenario-debug-controls { grid-template-columns:minmax(0,1fr); }.jj-scenario-debug-controls>.jj-button { margin:0;justify-self:end; } }
 .jj-scenario-reading>footer, .jj-scenario-actions { display:flex; justify-content:flex-end; gap:12px; }
 .jj-scenario-actions { margin-top:28px; padding-top:20px; }
 @media(max-width:900px) { .jj-scenario-layout { grid-template-columns:1fr;gap:24px; } .jj-scenario-reading { border-left:0; padding-left:0; } }
 @media(max-width:600px) { .jj-testing-directory .jj-object-table :is(th,td):nth-child(2) { display:none; } }
+/* 批量比较在窄窗逐项保留账号、归属与预期，避免把关键事实藏在横向滚动区。 */
+@media(max-width:600px) { .jj-scenario-resource-table { min-width:0; } .jj-scenario-resource-table thead { display:none; } .jj-scenario-resource-table :is(tbody,tr,th,td) { display:block; width:auto; } .jj-scenario-resource-table tr { padding:12px; border-bottom:1px solid var(--line); } .jj-scenario-resource-table :is(th,td) { padding:6px 0; border:0; } .jj-scenario-resource-table td::before { content:attr(data-label); display:inline-block; min-width:7em; color:var(--muted); } .jj-scenario-step-actions { flex-wrap:wrap; } .jj-scenario-toolbar>div:last-child { flex-wrap:wrap; } }
+@media(max-width:600px) { .jj-scenario-resources .jj-scenario-resource-table { display:block; width:100%; min-width:0; } .jj-scenario-resource-table tbody th:first-child { width:auto; } .jj-scenario-resource-table td.jj-table-state { text-align:start; white-space:normal; } .jj-scenario-toolbar>.jj-tabs { flex-basis:100%; width:100%; } .jj-scenario-toolbar>div:last-child { width:100%; } }
+
+.jj-scenario-task > .jj-notice { margin-bottom:24px; }
+
+.jj-scenario-editor > .jj-form-grid { grid-template-columns:repeat(2,minmax(0,400px)); }
+.jj-scenario-editor > .jj-form-grid textarea { min-height:88px; }
+.jj-scenario-reading > .jj-form-grid, .jj-scenario-advanced > .jj-form-grid { grid-template-columns:minmax(0,400px); }
+@media(max-width:600px) { .jj-scenario-editor > .jj-form-grid { grid-template-columns:minmax(0,1fr); } }

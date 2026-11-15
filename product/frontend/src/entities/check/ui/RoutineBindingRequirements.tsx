@@ -1,6 +1,7 @@
 import {useWorkflow} from '../../../shared/lib/workflow'
 import {useId,useRef,useState} from 'react'
 import type {CheckRoutine,RoutineAsset,RoutineBinding,RoutineRequirement,RoutineRequirementProgress} from '../api/routines'
+import {routineMaterialNames,routineRequirementLabel} from '../model/routineRequirements'
 import {preparationApi} from '../../preparation/api/preparation'
 import {assertProject} from '../../../shared/model/page'
 import {go,withReturnDestination} from '../../../shared/lib/navigation'
@@ -54,11 +55,11 @@ export function RoutineBindingRequirements({projectId,document,assets,progress=[
    (workflow?.open??go)(withReturnDestination('/preparation?'+query,origin+'&binding_slot='+encodeURIComponent(group.kind+':'+group.slot)),projectId)
   }catch(error){setError(error)}finally{lock.current=false;setBusy(false)}
  }
- const category=(item:Group)=>({ACCOUNT:'测试账号',RESOURCE:'测试资源',FLOW:'业务操作步骤',PROOF:'业务结果证明'}[item.kind])
- const title=(item:Group)=>item.kind==='ACCOUNT'&&!item.label.endsWith('账号')?item.label+'的测试账号':item.label
+ const category=(item:Group)=>routineMaterialNames[item.kind]
+ const title=(item:Group)=>item.requirement?routineRequirementLabel(item.requirement,declarations):item.label
  const explanation=group.kind==='ACCOUNT'?'本方案需要 '+group.minimum+' 个“'+group.label+'”账号。核对已有账号的实际身份是否符合要求；数量不足时再补充。':group.kind==='RESOURCE'?'选择这次检查要使用的测试资源，并确认它属于正确的账号。':'FLOW'===group.kind?'检查会按照已经保存的业务操作步骤进行。请核对这些步骤是否适用于这次使用的账号和资源。':'本次需要确认“'+group.label+'”是否实际发生。这里准备能够核对业务结果的记录或数据。'
  const actionLabel=group.kind==='ACCOUNT'?'去准备账号':group.kind==='RESOURCE'?'选择测试资源':group.kind==='FLOW'?'核对操作步骤':'配置结果证明'
- return <div className="jj-routine-binding-layout" data-single={groups.length===1||undefined}>{groups.length>1&&<nav aria-label="本次检查需要的材料"><IndexSelection identity={group.kind+':'+group.slot}>{attention.map(item=><button key={item.kind+':'+item.slot} className="jj-index-item" aria-current={group===item?'true':undefined} onClick={()=>{setSelected(item.kind+':'+item.slot);setError(undefined)}}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection>{retained.length>0&&<details className="jj-routine-retained"><summary>已有材料 · {retained.length}</summary><IndexSelection identity={group.kind+':'+group.slot}>{retained.map(item=><button className="jj-index-item" key={item.kind+':'+item.slot} aria-current={group===item?'true':undefined} onClick={()=>setSelected(item.kind+':'+item.slot)}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection></details>}</nav>}
+ return <div className="jj-routine-binding-layout" data-single={groups.length===1||undefined}>{groups.length>1&&<nav aria-label="本次检查需要的材料" data-has-attention={attention.length>0}><IndexSelection identity={group.kind+':'+group.slot}>{attention.map(item=><button key={item.kind+':'+item.slot} className="jj-index-item" aria-current={group===item?'true':undefined} onClick={()=>{setSelected(item.kind+':'+item.slot);setError(undefined)}}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection>{retained.length>0&&<details className="jj-routine-retained"><summary>已有材料 · {retained.length}</summary><IndexSelection identity={group.kind+':'+group.slot}>{retained.map(item=><button className="jj-index-item" key={item.kind+':'+item.slot} aria-current={group===item?'true':undefined} onClick={()=>setSelected(item.kind+':'+item.slot)}><strong>{title(item)}</strong><small>{category(item)} · {statusLabel(item)}</small></button>)}</IndexSelection></details>}</nav>}
   <section className="jj-routine-binding-reading" aria-labelledby={id}>
    <header className="jj-routine-binding-heading"><div className="jj-object-line"><h3 id={id}>{title(group)}</h3><Badge tone={unchanged?'positive':group.progress?.status==='NEEDS_REVIEW'?'caution':'neutral'}>{unchanged?'与上次确认一致':statusLabel(group)}</Badge></div></header>
    <section className="jj-routine-binding-current" aria-label="当前材料">

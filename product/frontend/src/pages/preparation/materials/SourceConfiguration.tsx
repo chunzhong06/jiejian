@@ -1,3 +1,4 @@
+import {AgentAssistAction} from '../../../entities/runtime/ui/AgentAssistAction'
 import {useWorkflow} from '../../../shared/lib/workflow'
 import {editorDraft,rememberEditorDraft,editorDraftGeneration,clearSubmittedDraft,useDraftProtection,requestCollaboration,useHandoffContext} from '../../../entities/runtime/model/handoff'
 import {useEffect,useRef,useState} from 'react'
@@ -11,7 +12,7 @@ import {Button} from '../../../shared/ui/actions'
 import {go,readRoute,withReturnDestination} from '../../../shared/lib/navigation'
 import {useRead} from '../../../shared/lib/useRead'
 import {projectsApi} from '../../../entities/application/api/projects'
-import {Field} from '../../../shared/ui/layout'
+import {Field,SectionHeading} from '../../../shared/ui/layout'
 import {ErrorNote,Empty,Loading} from '../../../shared/ui/feedback'
 
 export function SourceConfiguration({projectId,context,actionId,requestedEffect,initial,sourceId,onClose,onSave}:{projectId:string;context:ProofContext;actionId?:string;requestedEffect?:string|null;initial?:ProofConfig;sourceId?:string;onClose:()=>void;onSave:(config:ProofConfig)=>Promise<unknown>}) {
@@ -65,7 +66,7 @@ export function SourceConfiguration({projectId,context,actionId,requestedEffect,
         &&(!conditions?.tenant||(table.fields.includes(tenantColumn)&&identityTenantPath.trim()))
         &&(!conditions?.resource_state||table.fields.includes(stateColumn)))
     const result=effects.find(item=>item.effect_id===effectId)
-    return <TaskSurface title="设置结果判断依据" onBack={onClose} backLabel="返回结果证明" actions={dismiss=><><Button disabled={busy} onClick={()=>requestCollaboration(projectId,'SETUP','请沿用当前结果判断草稿和已声明的数据来源，补齐对应关系并保存候选；不明确的业务字段请向我确认，读取与采用仍由我审阅。')}>请 Agent 补全</Button><Button disabled={busy} onClick={dismiss}>取消</Button>{(fileEffect||Boolean(tables.length))&&<Button kind="primary" busy={busy} disabled={!ready} onClick={async()=>{
+    return <TaskSurface title="设置结果判断依据" onBack={onClose} backLabel="返回结果证明" headingActions={<AgentAssistAction task="proof" disabled={busy} onClick={()=>requestCollaboration(projectId,'SETUP','请沿用当前结果判断草稿和已声明的数据来源，补齐对应关系并保存候选；不明确的业务字段请向我确认，读取与采用仍由我审阅。')}/>} actions={dismiss=><><Button disabled={busy} onClick={dismiss}>取消</Button>{(fileEffect||Boolean(tables.length))&&<Button kind="primary" busy={busy} disabled={!ready} onClick={async()=>{
         setBusy(true)
         const submitted=editorDraftGeneration(draftKey,projectId)
         try{
@@ -78,25 +79,25 @@ export function SourceConfiguration({projectId,context,actionId,requestedEffect,
         }catch(e){setError(e)}finally{setBusy(false)}
     }}>保存判断方式</Button>}</>}>
         <div className="jj-source-configuration">
-            <section className="jj-source-target">
+            <section className="jj-source-target"><SectionHeading title="这份证明对应什么" appearance="group"/>
                 <dl className="jj-facts is-stacked" data-layout="columns"><div><dt>业务操作</dt><dd>{chosen?.label??'尚未选择'}</dd></div><div><dt>判断结果</dt><dd>{result?.label??'尚未选择'}</dd></div>{selectedResource&&<div><dt>测试数据</dt><dd>{selectedResource.resource_id}，属于{context.identities.find(identity=>identity.identity_id===selectedResource.owner_identity_id)?.label}</dd></div>}</dl>
                 {((!actionId&&!initial&&context.actions.length>1)||effects.length>1||resources.length>1)&&<div className="jj-form-grid">
-                    {!actionId&&!initial&&context.actions.length>1&&<Field label="业务操作"><Choice value={action} onValueChange={value=>{setAction(value);setEffect('');setResource('')}}>{context.actions.map(item=><option key={item.action_id} value={item.action_id}>{item.label}</option>)}</Choice></Field>}
-                    {effects.length>1&&<Field label="需要核对的结果"><Choice value={effectId} onValueChange={setEffect}>{effects.map(item=><option key={item.effect_id} value={item.effect_id}>{item.label}</option>)}</Choice></Field>}
-                    {resources.length>1&&<Field label="测试资源"><Choice value={selectedResource?.resource_binding_id??''} onValueChange={setResource}>{resources.map(item=><option key={item.resource_binding_id} value={item.resource_binding_id}>{item.resource_id} / {context.identities.find(identity=>identity.identity_id===item.owner_identity_id)?.label}</option>)}</Choice></Field>}
+                    {!actionId&&!initial&&context.actions.length>1&&<Field measure="standard" label="业务操作"><Choice value={action} onValueChange={value=>{setAction(value);setEffect('');setResource('')}}>{context.actions.map(item=><option key={item.action_id} value={item.action_id}>{item.label}</option>)}</Choice></Field>}
+                    {effects.length>1&&<Field measure="standard" label="需要核对的结果"><Choice value={effectId} onValueChange={setEffect}>{effects.map(item=><option key={item.effect_id} value={item.effect_id}>{item.label}</option>)}</Choice></Field>}
+                    {resources.length>1&&<Field measure="standard" label="测试资源"><Choice value={selectedResource?.resource_binding_id??''} onValueChange={setResource}>{resources.map(item=><option key={item.resource_binding_id} value={item.resource_binding_id}>{item.resource_id} / {context.identities.find(identity=>identity.identity_id===item.owner_identity_id)?.label}</option>)}</Choice></Field>}
                 </div>}
             </section>
-            {fileEffect?<section className="jj-source-mapping"><h3>如何判断文件是否完整交付</h3><p className="jj-small jj-muted">将实际收到的文件与同一测试资源的完整参照比对。下面的集合用于对应文件所属的资源。</p><div className="jj-form-grid"><Field label="资源所属记录集合" hint="使用当前应用中保存资源编号和所有者的集合，不是文件名。"><input value={collection} placeholder="填写应用已使用的记录集合名称" onChange={event=>setCollection(event.target.value)}/></Field><Field label="交付方式"><Choice value={deferred?'async':'direct'} onValueChange={value=>setDeferred(value==='async')}><option value="direct">本次操作直接返回文件</option><option value="async">先创建导出任务，再接收文件</option></Choice></Field></div>{deferred&&<AsyncExportFields value={exportMapping} onChange={setExportMapping} disabled={busy}/>}<p className="jj-small jj-muted">保存后准备所属资源的完整参照，再审阅读取范围。任务状态与实际文件分别核对。</p></section>:tables.length?<section className="jj-source-mapping"><h3>用哪项业务数据判断</h3>
-                <div className="jj-form-grid">{tables.length>1?<Field label="数据表"><Choice value={database} onValueChange={value=>{setDatabase(value);setColumn('')}}>{tables.map((item,index)=><option key={index} value={index}>{item.database_path} / {item.table}</option>)}</Choice></Field>:<dl className="jj-facts is-stacked" data-layout="columns"><div><dt>业务记录</dt><dd>{table?.database_path} / {table?.table}</dd></div></dl>}
-                <Field label="需要核对的业务字段"><Choice value={field} placeholder="选择实际结果对应的字段" disabled={!table} onValueChange={setColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field></div>
+            {fileEffect?<section className="jj-source-mapping"><h3>如何判断文件是否完整交付</h3><p className="jj-small jj-muted">将实际收到的文件与同一测试资源的完整参照比对。下面的集合用于对应文件所属的资源。</p><div className="jj-form-grid"><Field measure="standard" label="资源所属记录集合" hint="使用当前应用中保存资源编号和所有者的集合，不是文件名。"><input value={collection} placeholder="填写应用已使用的记录集合名称" onChange={event=>setCollection(event.target.value)}/></Field><Field measure="medium" label="交付方式"><Choice measure="medium" value={deferred?'async':'direct'} onValueChange={value=>setDeferred(value==='async')}><option value="direct">本次操作直接返回文件</option><option value="async">先创建导出任务，再接收文件</option></Choice></Field></div>{deferred&&<AsyncExportFields value={exportMapping} onChange={setExportMapping} disabled={busy}/>}<p className="jj-small jj-muted">保存后准备所属资源的完整参照，再审阅读取范围。任务状态与实际文件分别核对。</p></section>:tables.length?<section className="jj-source-mapping"><h3>用哪项业务数据判断</h3>
+                <div className="jj-form-grid">{tables.length>1?<Field measure="standard" label="数据表"><Choice value={database} onValueChange={value=>{setDatabase(value);setColumn('')}}>{tables.map((item,index)=><option key={index} value={index}>{item.database_path} / {item.table}</option>)}</Choice></Field>:<dl className="jj-facts is-stacked" data-layout="columns"><div><dt>业务记录</dt><dd>{table?.database_path} / {table?.table}</dd></div></dl>}
+                <Field measure="standard" label="需要核对的业务字段"><Choice value={field} placeholder="选择实际结果对应的字段" disabled={!table} onValueChange={setColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field></div>
                 {(conditions?.tenant||conditions?.resource_state)&&<section className="jj-condition-source"><h3>核对规则的适用条件</h3><div className="jj-form-grid">
-                    {conditions.tenant&&<><Field label="资源所属租户"><Choice value={tenantColumn} placeholder="选择租户字段" disabled={!table} onValueChange={setTenantColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field>
-                    <Field label="账号身份中的租户字段"><input value={identityTenantPath} placeholder="例如 tenant_id" onChange={event=>setIdentityTenantPath(event.target.value)}/></Field></>}
-                    {conditions.resource_state&&<Field label="资源的当前状态"><Choice value={stateColumn} placeholder="选择状态字段" disabled={!table} onValueChange={setStateColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field>}
+                    {conditions.tenant&&<><Field measure="standard" label="资源所属租户"><Choice value={tenantColumn} placeholder="选择租户字段" disabled={!table} onValueChange={setTenantColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field>
+                    <Field measure="standard" label="账号身份中的租户字段"><input value={identityTenantPath} placeholder="例如 tenant_id" onChange={event=>setIdentityTenantPath(event.target.value)}/></Field></>}
+                    {conditions.resource_state&&<Field measure="standard" label="资源的当前状态"><Choice value={stateColumn} placeholder="选择状态字段" disabled={!table} onValueChange={setStateColumn}>{table?.fields.map(name=><option key={name}>{name}</option>)}</Choice></Field>}
                 </div></section>}
                 {relationships.length>0&&table&&<RelationshipMapping requirements={relationships} value={relationshipMapping} fields={table.fields} onChange={setRelationshipMapping}/>}
                 {table&&<details><summary>查看编号与归属对应</summary><dl className="jj-facts is-stacked" data-layout="columns"><div><dt>资源编号</dt><dd>{table.resource_column}</dd></div><div><dt>资源所有者</dt><dd>{table.owner_column}</dd></div></dl></details>}
-            </section>:runtime.error?<ErrorNote error={runtime.error}/>:!runtime.data?<Loading>正在读取已有运行设置</Loading>:<Empty title={
+            </section>:runtime.error?<ErrorNote error={runtime.error} onRetry={runtime.reload} retryLabel="重新读取来源配置"/>:!runtime.data?<Loading>正在读取已有运行设置</Loading>:<Empty title={
                 !runtime.data.running?((runtime.data.configuration?.sqlite?.length||runtime.data.configuration?.databases?.length)?'先启动已配置的测试应用':'先准备应用的测试数据库'):
                 !runtime.data.source_matches?'当前运行与源码尚未对应':
                 !context.runtime_available?'先核对应用的运行记录':

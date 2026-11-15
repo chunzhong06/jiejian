@@ -26,7 +26,7 @@ it('正常对照和功能回归引用同一记录时只显示一行并保留用�
  setup('issue=exact',false,[{...row,role:'SELECTED_ALLOW'},{...row,role:'REGRESSION'}])
  await screen.findByRole('heading',{name:'原问题与正常访问'})
  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
- expect(screen.getByText(/正常对照、保留功能/)).toBeVisible()
+ expect(screen.getByText('正常对照与功能回归')).toBeVisible()
 })
 
 it('指定的已验证问题优先于默认筛选，不借用其他问题',async()=>{
@@ -59,6 +59,18 @@ it('失效的准确问题显示缺失状态，并提供主动选择当前问题�
   expect(screen.queryByRole('link',{name:/阅读原问题证据/})).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('link',{name:'查看当前问题'}))
   expect(location.hash).not.toContain('issue=missing')
+})
+
+it('从原问题进入共用登记任务时保留准确合同与修复回程',async()=>{
+  setup('issue=other&section=repair',true)
+  fireEvent.click(await screen.findByRole('button',{name:/登记已完成的修改/}))
+  const query=new URLSearchParams(location.hash.split('?')[1])
+  expect(query.get('view')).toBe('register')
+  expect(query.get('repair_reference')).toBe('otherfp')
+  const origin=new URLSearchParams(query.get('return_to')!.split('?')[1])
+  expect(origin.get('source_case_id')).toBe('case')
+  expect(origin.get('repair_reference')).toBe('otherfp')
+  expect(origin.get('section')).toBe('repair')
 })
 
 it('登记修改后提示核对复验条件，缺少运行交付时仍不能开始复验',async()=>{

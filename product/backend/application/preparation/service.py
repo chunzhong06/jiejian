@@ -11,6 +11,7 @@ from product.backend.domain.checks.plan import PreparedActionInput, PreparedIden
 from product.backend.domain.identities.models import identity_source_fingerprint
 from product.backend.application.reading import projected_once
 from product.backend.infrastructure.runtime.workflow_timing import timed_workflow
+from product.backend.application.preparation.materials.review import material_handling, material_context
 
 from product.backend.domain.preparation.requirements import ActionAssuranceContract, AssuranceStatus, compile_action_assurance, ActionAllowControlBinding, PermissionIdentity
 from product.backend.domain.boundaries.entities import BusinessActionRevision
@@ -292,7 +293,12 @@ class PreparationService:
         actions = []
         for action in boundary.actions:
             contract = compile_action_assurance(action, boundary.permission_intents, selections)
-            identity_view = self._identities(contract, identities, actor_names)
+            preferred, conflicts = {}, frozenset()
+            if work is not None:
+                from product.backend.application.preparation.identity_reuse import retained_identity_assignments
+                preferred, conflicts = retained_identity_assignments(work.action_preparation, project_id,
+                    contract, boundary.permission_intents, identities)
+            identity_view = self._identities(contract, identities, actor_names, preferred=preferred, conflicts=conflicts)
             from product.backend.application.preparation.demonstrations import legal_demonstrations
             demonstrations = legal_demonstrations(contract, boundary.permission_intents, identity_view)
             missing_legal_owners = {item.owner_slot_id for item in contract.resources} - {
@@ -364,9 +370,10 @@ class PreparationService:
                 'source_fingerprint':source,'actions':[item.model_dump(mode='json') for item in actions]}),
             impacts=tuple(MaterialImpactView(action_id=action.action_id, action_label=action.display_name,
                 kind=kind, status=item.status, reason_codes=item.reason_codes,
+                **material_handling(kind, item),
                 reuse_basis=item.reuse_basis,
                 member_id=getattr(item,'owner_test_identity_id',None) or getattr(item,'effect_id',None) or getattr(item,'test_identity_id',None),
-                member_label=getattr(item,'actor_display_name','') or getattr(item,'business_label',''),
+                **material_context(kind, item, action),
                 permission_ids=tuple(rule.intent_id for rule in action.permissions
                     if (kind != 'identity' or item.requirement.actor_id in (rule.subject_actor_id,rule.resource_owner_actor_id))
                     and (kind != 'evidence' or item.effect_id in rule.protected_effect_ids)))
@@ -377,34 +384,43 @@ class PreparationService:
         )
 
     @staticmethod
-    def _identities(contract, identities, actor_names) -> IdentityPreparationView:
+    def _identities(contract, identities, actor_names, *, preferred=None, conflicts=frozenset()) -> IdentityPreparationView:
+        preferred = preferred or {}
+        # 先预留仍符合角色修订的旧主体；再分配其他槽，避免新槽先占走原资源所有者。
+        reserved = {identity_id for slot in contract.identity_requirements.slots if slot.slot_id not in conflicts
+            if (identity_id := preferred.get(slot.slot_id)) is not None
+            if any(item.identity_id == identity_id and (item.actor_id, item.actor_revision) == (slot.actor_id, slot.actor_revision) for item in identities)}
         slots = []
         used = set()
         for slot in contract.identity_requirements.slots:
             matching = tuple(item for item in identities
                              if (item.actor_id, item.actor_revision) == (slot.actor_id, slot.actor_revision))
             # 会话失效不能改变资源所属账号；槽位按账号建立顺序分配，可用性另行判断。
-            usable = sorted((item for item in matching if item.identity_id not in used),
+            pinned = preferred.get(slot.slot_id)
+            usable = sorted((item for item in matching if item.identity_id not in used
+                             and (item.identity_id == pinned if pinned else item.identity_id not in reserved)),
                             key=lambda item: (item.created_at_us, item.identity_id))
-            selected = usable[0] if usable else None
+            conflicted = slot.slot_id in conflicts
+            selected = usable[0] if usable and not conflicted else None
             if selected is not None:
                 used.add(selected.identity_id)
             satisfied = selected is not None and selected.status is TestIdentityStatus.PREPARED
             stale = selected is not None and selected.status is TestIdentityStatus.NEEDS_REVIEW
-            reasons = () if satisfied else (
+            reasons = ('IDENTITY_MATERIAL_ASSIGNMENT_CONFLICT',) if conflicted else () if satisfied else (
                 "TEST_IDENTITY_REVIEW_REQUIRED" if stale else
                 "TEST_IDENTITY_LOGIN_REQUIRED" if selected else "TEST_IDENTITY_REQUIRED",
             )
             slots.append(IdentitySlotPreparationView(
                 requirement=slot, actor_display_name=actor_names[(slot.actor_id, slot.actor_revision)],
                 test_identity_id=None if selected is None else selected.identity_id,
-                status=PreparationStatus.SATISFIED if satisfied else
+                selection_basis='CURRENT_MATERIAL' if selected is not None and pinned == selected.identity_id else None,
+                status=PreparationStatus.BLOCKED if conflicted else PreparationStatus.SATISFIED if satisfied else
                        PreparationStatus.STALE if stale else PreparationStatus.NEEDS_USER,
                 reason_codes=reasons,
             ))
         return IdentityPreparationView(
             allocation_mode=contract.identity_requirements.allocation_mode, slots=tuple(slots),
-            status=PreparationStatus.BLOCKED if contract.status is AssuranceStatus.BLOCKED else
+            status=PreparationStatus.BLOCKED if contract.status is AssuranceStatus.BLOCKED or conflicts else
                    PreparationStatus.SATISFIED if all(item.status is PreparationStatus.SATISFIED for item in slots)
                    else PreparationStatus.NEEDS_USER,
             reason_codes=tuple(dict.fromkeys(reason for item in slots for reason in item.reason_codes)),

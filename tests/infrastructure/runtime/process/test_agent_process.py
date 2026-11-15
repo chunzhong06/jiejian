@@ -1,9 +1,12 @@
 import json
 import tomllib
+import subprocess
+import pytest
 from queue import Queue
 from threading import Event
 
 from product.backend.infrastructure.runtime import agent_process
+from product.backend.domain.errors import JiejianError
 
 
 class ProtocolProcess:
@@ -12,6 +15,17 @@ class ProtocolProcess:
         self.lines = Queue()
         self.messages = []
         self.stdout = self.stdin = self
+        self.closed = False
+        self.waits = []
+
+    def close(self):
+        self.closed = True
+        self.lines.put('')
+
+    def wait(self, timeout):
+        assert self.closed
+        self.waits.append(timeout)
+        return 0
 
     def reply(self, value):
         self.lines.put(json.dumps(value) + '\n')
@@ -37,10 +51,12 @@ class ProtocolProcess:
             self.reply(dict(method='turn/completed', params={'threadId': 'session', 'turn': {'id': 'current', 'status': 'completed'}}))
 
 
-def invoke(monkeypatch, *, cancelled=None, read_only=False):
-    process, spawned, released, events = ProtocolProcess(), [], [], []
+def invoke(monkeypatch, *, cancelled=None, read_only=False, process=None):
+    process, spawned, released, events = process or ProtocolProcess(), [], [], []
     monkeypatch.setattr(agent_process, 'spawn_managed_process', lambda command, **options: spawned.append((command, options)) or process)
     def terminate(value, timeout):
+        assert value.closed
+        assert timeout == 3
         released.append(value)
         value.lines.put('')
     monkeypatch.setattr(agent_process, 'terminate_process_tree', terminate)
@@ -60,6 +76,7 @@ def test_resume_keeps_current_turn_and_declines_native_escalation(monkeypatch):
     assert next(item for item in process.messages if item.get('id') == 20)['result'] == {'decision': 'decline'}
     assert 'OPENAI_API_KEY' not in spawned[0][1]['env']
     assert released == [process]
+    assert process.waits == [2]
     assert ('RESTRICTED', None) in events
     config = tomllib.loads(spawned[0][0][-1])['mcp_servers']['jiejian']
     assert config['required'] and config['default_tools_approval_mode'] == 'writes'
@@ -81,3 +98,31 @@ def test_read_only_executor_never_exposes_mutating_gateway(monkeypatch):
     assert set(parsed['enabled_tools']) == {'jiejian_collaboration_read',
         'jiejian_collaboration_context', 'jiejian_collaboration_capability'}
     assert parsed['tools'] == {}
+
+
+def test_unresponsive_shutdown_still_releases_owned_process_tree(monkeypatch):
+    class SlowShutdown(ProtocolProcess):
+        def wait(self, timeout):
+            super().wait(timeout)
+            raise subprocess.TimeoutExpired('fixture-client', timeout)
+    process = SlowShutdown()
+    _, _, released, _, result = invoke(monkeypatch, process=process)
+    assert result['state'] == 'FINISHED'
+    assert process.waits == [2]
+    assert released == [process]
+
+
+def test_missing_model_history_is_classified_without_restarting_or_logging_error(monkeypatch):
+    class MissingHistory(ProtocolProcess):
+        def write(self,line):
+            value=json.loads(line)
+            if value.get('method')=='thread/resume':
+                self.messages.append(value)
+                self.reply(dict(id=2,error=dict(code=-32600,message='no rollout found for thread id fixture-private-client-detail')))
+            else:super().write(line)
+    process=MissingHistory()
+    with pytest.raises(JiejianError) as error:invoke(monkeypatch,process=process)
+    assert error.value.to_dict()['details']=={'agent_history':'UNAVAILABLE'}
+    assert 'fixture-private-client-detail' not in str(error.value)
+    assert not any(item.get('method') in ('thread/start','turn/start') for item in process.messages)
+    assert process.closed

@@ -1,5 +1,5 @@
 import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import LoadingOutlined from '@ant-design/icons/LoadingOutlined';
+import {ActivityDots} from './ActivityDots'
 import CheckOutlined from '@ant-design/icons/CheckOutlined';
 import { Hint } from "./Hint";
 import {useWorkflow} from '../lib/workflow';
@@ -14,8 +14,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
     tip?: string;
 }>(function Button({ children, kind = 'default', busy = false, busyLabel, complete = false, size = 'regular', icon, tip, title, ...props }, ref) {
     const label = tip ?? title ?? (!children ? props['aria-label'] : undefined);
-    // 忙碌指示覆盖原内容，保留原图标和文字占位，提交时不能挤动相邻操作。
-    const button = <button {...props} ref={ref} type={props.type ?? 'button'} className={`jj-button is-${kind} ${props.className ?? ''}`} data-size={size} data-icon-only={!children || undefined} data-complete={complete || undefined} disabled={props.disabled || busy} aria-busy={busy || undefined}>{complete ? <CheckOutlined className="jj-button-complete" aria-hidden="true"/> : icon}{children}{busy && <span className="jj-button-progress" aria-hidden="true"><LoadingOutlined spin/>{busyLabel&&<span>{busyLabel}</span>}</span>}</button>;
+    // 忙碌保留动作文字与原占位；仅替换视觉反馈，不重建元素或挤动相邻操作。
+    const button = <button {...props} ref={ref} type={props.type ?? 'button'} className={`jj-button is-${kind} ${props.className ?? ''}`} data-size={size} data-icon-only={!children || undefined} data-press-surface={kind!=='quiet'||undefined} data-complete={complete || undefined} disabled={props.disabled || busy} aria-busy={busy || undefined}>{complete ? <CheckOutlined className="jj-button-complete" aria-hidden="true"/> : icon}{children}{busy && <span className="jj-button-progress" aria-hidden="true"><ActivityDots/>{(busyLabel??children)&&<span>{busyLabel??children}</span>}</span>}</button>;
     // 提示停用只改变浮层状态，不能在忙碌切换时替换按钮 DOM。
     return label ? <Hint label={label} disabled={props.disabled || busy}>{button}</Hint> : button;
 });
@@ -27,5 +27,5 @@ export function ActionLink({ kind = 'quiet', presentation = 'inline', navigation
 }) {
     // 链接沿用同一色彩和反馈；普通阅读导航不占用提交按钮的几何与视觉重量。
     const workflow=useWorkflow();
-    return <a {...props} onClick={event=>{onClick?.(event);if(!event.defaultPrevented&&(!props.target||props.target==='_self')&&!props.download&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey&&props.href?.startsWith('#/')&&(navigationScope==='page'||workflow)){event.preventDefault();if(navigationScope==='page')go(props.href.slice(1));else workflow!.open(props.href.slice(1));}}} data-navigation={kind === 'quiet' ? presentation : undefined} className={`jj-button is-${kind} ${className}`}/>;
+    return <a {...props} onClick={event=>{onClick?.(event);if(!event.defaultPrevented&&(!props.target||props.target==='_self')&&!props.download&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey&&props.href?.startsWith('#/')&&(navigationScope==='page'||workflow)){event.preventDefault();if(navigationScope==='page')go(props.href.slice(1));else workflow!.open(props.href.slice(1));}}} data-press-surface={kind!=='quiet'||undefined} data-navigation={kind === 'quiet' ? presentation : undefined} className={`jj-button is-${kind} ${className}`}/>;
 }

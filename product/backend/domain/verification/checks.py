@@ -80,11 +80,11 @@ class CheckDecisionInput(WireModel):
             raise ValueError("check facts must reference unique frozen case proofs")
         proof_by_id = {item.proof_fingerprint:item for item in self.case.proof_requirements}
         seen = set()
+        from product.protocols.checks.conditions import condition_source_reference
         for observation in self.condition_observations:
             proof = proof_by_id.get(observation.proof_fingerprint)
-            if (proof is None or proof.rule != 'REGISTERED_EFFECT' or observation.proof_fingerprint in seen
-                    or observation.source_id != proof.reference.descriptor_id
-                    or observation.source_fingerprint != proof.reference.descriptor_fingerprint):
+            if (proof is None or observation.proof_fingerprint in seen
+                    or (observation.source_id, observation.source_fingerprint) != condition_source_reference(proof)):
                 raise ValueError('condition facts must reference their frozen independent source')
             seen.add(observation.proof_fingerprint)
         return self

@@ -19,6 +19,7 @@ from product.backend.domain.changes.models import RuleChangeTarget
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.changes.models import CurrentActionChangeImpact, CurrentChangeAssessment, CurrentChangeAssessmentPayload, CurrentChangeManifest, SourceChangeSet, build_current_change_set, change_impact_fingerprint, normalize_relative_source_path
 from product.protocols.checks.execution_request import ChangeContext, LogicalId, PermissionReference, WireModel, content_hash
+from product.backend.application.changes.continuation import ChangeContinuation, change_continuation
 
 
 def _implementation_actor_refs(permissions):
@@ -43,6 +44,7 @@ class CurrentChangeView(WireModel):
     assessment: CurrentChangeAssessment
     revalidation: SourceRevalidationInspection
     rule_targets: tuple[RuleChangeTarget, ...] = ()
+    continuation: ChangeContinuation | None = None
 
 
 def permission_refs(boundary):
@@ -161,9 +163,9 @@ class CurrentSourceChangeService:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"代码变化记录不存在或不属于当前项目")
         return value
 
-    def list(self, project_id, *, limit=50):
+    def list(self, project_id, *, limit=50, before_change_id=None):
         with self._uow_factory() as work:
-            values = work.source_changes.current_changes(project_id,limit=limit)
+            values = work.source_changes.current_changes(project_id,limit=limit,before_change_id=before_change_id)
         # 同一次列表读取共用当前计划；不跨请求缓存，后续提交仍独立核验现场。
         preview = None
         def read_plan(identity):
@@ -208,9 +210,14 @@ class CurrentSourceChangeService:
 
     def _view(self, project_id, change_id, *, read_plan):
         manifest,change,assessment = self.get(project_id,change_id)
+        preview = None if read_plan is None else read_plan(project_id)
+        with self._uow_factory() as work:
+            boundary = self._boundaries.view(project_id, work=work)
+            current = permission_refs(boundary)
         return CurrentChangeView(manifest=manifest,change_set=change,assessment=assessment,
-            revalidation=self._inspect_revalidation(project_id,change_id,read_plan=read_plan),
-            rule_targets=self.targets(project_id, change_id))
+            revalidation=self._inspect_revalidation(project_id,change_id,read_plan=None if preview is None else lambda _: preview),
+            rule_targets=self.targets(project_id, change_id), continuation=change_continuation(assessment, current, preview,
+                {item.action_id: item.display_name for item in boundary.actions}))
 
     def inspect_revalidation(self, project_id, change_id, *, preparation_preview=None):
         """核对变化现场；冻结调用可传入本次刚形成的计划，避免递归再冻结。"""

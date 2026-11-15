@@ -6,7 +6,7 @@
 .jj-file-picker:focus-within { outline:2px solid var(--focus); outline-offset:3px; }
 .jj-file-symbol { flex:none; font-size:24px; color:var(--muted); line-height:1; }
 .jj-file-information { display:grid; gap:6px; min-width:0; flex:1; }
-.jj-file-name { color:var(--ink); font-weight:500; overflow-wrap:anywhere; font-size:var(--text-object); line-height:22px; }
+.jj-file-name { color:var(--ink); font-weight:var(--weight-medium); overflow-wrap:anywhere; font-size:var(--text-object); line-height:22px; }
 .jj-file-information > small { color:var(--muted); font-size:var(--text-label); line-height:20px; overflow-wrap:anywhere; }
 .jj-file-actions { display:flex; flex:none; gap:8px; align-items:center; }
 .jj-file-actions > .jj-button:has(> .anticon:only-child) { width:var(--control-compact); min-height:var(--control-compact); padding:0; }

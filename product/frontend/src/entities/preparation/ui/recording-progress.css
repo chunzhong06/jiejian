@@ -1,0 +1,32 @@
+.jj-recording-progress{display:grid;gap:28px;min-width:0}
+.jj-recording-reading{display:grid;gap:20px;align-content:start;min-width:0}
+.jj-recording-reading>.jj-section-header{margin:0}
+.jj-recording-reading p{margin:0;line-height:var(--leading-reading)}
+.jj-recording-reading .jj-facts{display:grid;gap:18px;margin:0}
+.jj-recording-progress>.jj-task-actions{margin:0}
+.jj-recording-review-context{display:grid;gap:16px}
+.jj-recording-review-context>p{margin:0;line-height:var(--leading-reading)}
+.jj-recording-progress:has(.jj-recording-review)>.jj-recording-reading>.jj-section-header{display:none}
+.jj-recording-progress:has(.jj-recording-review)>.jj-recording-reading>.jj-facts{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:20px 28px}
+.jj-recording-progress:has(.jj-recording-review)>.jj-recording-reading>.jj-facts>div{grid-template-columns:minmax(0,1fr);gap:6px}
+.jj-recording-reasons{display:grid;gap:12px;color:var(--ink)}
+.jj-recording-reasons>p,.jj-recording-ready-note{margin:0;line-height:var(--leading-reading)}
+.jj-recording-ready-note{color:var(--muted);font-size:var(--text-meta)}
+.jj-recording-decisions .jj-choice-field{border:0;padding:0;min-width:0}
+.jj-recording-decisions legend{float:left;width:100%;margin:0 0 16px;font-size:var(--text-object);font-weight:var(--weight-medium)}
+.jj-recording-decisions legend+*{clear:both}
+.jj-recording-decisions .jj-choice-field>label{display:flex;align-items:start;gap:12px;line-height:var(--leading-reading);overflow-wrap:anywhere}
+.jj-recording-decisions .jj-choice-field>label input{margin-top:4px;flex:none}
+.jj-recording-review{display:grid;gap:28px;min-width:0}
+.jj-recording-review>fieldset{margin:0}
+.jj-recording-review>.jj-task-actions{margin:0}
+.jj-recording-decisions{display:grid;gap:24px;align-content:start;min-width:0}
+.jj-recording-decisions>fieldset{margin:0;display:grid;gap:16px}
+.jj-recording-decisions>fieldset>button{justify-self:end}
+.jj-recording-steps{display:grid;gap:24px;margin:0;padding-left:24px}
+.jj-recording-steps>li{padding-left:8px;min-width:0}
+.jj-recording-steps>li::marker{color:var(--muted);font-variant-numeric:tabular-nums}
+.jj-recording-steps>li>p{margin-top:12px}
+.jj-recording-request{margin-top:12px;font-size:var(--text-meta)}
+.jj-recording-request>summary{cursor:pointer;color:var(--muted)}
+.jj-recording-request>code{display:block;margin-top:12px;overflow-wrap:anywhere}

@@ -1,32 +1,32 @@
-import CheckOutlined from '@ant-design/icons/CheckOutlined';
-import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
+import type {ReactNode} from 'react';
 import { projectsApi } from '../../entities/application/api/projects';
 import { useRead } from '../../shared/lib/useRead';
 import { assertProject } from '../../shared/model/page';
 import {scopedPath} from '../../shared/lib/navigation'
 import { Badge, ErrorNote } from '../../shared/ui/feedback';
 import {ActionLink} from '../../shared/ui/actions'
+import {ObjectHeading,TaskActions} from '../../shared/ui/layout'
+import {ValidationPlanPanel} from '../../entities/permission/ui/ValidationPlan'
 
 const tasks: Record<string,{title:string;ready:string;pending:string}> = {
-    source:{title:'读取业务内容',ready:'已识别源码中的角色和操作',pending:'需要从源码识别角色和操作时，在左侧允许读取'},
-    endpoint:{title:'连接应用',ready:'上次连接检查可以访问',pending:'在左侧设置应用的访问地址'},
+    source:{title:'源码中的业务',ready:'已识别源码中的角色和操作',pending:'允许读取源码后，可以识别角色和操作线索'},
     runtime:{title:'核对运行代码',ready:'已保存对应源码的运行记录',pending:'核验源码修改时，由界鉴启动并记录对应代码'},
-    proof:{title:'准备结果判断依据',ready:'已有配置，检查前还会核对是否可用',pending:'在材料准备中选择如何确认业务结果'},
 };
-export function Capabilities({projectId, revision}: {projectId:string;revision:number}) {
+/** 用途、准备事实和原操作同组；读取状态失败不移除父页已有的配置与授权操作。 */
+export function Capabilities({projectId, revision,sourceControls,runtimeControls}: {projectId:string;revision:number;sourceControls:ReactNode;runtimeControls?:ReactNode}) {
     const state=useRead('readiness:'+projectId+':'+revision,async signal=>{const value=await projectsApi.readiness(projectId,signal);assertProject(value.project_id,projectId);return value;});
     const connected=state.data?.items.find(item=>item.key==='endpoint')?.state==='READY';
-    return <aside className="jj-application-capabilities" aria-label="源码的后续用途">
-      <header><h2 className="jj-title-group">这份源码用于什么</h2></header>
-      {state.error&&<ErrorNote error={state.error}/>}
-      {state.loading&&!state.data?<p className="jj-small jj-muted">正在读取接入状态</p>:<ul>{state.data?.items.filter(item=>['source','runtime'].includes(item.key)).map(item=>{
-        const available=['READY','AVAILABLE','CONFIGURED'].includes(item.state),task=tasks[item.key];
-        return <li key={item.key} data-ready={item.state==='READY'}>
-          <span className="jj-capability-marker" aria-hidden="true">{item.state==='READY'&&<CheckOutlined/>}</span>
-          <div className="jj-object-line"><h3>{task?.title??item.label}</h3><Badge tone={item.state==='READY'?'positive':'neutral'}>{({READY:'已确认',AVAILABLE:'已有记录',CONFIGURED:'已有配置',NEEDS_ACTION:'待准备',UNVERIFIED:'待核对'} as Record<string,string>)[item.state]??'待核对'}</Badge></div>
-          <p>{task?(available?task.ready:task.pending):item.detail}</p>
-        </li>
-      })}</ul>}
-      {connected&&<footer><ActionLink navigationScope="page" href={'#'+scopedPath('/preparation',projectId)}>查看检查材料<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer>}
-    </aside>;
+    return <div className="jj-application-capabilities">
+      {state.error&&<ErrorNote error={state.error} onRetry={state.reload} retryLabel="重新读取接入能力"/>}
+      <div className="jj-source-uses">{(['source','runtime'] as const).map(key=>{
+        const item=state.data?.items.find(item=>item.key===key),available=item&&['READY','AVAILABLE','CONFIGURED'].includes(item.state),task=tasks[key];
+        return <section className="jj-source-use" key={key} aria-label={task.title}>
+          <ObjectHeading level={3} title={task.title} status={item&&<Badge tone={item.state==='READY'?'positive':'neutral'}>{({READY:key==='source'?'已识别':'已确认',AVAILABLE:'已有记录',CONFIGURED:'已有配置',NEEDS_ACTION:'待准备',UNVERIFIED:'待核对'} as Record<string,string>)[item.state]??'待核对'}</Badge>}/>
+          <p>{item?(available?task.ready:task.pending):state.loading?'正在读取接入状态':'接入状态尚未确认，请重新读取后核对。'}</p>
+          <div className="jj-source-use-controls">{key==='source'?sourceControls:runtimeControls}</div>
+        </section>
+      })}</div>
+      <ValidationPlanPanel projectId={projectId} mode="summary"/>
+      {connected&&<TaskActions><ActionLink kind="primary" navigationScope="page" href={'#'+scopedPath('/preparation',projectId)}>继续核对检查材料</ActionLink></TaskActions>}
+    </div>;
 }

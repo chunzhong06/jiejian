@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest'
-import {animateMotion,revealContent,springSample,stopAllMotion} from './motion'
+import {animateMotion,layoutBounds,revealContent,springSample,stopAllMotion} from './motion'
 import {connectMotionScene} from './motionScene'
 
 type Recording={node:HTMLElement;frames:Keyframe[];animation:Animation;finish:()=>void}
@@ -18,6 +18,15 @@ function animations(){
   return records
 }
 afterEach(()=>{stopAllMotion();Reflect.deleteProperty(HTMLElement.prototype,'animate');document.body.replaceChildren()})
+
+it('选择等布局读者取得最终位置，排除对象与祖先的补位位移且保留真实尺寸',()=>{
+  animations();const root=document.createElement('div'),child=document.createElement('div');root.append(child);document.body.append(root);
+  vi.spyOn(child,'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({x:100,y:200,width:280,height:160}));
+  vi.spyOn(window,'getComputedStyle').mockImplementation(node=>({translate:node===root?'0px 20px':node===child?'0px 30px':'none'} as CSSStyleDeclaration));
+  animateMotion(root,'position',[{translate:'0px 20px'},{translate:'0 0'}],{duration:200});
+  animateMotion(child,'position',[{translate:'0px 30px'},{translate:'0 0'}],{duration:200});
+  expect(layoutBounds(child)).toEqual({x:100,y:150,width:280,height:160});
+});
 
 it('同一对象快速换目标只保留最新运动，不取消其他对象',()=>{
   const records=animations(),a=document.createElement('div'),b=document.createElement('div')
@@ -75,4 +84,16 @@ it('同一个状态的重复通知保持静止，真实状态变化才交接',as
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))
   expect(records.some(record=>record.node===state)).toBe(true)
   disconnect()
+})
+
+it('异步补入的阅读组同步出现，保持原位置而不逐块上浮',async()=>{
+ const records=animations(),root=document.createElement('div')
+ root.className='jj-page';document.body.append(root)
+ const disconnect=connectMotionScene(root)
+ root.innerHTML='<section>当前访问要求</section><section>本次业务结果</section>'
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))
+ const arrivals=records.filter(record=>record.node.tagName==='SECTION'&&record.frames.some(frame=>frame.translate))
+ expect(arrivals).toHaveLength(2)
+ for(const arrival of arrivals)expect(arrival.frames.every(frame=>!frame.translate||['0 0','0 0px'].includes(String(frame.translate)))).toBe(true)
+ disconnect()
 })

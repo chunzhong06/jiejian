@@ -4,7 +4,7 @@
 .jj-tools-body { display:grid; gap:20px; padding:24px 0; }
 .jj-tool-selector, .jj-tool-detail { min-width:0; }
 .jj-tool-object { display:flex; align-items:end; gap:12px; }
-.jj-tool-object > .jj-field { flex:1 1 180px; min-width:0; max-width:280px; }
+.jj-tool-object > .jj-field { flex:0 1 var(--field-short); min-width:0; }
 .jj-tool-state { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-height:var(--control-height); }
 .jj-tool-state .jj-badge { white-space:nowrap; }
 .jj-tool-detail { display:grid; gap:16px; }
@@ -13,7 +13,7 @@
 .jj-tools-service { display:grid; gap:20px; min-width:0; padding-top:20px; border-top:1px solid var(--line); }
 .jj-tools-service-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; }
 .jj-tools-service-state { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:var(--text-meta); }
-.jj-tools-service strong { font-weight:500; }
+.jj-tools-service strong { font-weight:var(--weight-medium); }
 .jj-tools-service .jj-switch { flex-direction:row-reverse; gap:12px; }
 /* 维护内容只在当前连接组展开，不另铺一层表面。 */
 .jj-tool-management { width:100%; border:0; padding:0; }

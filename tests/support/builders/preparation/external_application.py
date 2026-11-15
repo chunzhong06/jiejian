@@ -26,10 +26,10 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 @contextmanager
-def external_application(tmp_path,*,changing=False,core=None):
+def external_application(tmp_path,*,changing=False,core=None,origin_host='127.0.0.1',resource_state=False):
     own_core=core is None
     tokens={uuid4().hex:'owner',uuid4().hex:'member'}
-    state={'vulnerable':True,'target_calls':0,'restore_calls':0,'changed':False,'delay':0,'recovery_failures':0,'inputs':[],'target_entered':False}
+    state={'vulnerable':True,'target_calls':0,'restore_calls':0,'changed':False,'delay':0,'recovery_failures':0,'inputs':[],'target_entered':False,'resource_state':'DRAFT'}
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             role=tokens.get(self.headers.get('Authorization','').removeprefix('Bearer '))
@@ -48,6 +48,7 @@ def external_application(tmp_path,*,changing=False,core=None):
                 data=dict(id='order-1',owner_id='owner',note='confidential-order-note') if allowed else dict(error='forbidden')
             else:
                 status,data=404,dict(error='missing')
+            if resource_state and 'owner_id' in data:data['status']=state['resource_state']
             raw=json.dumps(data).encode()
             self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
         def do_POST(self):
@@ -67,10 +68,10 @@ def external_application(tmp_path,*,changing=False,core=None):
     core=core or ApplicationCore(var,secret_store=MemorySecrets(),environ=runtime_identity_environment(var))
     var=core.var_dir
     try:
-        origin=f'http://127.0.0.1:{server.server_port}'
+        origin=f'http://{origin_host}:{server.server_port}'
         project=core.application_environments.create_application(operation_id=uuid4().hex,name='订单系统').project_id
         environment=FrozenEnvironment(environment_id='env_'+uuid4().hex,revision=1,name='Python测试环境',
-            target=WebTargetScope(base_url=origin,allowed_origins=(origin,),allowed_hosts=('127.0.0.1',),allowed_ports=(server.server_port,),allow_private_network=True))
+            target=WebTargetScope(base_url=origin,allowed_origins=(origin,),allowed_hosts=(origin_host,),allowed_ports=(server.server_port,),allow_private_network=True))
         core.application_environments.save(project,environment,expected_revision=0)
         current=core.application_environments.activate(project,environment.environment_id,revision=1,expected_revision=0)
         current=core.application_understanding.confirm_endpoint(project,endpoint=origin,revision=current.revision)
@@ -87,6 +88,8 @@ def external_application(tmp_path,*,changing=False,core=None):
             proposed_actors=[dict(item_id=actors[role.canonical_key],write_mode='CREATE',display_name=role.canonical_key,description='业务角色',effective_state='ACTIVE',source_candidate_ids=[role.candidate_id]) for role in current.role_candidates],
             proposed_actions=[dict(item_id=action_item,write_mode='CREATE',display_name='读取订单',description='读取订单详情',primary_resource_concept='订单',operation_kind='READ',state_changing=changing,effective_state='ACTIVE',source_candidate_ids=[current.action_candidates[0].candidate_id],effect_catalog=[dict(item_id=effect_item,business_label='订单备注可见',effect_kind='DATA_DISCLOSURE',resource_concept='订单',protected_projection=['note'],description='订单备注实际返回')])],
             proposed_permissions=[dict(item_id='pperm_'+str(i)*16,write_mode='CREATE',effective_state='ACTIVE',subject_actor_item_id=actors[role],business_action_item_id=action_item,resource_owner_actor_item_id=actors['owner'],relation=relation,expectation=expectation,protected_effect_item_ids=[effect_item]) for i,role,relation,expectation in [(1,'owner','OWNS','ALLOW'),(2,'member','OTHER_ROLE','DENY')]])
+        if resource_state:
+            for item in command['proposed_permissions']:item['conditions']=dict(resource_states=['DRAFT'])
         proposal=core.business_boundaries.create_initial_proposal(project,BoundaryProposalCommand.model_validate_json(json.dumps(command))).proposal
         boundary=core.business_boundaries.approve(project,proposal.proposal_id,expected_fingerprint=proposal.proposal_fingerprint,reason='核对本人及其他角色访问范围')
         identities={}
@@ -107,6 +110,7 @@ def external_application(tmp_path,*,changing=False,core=None):
         action=boundary.actions[0]
         request=dict(method='GET',path='/orders/{case_resource_id}',input_slots=[dict(slot_id='case_resource_id',source='CASE_RESOURCE_ID',consumer='PATH')])
         query=dict(request=request|dict(path='/owner/orders/{case_resource_id}'),resource_path='$.id',owner_path='$.owner_id',data_path='$')
+        if resource_state:query.update(condition_state_path='$.status',condition_state_values=['APPROVED','DRAFT'])
         draft=OperationFlowDraft.model_validate_json(json.dumps(dict(id='ofl_'+uuid4().hex,revision=1,business_action_id=action.action_id,action_revision=action.revision,
             subject_test_identity_id=identities['owner'],resource_owner_test_identity_id=identities['owner'],source_fingerprint=None,actual_resource_id='order-1',target_step_id='read',recovery=dict(method='POST',relative_path='/restore/{case_resource_id}',json_body={}) if changing else None,
             source_request=core.application_sources.context(project)['request_references'][0],entity_evidence=[dict(effect_id=action.effect_catalog[0].effect_id,query=query)],

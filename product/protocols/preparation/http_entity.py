@@ -1,5 +1,6 @@
 """独立业务查询与目标响应的实体对应；仅证明声明的JSON字段披露。"""
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
+from product.protocols.checks.conditions import PermissionConditions, PublicValue
 from product.protocols.web.base import ProtocolModel
 from product.protocols.web.request import HttpRequestTemplate, HttpBodyKind, ValueSlotSource, ValueSlotConsumer
 
@@ -9,6 +10,13 @@ class HttpEntityQuery(ProtocolModel):
     resource_path: str = Field(default='$.id', pattern=r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$')
     owner_path: str = Field(default='$.owner_id', pattern=r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$')
     data_path: str = Field(default='$', pattern=r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,8}$')
+    condition_state_path: str | None = Field(default=None, pattern=r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$', exclude_if=lambda value: value is None)
+    condition_state_values: tuple[PublicValue, ...] = Field(default=(), max_length=8, exclude_if=lambda value: not value)
+
+    @field_validator('condition_state_values')
+    @classmethod
+    def finite_states(cls, values):
+        return PermissionConditions(resource_states=values).resource_states if values else values
 
     @model_validator(mode='after')
     def readonly_resource(self):
@@ -27,8 +35,10 @@ class HttpEntityQuery(ProtocolModel):
         ) or slot.consumer not in (ValueSlotConsumer.PATH, ValueSlotConsumer.QUERY):
             raise ValueError('query must address the exact case resource as a whole path or query value')
         forbidden = {'password','token','secret','cookie','authorization','api_key'}
-        if any(set(value.lower().split('.')) & forbidden for value in (self.resource_path,self.owner_path,self.data_path)):
+        if any(set(value.lower().split('.')) & forbidden for value in (self.resource_path,self.owner_path,self.data_path,self.condition_state_path or '')):
             raise ValueError('entity mapping cannot select authentication material')
+        if (self.condition_state_path is not None) != bool(self.condition_state_values):
+            raise ValueError('resource state requires both its readonly path and finite public values')
         return self
 
 

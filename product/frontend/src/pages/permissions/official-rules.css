@@ -1,5 +1,6 @@
 .jj-official-rules-review {width:100%; max-width:1040px; margin-inline:auto; }
 .jj-official-rules-review > .jj-heading { margin-bottom:12px; }
+.jj-official-purpose { display:grid; gap:16px; max-width:76ch; line-height:var(--leading-reading); }
 .jj-official-rule-section { margin-top:32px; }
 .jj-official-rule-frame { margin-top:24px; }
 .jj-official-rule-frame .jj-official-rule-table { min-width:0; width:100%; table-layout:fixed; border-collapse:collapse; }
@@ -8,10 +9,11 @@
 .jj-official-rule-table col:last-child { width:26%; }
 .jj-official-rule-table tbody th { text-align:start; }
 .jj-official-rule-table :is(td,tbody th) { padding-block:24px; }
-.jj-official-rule-table small { display:block; color:var(--muted); font-size:var(--text-meta); font-weight:400; line-height:20px; margin-top:6px; }
+.jj-official-rule-table small { display:block; color:var(--muted); font-size:var(--text-meta); font-weight:var(--weight-regular); line-height:20px; margin-top:6px; }
 .jj-official-definitions { margin-block:24px; }
 .jj-official-definitions p { margin-top:12px; color:var(--muted); }
 .jj-official-ready-copy { margin-block:24px 32px; }
+.jj-official-ready-copy p + p { margin-top:12px;max-width:76ch;line-height:var(--leading-reading); }
 @media(max-width:700px) {
   .jj-official-rule-table, .jj-official-rule-table tbody { display:block; width:100%; }
   .jj-official-rule-table :is(colgroup,thead) { display:none; }

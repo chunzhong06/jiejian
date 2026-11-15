@@ -261,7 +261,13 @@ class CheckRuntimeBuilder:
                         and all(source.config.relationship_mapping.supports(item) for item in rule.conditions.relationships)))
                     and (rule.conditions.tenant is None or participants <= {
                         claim.identity_id for claim in source.config.identity_claims if claim.tenant_path is not None})]
-                if not candidates:
+                # 独立 HTTP 查询仅覆盖有限资源状态；组织、关系及提交事实仍需原强来源。
+                queries = [proof for config in configs if config['action_id'] == action_id for proof in config['proofs']
+                    if proof['rule'] == 'HTTP_ENTITY_QUERY' and proof['effect_id'] in rule.protected_effect_ids
+                    and rule.conditions.tenant is None and not rule.conditions.relationships
+                    and (not rule.conditions.resource_states or proof['entity_query'].get('condition_state_path') is not None
+                        and set(rule.conditions.resource_states) <= set(proof['entity_query'].get('condition_state_values', ())))]
+                if not candidates and not queries:
                     raise _incomplete('CONDITION_SOURCE_REQUIRED')
         return CheckRuntimeBundle.model_validate_json(json.dumps(payload | dict(runtime=runtime,
             proof_sources=[item.model_dump(mode="json") for item in sources])), strict=True)

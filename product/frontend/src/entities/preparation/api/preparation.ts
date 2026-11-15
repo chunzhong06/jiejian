@@ -18,6 +18,7 @@ export type IdentitySlot = PreparationItem & {
   requirement: { slot_id: string; actor_id: string; actor_revision: number; ordinal: number }
   actor_display_name: string
   test_identity_id: string | null
+  selection_basis?: 'CURRENT_MATERIAL' | null
 }
 export type ActionPreparation = {
   action_id: string
@@ -34,7 +35,8 @@ export type ActionPreparation = {
   recovery: PreparationItem
   reason_codes: string[]
 }
-export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean; recommended_action_id: string | null; basis_fingerprint: string | null; policy_epoch: number; source_fingerprint: string | null; impacts: Array<{action_id:string;action_label:string;kind:'identity'|'execution'|'resource'|'evidence'|'recovery';status:PreparationStatus;reason_codes:string[];permission_ids:string[];member_id:string|null;member_label:string}> }
+export type MaterialImpact = {slot_id?:string|null;prerequisites?:string[];action_id:string;action_label:string;kind:'identity'|'execution'|'resource'|'evidence'|'recovery';status:PreparationStatus;reason_codes:string[];permission_ids:string[];member_id:string|null;member_label:string} & {handling?:'KEEP'|'ADD'|'RECHECK'|'DECIDE';handler?:'SYSTEM'|'USER'|'AGENT_AND_USER';explanation?:string;next_step?:string}
+export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean; recommended_action_id: string | null; basis_fingerprint: string | null; policy_epoch: number; source_fingerprint: string | null; impacts: MaterialImpact[] }
 export type EffectMaterialSummary = {
   effect_id: string; business_label: string; resource_concept: string
   material_status: PreparationStatus; binding_fingerprint: string | null

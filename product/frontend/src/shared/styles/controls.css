@@ -1,10 +1,14 @@
 .jj-choice:where(.ant-select) { width: 100%; min-width: 0; height:var(--control-height); font:inherit; }
 .jj-choice.ant-select .ant-select-selector { min-height:var(--control-height); border-radius: var(--radius-control); border-color: var(--line-strong); background: var(--control-bg); color: var(--ink); padding-inline: 14px 42px; box-shadow: var(--control-shadow); }
-.jj-choice.ant-select .ant-select-selection-item { font-weight:400; line-height:calc(var(--control-height) - 2px); padding-inline-end: 0; }
+.jj-choice.ant-select .ant-select-selection-item { font-weight:var(--weight-regular); line-height:calc(var(--control-height) - 2px); padding-inline-end: 0; }
 /* 短值表格使用对称内缩，让文字对齐控件中心，而非避开箭头后的剩余空间中心。 */
 .jj-choice.ant-select[data-align=center] .ant-select-selector { padding-inline:42px; }
 .jj-choice.ant-select[data-align=center] :is(.ant-select-selection-item,.ant-select-selection-placeholder) { text-align:center; }
 .jj-choice.ant-select[data-align=center] .ant-select-selection-search { inset-inline:42px; }
+/* 紧凑短值仍保留完整文字；箭头在自己的窄轨道中，不复用宽选择器的42px对称内缩。 */
+.jj-choice:is(.jj-compact-choice,.jj-short-choice).ant-select[data-align=center] .ant-select-selector { padding-inline:24px; }
+.jj-choice:is(.jj-compact-choice,.jj-short-choice).ant-select[data-align=center] .ant-select-selection-search { inset-inline:24px; }
+.jj-choice:is(.jj-compact-choice,.jj-short-choice).ant-select[data-align=center] .ant-select-arrow { inset-inline-end:8px; }
 .jj-choice.ant-select-open .ant-select-selection-item { color: var(--ink); opacity: 1; }
 .jj-choice.ant-select .ant-select-arrow { inset-inline-end: 15px; color: var(--muted); font-size: var(--text-meta); pointer-events: none; }
 /* SVG 自身的命中规则不能截走箭头区域的点击；整块热区仍交给选择器。 */
@@ -21,7 +25,7 @@
 .jj-choice.ant-select-status-error .ant-select-selector { border-color:var(--bad); }
 .jj-choice input.ant-select-selection-search-input { border: 0; min-height: 0; padding: 0; box-shadow: none; background: transparent; outline: 0; }
 .jj-choice-menu.ant-select-dropdown { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-float); background: var(--surface-elevated); box-shadow: var(--popover-shadow); }
-.jj-choice-menu .ant-select-item { font-weight:400; border-radius:var(--radius-compact); min-height: 40px; padding: 10px 14px; color: var(--ink); font-size: var(--text-body); line-height:22px; }
+.jj-choice-menu .ant-select-item { font-weight:var(--weight-regular); border-radius:var(--radius-compact); min-height: 40px; padding: 10px 14px; color: var(--ink); font-size: var(--text-body); line-height:22px; }
 .jj-choice-menu .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
 .jj-choice-menu .ant-select-item-option-active:not(.ant-select-item-option-disabled) { background: var(--hover); }
 .jj-choice-menu .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { background:var(--selected); color:var(--selected-ink); }
@@ -38,31 +42,36 @@ html[data-input-mode=keyboard] .jj-choice-menu .ant-select-item-option-active:no
 :is(.jj-example-menu,.jj-command-menu).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-danger:not(.ant-dropdown-menu-item-disabled):is(:hover,.ant-dropdown-menu-item-active) { color:var(--bad); background:var(--bad-soft); }
 /* 方框以标签行高定位，不能继承文本输入固定的 20px 行高。 */
 input[type=checkbox], input[type=radio] { appearance: none; width: 18px; height: 18px; min-height: 18px; line-height: inherit; margin: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--control-bg); display: inline-grid; place-content: center; vertical-align: middle; cursor: pointer; }
-input[type=checkbox]::before { content:''; width:10px; height:7px; border-left:2px solid var(--on-accent); border-bottom:2px solid var(--on-accent); transform:translateY(-1px) rotate(-45deg) scale(.3); clip-path:inset(0 100% 0 0); opacity:0; }
+input[type=checkbox]::before { content:''; width:8px; height:8px; border-radius:2px; background:var(--accent); transform:scale(.3); opacity:0; }
 input[type=radio] { border-radius: 50%; }
 input[type=radio]::before { content: ''; width: 6px; height: 6px; background: var(--on-accent); border-radius: 50%; transform: scale(.3); opacity: 0; }
-input:is([type=checkbox],[type=radio]):checked { background: var(--accent); border-color: var(--accent); }
+input:is([type=checkbox],[type=radio]):checked { border-color: var(--accent); }
+input[type=radio]:checked { background:var(--accent); }
 input:is([type=checkbox],[type=radio]):checked::before { transform: scale(1); opacity: 1; }
-input[type=checkbox]:indeterminate { background: var(--accent); border-color: var(--accent); }
-input[type=checkbox]:checked::before { transform:translateY(-1px) rotate(-45deg); clip-path:inset(0); }
-input[type=checkbox]:indeterminate::before { border:0; clip-path:none; content: ''; width: 9px; height: 2px; background: var(--on-accent); transform: none; opacity: 1; }
+input[type=checkbox]:indeterminate { border-color: var(--accent); }
+input[type=checkbox]:indeterminate::before { width:9px; height:2px; border-radius:0; transform:none; opacity:1; }
 input:is([type=checkbox],[type=radio]):not(:disabled):hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 input:is([type=checkbox],[type=radio]):not(:disabled):active { transform: scale(.92); }
 input:is([type=checkbox],[type=radio]):disabled { cursor:default; background:var(--disabled-bg); border-color:var(--disabled-border); }
-input:is([type=checkbox],[type=radio]):disabled:checked { background:var(--disabled-ink); }
-input:is([type=checkbox],[type=radio]):disabled::before { color:var(--disabled-bg); }
-.jj-field > label { font-weight:500; }
+input[type=checkbox]:disabled::before { background:var(--disabled-ink); }
+input[type=radio]:disabled:checked { background:var(--disabled-ink); }
+/* 系统高对比模式使用原生标记，避免自绘背景被系统抹除后失去选择状态。 */
+@media (forced-colors:active) {
+  input:is([type=checkbox],[type=radio]) { appearance:auto; }
+  input:is([type=checkbox],[type=radio])::before { content:none; }
+}
+.jj-field > label { font-weight:var(--weight-medium); }
 .jj-working-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); flex: none; }
 .jj-environment-progress { display: flex; align-items: center; gap: 18px; }
-.jj-environment-progress strong { font-size: var(--text-body); font-weight: 500; }
+.jj-environment-progress strong { font-size: var(--text-body); font-weight:var(--weight-medium); }
 .jj-environment-progress p { color: var(--muted); font-size: var(--text-meta); margin-top: 5px; }
 .jj-example-menu .ant-dropdown-menu, .jj-choice-menu, .jj-hint { font-family:var(--font-ui); }
 .jj-command-menu { min-width: 224px; max-width: calc(100vw - 48px); }
 .jj-command-menu.ant-dropdown .ant-dropdown-menu { padding:8px; border:1px solid var(--line); border-radius:var(--radius-float); background: var(--surface-elevated); box-shadow: var(--menu-shadow); font-family: var(--font-ui); max-height: min(480px,calc(100dvh - 180px)); overflow-y: auto; }
-.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item { display:flex; align-items:center; gap:10px; font-weight:500; min-height:40px; padding:10px 14px; border-radius:var(--radius-compact); color: var(--ink); font-size: var(--text-body); line-height:22px; }
+.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item { display:flex; align-items:center; gap:10px; font-weight:var(--weight-medium); min-height:40px; padding:10px 14px; border-radius:var(--radius-compact); color: var(--ink); font-size: var(--text-body); line-height:22px; }
 /* 链接和普通标签共用同一行盒，图标不再按行内基线向下偏移。 */
 .jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon { display:inline-flex; align-items:center; justify-content:center; width:16px; height:22px; flex:none; margin-inline-end:0; color:var(--muted); font-size:14px; line-height:1; }
-.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-selected { background:var(--selected); color:var(--selected-ink); font-weight: 500; }
+.jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-selected { background:var(--selected); color:var(--selected-ink); font-weight:var(--weight-medium); }
 .jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled,.ant-dropdown-menu-item-selected):hover { background: var(--hover); }
 .jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-title-content { flex:1; min-width:0; margin-inline-start:0; white-space:normal; overflow-wrap:anywhere; }
 .jj-command-menu.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-divider { margin: 5px 4px; background: var(--line); }

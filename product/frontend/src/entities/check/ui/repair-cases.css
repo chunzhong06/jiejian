@@ -1,0 +1,26 @@
+.jj-repair-cases { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:28px 32px; }
+.jj-repair-cases > article { min-width:0; }
+.jj-repair-cases h4,.jj-repair-case-purpose { display:block; color:var(--muted); font-size:var(--text-label); margin-bottom:12px; font-weight:var(--weight-regular); }
+.jj-repair-case-identity { min-width:0; }
+.jj-repair-case-identity p { margin-top:8px; font-size:var(--text-body); color:var(--ink); line-height:var(--leading-reading); }
+.jj-repair-case-identity p > span { display:inline-block; margin-inline-start:20px; }
+.jj-repair-case-identity small { display:block; margin-top:8px; color:var(--muted); line-height:var(--leading-reading); }
+.jj-repair-case-identity code { overflow-wrap:anywhere; white-space:normal; }
+.jj-repair-comparison th:first-child { width:60%; }
+.jj-repair-comparison .jj-repair-case-purpose { margin:0; }
+.jj-repair-comparison .jj-object-line { align-items:baseline; }
+.jj-repair-comparison .jj-badge { margin-top:8px; }
+.jj-repair-comparison-frame { min-width:0; container:repair-comparison / inline-size; }
+/* 关键的前后结果在窄任务中同屏成对阅读，不藏在横向滚动的后两列。 */
+@container repair-comparison (max-width:680px) {
+  .jj-repair-comparison-frame .jj-repair-comparison { min-width:0; width:100%; }
+  .jj-repair-comparison thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .jj-repair-comparison tbody { display:block; }
+  .jj-repair-comparison tbody tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-bottom:1px solid var(--line); }
+  .jj-repair-comparison tbody tr:last-child { border-bottom:0; }
+  .jj-repair-comparison tbody td { border:0; min-width:0; }
+  .jj-repair-comparison tbody td:first-child { grid-column:1/-1; padding-bottom:4px; }
+  .jj-repair-comparison td[data-label] { text-align:start; }
+  .jj-repair-comparison td[data-label]::before { content:attr(data-label); display:block; margin-bottom:6px; color:var(--muted); font-size:var(--text-label); }
+}
+@media(max-width:700px) { .jj-repair-case-identity p > span { display:block; margin:4px 0 0; } }

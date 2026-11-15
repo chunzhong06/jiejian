@@ -16,6 +16,7 @@ export function returnDestination(value:string|null){
   if(!value||/[#\\\u0000-\u0020]/.test(value))return null
   const [path,search]=value.split('?'),query=new URLSearchParams(search)
   if(path==='/workspace')return query.get('view')==='collaboration'&&Boolean(query.get('task_id')?.trim())||[...query.keys()].every(key=>key==='project_id')?value:null
+  if(path==='/archive')return query.get('project_id')?.trim()&&!query.has('resume_run')&&query.get('view')!=='plan'?value:null
   if(!/^\/(reports|permissions|changes|preparation|testing|issues|application)$/.test(path))return null
   return value
 }
@@ -27,6 +28,7 @@ export function withReturnDestination(path:string,origin:string){
 }
 export function returnDestinationLabel(destination:string){
   const [path,search]=destination.split('?'),query=new URLSearchParams(search)
+  if(path==='/archive')return query.has('run_id')?'返回归档报告':'返回归档检查记录'
   if(path==='/reports')return query.get('view')==='compare'?'返回本轮变化':query.get('view')==='plan'?'返回检查范围':query.has('run_id')?'返回检查报告':'返回检查记录'
   if(path==='/permissions')return '返回权限规则'
   if(path==='/testing')return query.get('view')==='plans'?'返回检查方案':query.has('action_id')?'返回接口流程':query.has('scenario')?'返回业务场景':'返回操作与材料'

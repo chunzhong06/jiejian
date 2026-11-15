@@ -45,21 +45,24 @@ it('同一角色的多条条件规则分别对应自己的状态和详情，筛�
     expect(within(archived).getByText(/数据状态：archived/)).toBeVisible();
     expect(within(archived).getByText('负责人不得完成工单')).toBeVisible();
     expect(within(archived).getByText('不符合规则')).toBeVisible();
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    fireEvent.click(within(archived).getByRole('button'));
     fireEvent.click(screen.getByRole('button',{name:'收起详情'}));
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(within(archived).getByRole('button')).toHaveFocus();
     expect(screen.getByRole('region',{name:'权限规则目录'})).toHaveAttribute('data-detail-open','false');
     fireEvent.click(within(archived).getByRole('button'));
     expect(screen.getByRole('complementary',{name:'负责人不得完成工单'})).toBeVisible();
-    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
-    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('project_id=app'));
+    expect(screen.getByRole('link',{name:'完整要求'})).toHaveAttribute('href',expect.stringContaining('rule_id=archived'));
+    expect(screen.getByRole('link',{name:'完整要求'})).toHaveAttribute('href',expect.stringContaining('project_id=app'));
     fireEvent.change(screen.getByRole('searchbox',{name:'查找规则'}),{target:{value:'open'}});
     expect(screen.queryByRole('row',{name:/负责人不得完成工单/})).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     const open=screen.getByRole('row',{name:/负责人可以完成工单/});
     expect(within(open).getByText(/数据状态：open/)).toBeVisible();
     expect(within(open).getByText('符合规则')).toBeVisible();
     fireEvent.click(within(open).getByRole('button'));
-    expect(screen.getByRole('link',{name:'打开规则详情'})).toHaveAttribute('href',expect.stringContaining('rule_id=open'));
+    expect(screen.getByRole('link',{name:'完整要求'})).toHaveAttribute('href',expect.stringContaining('rule_id=open'));
 });
 
 it('从问题进入同一修复任务，登记和返回都保留准确原题', async () => {
@@ -84,7 +87,7 @@ it('检查摘要保留范围与时间，阅读入口指向同一规则的准确�
     expect(await screen.findByRole('heading',{name:'本次已检查场景符合这条规则'})).toBeVisible()
     expect(screen.getByText('检查范围')).toBeVisible()
     expect(screen.getByText('1 个检查场景')).toBeVisible()
-    expect(screen.getByText('检查时间')).toBeVisible()
+    const timestamp=screen.getByText('检查记录时间');expect(timestamp).toBeVisible();expect(timestamp.closest('details')).not.toHaveAttribute('open');fireEvent.click(timestamp);expect(timestamp.closest('details')).toHaveAttribute('open')
     fireEvent.click(screen.getByRole('link',{name:'阅读检查依据'}))
     expect(readRoute().query.get('run_id')).toBe('run')
     expect(readRoute().query.get('case_id')).toBe('case')

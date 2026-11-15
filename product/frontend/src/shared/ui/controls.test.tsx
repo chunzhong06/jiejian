@@ -196,6 +196,7 @@ it('提交期间按钮不可再次激活，并保留可访问状态',()=>{
   const button=screen.getByRole('button',{name:'提交检查'})
   fireEvent.click(button)
   expect(button).toBeDisabled();expect(button).toHaveAttribute('aria-busy','true');expect(action).not.toHaveBeenCalled()
+  expect(button.querySelector('.jj-button-progress')).toHaveTextContent('提交检查')
 })
 
 it('有提示的按钮进入忙碌后保留同一元素，恢复后继续可用',()=>{

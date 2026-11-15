@@ -39,4 +39,5 @@ def contract_and_new(*, historical_safe=True, new_safe=True, forbidden=False):
     payload = current.request.model_dump(mode="json")
     payload.update(change_context=change.model_dump(mode="json"),repair_context=repair_context(contract).model_dump(mode="json"))
     current.request = type(current.request).model_validate(payload,strict=False)
+    current.original=source
     return contract,current,change

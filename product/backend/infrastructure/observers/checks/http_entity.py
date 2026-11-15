@@ -26,7 +26,7 @@ def entity_fields(data, paths, key):
     return values
 
 
-def observe_http_entity(owner, *, case, action_id, proof, phase, common, source_identity, cleanup):
+def observe_http_entity(owner, *, case, action_id, proof, phase, common, source_identity, cleanup, requirement=None):
     query = proof.entity_query
     key = (case.case_id, proof.binding_fingerprint)
     response = owner.web.request(query.request, case=case, action_id=action_id,
@@ -40,6 +40,20 @@ def observe_http_entity(owner, *, case, action_id, proof, phase, common, source_
         and len(fields) == len(proof.protected_projection))
     projection = (case.resource_id, expected_owner, tuple(sorted(fields.items()))) if valid else None
     if phase in ('BASELINE', 'BEFORE'):
+        if hasattr(owner, 'condition_observations'):
+            owner.condition_observations.pop((case.case_id, common['proof_fingerprint']), None)
+        # 条件只取自同一资源所有者的独立参照；不使用 TARGET 响应或配置的期望状态补值。
+        if valid and getattr(case.permission, 'conditions', None) is not None:
+            from product.protocols.checks.conditions import ObservedPermissionConditions, condition_source_reference
+            if requirement is None:
+                raise ValueError('condition query requires its frozen proof reference')
+            source_id, source_fingerprint = condition_source_reference(requirement)
+            state = None if query.condition_state_path is None else selected(response.data, query.condition_state_path)
+            owner.condition_observations[(case.case_id, common['proof_fingerprint'])] = ObservedPermissionConditions(
+                    proof_fingerprint=common['proof_fingerprint'], source_id=source_id,
+                    source_fingerprint=source_fingerprint,
+                    principal='ANONYMOUS' if getattr(case, 'subject_test_identity_id', None) is None else 'AUTHENTICATED',
+                    resource_state=state if isinstance(state, str) and state in query.condition_state_values else None)
         owner._http_entities[key] = projection
         observation = CheckObservation(**common, state='CONFIRMED' if valid else 'UNKNOWN',
             closure='CLOSED' if valid else 'OPEN', complete=valid, reliable=source_identity=='MATCH',

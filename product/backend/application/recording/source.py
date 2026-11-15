@@ -148,8 +148,10 @@ def _require_assignment(work, request, action):
         created_at_us=item.created_at_us,
         status=TestIdentityStatus.PREPARED if item.prepared_at_us is not None else TestIdentityStatus.NOT_PREPARED,
     ) for item in work.test_identities.list_for_project(action.project_id))
+    from product.backend.application.preparation.identity_reuse import retained_identity_assignments
+    preferred, conflicts = retained_identity_assignments(work.action_preparation, action.project_id, contract, permissions, identities)
     prepared = PreparationService._identities(contract, identities,
-        {(item.actor_id, item.revision): item.display_name for item in actors})
+        {(item.actor_id, item.revision): item.display_name for item in actors}, preferred=preferred, conflicts=conflicts)
     choices = legal_demonstrations(contract, permissions, prepared)
     matched = tuple(item for item in choices if item.can_execute
         and (item.subject_test_identity_id, item.resource_owner_test_identity_id)

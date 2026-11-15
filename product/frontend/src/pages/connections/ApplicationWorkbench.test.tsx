@@ -7,6 +7,7 @@ import {projectsApi} from '../../entities/application/api/projects'
 import {onboardingApi} from '../../entities/application/api/onboarding'
 import {savePending} from '../../shared/lib/operations'
 import {ApiError} from '../../shared/api/http'
+import {validationApi} from '../../entities/permission/api/validation'
 
 it.each([false,true])('名称明确拒绝后按原未知事实决定能否继续编辑，原未知=%s',async previous=>{
   const operation='e'.repeat(32)
@@ -15,7 +16,7 @@ it.each([false,true])('名称明确拒绝后按原未知事实决定能否继续
   const create=vi.spyOn(workbenchApi,'create').mockRejectedValue(new ApiError('INPUT_INVALID','名称未被接纳',undefined,undefined,undefined,undefined,'NOT_ACCEPTED'))
   render(<ApplicationWorkbench onChanged={vi.fn()}/>)
   if(!previous)fireEvent.change(screen.getByLabelText('应用名称'),{target:{value:'原名称'}})
-  fireEvent.click(screen.getByRole('button',{name:previous?'继续上次添加':'添加并配置连接'}))
+  fireEvent.click(screen.getByRole('button',{name:previous?'继续上次添加':'建立应用工作区'}))
   expect(await screen.findByText('名称未被接纳')).toBeVisible()
   expect(create).toHaveBeenCalledOnce()
   expect(screen.getByLabelText('应用名称')).toHaveValue('原名称')
@@ -27,17 +28,36 @@ it('名称按Unicode字符计数，过长时就地定位且不发送请求',asyn
   const create=vi.spyOn(workbenchApi,'create')
   render(<ApplicationWorkbench onChanged={vi.fn()}/>)
   fireEvent.change(screen.getByLabelText('应用名称'),{target:{value:'𠮷'.repeat(129)}})
-  fireEvent.click(screen.getByRole('button',{name:'添加并配置连接'}))
+  fireEvent.click(screen.getByRole('button',{name:'建立应用工作区'}))
   expect(await screen.findByText('应用名称需为 1—128 个字符。')).toBeVisible()
   expect(screen.getByLabelText('应用名称')).toHaveFocus()
   expect(create).not.toHaveBeenCalled()
 })
 
-beforeEach(()=>{vi.spyOn(projectsApi,'understanding').mockResolvedValue({project_id:'app',source_root:'D:\\review\\orders',source_analysis_authorized:false,analysis_completed_at_us:null} as never)})
+beforeEach(()=>{
+  vi.spyOn(projectsApi,'understanding').mockResolvedValue({project_id:'app',source_root:'D:\\review\\orders',source_analysis_authorized:false,analysis_completed_at_us:null} as never)
+  vi.spyOn(validationApi,'read').mockResolvedValue({project_id:'app',basis_id:'basis',fingerprint:'fingerprint',candidate_id:null,candidate_revision:null,state:'CURRENT',requirements:[],questions:[],scope:'本次尚无具体要求'})
+})
 afterEach(()=>{vi.restoreAllMocks();sessionStorage.clear();discardProjectEditorDrafts('app')})
 
 const environment=(revision:number,name:string):ApplicationEnvironment=>({environment_id:'env',revision,name,target:{base_url:'http://127.0.0.1:18081',allowed_origins:['http://127.0.0.1:18081'],allowed_hosts:['127.0.0.1'],allowed_ports:[18081],allow_private_network:true},deployment_label:null,deployment_verification:'UNVERIFIED'})
 const context=():EnvironmentContext=>({project_id:'app',revision:1,environments:[],active_environment:null,confirmed_endpoint:'http://127.0.0.1:10910',endpoint_reachable:null,endpoint_checked_at_us:null,source_available:true})
+
+it('已核验连接把继续准备留作唯一末尾推进，管理和核验保留原对象且不隐式执行',async()=>{
+  const current=environment(1,'隔离测试环境'),origin='/reports?view=plan&rule_id=pin_original'
+  location.hash='#/application?'+new URLSearchParams({project_id:'app',return_to:origin})
+  vi.spyOn(workbenchApi,'environments').mockResolvedValue({...context(),source_available:false,environments:[{configuration:current,created_at_us:1}],active_environment:current,endpoint_reachable:true,endpoint_checked_at_us:1})
+  const verify=vi.spyOn(projectsApi,'confirmEndpoint'),activate=vi.spyOn(workbenchApi,'activateEnvironment')
+  render(<ApplicationWorkbench selected={{project_id:'app',name:'订单'}} onChanged={vi.fn()}/>)
+  const next=within(await screen.findByLabelText('已保存的连接')).getByRole('link',{name:'返回检查范围'})
+  const footer=next.closest('footer')!
+  expect(footer).toContainElement(next)
+  expect(within(footer).queryByRole('button')).not.toBeInTheDocument()
+  expect(footer).not.toContainElement(screen.getByRole('button',{name:'重新核验地址'}))
+  expect(footer).not.toContainElement(screen.getByRole('button',{name:'编辑'}))
+  expect(next).toHaveAttribute('href',expect.stringContaining('rule_id=pin_original'))
+  expect(verify).not.toHaveBeenCalled();expect(activate).not.toHaveBeenCalled()
+})
 
 it('嵌入运行任务只保留当前层级的返回，回到源码后恢复应用连接回程',async()=>{
   location.hash='#/application?view=source&runtime_method=managed&project_id=app'
@@ -102,19 +122,20 @@ it('运行地址确认失败留在当前运行任务，返回源码不把失败�
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-it('空环境直接配置，保存后只形成记录，不隐式采用或发送核验请求',async()=>{
+it('已有地址先读事实，另行保存具名配置，不隐式采用或发送核验请求',async()=>{
   location.hash='#/application?project_id=app'
   const data=context()
   vi.spyOn(workbenchApi,'environments').mockImplementation(async()=>({...data}))
   const write=vi.spyOn(workbenchApi,'saveEnvironment').mockImplementation(async(_project,configuration)=>{data.environments=[{configuration,created_at_us:1}];return {}})
   const activate=vi.spyOn(workbenchApi,'activateEnvironment'),probe=vi.spyOn(projectsApi,'confirmEndpoint')
   render(<ApplicationWorkbench selected={{project_id:'app'}} onChanged={vi.fn()}/>)
-  expect(await screen.findByLabelText('连接名称')).toBeVisible()
-  expect(screen.getByRole('heading',{name:'新增检查连接'})).toBeVisible()
-  expect(screen.getByText('当前运行地址')).toBeVisible()
+  expect(await screen.findByText('当前检查地址')).toBeVisible()
+  expect(screen.queryByLabelText('连接名称')).not.toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('已保存的连接')).not.toBeInTheDocument()
   expect(screen.queryByText('接口资料只提供调查线索；实际执行仍需要确认权限要求、主体、资源与操作范围。')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'保存为具名连接'}))
+  expect(screen.getByRole('dialog',{name:'添加连接'})).toBeVisible()
   fireEvent.change(screen.getByLabelText('连接名称'),{target:{value:'回归环境'}})
   fireEvent.change(screen.getByLabelText('应用地址'),{target:{value:'http://127.0.0.1:18081'}})
   fireEvent.click(screen.getByText('部署说明与请求限制'))
@@ -143,6 +164,17 @@ it('采用旧修订与保存新修订分别呈现，编辑与取消不改变当�
   fireEvent.change(screen.getByLabelText('连接名称'),{target:{value:'尚未保存'}})
   fireEvent.click(screen.getByRole('button',{name:'取消编辑'}))
   expect(within(screen.getByRole('heading',{name:old.name}).closest('section')!).getByText('当前使用')).toBeVisible()
+  expect(write).not.toHaveBeenCalled();expect(activate).not.toHaveBeenCalled()
+})
+
+it('没有任何检查地址时直接配置，不把首次接入藏进具名连接管理',async()=>{
+  location.hash='#/application?project_id=app'
+  vi.spyOn(workbenchApi,'environments').mockResolvedValue({...context(),confirmed_endpoint:null,source_available:false})
+  const write=vi.spyOn(workbenchApi,'saveEnvironment'),activate=vi.spyOn(workbenchApi,'activateEnvironment')
+  render(<ApplicationWorkbench selected={{project_id:'app'}} onChanged={vi.fn()}/>);
+  expect(await screen.findByRole('heading',{name:'新增检查连接'})).toBeVisible()
+  expect(screen.getByLabelText('连接名称')).toBeVisible()
+  expect(screen.queryByRole('button',{name:'保存为具名连接'})).not.toBeInTheDocument()
   expect(write).not.toHaveBeenCalled();expect(activate).not.toHaveBeenCalled()
 })
 

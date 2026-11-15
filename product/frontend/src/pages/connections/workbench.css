@@ -1,4 +1,5 @@
 .jj-application-page { display:grid; gap:24px; width:100%; max-width:1080px; margin-inline:auto; min-width:0; }
+.jj-application-page > .jj-back-link { --return-layout-gap:24px; }
 .jj-application-browser { min-width:0; display:grid; gap:24px; }
 .jj-application-content { min-width:0; }
 .jj-environment-editor { padding:0; min-width:0; }
@@ -15,6 +16,10 @@
 
 
 .jj-environments { display:grid; gap:24px; min-width:0; }
+.jj-current-connection { display:grid; gap:20px; min-width:0; }
+.jj-current-connection > .jj-facts { margin:0; }
+.jj-current-connection > p { max-width:62ch; line-height:var(--leading-reading); }
+.jj-current-connection > .jj-task-actions { margin:0; }
 .jj-application-connections {width:100%; display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); align-items:start; gap:32px; }
 .jj-application-source-summary { min-width:0; padding-left:28px; border-left:1px solid var(--line); }
 .jj-application-source-summary > :is(.jj-source-attachment,.jj-source-summary) { padding-block:0; }
@@ -43,7 +48,8 @@
 .jj-environment-facts > div { flex-wrap:wrap; }
 .jj-environment-context > span:first-child { color:var(--muted); }
 .jj-environment-reachability { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:var(--text-meta); color:var(--muted); }
-.jj-environment-card > footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:12px; margin-top:6px; }
+.jj-environment-card > .jj-task-actions { margin-top:8px; }
+.jj-environment-reachability > .jj-button { margin-left:auto; }
 .jj-source-attachment { display:grid; gap:26px; width:min(100%,880px); padding-block:12px; }
 .jj-source-attachment > header { display:grid; gap:12px; }
 .jj-source-attachment > header > p { max-width:70ch; color:var(--muted); line-height:var(--leading-reading); overflow-wrap:anywhere; }
@@ -65,7 +71,6 @@
 .jj-environment-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }
 .jj-environment-fields > .jj-field { align-content:start; }
 .jj-environment-fields > .jj-field > small { font-size:var(--text-meta); }
-.jj-environment-fields > .jj-field:first-child > input { max-width:360px; }
 .jj-environment-fields input[type=number] { max-width:160px; }
 @media(max-width:800px) { .jj-environment-fields { grid-template-columns:minmax(0,1fr); } }
 .jj-environment-form > footer { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:center; }
@@ -76,3 +81,7 @@
 
 @media(max-width:900px) { .jj-source-toolbar { flex-wrap:wrap; align-items:start; } }
 @media(max-width:1100px) { .jj-application-connections { grid-template-columns:minmax(0,1fr); gap:32px; } .jj-application-source-summary { padding:28px 0 0; border-left:0; border-top:1px solid var(--line); } }
+
+.jj-application-purpose { display: grid; gap: 12px; margin-bottom: 24px; }
+.jj-application-purpose h2, .jj-application-purpose p { margin: 0; }
+.jj-application-purpose a { justify-self: start; }

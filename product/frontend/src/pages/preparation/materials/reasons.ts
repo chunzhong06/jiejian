@@ -20,5 +20,5 @@ const reasons: Record<string,string> = {
 };
 export function materialReasons(codes:string[]) {
     const specific=codes.some(code=>code.startsWith('MATERIAL_')&&reasons[code])
-    return [...new Set(codes.filter(code=>!specific||!['ACTION_BINDING_SOURCE_STALE','RESOURCE_OWNER_SOURCE_STALE'].includes(code)).map(code=>reasons[code]??'当前材料需要重新核对，原记录仍保留'))];
+    return [...new Set(codes.filter(code=>!specific||!['ACTION_BINDING_SOURCE_STALE','RESOURCE_OWNER_SOURCE_STALE'].includes(code)).map(code=>reasons[code]??'当前材料需要重新核对'))];
 }

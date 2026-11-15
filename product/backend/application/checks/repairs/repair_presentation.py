@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Literal
 
 from product.backend.domain.checks.repair import CurrentRepairContract, CurrentRepairReference, CurrentRepairVerification, repair_case_identity, repair_context
+from product.backend.domain.checks.repair_challenge import repair_challenge_reason
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.domain.lifecycle import CaseVerdict
 from product.protocols.checks.execution_request import WireModel
@@ -23,7 +24,7 @@ class RepairComparisonRow(WireModel):
     after_case_id: str | None = None
     after_verdict: CaseVerdict | None = None
     after_evidence_refs: tuple[str, ...] = ()
-    match_status: Literal["NOT_AVAILABLE", "MATCHED", "NOT_FOUND", "AMBIGUOUS"]
+    match_status: Literal["NOT_AVAILABLE", "MATCHED", "NOT_FOUND", "AMBIGUOUS", "CHALLENGE_CHANGED", "CHALLENGE_UNAVAILABLE"]
 
 
 class RepairReview(WireModel):
@@ -73,6 +74,10 @@ def build_repair_comparison(contract: CurrentRepairContract, source, current=Non
         after = current_results.get(matches[0].case_id) if len(matches) == 1 else None
         match_status = ("NOT_AVAILABLE" if not available else "AMBIGUOUS" if len(matches) > 1
                         else "MATCHED" if after is not None else "NOT_FOUND")
+        if match_status=='MATCHED':
+            reason=repair_challenge_reason(original_request=source.request,original_bundle=source.bundle,
+                request=current.request,bundle=current.bundle,source_case_id=case.case_id,case_id=matches[0].case_id)
+            if reason:match_status='CHALLENGE_CHANGED' if reason=='REPAIR_CHALLENGE_CHANGED' else 'CHALLENGE_UNAVAILABLE'
         rows.append(RepairComparisonRow(role=role, source_case_id=case.case_id,
             action_label=config.display_name, subject_label='未登录访客' if subject is None else subject.label, resource_owner_label=owner.label,
             resource_id=case.resource_id, effect_labels=tuple(labels), before_verdict=before.verdict,

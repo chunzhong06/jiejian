@@ -97,55 +97,82 @@ class ApplicationSources:
             work.commit()
             return document
 
-    def annotate(self, project_id, source_id, item_id, *, label, action_id, expected_revision):
+    def annotate(self, project_id, source_id, item_id, *, label, action_id, expected_revision, expected_source_revision=None):
         with self._uow() as work:
             work.acquire_write_lock()
-            self._request(work, project_id, source_id, item_id)
+            source, request = self._request(work, project_id, source_id, item_id)
+            if expected_source_revision is not None and source.revision != expected_source_revision:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '接口来源已变化，请重新核对这条请求')
             if action_id is not None:
                 action = work.business_boundaries.action(action_id)
                 if action is None or action.project_id != project_id:
                     raise JiejianError(ErrorCode.INPUT_INVALID, '只能关联本应用的业务动作')
             previous = next((item for item in work.api_sources.annotations(project_id)
                 if (item['source_id'], item['item_id']) == (source_id, item_id)), None)
-            if previous is not None and (previous['label'], previous['action_id']) == (label, action_id):
+            current = work.application_understanding.get(project_id)
+            updated = self._source_candidate(current, source, request, decision=CandidateDecision.CONFIRMED) if action_id is not None else current
+            if previous is not None and (previous['label'], previous['action_id']) == (label, action_id) and updated == current:
                 return previous
             if (0 if previous is None else previous['revision']) != expected_revision:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '人工说明已变化，请重新读取')
             result = dict(source_id=source_id, item_id=item_id, label=label, action_id=action_id,
                 revision=expected_revision + 1)
             work.api_sources.annotate(project_id, source_id, item_id, result)
+            if updated != current:
+                work.application_understanding.replace(updated)
             work.commit()
             return result
 
-    def propose_action(self, project_id, source_id, item_id, *, expected_revision):
+    def propose_action(self, project_id, source_id, item_id, *, expected_revision, decision=None, expected_source_revision=None):
+        """普通候选入口及本机明确排除共用事务；不创建权限或替代提案批准。"""
         with self._uow() as work:
             work.acquire_write_lock()
             source, request = self._request(work, project_id, source_id, item_id)
             current = work.application_understanding.get(project_id)
-            key = request.method + ' ' + request.path
-            if len(key) > 256:
-                raise JiejianError(ErrorCode.INPUT_INVALID, '此路径过长，请先整理为可维护的资源参数模板')
-            identity = candidate_id('action', key)
-            previous = next((item for item in current.action_candidates if item.candidate_id == identity), None)
-            evidence = CandidateEvidence(relative_path=f'api-sources/{source_id}', line_start=1, line_end=1,
-                detector='API_SOURCE', symbol=request.pointer,
-                content_sha256=hashlib.sha256(encode_json(request.model_dump(mode='json'))).hexdigest())
-            if previous is not None and evidence in previous.evidence and not previous.stale:
+            if expected_source_revision is not None and source.revision != expected_source_revision:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '接口来源已变化，核对决定尚未保存')
+            if decision == 'REJECTED':
+                identity = candidate_id('action', request.method+' '+request.path)
+                linked = any(identity in binding.action_candidate_ids for root in work.business_boundaries.list_actions(project_id)
+                    if (binding := work.business_boundaries.action_binding(root.action_id,root.current_revision)) is not None)
+                annotation = next((item for item in work.api_sources.annotations(project_id)
+                    if (item['source_id'],item['item_id']) == (source_id,item_id)), None)
+                if linked or annotation is not None and annotation['action_id'] is not None:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '这条线索仍关联正式业务操作，请先在原规则与业务关联中核对，不能以排除线索代替变更要求')
+            updated = self._source_candidate(current, source, request,
+                decision=None if decision is None else CandidateDecision(decision))
+            if updated == current:
                 return current
             if current.revision != expected_revision:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, '应用已变化，请重新读取')
-            candidate = (previous.model_copy(update=dict(evidence=tuple(e for e in previous.evidence
-                if e.relative_path != evidence.relative_path) + (evidence,), stale=False)) if previous else
-                ActionCandidate(candidate_id=identity, canonical_key=key, display_name=request.label,
-                    confidence=CandidateConfidence.MEDIUM, evidence=(evidence,)))
-            actions=tuple(candidate if item.candidate_id == identity else item for item in current.action_candidates)
-            if previous is None:
-                actions=(*actions,candidate)
-            updated = ApplicationUnderstanding(**(current.model_dump() | dict(action_candidates=actions,
-                revision=current.revision + 1, updated_at_us=max(current.updated_at_us, self._clock()))))
             work.application_understanding.replace(updated)
             work.commit()
             return updated
+
+    def _source_candidate(self, current, source, request, *, decision=None):
+        key = request.method + ' ' + request.path
+        if len(key) > 256 and decision is None:
+            raise JiejianError(ErrorCode.INPUT_INVALID, '此路径过长，请先整理为可维护的资源参数模板')
+        identity = candidate_id('action', key)
+        previous = next((item for item in current.action_candidates if item.candidate_id == identity), None)
+        evidence = CandidateEvidence(relative_path=f'api-sources/{source.source_id}', line_start=1, line_end=1,
+            detector='API_SOURCE', symbol=request.pointer,
+            content_sha256=hashlib.sha256(encode_json(request.model_dump(mode='json'))).hexdigest())
+        same = previous is not None and evidence in previous.evidence and not previous.stale
+        if same and (decision is None or previous.decision == decision):
+            return current
+        # 新内容不能继承旧排除；明确重新关联或排除才记录本次决定。
+        selected = decision if decision is not None else (previous.decision if same else CandidateDecision.PROPOSED)
+        candidate = (ActionCandidate(**(previous.model_dump() | dict(evidence=tuple(e for e in previous.evidence
+            if (e.relative_path,e.symbol) != (evidence.relative_path,evidence.symbol)) + (evidence,),
+            stale=False, decision=selected))) if previous else ActionCandidate(candidate_id=identity,
+            canonical_key=key if len(key)<=256 else 'api-source:'+identity, display_name=request.label, confidence=CandidateConfidence.MEDIUM,
+            evidence=(evidence,), decision=selected))
+        actions = tuple(candidate if item.candidate_id == identity else item for item in current.action_candidates)
+        if previous is None:
+            actions = (*actions,candidate)
+        return ApplicationUnderstanding(**(current.model_dump() | dict(action_candidates=actions,
+            revision=current.revision+1, updated_at_us=max(current.updated_at_us,self._clock()))))
 
     @staticmethod
     def _project(work, project_id):

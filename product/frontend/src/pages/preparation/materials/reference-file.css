@@ -1,0 +1,9 @@
+.jj-reference-section{display:grid;gap:20px;align-content:start;min-width:0}
+.jj-reference-section>.jj-section-header{margin:0}
+.jj-reference-section .jj-facts{display:grid;gap:18px;margin:0}
+.jj-reference-section p{margin:0;line-height:var(--leading-reading)}
+.jj-reference-section .jj-task-actions{margin-top:8px}
+.jj-reference-result{display:grid;gap:28px;container:reference-result / inline-size}
+.jj-reference-result>.jj-task-actions{margin-top:4px}
+.jj-reference-download{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.jj-reference-method{margin-top:28px}

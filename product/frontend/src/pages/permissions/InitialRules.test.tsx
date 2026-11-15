@@ -27,15 +27,15 @@ it('规则条件切换编辑保留各自草稿，只有生成提案才提交对�
     vi.spyOn(api,'maintenanceDraft').mockResolvedValue({...basis, actors:draft.actors, actions:draft.actions, permissions:[draft.permissions[0],second]});
     const create = vi.spyOn(api,'createMaintenanceProposal').mockResolvedValue({proposal:{project_id:'app',proposal_id:'proposal'}} as never);
     render(<RuleEditor projectId="app" onBack={vi.fn()} onProposal={vi.fn().mockResolvedValue(undefined)} onError={vi.fn()}/>);
-    const editors = await screen.findAllByRole('button',{name:/^编辑.*的适用条件$/});
+    const editors = await screen.findAllByRole('button',{name:/^编辑.*的访问要求$/});
     fireEvent.click(editors[0]);
     const states = screen.getByLabelText('仅检查这些数据状态（选填）');
     fireEvent.change(states,{target:{value:'OPEN、OPEN'}});
     fireEvent.blur(states);
-    fireEvent.click(editors[1]);
+    fireEvent.click(screen.getAllByRole('button',{name:/^编辑.*的访问要求$/})[1]);
     expect(screen.getByLabelText('仅检查这些数据状态（选填）')).toHaveValue('');
     expect(screen.getAllByRole('region',{name:/的适用条件$/})).toHaveLength(1);
-    fireEvent.click(screen.getAllByRole('button',{name:/^编辑.*的适用条件$/})[0]);
+    fireEvent.click(screen.getAllByRole('button',{name:/^编辑.*的访问要求$/})[0]);
     expect(screen.getByLabelText('仅检查这些数据状态（选填）')).toHaveValue('OPEN');
     expect(create).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('变更理由'),{target:{value:'只检查开放中的工单'}});

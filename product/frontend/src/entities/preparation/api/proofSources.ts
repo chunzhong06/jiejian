@@ -2,7 +2,7 @@
 import { request } from '../../../shared/api/http'
 import type { PreparationGuidance } from './preparationGuidance'
 import type { PreparationSuggestionContext } from './preparationSuggestions'
-import type {RelationshipRequirement,FieldMutationRequirement} from '../../permission/api/businessBoundaries'
+import type {RelationshipRequirement,FieldMutationRequirement,PermissionConditions} from '../../permission/api/businessBoundaries'
 import type {DatabaseCapture} from '../../application/api/projects'
 export type RelationshipSourceMapping = {
   subject_groups_path?:string[]|null
@@ -33,7 +33,7 @@ export type CaptureSelection = {basis_id: string; action_id: string; action_revi
 export type CapturePlan = {schema_version: '1'; project_id: string; basis_id: string; plan_hash: string; created_at_us: number
   restore: null | {capture_id:string;resource_id:string;generation:string}
   case: {subject_test_identity_id: string; resource_owner_test_identity_id: string; resource_id: string; resource_binding_id: string}
-  runtime: {source_fingerprint: string; target: {base_url: string; max_response_bytes: number}; actions: Array<{display_name: string; state_changing: boolean; recovery: unknown}>}}
+  runtime: {source_fingerprint: string; target: {base_url: string; max_response_bytes: number}; budget:{max_requests:number;max_duration_us:number}; actions: Array<{display_name: string; state_changing: boolean; recovery: unknown;steps:unknown[]}>}}
 export type CaptureStatus = {capture_id: string; action_id:string;resource_binding_id:string;asset_id: string | null; state: string; target_may_have_run: boolean; operation_may_have_run:boolean; plan_hash: string
   report: null | {state: 'CANDIDATE' | 'INCOMPLETE' | 'RECOVERED'; recovery_verified: boolean; reason_codes: string[]; manifest: ArtifactManifest | null}}
 export type ProofReport = { assessment: 'USABLE' | 'NEEDS_CHANGES' | 'UNSUPPORTED'|'COMPLETED'; checks: Array<{code: string; status: 'CONFIRMED' | 'MISSING' | 'UNAVAILABLE' | 'UNSUPPORTED'; mapping_key: string | null}> }
@@ -52,7 +52,7 @@ export type ProofContext = { project_id: string; basis_id: string; runtime_avail
   sources: ProofSource[]; read_scopes: Array<{scope_id: string; origin: string; identity_ids: string[]; resource_binding_ids: string[]; path_templates: string[]; max_response_bytes: number; timeout_us: number}>
   reference_inputs?: ReferenceInput[]
   reference_recovery_gaps?: Array<{capture_id:string;action_id:string;resource_id:string;owner_identity_id:string;reason:string}>
-  allow_permissions?: Array<{intent_id: string; action_id: string; action_revision: number; subject_actor_id: string; owner_actor_id: string; relation: string}>
+  allow_permissions?: Array<{intent_id: string; action_id: string; action_revision: number; subject_actor_id: string; owner_actor_id: string; relation: string;protected_effect_ids?:string[];conditions?:PermissionConditions|null}>
 }
 export type ProofReceipt = { project_id: string; operation_id: string; operation_kind: string; result: {source_id?: string; state: string; preflight_id?: string; asset_id?: string; capture_id?: string} }
 export type AdoptionPreview = {project_id: string; basis_id: string; source_id: string; revision: number; preflight_id: string; action_label: string; effect_label: string; replaces_existing: boolean; resource_id: string; retained: string[]; recheck: string[]; collection: string; mappings: Record<string,string>; expected_state: string | null; protected_projection: string[]; field_mutation:FieldMutationRequirement|null; identity_claims:ProofConfig['identity_claims']; source_path:string; read_paths:string[]; gui_url:string}

@@ -8,7 +8,6 @@
 .jj-flow-origins { display:grid; gap:28px; margin-top:24px; }
 .jj-flow-origin-content { display:grid; justify-items:start; align-content:start; gap:20px; min-width:0; }
 .jj-flow-origin-content > .jj-button { justify-self:end; }
-.jj-flow-origin-content > .jj-field { width:100%; }
 .jj-flow-origin-content > .jj-button { justify-self:end; }
 .jj-flow-origin-content > p { color:var(--muted); font-size:var(--text-meta); line-height:1.8; }
 .jj-flow-context { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; padding-top:24px; }
@@ -37,32 +36,36 @@
 .jj-flow-recovery { display:grid; gap:24px; border-top:1px solid var(--line); }
 .jj-flow-token-fields { display:grid; gap:24px; margin-top:24px; }
 @container operation-flow (max-width:950px) { .jj-flow-editor { grid-template-columns:220px minmax(0,1fr); } }
-@container operation-flow (max-width:620px) {
-  .jj-flow-workspace .jj-form-grid, .jj-flow-context, .jj-flow-editor, .jj-flow-request { grid-template-columns:minmax(0,1fr); }
+@container operation-flow (max-width:760px) {
+  .jj-flow-editor { grid-template-columns:minmax(0,1fr); }
   .jj-flow-step-index { padding:0 0 24px; }
   .jj-flow-step-index nav { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .jj-flow-step { border-left:0; border-top:1px solid var(--line); padding:24px 0; }
+}
+@container operation-flow (max-width:620px) {
+  .jj-flow-workspace .jj-form-grid, .jj-flow-context, .jj-flow-request { grid-template-columns:minmax(0,1fr); }
   .jj-flow-start, .jj-flow-participants { padding:24px 0; }
 }
 
 
-.jj-flow-inputs { margin-top: 28px; }
+.jj-flow-inputs { margin-top: 28px; min-width:0; container:flow-inputs / inline-size; }
 .jj-flow-inputs > header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; border-bottom:1px solid var(--line); }
 .jj-flow-inputs > header > .jj-button { margin-left:auto; }
 .jj-flow-input-empty { padding: 16px 0; line-height: 1.8; }
-.jj-flow-input-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr) 36px; gap: 12px; align-items: end; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.jj-flow-input-row { display: grid; grid-template-columns: minmax(0,240px) minmax(0,400px) 44px; gap: 20px 24px; align-items: end; padding: 24px 0; }
+.jj-flow-input-row + .jj-flow-input-row { border-top:1px solid var(--line); }
 .jj-flow-input-row .jj-field { min-width: 0; margin: 0; }
 .jj-flow-input-remove { width:44px; min-height:44px; padding: 0; grid-column: 3; grid-row: 1; }
 .jj-flow-input-value { grid-column: 1/3; }
 .jj-flow-input-row > .jj-checkbox { align-self: center; grid-column: 1/3; }
-.jj-flow-input-type { grid-column: 1/3; width: min(100%,220px); }
-@container operation-flow (max-width:620px) {
-  .jj-flow-input-row { grid-template-columns: minmax(0,1fr) 36px; }
+.jj-flow-input-type { grid-column: 1/3; }
+/* 参数区还会嵌在步骤目录旁，按自身宽度换行，不拿整份流程的宽度判断。 */
+@container flow-inputs (max-width:520px) {
+  .jj-flow-input-row { grid-template-columns: minmax(0,1fr) 44px; }
   .jj-flow-input-row > .jj-field, .jj-flow-input-row > .jj-checkbox { grid-column: 1/-1; }
   .jj-flow-input-row > .jj-field:first-child { grid-column: 1; }
   .jj-flow-input-remove { grid-column: 2; }
   .jj-flow-input-value { grid-column: 1/-1; }
-  .jj-flow-input-type { width: 100%; }
 }
 
 .jj-flow-input-builtin { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); gap: 12px; padding: 16px 0; font-size:var(--text-body); border-bottom: 1px solid var(--line); line-height:22px; }
@@ -71,17 +74,22 @@
 .jj-flow-input-builtin dd > span { display: block; color: var(--muted); margin-top: 4px; }
 
 /* 核对与试运行都以短事实为主，按阅读宽度分配双栏，避免宽窗把两项工作拉开。 */
-.jj-flow-confirm { padding:24px; }
+.jj-flow-confirm { padding:24px 0; }
 .jj-flow-confirm > header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .jj-flow-confirm > p { margin-top:12px; line-height:1.8; }
+.jj-flow-confirm > [data-milestone-part=facts] { margin-top:24px; }
 .jj-flow-trial-scope > div { padding:10px 0; }
 .jj-flow-review-facts small,.jj-flow-trial-scope small { color:var(--muted); }
 .jj-flow-review-facts code { overflow-wrap:anywhere; }
-.jj-flow-review-actions,.jj-flow-trial-result-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; align-items:center; gap:10px; padding-top:20px; border-top:1px solid var(--line); }
+.jj-flow-review-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; align-items:center; gap:10px; padding-top:20px; border-top:1px solid var(--line); }
 .jj-flow-trial { padding:0; min-width:0; container:flow-trial / inline-size; }
 .jj-flow-trial-heading { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .jj-flow-trial > header p { color:var(--muted); margin:10px 0 20px; line-height:1.7; }
 .jj-flow-trial-content { padding-top:20px; }
+.jj-flow-trial-participants { padding-bottom:28px; }
+.jj-flow-trial-participants > h3 { margin-bottom:16px; }
+.jj-flow-trial-purpose { margin:12px 0 20px; font-weight:var(--weight-semibold); }
+.jj-flow-trial-participants small { display:block; color:var(--muted); margin-top:4px; }
 .jj-flow-trial-selection > .jj-inline-actions, .jj-flow-trial-preview > .jj-inline-actions { justify-content:flex-end; margin-top:20px; }
 .jj-flow-trial-outline { list-style:none; margin:0 0 24px; padding:0; display:grid; gap:16px; }
 .jj-flow-trial-outline > li { display:flex; align-items:flex-start; gap:14px; padding:18px; background:var(--inset); border:1px solid var(--line); border-radius:var(--radius-control); }
@@ -97,15 +105,10 @@
 .jj-flow-trial-requests code { overflow-wrap:anywhere; }
 /* 记录名称可能较长，局部选择不得以内容最小宽度撑开外层任务列。 */
 .jj-flow-trial-result { min-width:0; display:grid; gap:24px; }
-.jj-flow-trial-result > header { display:grid; gap:8px; }
-.jj-flow-trial-result > header > p, .jj-flow-trial-result > details { margin:0; }
-.jj-flow-trial-step-list { display:grid; }
-.jj-flow-trial-step-list > div { display:grid; gap:10px; padding:20px 0; border-bottom:1px solid var(--line); }
 .jj-flow-trial-step-meta { display:flex; flex-wrap:wrap; gap:8px 20px; color:var(--muted); font-size:var(--text-meta); }
 .jj-flow-trial-step-list code { overflow-wrap:anywhere; font-size:var(--text-meta); }
-.jj-flow-trial-result-actions { border:0; margin-top:0; padding-top:8px; }
 .jj-flow-trial-empty { padding:8px 0 20px; line-height:1.8; }
-@container operation-flow (max-width:620px) { .jj-flow-confirm { padding:20px; } }
+@container operation-flow (max-width:620px) { .jj-flow-confirm { padding:20px 0; } }
 
 .jj-flow-section-heading > .jj-notice { margin-top:20px; }
 
@@ -116,12 +119,28 @@
 .jj-flow-workspace[data-mode=maintain] .jj-flow-participants { padding:28px 0; max-width:900px; }
 .jj-flow-maintenance-actions > .jj-inline-actions { margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
 
-.jj-flow-trial-feedback { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:32px; border-block:1px solid var(--line); padding-block:24px; }
-.jj-flow-trial-feedback > section { min-width:0; display:grid; align-content:start; gap:16px; }
-.jj-flow-page{width:100%;min-width:0;max-width:980px;margin-inline:auto;display:grid;gap:24px;}
+.jj-flow-trial-object,.jj-flow-trial-record-basis { display:grid;align-content:start;gap:16px;min-width:0; }
+.jj-flow-trial-object > header { display:grid;gap:12px; }
+.jj-flow-trial-record-basis > .jj-section-header { margin:0; }
+.jj-flow-trial-stage .jj-task-stage-context .jj-facts { margin:0; }
+/* 组内已由gap安排距离，不叠加普通独立披露区的上下内边距。 */
+.jj-flow-trial-record-basis > details,.jj-flow-trial-step-list details { padding:0; }
+.jj-flow-trial-stage details[open] > summary { margin-bottom:0; }
+.jj-flow-trial-stage .jj-task-stage-current > header { display:grid; gap:12px; }
+.jj-flow-trial-stage :is(h3,p) { margin:0; }
+.jj-flow-trial-step-list { display:grid;gap:20px; }
+.jj-flow-trial-step-list > section { display:grid; gap:12px; padding:0; min-width:0; }
+.jj-flow-trial-step-list > section + section { padding-top:20px; border-top:1px solid var(--line); }
+.jj-flow-trial-step-list details > summary { color:var(--muted); font-size:var(--text-meta); }
+.jj-flow-trial-step-list details[open] > .jj-flow-trial-step-meta { margin-top:16px; }
+.jj-flow-trial-wait { display:flex; align-items:center; gap:12px; line-height:var(--leading-reading); }
+.jj-flow-trial-read-error { display:grid; gap:20px; margin-block:4px 24px; }
+.jj-flow-trial-read-error > * { margin:0; }
+.jj-flow-page{display:grid;gap:24px;}
 .jj-flow-edit:not([hidden]){display:grid;gap:24px;}
+.jj-flow-edit > .jj-back-link { --return-layout-gap:24px; }
 .jj-flow-review{min-width:0;}
-.jj-flow-trial-entry{display:flex;justify-content:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:24px;}
+.jj-flow-trial-entry{margin-bottom:24px;}
 .jj-flow-trial-entry:empty{display:none;}
 .jj-flow-review-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:24px 32px;margin:28px 0;}
 .jj-flow-review-facts > div{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-content:start;}

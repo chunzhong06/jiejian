@@ -12,7 +12,7 @@
 
 ### App.tsx
 
-[源码](../../../product/frontend/src/app/App.tsx)（54 行）。公开声明：`App`。
+[源码](../../../product/frontend/src/app/App.tsx)（55 行）。公开声明：`App`。
 
 ### check-workspace.css
 
@@ -36,7 +36,7 @@
 
 ### shell.css
 
-[源码](../../../product/frontend/src/app/shell.css)（94 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/app/shell.css)（100 行）。公开声明：包、内部机制或样式。
 
 ### Shutdown.tsx
 
@@ -64,13 +64,13 @@
 
 ### providers/UIProvider.tsx
 
-[源码](../../../product/frontend/src/app/providers/UIProvider.tsx)（18 行）。公开声明：`UIProvider`。
+[源码](../../../product/frontend/src/app/providers/UIProvider.tsx)（24 行）。公开声明：`UIProvider`。
 
 ## shell
 
 ### shell/Activity.tsx
 
-[源码](../../../product/frontend/src/app/shell/Activity.tsx)（30 行）。公开声明：`Activity`。
+[源码](../../../product/frontend/src/app/shell/Activity.tsx)（29 行）。公开声明：`Activity`。
 
 ### shell/ApplicationSwitcher.tsx
 
@@ -78,11 +78,11 @@
 
 ### shell/AppShell.tsx
 
-[源码](../../../product/frontend/src/app/shell/AppShell.tsx)（53 行）。公开声明：`AppShell`。
+[源码](../../../product/frontend/src/app/shell/AppShell.tsx)（55 行）。公开声明：`AppShell`。
 
 ### shell/settings.css
 
-[源码](../../../product/frontend/src/app/shell/settings.css)（3 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/app/shell/settings.css)（4 行）。公开声明：包、内部机制或样式。
 
 ### shell/SettingsEntry.tsx
 

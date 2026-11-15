@@ -27,7 +27,7 @@ def wait_for(read, terminal=('SUCCEEDED','FAILED','CANCELLED')):
     raise AssertionError('bounded task wait expired')
 
 
-def ordinary_application(tmp_path, *, regression=False, read_only=False, core=None, source_edits=None, alternate=False,file_delivery=False,recovery_failures=0,async_export=None,database_backend=None,edit_driver=None,edit_proposal=None,edit_source=None,max_requests=None):
+def ordinary_application(tmp_path, *, regression=False, read_only=False, core=None, source_edits=None, alternate=False,file_delivery=False,recovery_failures=0,async_export=None,database_backend=None,edit_driver=None,edit_proposal=None,edit_source=None,max_requests=None,prepare_recordings=True):
     source = tmp_path/'application'
     from tests.support.builders.preparation.record_driver import write_record_driver
     write_record_driver(source,alternate=alternate)
@@ -175,6 +175,9 @@ def ordinary_application(tmp_path, *, regression=False, read_only=False, core=No
             identities.append(core.test_identities.get_record(identity.identity_id))
         action = next(item for item in boundary.actions if item.display_name==command['proposed_actions'][0]['display_name'])
         harness = PreparationHarness(core,project,source,action,actors['负责人'],tuple(identities),action.effect_catalog[0].effect_id)
+        # 手工流程与模型协作验收从真实登录继续，不借用录制接受夹具填充材料。
+        if not prepare_recordings:
+            return harness
         target = add_recording(harness,identity_index=1 if read_only else 0,
             method='GET' if read_only else 'POST',request_path='/api/resources/beta' if read_only else '/api/resources/alpha/publish',
             resource_location='path[2]',request_json={},response_status=202 if async_export is not None else 200)

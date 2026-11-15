@@ -3,6 +3,17 @@ import {expect,it,vi} from 'vitest'
 import {System} from './System'
 import {systemApi,type RuntimeDiagnostics,type UpdateOperation} from '../../entities/runtime/api/system'
 
+it('异常先说明处理对象，通过的组件按需阅读',async()=>{
+ vi.spyOn(systemApi,'diagnostics').mockResolvedValue({checked_at:'2026-11-14T01:00:00Z',components:[{key:'worker',label:'执行服务',ready:false},{key:'browser',label:'检查浏览器',ready:true}],summary_text:'隔离诊断摘要'} as RuntimeDiagnostics)
+ vi.spyOn(systemApi,'updateInfo').mockResolvedValue({version:'1.3.12',portable:false,release_root:'source',workspace:'data',operation:null})
+ render(<System route={{path:'/settings',query:new URLSearchParams('section=system')}} embedded/>)
+ expect(await screen.findByRole('heading',{name:'先处理 1 项运行问题'})).toBeVisible()
+ expect(screen.getByText('执行服务尚未就绪，检查暂不能运行')).toBeVisible()
+ expect(screen.getByText('检查浏览器')).not.toBeVisible()
+ fireEvent.click(screen.getByText('已通过核对的组件 · 1 项'))
+ expect(screen.getByText('检查浏览器')).toBeVisible()
+})
+
 it('同一设置工作面进入更新再返回时同步显示对应内容',async()=>{
   vi.spyOn(systemApi,'diagnostics').mockResolvedValue({checked_at:'2026-11-08T12:00:00Z',components:[],summary_text:'摘要'} as unknown as RuntimeDiagnostics)
   vi.spyOn(systemApi,'updateInfo').mockResolvedValue({version:'1.3.9',portable:false,release_root:'source',workspace:'data',operation:null})

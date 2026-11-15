@@ -4,6 +4,8 @@ import {MaterialEditor} from './MaterialEditor'
 import {preparationApi} from '../../../entities/preparation/api/preparation'
 import type {MaterialDetails,MaterialReference} from '../../../entities/preparation/api/preparation'
 import {ApiError} from '../../../shared/api/http'
+import {operationFlowsApi,type OperationFlow} from '../../../entities/preparation/api/operationFlows'
+import {testIdentitiesApi} from '../../../entities/preparation/api/testIdentities'
 
 const reference:MaterialReference={action_id:'action',action_revision:1,kind:'evidence',member_id:'effect'}
 const details:MaterialDetails={material:reference,status:'SATISFIED',reason_codes:[],retained:true,source_recording_id:'old',confirmed_at_us:100,expected_fingerprint:'basis',observed_at_us:100,recording_context:null,
@@ -15,6 +17,28 @@ beforeEach(()=>{
   vi.spyOn(preparationApi,'previewMaterial').mockResolvedValue(impact)
 })
 async function select(){fireEvent.click(await screen.findByRole('radio'));fireEvent.click(screen.getByRole('button',{name:'核对后用于检查'}))}
+
+it('材料概览只使用准确动作版本的在用流程，不把较新的未采用修订当作当前材料',async()=>{
+  const document:OperationFlow={id:'ofl_current',revision:1,business_action_id:'action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',provenance:'MANUAL',source_recording_id:null,source_fingerprint:null,actual_resource_id:'current-resource',workflow:{steps:[],target_step_id:'target'},recovery:null}
+  vi.spyOn(operationFlowsApi,'context').mockResolvedValue({project_id:'project',source_fingerprint:null,endpoint:null,recordings:[],actions:[{action_id:'action',revision:1,label:'导出资料',state_changing:false,effects:[]}],flows:[{document:{...document,revision:2,actual_resource_id:'unadopted-resource'},adopted:false,in_use:false,configuration_current:true},{document,adopted:true,in_use:true,configuration_current:true}]})
+  vi.spyOn(testIdentitiesApi,'list').mockResolvedValue([{identity_id:'owner',label:'负责人',auth_method:'COOKIE'}] as never)
+  const view=render(<MaterialEditor {...props()} reference={{action_id:'action',action_revision:1,kind:'resource',member_id:'owner'}}/>)
+  expect(await screen.findByText('current-resource')).toBeVisible()
+  expect(screen.queryByText('unadopted-resource')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'建立本次录制'})).not.toBeInTheDocument()
+  view.rerender(<MaterialEditor {...props()} reference={{action_id:'action',action_revision:2,kind:'resource',member_id:'owner'}}/>)
+  await screen.findByRole('radio')
+  expect(screen.queryByText('current-resource')).not.toBeInTheDocument()
+})
+
+it.each([false,true])('材料原因与保留状态分别表达，保留原记录=%s',async retained=>{
+  vi.mocked(preparationApi.material).mockResolvedValue({...details,status:'NEEDS_USER',reason_codes:['UNRECOGNIZED_REASON'],retained})
+  render(<MaterialEditor {...props()}/>);
+  expect(await screen.findByText('当前材料需要重新核对。')).toBeVisible()
+  expect(screen.queryByText('原记录已保留')!==null).toBe(retained)
+  expect(screen.queryByText(/原记录仍保留/)).not.toBeInTheDocument()
+  expect(await screen.findByRole('radio')).toBeVisible()
+})
 
 it('先核对影响，明确采用后才写入一次',async()=>{
   const save=vi.spyOn(preparationApi,'saveMaterial').mockImplementation(async(_,value)=>({...impact,operation_id:value.operation_id,created_at_us:100,result:'SAVED'}))

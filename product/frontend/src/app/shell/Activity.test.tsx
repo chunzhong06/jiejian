@@ -25,11 +25,13 @@ it('中断任务仍能打开原位置，并显示待处理状态',async()=>{
     expect(within(entry).getByText('未完成')).toBeVisible();
 });
 
-it('排队与重试等待显示静态时钟，真实运行继续显示活动图标',async()=>{
+it('排队与重试等待保持静态，真实运行显示活动点和准确阶段',async()=>{
     vi.spyOn(projectsApi,'activity').mockResolvedValue({project_id:'app',revision:3,items:['PENDING','RETRY_WAIT','RUNNING'].map((phase,index)=>({id:String(index),kind:'IDENTITY_PREPARATION',label:'任务 '+index,phase,destination:'/preparation',updated_at_us:1}))});
     render(<Activity projectId="app"/>);
     const pending=await screen.findByRole('link',{name:/^任务 0/});
     expect(pending.querySelector('.anticon-clock-circle')).not.toBeNull();
-    expect(screen.getByRole('link',{name:/^任务 1/}).querySelector('.anticon-spin')).toBeNull();
-    expect(screen.getByRole('link',{name:/^任务 2/}).querySelector('.anticon-spin')).not.toBeNull();
+    expect(screen.getByRole('link',{name:/^任务 1/}).querySelector('.jj-activity-dots')).toBeNull();
+    const running=screen.getByRole('link',{name:/^任务 2/});
+    expect(running.querySelector('.jj-activity-dots')).not.toBeNull();
+    expect(within(running).getByText('正在执行')).toBeVisible();
 });

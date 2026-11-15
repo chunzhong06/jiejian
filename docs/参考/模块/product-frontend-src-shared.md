@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（34 个文件）。
+按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（35 个文件）。
 
 ## api
 
@@ -42,11 +42,11 @@
 
 ### lib/motion.ts
 
-[源码](../../../product/frontend/src/shared/lib/motion.ts)（80 行）。公开声明：`animateMotion`、`animateOverlay`、`motionDuration`、`reducedMotion`、`revealContent`、`revealPage`、`springSample`、`stopAllMotion`等。
+[源码](../../../product/frontend/src/shared/lib/motion.ts)（93 行）。公开声明：`animateMotion`、`animateOverlay`、`layoutBounds`、`motionDuration`、`reducedMotion`、`revealContent`、`revealPage`、`springSample`等。
 
 ### lib/motionScene.ts
 
-[源码](../../../product/frontend/src/shared/lib/motionScene.ts)（152 行）。公开声明：`connectMotionScene`。
+[源码](../../../product/frontend/src/shared/lib/motionScene.ts)（153 行）。公开声明：`connectMotionScene`。
 
 ### lib/motionTiming.ts
 
@@ -54,7 +54,7 @@
 
 ### lib/navigation.ts
 
-[源码](../../../product/frontend/src/shared/lib/navigation.ts)（53 行）。公开声明：`Route`、`checkPlanDestination`、`go`、`historyLocation`、`readRoute`、`replaceDestination`、`returnDestination`、`returnDestinationLabel`等。
+[源码](../../../product/frontend/src/shared/lib/navigation.ts)（55 行）。公开声明：`Route`、`checkPlanDestination`、`go`、`historyLocation`、`readRoute`、`replaceDestination`、`returnDestination`、`returnDestinationLabel`等。
 
 ### lib/operations.ts
 
@@ -78,7 +78,7 @@
 
 ### lib/selectionIndicator.ts
 
-[源码](../../../product/frontend/src/shared/lib/selectionIndicator.ts)（67 行）。公开声明：`useSelectionIndicator`。
+[源码](../../../product/frontend/src/shared/lib/selectionIndicator.ts)（69 行）。公开声明：`useSelectionIndicator`。
 
 ### lib/settings.ts
 
@@ -106,7 +106,7 @@
 
 ### styles/controls.css
 
-[源码](../../../product/frontend/src/shared/styles/controls.css)（97 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/controls.css)（106 行）。公开声明：包、内部机制或样式。
 
 ### styles/cross-page.css
 
@@ -114,15 +114,15 @@
 
 ### styles/foundation.css
 
-[源码](../../../product/frontend/src/shared/styles/foundation.css)（194 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/foundation.css)（216 行）。公开声明：包、内部机制或样式。
 
 ### styles/loading.css
 
-[源码](../../../product/frontend/src/shared/styles/loading.css)（14 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/loading.css)（30 行）。公开声明：包、内部机制或样式。
 
 ### styles/motion.css
 
-[源码](../../../product/frontend/src/shared/styles/motion.css)（151 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/motion.css)（162 行）。公开声明：包、内部机制或样式。
 
 ### styles/navigation.css
 
@@ -130,7 +130,7 @@
 
 ### styles/patterns.css
 
-[源码](../../../product/frontend/src/shared/styles/patterns.css)（129 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/patterns.css)（145 行）。公开声明：包、内部机制或样式。
 
 ### styles/shapes.css
 
@@ -138,11 +138,11 @@
 
 ### styles/tokens.css
 
-[源码](../../../product/frontend/src/shared/styles/tokens.css)（151 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/tokens.css)（166 行）。公开声明：包、内部机制或样式。
 
 ### styles/workspaces.css
 
-[源码](../../../product/frontend/src/shared/styles/workspaces.css)（73 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/styles/workspaces.css)（76 行）。公开声明：包、内部机制或样式。
 
 ## ui
 
@@ -150,9 +150,13 @@
 
 [源码](../../../product/frontend/src/shared/ui/actions.tsx)（31 行）。公开声明：`ActionLink`、`Button`。
 
+### ui/ActivityDots.tsx
+
+[源码](../../../product/frontend/src/shared/ui/ActivityDots.tsx)（2 行）。公开声明：`ActivityDots`。
+
 ### ui/Choice.tsx
 
-[源码](../../../product/frontend/src/shared/ui/Choice.tsx)（22 行）。公开声明：`Choice`。
+[源码](../../../product/frontend/src/shared/ui/Choice.tsx)（24 行）。公开声明：`Choice`。
 
 ### ui/CommandMenu.tsx
 
@@ -180,7 +184,7 @@
 
 ### ui/feedback.tsx
 
-[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（40 行）。公开声明：`Badge`、`ContextNote`、`Empty`、`ErrorNote`、`FeedbackTone`、`InlineFeedback`、`Loading`、`Notice`等。
+[源码](../../../product/frontend/src/shared/ui/feedback.tsx)（44 行）。公开声明：`Badge`、`ContextNote`、`Empty`、`ErrorNote`、`FeedbackTone`、`InlineFeedback`、`Loading`、`Notice`等。
 
 ### ui/FilePicker.css
 
@@ -196,7 +200,7 @@
 
 ### ui/IndexSelection.css
 
-[源码](../../../product/frontend/src/shared/ui/IndexSelection.css)（26 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/ui/IndexSelection.css)（24 行）。公开声明：包、内部机制或样式。
 
 ### ui/IndexSelection.tsx
 
@@ -208,7 +212,7 @@
 
 ### ui/layout.tsx
 
-[源码](../../../product/frontend/src/shared/ui/layout.tsx)（42 行）。公开声明：`Field`、`FormColumns`、`Heading`、`ObjectHeading`、`ObjectIdentity`、`SectionHeading`、`TaskActions`。
+[源码](../../../product/frontend/src/shared/ui/layout.tsx)（53 行）。公开声明：`Field`、`FormColumns`、`Heading`、`ObjectHeading`、`ObjectIdentity`、`SectionHeading`、`TaskActions`、`TaskFrame`等。
 
 ### ui/MotionRoot.tsx
 
@@ -228,7 +232,7 @@
 
 ### ui/PageSkeleton.tsx
 
-[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（23 行）。公开声明：`PageSkeleton`、`pageTitle`。
+[源码](../../../product/frontend/src/shared/ui/PageSkeleton.tsx)（28 行）。公开声明：`PageSkeleton`、`pageTitle`。
 
 ### ui/PageSurface.tsx
 
@@ -268,15 +272,15 @@
 
 ### ui/Tabs.css
 
-[源码](../../../product/frontend/src/shared/ui/Tabs.css)（50 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/shared/ui/Tabs.css)（51 行）。公开声明：包、内部机制或样式。
 
 ### ui/Tabs.tsx
 
-[源码](../../../product/frontend/src/shared/ui/Tabs.tsx)（19 行）。公开声明：`LinkTabs`、`Tabs`。
+[源码](../../../product/frontend/src/shared/ui/Tabs.tsx)（40 行）。公开声明：`LinkTabs`、`Tabs`。
 
 ### ui/TaskSurface.tsx
 
-[源码](../../../product/frontend/src/shared/ui/TaskSurface.tsx)（15 行）。公开声明：`TaskSurface`。
+[源码](../../../product/frontend/src/shared/ui/TaskSurface.tsx)（30 行）。公开声明：`TaskSurface`、`useTaskSurfaceFocus`。
 
 ### ui/WorkflowSteps.tsx
 

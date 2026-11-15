@@ -34,7 +34,7 @@
 
 ### cli/check_client.py
 
-[源码](../../../product/backend/interfaces/cli/check_client.py)（127 行）。公开声明：`CheckClient`、`execution_exit`。
+[源码](../../../product/backend/interfaces/cli/check_client.py)（132 行）。公开声明：`CheckClient`、`execution_exit`。
 
 ### cli/gui_browser.py
 
@@ -60,7 +60,7 @@
 
 ### cli/commands/checks.py
 
-[源码](../../../product/backend/interfaces/cli/commands/checks.py)（141 行）。公开声明：`preview`、`run`、`request`、`execute`、`status`、`wait`、`cancel`。
+[源码](../../../product/backend/interfaces/cli/commands/checks.py)（152 行）。公开声明：`report`、`preview`、`run`、`request`、`execute`、`status`、`wait`、`cancel`。
 
 ### cli/commands/system.py
 
@@ -104,7 +104,7 @@
 
 ### http/mcp/collaboration.py
 
-[源码](../../../product/backend/interfaces/http/mcp/collaboration.py)（81 行）。公开声明：`register_collaboration_tools`。
+[源码](../../../product/backend/interfaces/http/mcp/collaboration.py)（84 行）。公开声明：`register_collaboration_tools`。
 
 ### http/mcp/errors.py
 
@@ -144,7 +144,7 @@
 
 ### http/routers/applications/experience.py
 
-[源码](../../../product/backend/interfaces/http/routers/applications/experience.py)（135 行）。公开声明：`build_experience_router`、`OfficialSampleStartRequest`、`OfficialSampleStopRequest`、`OfficialSampleVersionRequest`、`OfficialBoundaryChoice`、`OfficialObservationRequest`。
+[源码](../../../product/backend/interfaces/http/routers/applications/experience.py)（145 行）。公开声明：`build_experience_router`、`OfficialSampleStartRequest`、`OfficialSampleStopRequest`、`OfficialSampleVersionRequest`、`OfficialBoundaryChoice`、`OfficialObservationRequest`。
 
 ### http/routers/applications/onboarding.py
 
@@ -156,7 +156,7 @@
 
 ### http/routers/applications/workbench.py
 
-[源码](../../../product/backend/interfaces/http/routers/applications/workbench.py)（118 行）。公开声明：`CreateApplication`、`SaveEnvironment`、`AttachSource`、`ActivateEnvironment`、`ImportPreview`、`ImportAccept`、`SourceAnnotation`、`SourceProposal`等。
+[源码](../../../product/backend/interfaces/http/routers/applications/workbench.py)（136 行）。公开声明：`CreateApplication`、`SaveEnvironment`、`AttachSource`、`ActivateEnvironment`、`ImportPreview`、`ImportAccept`、`SourceAnnotation`、`SourceProposal`等。
 
 ## http/routers/boundaries
 
@@ -166,7 +166,7 @@
 
 ### http/routers/boundaries/business_boundaries.py
 
-[源码](../../../product/backend/interfaces/http/routers/boundaries/business_boundaries.py)（319 行）。公开声明：`BoundaryProposalCreateRequest`、`BoundaryDecisionRequest`、`RuleCandidateSaveRequest`、`RuleCandidateProposalRequest`、`BoundaryReviewRequest`、`ScopeBatchChoiceRequest`、`ScopeBatchRequest`、`CoverageLinkRequest`等。
+[源码](../../../product/backend/interfaces/http/routers/boundaries/business_boundaries.py)（333 行）。公开声明：`BoundaryProposalCreateRequest`、`BoundaryDecisionRequest`、`RuleCandidateSaveRequest`、`RuleCandidateProposalRequest`、`BoundaryReviewRequest`、`ScopeBatchChoiceRequest`、`ScopeBatchRequest`、`CoverageLinkRequest`等。
 
 ## http/routers/changes
 
@@ -180,7 +180,7 @@
 
 ### http/routers/changes/source_changes.py
 
-[源码](../../../product/backend/interfaces/http/routers/changes/source_changes.py)（110 行）。公开声明：`SourceChangeCreateRequest`、`SourceChangeRegistrationRequest`、`build_source_changes_router`。
+[源码](../../../product/backend/interfaces/http/routers/changes/source_changes.py)（111 行）。公开声明：`SourceChangeCreateRequest`、`SourceChangeRegistrationRequest`、`build_source_changes_router`。
 
 ## http/routers/checks
 

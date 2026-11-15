@@ -23,6 +23,7 @@ from product.protocols.checks.scenario_execution import ScenarioNodeProgress
 from product.protocols.checks.routine_reference import FrozenRoutineReference
 from product.protocols.web.environment import FrozenEnvironment
 from product.backend.application.reading import accepted_once, projection_read
+from product.backend.application.examples.change_labels import gallery_change_labels
 
 
 class CheckRunView(WireModel):
@@ -96,6 +97,8 @@ class CheckHistoryItem(WireModel):
     status: CheckRunStatus
     action_labels: tuple[str, ...] = ()
     change_id: str | None = None
+    change_reason: str | None = None
+    change_label: str | None = None
     source_run_id: str | None = None
     matching_cases:tuple[str,...]=()
     matching_verdicts:tuple[str,...]=()
@@ -222,6 +225,12 @@ class CheckResultReader:
                     change_id=change_id, source_run_id=source_run_id,matching_cases=tuple(item.case_id for item in matched),matching_verdicts=tuple(item.verdict.value for item in matched)))
                 if len(items) == limit:
                     break
+            # 名称只补充到已验证的准确修改引用；批量读取声明，不重读源码或改写发布包。
+            descriptions = work.source_changes.change_descriptions(project_id,
+                tuple({item.change_id for item in items if item.change_id is not None}))
+            labels = gallery_change_labels(work, project_id, set(descriptions))
+            items = [item.model_copy(update=dict(change_reason=descriptions.get(item.change_id, {}).get('reason'),
+                change_label=labels.get(item.change_id))) for item in items]
             cursor = None
             more=last is not None and (work.runs.has_after_for_project(project_id,last.created_at_us,last.run_id) if rule_reference is None else
                 bool(work.rule_history.runs(project_id,rule_reference,limit=1,before_time=last.created_at_us,before_run=last.run_id)))

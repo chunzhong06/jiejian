@@ -2,17 +2,16 @@ import {TaskActions} from '../../shared/ui/layout'
 import {useMilestone} from '../../shared/lib/milestone'
 import {useState} from 'react'
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
-import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined'
 import {experienceApi,type OfficialBoundaryDraftDto} from '../../entities/application/api/experience'
 import type {BoundaryEditorDto,BoundaryProposalDto} from '../../entities/permission/api/businessBoundaries'
 import {ProposalQueue} from '../../entities/permission/ui/ProposalQueue'
 import {assertProject} from '../../shared/model/page'
 import {useRead} from '../../shared/lib/useRead'
-import {scopedPath,returnDestinationLabel} from '../../shared/lib/navigation'
+import {scopedPath,returnDestinationLabel,withReturnDestination} from '../../shared/lib/navigation'
 import {Button,ActionLink} from '../../shared/ui/actions'
 import {Choice} from '../../shared/ui/Choice'
 import {Badge,ErrorNote,Loading,Notice} from '../../shared/ui/feedback'
-import {Heading,ObjectIdentity} from '../../shared/ui/layout'
+import {Heading,ObjectIdentity,ObjectHeading} from '../../shared/ui/layout'
 import './official-rules.css'
 
 /** 只比较实际展示的整份命令；服务端内容变化时转回完整提案审阅。 */
@@ -31,8 +30,7 @@ export function OfficialRules({projectId,name,busy,uncertain,pending,onApprove,o
   return <div className="jj-official-rules-review">
     <div className="jj-back-link"><ActionLink kind="quiet" href={'#'+scopedPath('/environment',projectId)}><ArrowLeftOutlined aria-hidden="true"/>返回官方示例</ActionLink></div>
     <Heading title={`确认${name}的访问规则`}/>
-    <p className="jj-muted">示例已启动。核对预置规则，批准后继续准备检查材料。</p>
-    {read.error&&<ErrorNote error={read.error}/>}
+    {read.error?<ErrorNote error={read.error} onRetry={read.reload} retryLabel="重新读取示例访问要求"/>:command&&<div className="jj-official-purpose"><p>负责人保管资料，评审访问公开内容。先确认两者可以取得哪些资料，再检查程序是否遵守。</p>{draft.choice_permission_item_id&&<p className="jj-small jj-muted">公开展示版是否允许评审下载，由你决定；内部完整包的访问要求在表中单独保留。</p>}</div>}
     {uncertain&&<Notice tone="caution">上次提交的结果尚未确认。先读取待审提案，避免重复提交。<Button busy={busy} onClick={onRecover} busyLabel="正在查询">读取待审提案</Button></Notice>}
     <ProposalQueue items={pending} busy={busy} onReview={onReview}/>
     {!command?(!read.error&&<Loading>正在读取预置访问规则</Loading>):<>
@@ -41,7 +39,7 @@ export function OfficialRules({projectId,name,busy,uncertain,pending,onApprove,o
           const actor=actors.get(rule.subject_actor_item_id),owner=actors.get(rule.resource_owner_actor_item_id),action=actions.get(rule.business_action_item_id)
           const scope=rule.relation==='OWNS'?'自己的资源':rule.relation==='SAME_ROLE_OTHER_ACCOUNT'?`其他${owner?.display_name??'同角色'}账号的资源`:`${owner?.display_name??'指定所有者'}的资源`
           const title=(actor?.display_name??'操作主体')+(action?.display_name??'业务操作')
-          return <tr key={rule.item_id}><th scope="row"><strong>{title}</strong><small>{action?.effect_catalog.filter(effect=>rule.protected_effect_item_ids.includes(effect.item_id)).map(effect=>effect.business_label).join('；')}</small></th><td className="jj-table-state" data-label="数据范围">{scope}</td><td className="jj-table-state" data-label="访问要求">{rule.item_id===draft!.choice_permission_item_id?<Choice align="center" className="jj-table-choice" aria-label={title+'的访问要求'} value={choice?'ALLOW':'DENY'} disabled={busy||uncertain||read.loading} onValueChange={value=>{const next=value==='ALLOW';setChoice(next);sessionStorage.setItem(key,value)}}><option value="ALLOW">允许</option><option value="DENY">禁止</option></Choice>:rule.expectation==='ALLOW'?'允许':'禁止'}</td></tr>
+          return <tr key={rule.item_id}><th scope="row"><strong>{title}</strong><small>{action?.effect_catalog.filter(effect=>rule.protected_effect_item_ids.includes(effect.item_id)).map(effect=>effect.business_label).join('；')}</small></th><td className="jj-table-state" data-label="数据范围">{scope}</td><td className="jj-table-state" data-label="访问要求">{rule.item_id===draft!.choice_permission_item_id?<Choice measure="compact" align="center" className="jj-table-choice" aria-label={title+'的访问要求'} value={choice?'ALLOW':'DENY'} disabled={busy||uncertain||read.loading} onValueChange={value=>{const next=value==='ALLOW';setChoice(next);sessionStorage.setItem(key,value)}}><option value="ALLOW">允许</option><option value="DENY">禁止</option></Choice>:rule.expectation==='ALLOW'?'允许':'禁止'}</td></tr>
         })}</tbody></table></div>
       </section>
       <details className="jj-official-definitions"><summary>角色与业务定义</summary>{command.proposed_actors.map(actor=><p key={actor.item_id}><strong>{actor.display_name}</strong> · {actor.description}</p>)}{command.proposed_actions.map(action=><p key={action.item_id}><strong>{action.display_name}</strong> · {action.description}</p>)}</details>
@@ -53,5 +51,7 @@ export function OfficialRules({projectId,name,busy,uncertain,pending,onApprove,o
 
 export function OfficialRulesReady({projectId,origin,onRules}:{projectId:string;origin:string|null;onRules:()=>void}){
   const completion=useMilestone<HTMLDivElement>('rules:'+projectId,true,'rules')
-  return <div ref={completion} className="jj-official-rules-review"><Heading title="示例规则已确认"/><ObjectIdentity name={<h2>访问规则已生效</h2>} status={<Badge tone="positive">已批准</Badge>}/><p data-milestone-part="facts" className="jj-official-ready-copy">接下来准备示例账号、操作和业务结果证明。先核对本次准备的范围，再开始执行。</p><footer data-milestone-part="actions" className="jj-task-actions"><Button kind="quiet" onClick={onRules}>查看访问规则</Button><ActionLink kind="primary" href={'#'+scopedPath(origin??'/preparation?prepare_example=1',projectId)}>{origin?returnDestinationLabel(origin):'准备示例材料'}<ArrowRightOutlined aria-hidden="true"/></ActionLink></footer></div>
+  const prepare=!origin||/^\/(workspace|environment)(\?|$)/.test(origin)
+  const next=prepare?withReturnDestination('/preparation?prepare_example=1',origin??'/workspace'):origin
+  return <div ref={completion} className="jj-official-rules-review"><ObjectHeading level={1} title="示例规则已确认" status={<Badge tone="positive">已批准</Badge>}/><div data-milestone-part="facts" className="jj-official-ready-copy"><p>访问规则已生效。</p><p>接下来准备示例账号、操作和业务结果证明。先核对本次准备的范围，再开始执行。</p></div><footer data-milestone-part="actions" className="jj-task-actions"><Button kind="quiet" onClick={onRules}>查看访问规则</Button><ActionLink kind="primary" href={'#'+scopedPath(next,projectId)}>{prepare?'准备示例材料':returnDestinationLabel(origin!)}</ActionLink></footer></div>
 }

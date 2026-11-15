@@ -35,6 +35,70 @@ class RuleCandidateService:
         self._preparation = preparation
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
 
+    def validation_plan(self, project_id, *, candidate_id=None, revision=None, intent_id=None):
+        """只读准确要求与当前材料；候选评估不转提案，也不探测目标。"""
+        from product.backend.application.business_boundaries.validation import build_validation_plan
+        if revision is not None and candidate_id is None or candidate_id is not None and intent_id is not None:
+            raise JiejianError(ErrorCode.INPUT_INVALID, '请使用准确候选，或选择正式权限要求')
+        with self._uow_factory() as work:
+            formal = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
+            value = None if candidate_id is None else self._required(work, project_id, candidate_id, revision)
+            draft = formal
+            if value is not None:
+                merged = self._merge(value, formal)
+                draft = formal.model_copy(update={name: getattr(merged, name) for name in ('actors', 'actions', 'permissions')})
+            if intent_id is not None and not any(item.intent_id == intent_id for item in formal.permissions):
+                raise JiejianError(ErrorCode.RECORD_NOT_FOUND, '这条正式权限要求已不在当前范围')
+            prepared = None if self._preparation is None else self._preparation.get(project_id, work=work)
+            return build_validation_plan(work, draft, prepared, candidate=value, intent_id=intent_id, formal=formal)
+
+    def preview_validation(self, project_id, command):
+        """沿正式维护规划器校验未保存编辑；不生成提案、修订或目标请求。"""
+        from product.backend.application.business_boundaries.reading.queries import _maintenance_facts
+        from product.backend.application.business_boundaries.proposals.maintenance import maintenance_to_proposal_command
+        from product.backend.application.business_boundaries.validation import build_validation_plan
+        with self._uow_factory() as work:
+            facts = _maintenance_facts(work, project_id, allow_empty=True)
+            maintenance_to_proposal_command(project_id, command, facts.actor_roots, facts.action_roots,
+                facts.actors, facts.actions, facts.permissions, facts.policy_epoch)
+            formal = self._boundaries.maintenance_draft(project_id, work=work, allow_empty=True)
+            draft = formal.model_copy(update={name: getattr(command, name) for name in ('actors', 'actions', 'permissions')})
+            prepared = None if self._preparation is None else self._preparation.get(project_id, work=work)
+            plan = build_validation_plan(work, draft, prepared, formal=formal)
+            return plan.model_copy(update={'draft_fingerprint': boundary_sha256(command.model_dump(mode='json'))})
+
+    def open_validation_question(self, project_id, requirement_id, command):
+        """将系统问题交给原候选范围审阅；原SAVE回执先于当前依据恢复。"""
+        from product.backend.domain.boundaries.rule_candidates import ScopedCandidateContentInput
+        from product.backend.domain.boundaries.candidate_scope import RequirementSource
+        from product.backend.domain.boundaries.candidate_reviews import SupportingNote
+        excerpt = '权限边界核对 ' + requirement_id + ' / ' + command.question_fingerprint
+        request_hash = boundary_sha256({'requirement_id': requirement_id, **command.model_dump(mode='json')})
+        note_id = 'note_' + request_hash[:16]
+        with self._uow_factory() as work:
+            receipt = work.rule_candidates.receipt(project_id, 'SAVE', command.operation_id)
+            if receipt:
+                saved = self._required(work, project_id, receipt[1], receipt[2])
+                if (not any(item.requirement_id == requirement_id and item.source_excerpt == excerpt for item in saved.content.requirement_sources)
+                        or not any(item.note_id == note_id and item.text == '验证方案请求 ' + request_hash for item in saved.supporting_notes)):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, '操作标识已用于其他内容')
+                return self._view(work, saved)
+            referenced = None if command.candidate_id is None else self._required(work, project_id, command.candidate_id, command.revision)
+        plan = self.validation_plan(project_id, candidate_id=command.candidate_id, revision=command.revision)
+        if plan.fingerprint != command.expected_fingerprint:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '验证方案已变化，请重新读取后核对', details={'reason': 'CONTEXT_STALE'})
+        question = next((item for item in plan.questions if item.requirement_id == requirement_id and item.fingerprint == command.question_fingerprint), None)
+        if question is None or question.status not in {'NEEDS_DECISION', 'RECHECK'}:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, '这项问题已有审阅记录，请读取原记录继续')
+        original = None if referenced is None else referenced.content.original_text
+        content = ScopedCandidateContentInput(original_text=original or question.basis + '\n' + question.question,
+            requirement_sources=(RequirementSource(requirement_id=requirement_id, title=question.question,
+                origin='AGENT', source_excerpt=excerpt, interpretation=question.question),))
+        return self.save(project_id, RuleCandidateSave(operation_id=command.operation_id,
+            candidate_id=command.candidate_id, expected_revision=command.revision, merge=command.candidate_id is not None,
+            expected_basis_id=plan.basis_id, content=content, supporting_notes=(SupportingNote(note_id=note_id,
+                kind='CAPABILITY_INFORMATION', text='验证方案请求 ' + request_hash),)), submitted_via='LOCAL_GUI')
+
     def context(self, project_id: str, *, offset: int = 0, archived: bool = False, include_preparation: bool = True):
         if type(offset) is not int or offset < 0:
             raise JiejianError(ErrorCode.INPUT_INVALID, "候选列表位置无效")
@@ -81,6 +145,7 @@ class RuleCandidateService:
                 "next_offset": offset + 50 if len(candidates) > 50 else None}
         # 正式准备仍由原服务现场投影；读取上下文不生成绑定或执行目标。
         result["preparation"] = None if self._preparation is None or not include_preparation else self._preparation.get(project_id)
+        result['validation_plan'] = self.validation_plan(project_id) if include_preparation else None
         return result
 
     def save(self, project_id: str, command: RuleCandidateSave, *, submitted_via: str):

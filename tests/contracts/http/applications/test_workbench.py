@@ -4,6 +4,29 @@ from uuid import uuid4
 from tests.support.builders.control_plane import TestClient, create_app
 
 
+def test_request_review_requires_local_control_current_source_and_returns_focused_state(tmp_path):
+    app=create_app(tmp_path/'instance',start_worker=False)
+    with TestClient(app) as client:
+        project=client.post('/api/applications',json={'operation_id':uuid4().hex,'name':'来源核对'}).json()['data']['project_id']
+        root=f'/api/projects/{project}'
+        raw=json.dumps({'openapi':'3.0.3','paths':{'/api/next':{'get':{'responses':{'200':{'description':'ok'}}}}}})
+        preview=client.post(root+'/api-sources/preview',json={'kind':'OPENAPI','raw':raw}).json()['data']
+        source=client.post(root+'/api-sources/accept',json=dict(candidate_id=preview['candidate_id'],source_id='src_'+uuid4().hex,
+            name='新增接口',expected_revision=0,expected_fingerprint=preview['fingerprint'])).json()['data']
+        item=source['requests'][0]['item_id']
+        path=root+'/api-sources/'+source['source_id']+'/requests/'+item+'/review'
+        revision=app.state.context.application_understanding.get(project).revision
+        command=dict(expected_revision=revision,expected_source_revision=1,decision='REJECTED')
+        assert client.put(path,json=command,headers={'Origin':'https://foreign.invalid'}).status_code==403
+        assert client.put(path,json=command|{'expected_source_revision':2}).status_code==409
+        assert client.put(path,json=command).status_code==200
+        assert client.put(path,json=command).status_code==200
+        coverage=client.get(root+'/discovery-coverage',params={'source_id':source['source_id'],'request_id':item}).json()['data']
+        assert coverage['items'][0]['request_id']==item and coverage['items'][0]['status']=='EXCLUDED'
+        assert client.get(root+'/discovery-coverage',params={'source_id':source['source_id']}).status_code==400
+        assert app.state.context.business_boundaries.view(project).policy_epoch==0
+
+
 def test_application_rejection_reports_safe_field_and_does_not_accept(tmp_path):
     app = create_app(tmp_path / 'instance', start_worker=False)
     with TestClient(app) as client:

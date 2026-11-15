@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 
 from product.backend.domain.errors import ErrorCode, JiejianError
@@ -125,6 +126,12 @@ def _prepare_dependencies(root,manifest,node,var_dir,*,cancelled):
         environment.update(PATH=str(node.parent) + os.pathsep + str(Path(environment.get('SYSTEMROOT', 'C:/Windows')) / 'System32'),
             TEMP=str(temporary), TMP=str(temporary), npm_config_userconfig=str(configuration), npm_config_globalconfig=str(global_configuration),
             npm_config_cache=str(Path(var_dir).resolve() / 'cache/npm-downloads'), npm_config_update_notifier='false')
+        if plan.allow_install_scripts:
+            # node-gyp 需要 Python 和系统安装目录；不继承用户配置或其他宿主变量。
+            environment['PYTHON'] = str(Path(sys.executable).resolve())
+            environment['npm_package_config_node_gyp_devdir'] = str(Path(var_dir).resolve() / 'cache/npm-downloads/node-gyp')
+            if os.environ.get('PROGRAMDATA'):
+                environment['PROGRAMDATA'] = os.environ['PROGRAMDATA']
         arguments = ['ci', '--no-audit', '--no-fund', '--bin-links=true', '--ignore-scripts=' + ('false' if plan.allow_install_scripts else 'true')]
         _run(node, npm, arguments, cwd=source, environment=environment,
             tree_name='jiejian-npm-' + manifest.instance_id, cancelled=cancelled)

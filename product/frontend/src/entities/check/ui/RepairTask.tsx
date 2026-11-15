@@ -1,8 +1,10 @@
+import {AgentAssistAction} from '../../runtime/ui/AgentAssistAction'
 import {useMilestoneTransition} from '../../../shared/lib/milestone'
 import './RepairTask.css'
 
 import {WorkflowSteps} from '../../../shared/ui/WorkflowSteps'
 import {useState} from 'react'
+import {TaskActions} from '../../../shared/ui/layout'
 import {preparationApi} from '../../preparation/api/preparation'
 import ArrowLeftOutlined from '@ant-design/icons/ArrowLeftOutlined'
 import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined'
@@ -10,7 +12,6 @@ import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined'
 import type {RuleItem} from '../../permission/api/ruleWorkspace'
 import {repairReference,type ProjectRepair} from '../api/repairs'
 import {AgentHandoff} from '../ui/AgentHandoff'
-import {ChangeRegistration,changeTargetOptions} from '../../source-change/ui/ChangeRegistration'
 import {sourceChangesApi} from '../../source-change/api/sourceChanges'
 import {developmentApi} from '../../source-change/api/development'
 import {RuntimeActivation} from '../../source-change/ui/RuntimeActivation'
@@ -21,10 +22,11 @@ import {useRead} from '../../../shared/lib/useRead'
 import {text,date} from '../../../shared/lib/format'
 import {assertProject} from '../../../shared/model/page'
 import {issueDestination} from '../issueDestination'
+import {OfficialRepair} from './OfficialRepair'
 
 type Issue=ProjectRepair['tasks'][number]
-export function RepairTask({rule,rules,issue,projectId,changeId,onError,onReload,returnTo,embedded=false,location}:{rule:RuleItem;rules:RuleItem[];issue:Issue;projectId:string;changeId?:string|null;returnTo?:string;embedded?:boolean;location?:string;onError:(error:unknown)=>void;onReload:()=>void}) {
-    const [register,setRegister]=useState(false),[assist,setAssist]=useState(false),[runtimeReady,setRuntimeReady]=useState(false)
+export function RepairTask({rule,issue,projectId,changeId,onError,onReload,returnTo,embedded=false,location,official=false}:{rule:RuleItem;issue:Issue;projectId:string;changeId?:string|null;returnTo?:string;embedded?:boolean;location?:string;official?:boolean;onError:(error:unknown)=>void;onReload:()=>void}) {
+    const [assist,setAssist]=useState(false),[runtimeReady,setRuntimeReady]=useState(false)
     const selected=changeId??issue.change_id
     const plainPath=issueDestination(issue.contract,undefined,{section:'repair'})
     const basePath=location??(returnTo?withReturnDestination(plainPath,returnTo):plainPath)
@@ -47,28 +49,31 @@ export function RepairTask({rule,rules,issue,projectId,changeId,onError,onReload
     const missingMaterials=currentMaterials.filter(item=>!item.ready)
     const plan='/reports?'+new URLSearchParams({view:'plan',change_id:selected??'',rule_id:rule.permission.intent_id,repair_reference:issue.contract.repair_fingerprint,return_to:path})
     const reload=()=>{detail.reload();materials.reload();onReload()}
+    const openRegistration=()=>go(withReturnDestination('/changes?view=register&repair_reference='+encodeURIComponent(issue.contract.repair_fingerprint),path))
     // 嵌入态沿用父页的问题标题，主动作留在当前任务内，原题依据作为辅助内容。
     const SectionTitle=embedded?'h3':'h2'
-    const originalLink=<ActionLink navigationScope="page" href={'#'+scopedPath(original)} kind="quiet">查看原问题与证据<ArrowRightOutlined aria-hidden="true"/></ActionLink>
-    const advance=!register&&(verified||!failed&&runtimeReady&&linked)?<div data-milestone-part="actions" className="jj-repair-task-advance">{verified?<ActionLink navigationScope="page" href={'#'+scopedPath('/reports?run_id='+encodeURIComponent(issue.verification!.run_id)+'&return_to='+encodeURIComponent(path))} kind="primary">查看复验结果<ArrowRightOutlined aria-hidden="true"/></ActionLink>:<Button kind="primary" disabled={stale} onClick={()=>go(plan)}>{missingMaterials.length?'补齐本题材料':'核对原问题复验范围'}<ArrowRightOutlined aria-hidden="true"/></Button>}</div>:null
+    const manual=<section className="jj-repair-task-start"><p>{failed?'上次复验仍发现原问题，请继续修改后登记。':'在开发工具中修复应用后，登记修改的文件并加载运行，再按原问题复验。'}</p><TaskActions separated><AgentAssistAction task="repair" onClick={()=>setAssist(true)}/><Button kind="primary" disabled={stale} onClick={openRegistration}>登记已完成的修改</Button></TaskActions></section>
+    const originalLink=<ActionLink navigationScope="page" href={'#'+scopedPath(original)} kind="quiet">查看原问题与证据</ActionLink>
+    const officialStart=official&&!stale&&!selected
+    const context=<aside className="jj-repair-task-context"><SectionTitle className={embedded?"jj-title-caption":"jj-title-group"}>{verified?'复验范围与修改':'复验依据'}</SectionTitle><dl className="jj-facts" data-layout="columns"><div><dt>原问题</dt><dd>{text(rule.title)}</dd></div><div><dt>测试数据</dt><dd>{issue.contract.deny.identity.resource_id}</dd></div>{!officialStart&&<div><dt>正常功能</dt><dd>原来允许的操作仍能完成</dd></div>}</dl><div className="jj-repair-task-context-actions">{detail.data&&<details><summary>查看修改文件</summary>{(['modified_paths','added_paths','removed_paths'] as const).flatMap(key=>detail.data!.change.change_set[key]).map(file=><p className="jj-path" key={file}>{file}</p>)}</details>}{embedded&&originalLink}{selected&&<ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/changes?change_id='+encodeURIComponent(selected),path))} kind="quiet">查看变更归档</ActionLink>}</div></aside>
+    const advance=(verified||!failed&&runtimeReady&&linked)?<div data-milestone-part="actions" className="jj-repair-task-advance">{verified?<ActionLink navigationScope="page" href={'#'+scopedPath('/reports?run_id='+encodeURIComponent(issue.verification!.run_id)+'&return_to='+encodeURIComponent(path))} kind="primary">查看复验结果</ActionLink>:<Button kind="primary" disabled={stale} onClick={()=>go(plan)}>{missingMaterials.length?'补齐本题材料':'核对原问题复验范围'}<ArrowRightOutlined aria-hidden="true"/></Button>}</div>:null
     return <>
         {!embedded&&<div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(returnTo?withReturnDestination('/permissions?rule_id='+encodeURIComponent(rule.permission.intent_id),returnTo):'/permissions?rule_id='+encodeURIComponent(rule.permission.intent_id))} kind="quiet">{<ArrowLeftOutlined aria-hidden="true"/>}返回这条权限规则</ActionLink></div>}
         <section ref={completion} className="jj-repair-task" data-embedded={embedded||undefined}>
             {!embedded&&<header><div><span className="jj-eyebrow">权限问题处理</span><div className="jj-object-line"><h1>{text(rule.title)}</h1><Badge tone={verified?'positive':failed?'negative':stale?'caution':selected?'accent':'neutral'}>{verified?'修复已验证':failed?'原问题仍存在':selected?'修改已登记':'等待代码修改'}</Badge></div><p>{text(rule.resource_scope)}</p></div></header>}
             <WorkflowSteps className="jj-repair-task-progress" label="修复流程" steps={['登记代码修改','核对复验条件','查看复验结果'].map((label,index)=>({id:String(index),label,state:verified||phase>index+1?'complete' as const:phase===index+1?stale?'blocked' as const:'current' as const:'pending' as const}))}/>
-            {stale&&<Notice tone="caution">权限规则已经变化，原问题暂不能按旧条件复验。请返回权限规则核对当前要求。</Notice>}<div className={'jj-repair-task-layout'+(verified?' is-verified':'')}><div className="jj-repair-task-main">
-                {register?<ChangeRegistration options={changeTargetOptions(rules)} initialTargets={[{permission:rule.permission,repair:repairReference(issue.contract)}]} projectId={projectId} closeLabel="返回修复任务" onClose={()=>setRegister(false)} onError={onError} onSaved={id=>{setRegister(false);onReload();go(basePath+'&change_id='+encodeURIComponent(id))}}/>:
-                verified?<section data-milestone-part="results" className="jj-repair-task-result"><SectionTitle className={embedded?"jj-title-group":undefined}>原问题已解决，正常功能保留</SectionTitle><ResultList label="复验结果" items={(['DENY','SELECTED_ALLOW','REGRESSION'] as const).map(role=>{const rows=issue.comparison?.filter(item=>item.role===role)??[];return {label:role==='DENY'?'原权限问题':role==='SELECTED_ALLOW'?'正常功能':'相关回归',status:<Badge tone={rows.length&&rows.every(item=>item.after_verdict==='SAFE'&&item.match_status==='MATCHED')?'positive':'neutral'}>{rows.length&&rows.every(item=>item.after_verdict==='SAFE'&&item.match_status==='MATCHED')?'已验证':'范围待确认'}</Badge>} })}/></section>:
-                !selected||failed?<section className="jj-repair-task-start"><p>{failed?'上次复验仍发现原问题，请继续修改后登记。':'在开发工具中修复应用后，登记修改的文件并加载运行，再按原问题复验。'}</p><div className="jj-repair-task-next"><Button kind="quiet" onClick={()=>setAssist(true)}>交给 Agent 协助</Button><Button kind="primary" disabled={stale} onClick={()=>setRegister(true)}>登记已完成的修改<ArrowRightOutlined aria-hidden="true"/></Button></div></section>:
-                detail.loading?<Loading>正在读取这次修改</Loading>:detail.error?<ErrorNote error={detail.error}/>:detail.data&&!linked?<Notice tone="caution">这次修改没有关联当前原问题。请返回核对修复目标。</Notice>:detail.data&&<>
+            {stale&&<Notice tone="caution">权限规则已经变化，原问题暂不能按旧条件复验。请返回权限规则核对当前要求。</Notice>}{officialStart?<OfficialRepair projectId={projectId} contract={issue.contract} onError={onError} fallback={manual} context={context} onLoaded={id=>{onReload();go(scopedPath(basePath+'&change_id='+encodeURIComponent(id),projectId))}}/>:<div className={'jj-panel jj-repair-task-layout'+(verified?' is-verified':'')}><div className="jj-repair-task-main">
+                {verified?
+                <section data-milestone-part="results" className="jj-repair-task-result"><SectionTitle className={embedded?"jj-title-group":undefined}>原问题已解决，正常功能保留</SectionTitle><ResultList label="复验结果" items={(['DENY','SELECTED_ALLOW','REGRESSION'] as const).map(role=>{const rows=issue.comparison?.filter(item=>item.role===role)??[];return {label:role==='DENY'?'原权限问题':role==='SELECTED_ALLOW'?'正常功能':'相关回归',status:<Badge tone={rows.length&&rows.every(item=>item.after_verdict==='SAFE'&&item.match_status==='MATCHED')?'positive':'neutral'}>{rows.length&&rows.every(item=>item.after_verdict==='SAFE'&&item.match_status==='MATCHED')?'已验证':'范围待确认'}</Badge>} })}/></section>:
+                !selected||failed?manual:
+                detail.loading?<Loading>正在读取这次修改</Loading>:detail.error?<ErrorNote error={detail.error} onRetry={detail.reload} retryLabel="重新读取原问题资料"/>:detail.data&&!linked?<Notice tone="caution">这次修改没有关联当前原问题。请返回核对修复目标。</Notice>:detail.data&&<>
                     <section className="jj-repair-task-change"><div className="jj-section-header"><SectionTitle className={embedded?"jj-title-group":undefined}>已登记的修改</SectionTitle><span className="jj-small jj-muted">{date(detail.data.change.manifest.created_at_us)}</span></div><p>{text(detail.data.change.manifest.reason)}</p>
                     {detail.data.delivery?<RuntimeActivation key={selected} projectId={projectId} details={detail.data.delivery} onError={onError} onChanged={reload} onReady={setRuntimeReady}/>:<Notice tone="caution">这次修改缺少可读取的运行交付，请核对修改记录。</Notice>}
                     </section>
-                    {runtimeReady&&gaps.length>0&&<section className="jj-repair-task-readiness"><SectionTitle className={embedded?"jj-title-group":undefined}>复验前需要处理</SectionTitle>{materials.loading?<p>正在读取本题材料。</p>:materials.error?<ErrorNote error={materials.error}/>:missingMaterials.length?<ul>{missingMaterials.map(item=><li key={item.label}>{item.label}需要核对</li>)}</ul>:materials.data?<p>当前操作的材料已准备，继续预览时将核对原账号、资源及正常对照。</p>:<p>当前准备目录中未找到本题操作，请在原问题范围中继续核对。</p>}<details><summary>这次修改对其他材料的影响</summary><p>{gaps.length} 项准备条件受影响，完整范围在本次检查预览中核对。</p></details></section>}
+                    {runtimeReady&&gaps.length>0&&<section className="jj-repair-task-readiness"><SectionTitle className={embedded?"jj-title-group":undefined}>复验前需要处理</SectionTitle>{materials.loading?<p>正在读取本题材料。</p>:materials.error?<ErrorNote error={materials.error} onRetry={materials.reload} retryLabel="重新读取原问题资料"/>:missingMaterials.length?<ul>{missingMaterials.map(item=><li key={item.label}>{item.label}需要核对</li>)}</ul>:materials.data?<p>当前操作的材料已准备，继续预览时将核对原账号、资源及正常对照。</p>:<p>当前准备目录中未找到本题操作，请在原问题范围中继续核对。</p>}<details><summary>这次修改对其他材料的影响</summary><p>{gaps.length} 项准备条件受影响，完整范围在本次检查预览中核对。</p></details></section>}
                 </>}
-                {embedded&&advance}
-            </div><aside className="jj-repair-task-context"><SectionTitle className={embedded?"jj-title-caption":"jj-title-group"}>{verified?'复验范围与修改':'复验依据'}</SectionTitle><dl className="jj-facts"><div><dt>原问题</dt><dd>{text(rule.title)}</dd></div><div><dt>测试数据</dt><dd>{issue.contract.deny.identity.resource_id}</dd></div><div><dt>正常功能</dt><dd>原来允许的操作仍能完成</dd></div></dl><div className="jj-repair-task-context-actions">{detail.data&&<details><summary>查看修改文件</summary>{(['modified_paths','added_paths','removed_paths'] as const).flatMap(key=>detail.data!.change.change_set[key]).map(file=><p className="jj-path" key={file}>{file}</p>)}</details>}{embedded&&originalLink}{selected&&<ActionLink navigationScope="page" href={'#'+scopedPath(withReturnDestination('/changes?change_id='+encodeURIComponent(selected),path))} kind="quiet">查看变更归档<ArrowRightOutlined aria-hidden="true"/></ActionLink>}</div></aside></div>
-                {!embedded&&!register&&<footer>{originalLink}{advance}</footer>}
+                </div>{context}{embedded&&advance}</div>}
+                {!embedded&&<footer>{originalLink}{advance}</footer>}
         </section>
         {assist&&<AgentHandoff projectId={projectId} runId={issue.contract.source_run_id} caseId={issue.contract.source_case_id} targets={[repairReference(issue.contract)]} repair onClose={()=>setAssist(false)}/>}
     </>

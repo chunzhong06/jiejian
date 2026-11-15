@@ -17,6 +17,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    and_,
+    or_,
     select,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -235,11 +237,19 @@ class SourceChangeRepository:
             ChangeManifestRow.project_id == project_id, ChangeManifestRow.change_id.in_(change_ids)))
         return {row.change_id: dict(reason=row.reason, submitted_by=row.submitted_by) for row in rows}
 
-    def current_changes(self, project_id: str, *, limit: int = 50):
+    def current_changes(self, project_id: str, *, limit: int = 50, before_change_id: str | None = None):
         if isinstance(limit,bool) or not 1 <= limit <= 100:
             raise ValueError("current change list limit")
-        ids = self._session.scalars(select(ChangeManifestRow.change_id).where(ChangeManifestRow.project_id == project_id)
-            .order_by(ChangeManifestRow.created_at_us.desc(),ChangeManifestRow.change_id.desc()).limit(limit)).all()
+        query = select(ChangeManifestRow.change_id).where(ChangeManifestRow.project_id == project_id)
+        if before_change_id is not None:
+            anchor = self._session.scalar(select(ChangeManifestRow).where(
+                ChangeManifestRow.project_id == project_id, ChangeManifestRow.change_id == before_change_id))
+            if anchor is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, '修改记录分页依据不存在或不属于当前项目')
+            # 登记时间与标识不可变；同一时刻的记录也能稳定翻页，新登记不会挤走后一页。
+            query = query.where(or_(ChangeManifestRow.created_at_us < anchor.created_at_us,
+                and_(ChangeManifestRow.created_at_us == anchor.created_at_us, ChangeManifestRow.change_id < anchor.change_id)))
+        ids = self._session.scalars(query.order_by(ChangeManifestRow.created_at_us.desc(),ChangeManifestRow.change_id.desc()).limit(limit)).all()
         return tuple(self.current_change(project_id,identity) for identity in ids)
 
     def latest_current_for_repair(self, project_id, reference):

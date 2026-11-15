@@ -86,7 +86,12 @@ class WorkspaceReader:
                 continue
             if (package.request.source_fingerprint == understanding.source_fingerprint
                     and package.request.environment == understanding.environment):
+                from product.backend.application.checks.reading.coverage import sample_coverage
+                correspondence=package.result.runtime_correspondence
+                runtime_status='UNSUPPORTED' if correspondence is None else 'MATCHED' if correspondence.before==correspondence.after=='MATCHED' else 'UNCONFIRMED'
                 latest_result = WorkspaceLatestResult(run_id=entry.run.run_id,verdict=entry.run.verdict.value,
+                    runtime_status=runtime_status,
+                    unchecked_states=tuple(sorted({state for item in sample_coverage(package) for state in item.unchecked_states})),
                     policy_epoch=entry.run.policy_epoch,created_at_us=entry.run.created_at_us,
                     summary=JUDGEMENTS[entry.run.verdict.value])
                 break

@@ -136,7 +136,8 @@ export const recordingsApi = {
   ) =>
     request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}/review`, {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', command }),
+      // command 本身也可独立交换和持久化，按 FlowDraftReviewCommand 合同携带版本。
+      body: JSON.stringify({ schema_version: '1', command: {...command, schema_version: '1'} }),
     }),
   finalizeRecording: (id: string) =>
     request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}/finalize`, {

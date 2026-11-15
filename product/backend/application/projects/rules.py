@@ -1,5 +1,6 @@
 # 按权限规则聚合已发布检查、原问题和真实修改；不执行目标或改写历史结论。
 from __future__ import annotations
+from product.backend.application.checks.reading.coverage import sample_coverage
 
 
 class RuleWorkspaceService:
@@ -18,6 +19,7 @@ class RuleWorkspaceService:
         actions = {item.action_id: item.display_name for item in boundary.actions}
         packages = sorted(((status, package) for status, package in readings if package is not None
             and status.result_integrity == 'VALID'), key=lambda item: (item[0].run.created_at_us, item[0].run.run_id), reverse=True)
+        coverage_by_run={status.run.run_id:sample_coverage(package) for status,package in packages}
         rules = []
         for rule in boundary.permission_intents:
             if rule.effective_state != 'ACTIVE':
@@ -34,12 +36,17 @@ class RuleWorkspaceService:
                     continue
                 verdicts = {item.verdict.value for item in cases}
                 judgement = 'VULNERABLE' if 'VULNERABLE' in verdicts else 'INCONCLUSIVE' if 'INCONCLUSIVE' in verdicts else 'SAFE'
+                # 已按准确权限三元组匹配；无关规则新增不使这条规则的历史结果失效。
                 current = (understanding is not None and package.request.source_fingerprint == understanding.source_fingerprint
-                    and package.request.policy_epoch == boundary.policy_epoch)
+                    and package.request.environment == understanding.environment)
                 runtime = getattr(package.result, 'runtime_correspondence', None)
                 runtime_confirmed = runtime is not None and runtime.before == runtime.after == 'MATCHED'
+                runtime_status = 'UNSUPPORTED' if runtime is None else 'MATCHED' if runtime_confirmed else 'UNCONFIRMED'
                 history.append(dict(run_id=status.run.run_id, created_at_us=status.run.created_at_us,
                     case_ids=[item.case_id for item in cases], verdict=judgement, case_count=len(cases), current=current, runtime_confirmed=runtime_confirmed,
+                    runtime_status=runtime_status, result_integrity=status.result_integrity,
+                    applicability='CURRENT' if current else 'RECHECK',
+                    sample_coverage=[item.model_dump(mode='json') for item in coverage_by_run[status.run.run_id] if matches(item.permission)],
                     change_id=None if package.request.change_context is None else package.request.change_context.change_id))
             issues = [item for item in repair.tasks if matches(item.contract.deny.identity.permission)]
             linked = []
@@ -53,10 +60,6 @@ class RuleWorkspaceService:
             latest = history[0] if history else None
             current_issues = [item for item in issues if item.status not in {'VERIFIED', 'STALE'}]
             state = 'UNTESTED' if latest is None else 'STALE' if not latest['current'] else latest['verdict']
-            if state == 'SAFE' and not latest['runtime_confirmed']:
-                state = 'UNCONFIRMED'
-            if state == 'SAFE' and current_issues:
-                state = 'REPAIR_PENDING'
             subject = '未登录访客' if rule.conditions is not None and rule.conditions.principal == 'ANONYMOUS' else actors.get(rule.subject_actor_id, '未命名角色')
             action = actions.get(rule.business_action_id, '未命名操作')
             owner = actors.get(rule.resource_owner_actor_id, '资源所有者')
@@ -64,7 +67,7 @@ class RuleWorkspaceService:
             rules.append(dict(permission=dict(intent_id=rule.intent_id, revision=rule.revision, intent_hash=rule.intent_hash),
                 title=f'{subject}{"可以" if rule.expectation == "ALLOW" else "不得"}{action}',
                 expectation=rule.expectation, conditions=None if rule.conditions is None else rule.conditions.model_dump(mode='json'), subject=subject, action=action, resource_scope=relation,
-                state=state, latest=latest, issues=[item.model_dump(mode='json') for item in issues],
+                state=state, latest=latest, repair_pending=bool(current_issues), issues=[item.model_dump(mode='json') for item in issues],
                 changes=linked, history=history[:20], history_has_more=len(history)>20))
         ranking = {'VULNERABLE':0, 'REPAIR_PENDING':1, 'INCONCLUSIVE':2, 'STALE':3, 'UNCONFIRMED':3, 'UNTESTED':4, 'SAFE':5}
         rules.sort(key=lambda item:(ranking[item['state']], item['title'], item['permission']['intent_id']))

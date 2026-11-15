@@ -351,6 +351,11 @@ class BusinessBoundaryService:
             work.commit()
         return view
 
+    def discovery(self, project_id: str, *, focus_request=None):
+        from product.backend.application.business_boundaries.discovery import discovery_coverage
+        with self._uow_factory() as work:
+            return discovery_coverage(work, project_id, self.view(project_id, work=work),focus_request=focus_request)
+
     def view(self, project_id: str, *, work=None) -> BusinessBoundaryView:
         from contextlib import nullcontext
         # 技术准备写入者可以在自己的 UoW 中重读正式事实；这里仍不读取技术选择。

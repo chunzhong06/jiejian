@@ -13,7 +13,7 @@ export type RepairComparisonRow = {
   subject_label: string | null; resource_owner_label: string | null; resource_id: string; effect_labels: string[]
   before_verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'; before_evidence_refs: string[]
   after_run_id?: string | null; after_case_id?: string | null; after_verdict?: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE' | null
-  after_evidence_refs?: string[]; match_status: 'NOT_AVAILABLE' | 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS'
+  after_evidence_refs?: string[]; match_status: 'NOT_AVAILABLE' | 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS' | 'CHALLENGE_CHANGED' | 'CHALLENGE_UNAVAILABLE'
 }
 export type RepairVerification = { verification_scope?:'SOURCE_CHANGE'|'EXTERNAL_OBSERVATION'; repair_reference: string; source_run_id: string; run_id: string; status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'STALE'; reason_codes: string[] }
 export type RepairHistoryEvent = { kind: 'FOUND'|'CHECKED'|'VERIFIED'|'RECURRED'|'CONDITIONS_CHANGED'|'CHECK_PENDING'|'CHECK_INTERRUPTED'; run_id: string; source_run_id: string; created_at_us: number; status: RepairStatus|null; change_id: string|null; reason_codes: string[] }

@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator, model_validator
 
 from product.protocols.web.base import ProtocolModel
+from product.protocols.web.hosts import target_host, target_address
 from product.protocols.web.workflow import (
     HttpRequestTemplate,
     ValueSlotSource,
@@ -66,11 +67,11 @@ class AuthTargetScope(ProtocolModel):
         ):
             raise ValueError("auth scope must be an HTTP origin")
         try:
-            host = str(ipaddress.IPv4Address(parsed.hostname))
+            host = target_host(parsed.hostname)
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
         except (ipaddress.AddressValueError, ValueError) as exc:
-            raise ValueError("auth scope must use an IPv4 literal and valid port") from exc
-        address = ipaddress.IPv4Address(host)
+            raise ValueError("auth scope must use an IPv4 literal or localhost and valid port") from exc
+        address = target_address(host)
         if (
             address.is_link_local
             or address.is_reserved
@@ -96,20 +97,20 @@ class AuthTargetScope(ProtocolModel):
                     "auth allowed_origins must contain normalized HTTP origins"
                 )
             try:
-                candidate_host = str(ipaddress.IPv4Address(candidate.hostname))
+                candidate_host = target_host(candidate.hostname)
                 candidate_port = candidate.port or (
                     443 if candidate.scheme == "https" else 80
                 )
             except (ipaddress.AddressValueError, ValueError) as exc:
                 raise ValueError(
-                    "auth allowed_origins must use IPv4 literals"
+                    "auth allowed_origins must use IPv4 literals or localhost"
                 ) from exc
             origins.append(
                 f"{candidate.scheme}://{candidate_host}:{candidate_port}"
             )
         normalized_origins = tuple(dict.fromkeys(origins))
         normalized_hosts = tuple(
-            dict.fromkeys(str(ipaddress.IPv4Address(item)) for item in self.allowed_hosts)
+            dict.fromkeys(target_host(item) for item in self.allowed_hosts)
         )
         normalized_ports = tuple(dict.fromkeys(self.allowed_ports))
         origin = f"{parsed.scheme}://{host}:{port}"

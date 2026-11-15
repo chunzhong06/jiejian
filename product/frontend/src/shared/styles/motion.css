@@ -29,7 +29,15 @@
   }
 }
 .jj-button { transition: transform var(--motion-press) var(--ease-spring), box-shadow var(--motion-hover-out) var(--ease-respond), background-color var(--motion-hover-out) var(--ease-respond), color var(--motion-hover-out) var(--ease-respond), border-color var(--motion-hover-out) var(--ease-respond); }
-.jj-button:not(:disabled):active { transform: translateY(1px) scale(.985); transition-duration: 0ms; }
+/* 表面各边等距内陷；文字与命中区域保持静止，不给宽按钮施加等比横缩。 */
+.jj-button[data-press-surface] { background:transparent; --command-fill:var(--soft); }
+.jj-button[data-press-surface].is-primary { --command-fill:var(--accent); }
+.jj-button[data-press-surface].is-danger { --command-fill:var(--bad-soft); }
+.jj-button[data-press-surface]:disabled { --command-fill:var(--disabled-bg); }
+.jj-button[data-press-surface][aria-busy=true].is-primary { --command-fill:var(--accent); }
+.jj-button[data-press-surface][aria-busy=true].is-danger { --command-fill:var(--bad-soft); }
+.jj-button[data-press-surface]::after { content:''; position:absolute; inset:0; z-index:-2; border-radius:inherit; background:var(--command-fill); pointer-events:none; transition:inset var(--motion-press) var(--ease-spring),background-color var(--motion-hover-out) var(--ease-respond); }
+.jj-button[data-press-surface]:not(:disabled):active::after,.jj-button[data-press-surface]:not(:disabled):active::before { inset:1px; transition-duration:60ms; }
 .jj-nav-item.jj-button:active { transform: none; }
 /* 按实际按钮与链接分开匹配，保留旧组合选择器的按压优先级。 */
 button:is(.jj-button, .jj-index-item, .jj-case-select, .jj-step-select):not(:disabled):active::before, a.jj-button:not(:disabled):active::before { opacity: 1; transition-duration: 0ms; }
@@ -67,8 +75,7 @@ input, textarea, .jj-choice.ant-select .ant-select-selector { transition: border
 }
 .jj-stage-marker,.jj-status,.jj-badge,.jj-object-identity { transition:color var(--motion-state) var(--ease-respond),background-color var(--motion-state) var(--ease-respond),border-color var(--motion-state) var(--ease-respond); }
 .jj-home-facts > a,.jj-home-check-row,.jj-home-object-link { transition:background-color var(--motion-hover-out) var(--ease-respond),color var(--motion-hover-out) var(--ease-respond); }
-.jj-runtime-method::before,.jj-tabs > :is(button,a)::before { transition:opacity var(--motion-hover-out) var(--ease-respond); }
-.jj-tabs > :is(button,a) { transition:background-color var(--motion-indicator) var(--ease-layout),color var(--motion-hover-in) var(--ease-respond); }
+.jj-runtime-method::before { transition:opacity var(--motion-hover-out) var(--ease-respond); }
 .jj-file-picker { transition:border-color var(--motion-hover-out) var(--ease-respond),background-color var(--motion-hover-out) var(--ease-respond); }
 /* 选择标记测量原控件的边界；这些入口以选中面响应，不能同时缩小测量目标。 */
 :where(.jj-app,.jj-dialog) button:not(.jj-button,.jj-index-item,[role=tab],[aria-pressed]):not(:disabled):active { scale:.99; }
@@ -122,6 +129,10 @@ html body .anticon-spin { animation:jj-motion-spin 1200ms linear infinite; }
 @keyframes jj-motion-settle { 0% { opacity:.5; scale:.97; } 62% { opacity:1; scale:1.015; } 100% { scale:1; } }
 @keyframes jj-motion-progress { from { transform:translateX(-100%); } to { transform:translateX(334%); } }
 @keyframes jj-motion-breathe { from { opacity:.55; transform:scale(.88); } to { opacity:1; transform:scale(1); } }
+@keyframes jj-reading-wait { 0%,80%,100% { opacity:.25; } 40% { opacity:1; } }
+.jj-activity-dots > i { animation:jj-reading-wait var(--motion-reading) ease-in-out infinite; }
+.jj-activity-dots > i:nth-child(2) { animation-delay:200ms; }
+.jj-activity-dots > i:nth-child(3) { animation-delay:400ms; }
 @keyframes jj-motion-skeleton { to { opacity:.42; } }
 @keyframes jj-motion-spin { to { transform:rotate(360deg); } }
 @keyframes jj-motion-check { 0% { opacity:.3; scale:.65; } 65% { opacity:1; scale:1.08; } 100% { opacity:1; scale:1; } }

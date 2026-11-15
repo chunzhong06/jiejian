@@ -384,8 +384,10 @@ def test_continuous_executor_waits_for_answer_then_resumes_same_session(harness,
 
 
 def test_completed_check_is_a_deliverable_even_when_it_finds_a_violation(harness, monkeypatch):
+    from types import SimpleNamespace as NS
     capabilities=harness.core.agent_capabilities
     monkeypatch.setattr(capabilities,'latest_check',lambda *args:dict(run_id='published',lifecycle='COMPLETED',verdict='BLOCK'))
+    monkeypatch.setattr(harness.core.check_story,'build',lambda *a,**kw:NS(project_id=harness.project_id,run_id='published',verdict=NS(value='BLOCK'),actions=()))
     outcome=capabilities.goal_outcome(harness.project_id,task(harness))
     assert outcome['fulfilled'] is True
     assert outcome['destination']=='/reports?run_id=published'
@@ -399,6 +401,86 @@ def test_service_restart_revokes_waiting_native_execution(harness):
     current=service.show(project,value['task_id'])
     assert current['execution']['state']=='UNKNOWN'
     assert current['state']=='BLOCKED'
+
+
+@pytest.mark.parametrize('new_session', [False, True])
+def test_failed_model_session_can_be_explicitly_replaced_without_replacing_task(harness, monkeypatch, new_session):
+    from types import SimpleNamespace as NS
+    from threading import Event
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    question=CollaborationQuestion(question_id=uuid4().hex,question='先保留已经核对的业务决定')
+    service.ask(project,value['task_id'],question);service.answer(project,value['task_id'],question.question_id,'仅当前资源')
+    service.execution_started(project,value['task_id'],dict(operation_id=uuid4().hex,state='FAILED',session_id='old-session'))
+    monkeypatch.setattr(execution,'_codex_executable',lambda:'fixture-client')
+    done,calls=Event(),[]
+    def runner(**arguments):
+        calls.append(arguments['session_id']);done.set()
+        return dict(state='FINISHED',session_id='new-session' if new_session else 'old-session')
+    access=NS(view=lambda:NS(paired=True),level_for=lambda _:MCPAccessLevel.PREPARE)
+    executor=execution.AgentExecution(harness.core,access,NS(prepare_managed_profile=lambda _:'protected-profile'),runner=runner)
+    try:
+        executor.start(project,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,new_session=new_session))
+        assert done.wait(4)
+    finally:executor.close()
+    current=service.show(project,value['task_id'])
+    assert calls==[None if new_session else 'old-session']
+    assert current['questions'][0]['answer']=='仅当前资源'
+    assert current['task_id']==value['task_id']
+    assert current['execution'].get('replaced_session_id')==('old-session' if new_session else None)
+
+
+@pytest.mark.parametrize('unsettled', ['UNKNOWN', 'RUNNING', 'BACKGROUND'])
+def test_new_model_session_cannot_bypass_unsettled_business(harness, monkeypatch, unsettled):
+    from types import SimpleNamespace as NS
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    service.execution_started(project,value['task_id'],dict(operation_id=uuid4().hex,state='FAILED',session_id='old-session'))
+    original=service.show(project,value['task_id'])
+    if unsettled!='BACKGROUND':original['operations']=[dict(state=unsettled)]
+    monkeypatch.setattr(service,'show',lambda *a:original)
+    monkeypatch.setattr(harness.core.agent_capabilities,'operation_progress',lambda *a,**kw:[dict(phase='RUNNING')])
+    monkeypatch.setattr(execution,'_codex_executable',lambda:'fixture-client')
+    calls=[]
+    executor=execution.AgentExecution(harness.core,NS(view=lambda:NS(paired=True),level_for=lambda _:MCPAccessLevel.PREPARE),None,runner=lambda **kw:calls.append(kw))
+    with pytest.raises(JiejianError,match='原业务操作|原后台业务'):
+        executor.start(project,value['task_id'],execution.StartAgent(operation_id=uuid4().hex,new_session=True))
+    assert not calls
+
+
+def test_check_goal_rejects_an_unrelated_terminal_run_without_reading_it(harness,monkeypatch):
+    from unittest.mock import Mock
+    capabilities=harness.core.agent_capabilities
+    monkeypatch.setattr(capabilities,'latest_check',lambda *a:dict(run_id='other',lifecycle='COMPLETED',verdict='PASS'))
+    read=Mock()
+    monkeypatch.setattr(harness.core.check_story,'build',read)
+    value=task(harness);value['references']={'run_id':'original'}
+    outcome=capabilities.goal_outcome(harness.project_id,value)
+    assert not outcome['fulfilled'] and '指定报告不同' in outcome['title']
+    read.assert_not_called()
+
+
+def test_check_goal_waits_when_database_verdict_has_no_readable_published_report(harness,monkeypatch):
+    capabilities=harness.core.agent_capabilities
+    monkeypatch.setattr(capabilities,'latest_check',lambda *a:dict(run_id='missing',lifecycle='COMPLETED',verdict='PASS'))
+    def missing(*a,**kw):
+        raise JiejianError(ErrorCode.RECORD_NOT_FOUND,'没有正式产物')
+    monkeypatch.setattr(harness.core.check_story,'build',missing)
+    outcome=capabilities.goal_outcome(harness.project_id,task(harness))
+    assert not outcome['fulfilled'] and '正式报告暂不可读取' in outcome['title']
+
+
+def test_check_goal_requires_the_target_rule_in_the_published_report(harness,monkeypatch):
+    from types import SimpleNamespace as NS
+    capabilities=harness.core.agent_capabilities
+    monkeypatch.setattr(capabilities,'latest_check',lambda *a:dict(run_id='published',lifecycle='COMPLETED',verdict='PASS'))
+    monkeypatch.setattr(harness.core.check_story,'build',lambda *a,**kw:NS(project_id=harness.project_id,
+        run_id='published',verdict=NS(value='PASS'),actions=(NS(permission=NS(intent_id='other')),)))
+    value=task(harness);value['references']={'rule_id':'requested'}
+    outcome=capabilities.goal_outcome(harness.project_id,value)
+    assert not outcome['fulfilled'] and '目标权限要求' in outcome['title']
 
 
 def test_repair_goal_cannot_be_satisfied_by_another_problem_report(harness,monkeypatch):
@@ -497,6 +579,7 @@ def test_ready_deliverable_after_wait_does_not_spend_another_model_turn(harness,
     understanding=harness.core.application_understanding.get(harness.project_id).model_copy(update={'source_analysis_authorized':True})
     monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:understanding)
     ready=Event()
+    monkeypatch.setattr(harness.core.check_story,'build',lambda *a,**kw:SimpleNamespace(project_id=harness.project_id,run_id='published',verdict=SimpleNamespace(value='PASS'),actions=()))
     monkeypatch.setattr(harness.core.agent_capabilities,'latest_check',lambda *a:
         dict(run_id='published',lifecycle='COMPLETED',verdict='PASS') if ready.is_set() else None)
     service,project,value,calls=harness.core.collaboration,harness.project_id,task(harness),[]
@@ -560,7 +643,7 @@ def test_followup_replaces_target_without_reusing_old_completion_or_losing_histo
     assert harness.core.agent_capabilities.goal_outcome(project,result)['fulfilled'] is False
 
 
-def test_agent_flow_candidate_returns_exact_revision_and_waits_for_explicit_adoption(harness):
+def test_agent_flow_candidate_returns_exact_revision_and_waits_for_explicit_adoption(harness,monkeypatch):
     import json
     from product.protocols.preparation.operation_flow import OperationFlowDraft
     service,project=harness.core.collaboration,harness.project_id
@@ -578,12 +661,34 @@ def test_agent_flow_candidate_returns_exact_revision_and_waits_for_explicit_adop
     service.act(project,value['task_id'],CollaborationAction(operation_id=uuid4().hex,capability='flows.save',arguments=document.model_dump(mode='json')))
     reviewed=service.show(project,value['task_id'])
     assert reviewed['state']=='WAITING_USER'
+    assert reviewed['reviews'][0]['title']=='更新文档：执行与恢复步骤'
     assert 'flow_id='+document.id in reviewed['reviews'][0]['destination']
     assert 'revision=1' in reviewed['reviews'][0]['destination']
     assert harness.core.operation_flows.read(project,document.id,1)==document
     with pytest.raises(JiejianError):harness.core.operation_flows.read('other-project',document.id,1)
     harness.core.operation_flows.adopt(project,document.id,1)
     assert service.show(project,value['task_id'])['reviews']==[]
+    # 两个业务结果分别保存和审阅，不能靠相同的“判断依据”标题合并它们。
+    from product.protocols.preparation.proof_sources import AtomicProofSourceConfig
+    context=harness.core.proof_preparation.context(project)
+    for effect in harness.action.effect_catalog:
+        config=AtomicProofSourceConfig(action_id=harness.action.action_id,action_revision=1,effect_id=effect.effect_id,
+            observation_identity_id=harness.identities[0].identity_id,resource_binding_id=context['resources'][0]['resource_binding_id'],
+            collection='documents',relative_path_template='/collections/documents/{resource_id}',
+            mappings={'resource_id':('resource_id',),'owner_id':('owner_id',),'state':('data','state')},source_contract_id='TRANSACTION_HISTORY_V2',
+            identity_claims=(dict(identity_id=harness.identities[0].identity_id,application_subject_id='member-1',request_path='/me',subject_path=('id',),role_path=('role',),application_role='member'),))
+        service.act(project,value['task_id'],CollaborationAction(operation_id=uuid4().hex,capability='proofs.save',
+            arguments=dict(basis_id=context['basis_id'],config=config.model_dump(mode='json'))))
+    reviews=service.show(project,value['task_id'])['reviews']
+    assert {item['title'] for item in reviews}=={'文档更新：结果判断依据','审阅更新：结果判断依据'}
+    assert len({item['id'] for item in reviews})==2
+    from types import SimpleNamespace
+    # 旧材料已经可运行，也不能跳过本任务新保存的两份候选。
+    monkeypatch.setattr(harness.core.checks,'preview',lambda _:SimpleNamespace(can_execute=True))
+    outcome=service.assess(project,value['task_id'])
+    assert outcome['fulfilled'] is False
+    with pytest.raises(JiejianError):
+        service.control(project,value['task_id'],'finish',require_fulfilled=True)
 
 
 def test_legacy_agent_review_location_keeps_stage_and_exact_report_reference(harness,monkeypatch):
@@ -653,3 +758,58 @@ def test_create_budget_counts_the_complete_saved_task(harness,monkeypatch):
         harness.core.collaboration.create(harness.project_id,command)
     with harness.core.uow_factory() as work:
         assert work.collaboration.get(harness.project_id,'ctk_'+command.operation_id) is None
+
+
+def test_question_presentation_roundtrips_and_cannot_rewrite_original_decision(harness):
+    from product.protocols.runtime.collaboration import QuestionPresentation
+    service,project,value=harness.core.collaboration,harness.project_id,task(harness)
+    question=CollaborationQuestion(question_id=uuid4().hex,question='内部依据：已读取现有来源，尚缺业务用途。',
+        presentation=QuestionPresentation(title='用什么依据确认发布结果？',reason='需要确定实际状态的来源。'))
+    first=service.ask(project,value['task_id'],question)
+    assert first['questions'][0]['presentation']['title']=='用什么依据确认发布结果？'
+    assert first['questions'][0]['question']==question.question
+    assert service.ask(project,value['task_id'],question)['revision']==first['revision']
+    changed=question.model_copy(update={'presentation':QuestionPresentation(title='是否启动检查？',reason='另一个决定。')})
+    with pytest.raises(JiejianError) as caught:service.ask(project,value['task_id'],changed)
+    assert caught.value.code==ErrorCode.STATE_PRECONDITION
+    answered=service.answer(project,value['task_id'],question.question_id,'暂不确定，继续查证')
+    assert answered['operations']==[] and answered['questions'][0]['answer']=='暂不确定，继续查证'
+
+
+def test_task_brief_keeps_original_goal_and_followup_drops_previous_summary(harness):
+    from product.protocols.runtime.collaboration import CollaborationBrief,CollaborationOutput
+    from product.backend.application.agent_access.tasks import CollaborationFollowup
+    service,project=harness.core.collaboration,harness.project_id
+    command=CreateCollaboration(operation_id=uuid4().hex,goal='保留完整执行指令。'*20,purpose='SETUP',
+        brief=CollaborationBrief(title='准备资料发布检查',objective='整理候选后交回审阅。',outputs=[CollaborationOutput(kind='FLOW',label='发布与恢复步骤')]))
+    value=service.create(project,command)
+    assert service.create(project,command)['revision']==value['revision']
+    assert value['goal']==command.goal and service.current(project)['brief']['title']==command.brief.title
+    current=service.followup(project,CollaborationFollowup(task_id=value['task_id'],operation_id=uuid4().hex,goal='理解当前报告',purpose='UNDERSTAND'))
+    assert 'brief' not in current and current['followups'][0]['previous']['brief']['title']==command.brief.title
+
+
+def test_reading_metadata_is_strict_and_rejects_state_or_blank_title():
+    from pydantic import ValidationError
+    from product.protocols.runtime.collaboration import CollaborationBrief,QuestionPresentation
+    with pytest.raises(ValidationError):CollaborationBrief(title='   ')
+    with pytest.raises(ValidationError):CollaborationBrief.model_validate({'title':'发布检查','outputs':[{'kind':'FLOW','label':'步骤A'},{'kind':'FLOW','label':'步骤B'}]})
+    with pytest.raises(ValidationError):QuestionPresentation(title='发布依据是什么？',reason='说明用途',verdict='PASS')
+
+
+def test_scenario_reading_keeps_exact_requirement_when_execution_materials_are_unavailable(harness,monkeypatch):
+    from types import SimpleNamespace
+    import json
+    from product.protocols.checks.scenarios import BusinessScenarioRevision
+    service,project=harness.core.business_scenarios,harness.project_id
+    with harness.core.uow_factory() as work:
+        permission=next(item for item in work.permission_intents.list_latest(project) if item.expectation.value=='ALLOW')
+    document=BusinessScenarioRevision.model_validate_json(json.dumps(dict(document_type='jiejian.business-scenario',schema_version='1',id='bsc_'+uuid4().hex,project_id=project,revision=1,label='读取已有实验要求',description='',experiments=[dict(id='normal',label='正常业务',kind='NORMAL',invocations=[dict(id='step',label='处理资料',items=[dict(id='resource',permission=dict(intent_id=permission.intent_id,revision=permission.revision,intent_hash=permission.intent_hash),subject_identity_id=harness.identities[0].identity_id,resource_id='alpha')])])])))
+    service.save(project,document,submitted_via='MCP')
+    monkeypatch.setattr(harness.core.checks,'preview',lambda project:SimpleNamespace(actions=[],gaps=[]))
+    value=service.context(project,scenario_id=document.id,revision=1)
+    assert value['actions']==[]
+    assert value['scenario']==dict(id=document.id,revision=1)
+    assert value['requirements']==[dict(permission=dict(intent_id=permission.intent_id,revision=permission.revision,intent_hash=permission.intent_hash),expectation='ALLOW')]
+    with pytest.raises(JiejianError):service.context(project,scenario_id=document.id)
+    with pytest.raises(JiejianError):service.context(project,scenario_id=document.id,revision=2)

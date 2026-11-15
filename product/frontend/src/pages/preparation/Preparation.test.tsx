@@ -42,3 +42,12 @@ it.each(['action_id=missing','action_id=current&action_revision=1'])('指定操�
     expect(screen.queryByRole('button',{name:'核对整批材料'})).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'返回原事项'}));expect(finish).toHaveBeenCalledOnce();
 });
+
+it.each(['revision=1&intent_hash=current','revision=2&intent_hash=outdated'])('历史报告补查基准变化时先核对当前要求 %s',async query=>{
+    vi.spyOn(batches,'latest').mockResolvedValue(null);
+    vi.spyOn(preparationApi,'get').mockResolvedValue({project_id:'app',actions:[{action_id:'current',action_revision:2,permissions:[{intent_id:'rule',revision:2,intent_hash:'current'}]}],preparation_complete:false} as never);
+    render(<Preparation projectId="app" name="应用" official={false} route={{path:'/preparation',query:new URLSearchParams('action_id=current&rule_id=rule&target_state=待领取&'+query)}} refresh={()=>{}} onError={()=>{}}/>);
+    expect(await screen.findByText(/原报告的规则与当前修订不同/)).toBeVisible();
+    expect(screen.getByRole('link',{name:'核对当前要求'})).toHaveAttribute('href',expect.stringContaining('rule_id=rule'));
+    expect(screen.queryByRole('button',{name:'选择数据'})).not.toBeInTheDocument();
+});

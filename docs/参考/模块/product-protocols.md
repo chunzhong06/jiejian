@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[根目录](#根目录)（4 个文件）、[checks](#checks)（14 个文件）、[observer](#observer)（5 个文件）、[preparation](#preparation)（9 个文件）、[recording](#recording)（5 个文件）、[runner](#runner)（6 个文件）、[runtime](#runtime)（12 个文件）、[web](#web)（9 个文件）。
+按目录定位：[根目录](#根目录)（4 个文件）、[checks](#checks)（15 个文件）、[observer](#observer)（5 个文件）、[preparation](#preparation)（9 个文件）、[recording](#recording)（5 个文件）、[runner](#runner)（6 个文件）、[runtime](#runtime)（13 个文件）、[web](#web)（10 个文件）。
 
 ## 根目录
 
@@ -50,11 +50,15 @@
 
 ### checks/conditions.py
 
-[源码](../../../product/protocols/checks/conditions.py)（107 行）。公开声明：`ConditionModel`、`PermissionConditions`、`ObservedPermissionConditions`、`match_permission_conditions`、`collected_conditions_status`、`permission_conditions_overlap`。
+[源码](../../../product/protocols/checks/conditions.py)（117 行）。公开声明：`ConditionModel`、`PermissionConditions`、`ObservedPermissionConditions`、`condition_source_reference`、`match_permission_conditions`、`collected_conditions_status`、`permission_conditions_overlap`。
+
+### checks/discovery.py
+
+[源码](../../../product/protocols/checks/discovery.py)（41 行）。公开声明：`DiscoveryItem`、`DiscoveryCoverage`。
 
 ### checks/execution_request.py
 
-[源码](../../../product/protocols/checks/execution_request.py)（534 行）。公开声明：`WireModel`、`PermissionReference`、`FrozenPermission`、`ExecutionAssetReference`、`RecordedProofReference`、`ObserverProofReference`、`OperationProofReference`、`EffectProofRequirement`等。
+[源码](../../../product/protocols/checks/execution_request.py)（536 行）。公开声明：`WireModel`、`PermissionReference`、`FrozenPermission`、`ExecutionAssetReference`、`RecordedProofReference`、`ObserverProofReference`、`OperationProofReference`、`EffectProofRequirement`等。
 
 ### checks/field_mutation.py
 
@@ -122,7 +126,7 @@
 
 ### preparation/http_entity.py
 
-[源码](../../../product/protocols/preparation/http_entity.py)（37 行）。公开声明：`HttpEntityQuery`、`HttpEntityEvidence`。
+[源码](../../../product/protocols/preparation/http_entity.py)（47 行）。公开声明：`HttpEntityQuery`、`HttpEntityEvidence`。
 
 ### preparation/operation_flow.py
 
@@ -198,6 +202,10 @@
 
 [源码](../../../product/protocols/runtime/__init__.py)（1 行）。公开声明：包、内部机制或样式。
 
+### runtime/collaboration.py
+
+[源码](../../../product/protocols/runtime/collaboration.py)（31 行）。公开声明：`CollaborationOutput`、`CollaborationBrief`、`QuestionPresentation`。
+
 ### runtime/creation_records.py
 
 [源码](../../../product/protocols/runtime/creation_records.py)（58 行）。公开声明：`ScopedRecordSeed`、`RecordRemove`、`CreationMember`、`CreationEvent`、`CreationView`。
@@ -256,9 +264,13 @@
 
 [源码](../../../product/protocols/web/environment.py)（47 行）。公开声明：`FrozenEnvironment`、`EnvironmentDocument`、`parse_environment_document`。
 
+### web/hosts.py
+
+[源码](../../../product/protocols/web/hosts.py)（12 行）。公开声明：`target_host`、`target_address`。
+
 ### web/identity.py
 
-[源码](../../../product/protocols/web/identity.py)（359 行）。公开声明：`HttpIdentityKind`、`IdentityBootstrapRequest`、`AuthTargetScope`、`AnonymousIdentityBinding`、`BearerIdentityBinding`、`StaticHeaderCredential`、`StaticHeadersIdentityBinding`、`CookieSessionIdentityBinding`等。
+[源码](../../../product/protocols/web/identity.py)（360 行）。公开声明：`HttpIdentityKind`、`IdentityBootstrapRequest`、`AuthTargetScope`、`AnonymousIdentityBinding`、`BearerIdentityBinding`、`StaticHeaderCredential`、`StaticHeadersIdentityBinding`、`CookieSessionIdentityBinding`等。
 
 ### web/profile.py
 
@@ -274,7 +286,7 @@
 
 ### web/target.py
 
-[源码](../../../product/protocols/web/target.py)（112 行）。公开声明：`WebTargetScope`、`WebTargetDefinition`。
+[源码](../../../product/protocols/web/target.py)（113 行）。公开声明：`WebTargetScope`、`WebTargetDefinition`。
 
 ### web/workflow.py
 

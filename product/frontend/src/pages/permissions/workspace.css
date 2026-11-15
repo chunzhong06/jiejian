@@ -1,36 +1,39 @@
-.jj-rule-editor.jj-panel { padding:0; overflow:hidden; }
-.jj-rule-editor-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:24px; background:var(--surface-heading); }
-.jj-rule-editor>.jj-scroll-table { border:0; border-radius:0; }
-.jj-rule-editor-table { width:100%; min-width:760px; border-collapse:collapse; table-layout:fixed; }
-.jj-rule-object-column { width:35%; }
-.jj-rule-condition-column { width:33%; }
-.jj-rule-current-column { width:12%; }
-.jj-rule-edit-column { width:20%; }
-.jj-rule-editor-table th { text-align:left; border-top:1px solid var(--line); vertical-align:middle; }
-.jj-rule-editor-table td { text-align:left; border-top:1px solid var(--line); vertical-align:middle; }
-.jj-rule-editor-table th { color:var(--muted); }
-.jj-rule-editor-table p { margin-top:6px; }
-.jj-rule-condition-summary { display:grid; justify-items:start; gap:8px; }
-.jj-rule-condition-summary>.jj-button { min-height:var(--control-compact); padding:6px 10px; }
-.jj-rule-condition-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:20px 40px; }
-.jj-rule-condition-editor>h3 { grid-column:1/-1; }
-.jj-rule-condition-editor>.jj-condition-fields { grid-template-columns:minmax(0,1fr); padding:0; }
-.jj-rule-condition-editor>.jj-relationship-conditions { padding:0; }
-@media(max-width:1000px) { .jj-rule-condition-editor { grid-template-columns:minmax(0,1fr); } }
-.jj-rule-editor-reason { margin:24px; }
-.jj-rule-edit-summary { margin:24px; }
-.jj-implementation-mappings { border-top:1px solid var(--line); }
-.jj-implementation-mappings>summary { padding:24px; cursor:pointer; font-weight:600; }
+.jj-rule-editor { min-width:0; container:rule-maintenance / inline-size; }
+.jj-rule-editor > .jj-section-header { justify-content:flex-start; margin-bottom:16px; }
+.jj-rule-edit-workspace { display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,2fr);gap:32px;align-items:start; }
+.jj-rule-edit-index .jj-index-item { display:grid;width:100%;gap:8px;text-align:left;padding:18px 20px; }
+.jj-rule-edit-index :is(small,span) { color:var(--muted);font-size:var(--text-meta); }
+.jj-rule-edit-detail { min-width:0;padding-left:32px;border-left:1px solid var(--line);container:rule-detail / inline-size; }
+.jj-rule-edit-heading { display:grid;gap:10px;margin-bottom:28px; }
+.jj-rule-edit-heading :is(h3,p) { margin:0; }
+.jj-rule-expectations { display:flex;flex-wrap:wrap;align-items:end;gap:24px 40px;margin-bottom:32px; }
+.jj-rule-expectations > div:first-child { display:grid;justify-items:start;gap:12px;padding-bottom:10px; }
+.jj-rule-condition-editor { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:24px 32px; }
+.jj-rule-condition-context { grid-column:1/-1;display:grid;gap:10px; }
+.jj-rule-condition-context :is(h4,p) { margin:0; }
+.jj-rule-condition-editor > .jj-condition-fields { grid-template-columns:minmax(0,1fr);padding:0; }
+.jj-rule-condition-editor > .jj-relationship-conditions { padding:0; }
+.jj-rule-edit-selector { display:none; }
+@container rule-detail (max-width:620px) { .jj-rule-condition-editor { grid-template-columns:minmax(0,1fr); } }
+@container rule-maintenance (max-width:760px) {
+ .jj-rule-edit-workspace { grid-template-columns:minmax(0,1fr);gap:28px; }
+ .jj-rule-edit-index { display:none; }
+ .jj-rule-edit-selector { display:block; }
+ .jj-rule-edit-detail { padding:0;border:0; }
+}
+.jj-rule-editor-reason { margin:28px 0 0; max-width:720px; }
+.jj-rule-edit-summary { margin:24px 0; }
+.jj-implementation-mappings { margin-top:28px; }
+.jj-implementation-mappings>summary { padding:22px 0; cursor:pointer; font-weight:var(--weight-semibold); }
 .jj-implementation-mappings>summary>.jj-badge { margin-inline-start:12px; }
-.jj-implementation-content { padding:0 24px 24px; display:grid; gap:24px; }
+.jj-implementation-content { padding:0 0 24px; display:grid; gap:24px; }
 .jj-implementation-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:24px 40px; }
 .jj-implementation-groups>section,.jj-implementation-items { min-width:0; display:grid; align-content:start; gap:20px; }
 .jj-implementation-items>fieldset { min-width:0; padding:0; border:0; display:grid; gap:12px; }
 .jj-implementation-items legend { padding:0; margin-bottom:12px; overflow-wrap:anywhere; }
 .jj-implementation-items legend>.jj-badge { margin-inline-start:12px; }
 .jj-implementation-items .jj-checkbox { align-items:start; overflow-wrap:anywhere; }
-.jj-rule-editor>.jj-form-actions { margin:0; padding:18px 24px; border-top:1px solid var(--line); background:var(--surface-heading); }
-
+.jj-rule-editor > .jj-task-actions { margin-top:32px; }
 .jj-rule-conditions { margin-top:16px; min-width:0; grid-column:1/-1; }
 .jj-rule-conditions > summary { cursor:pointer; padding-block:8px; }
 .jj-rule-conditions > summary > span { margin-inline-start:12px; }
@@ -38,11 +41,12 @@
 .jj-condition-fields > :last-child { grid-column:1/-1; }
 .jj-relationship-conditions { display:grid; gap:20px; padding-block:8px 16px; }
 .jj-relationship-condition { min-width:0; }
+.jj-relationship-condition > .jj-form-grid { grid-template-columns:minmax(0,1fr); }
 .jj-relationship-condition > header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; }
 .jj-relationship-condition > header > strong { font-size:var(--text-body); }
 @media(max-width:650px) { .jj-condition-fields { grid-template-columns:minmax(0,1fr); } .jj-rule-conditions > summary > span { display:block; margin:6px 0 0 20px; } }
 
-.jj-rule-directory-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:var(--text-meta); }
+.jj-rule-directory-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; margin-block:20px 20px; color:var(--muted); font-size:var(--text-meta); }
 .jj-rule-directory-summary > div { display:flex; gap:8px; flex-wrap:wrap; }
 .jj-rule-directory-summary .jj-button { font-size:var(--text-body); min-height:var(--control-compact); padding:5px 10px; }
 .jj-rule-directory-summary [aria-pressed=true] { background:var(--selected); color:var(--selected-ink); }
@@ -56,3 +60,35 @@
 .jj-rule-inspector-links>.jj-button{padding-inline:0}
 @media(max-width:1180px){.jj-rule-directory .jj-collection-layout{grid-template-columns:minmax(0,1fr)}.jj-rule-directory[data-detail-open=true] .jj-collection-main{display:none}.jj-rule-directory .jj-inspector{border:0;padding:28px 0}}
 @media(max-width:550px){.jj-rule-quick-facts{grid-template-columns:minmax(0,1fr)}}
+
+.jj-rule-check-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px}
+.jj-rule-check-summary>p{display:flex;align-items:center;gap:8px;font-size:var(--text-body);line-height:var(--leading-reading)}
+.jj-rule-check-summary>.jj-button{margin-left:auto}
+.jj-rule-current-preparation p{margin-top:12px;color:var(--muted);line-height:var(--leading-reading)}
+.jj-rule-review-context>summary{font-size:var(--text-label);color:var(--muted)}
+.jj-rule-review-context[open]{display:grid;gap:20px}
+.jj-rule-snapshot{display:grid;gap:24px}
+
+.jj-rule-directory .jj-inspector-body>.jj-facts{margin-bottom:24px}
+
+.jj-rule-edit-title { display:flex;justify-content:space-between;align-items:start;gap:20px; }
+.jj-rule-edit-title > .jj-button { width:36px;min-height:36px;padding:0; }
+.jj-rule-edit-overview th:first-child { width:42%; }
+.jj-rule-edit-overview td:nth-child(2) { width:28%; }
+
+.jj-scroll-table > .jj-rule-edit-overview { width:100%;min-width:0;table-layout:fixed; }
+/* 规则、条件和修改值必须同时可读；窄窗缩为逐条记录，不隐藏决定所依赖的条件。 */
+@container rule-maintenance (max-width:700px) {
+ .jj-rule-edit-overview thead { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
+ .jj-rule-edit-overview tbody { display:block; }
+ .jj-rule-edit-overview tr { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;gap:16px; }
+ .jj-rule-edit-overview :is(th,td) { width:auto!important;padding:0;border:0; }
+ .jj-rule-edit-overview th:first-child,.jj-rule-edit-overview td:nth-child(2) { grid-column:1/-1;text-align:left; }
+ .jj-rule-edit-overview .jj-object-select { padding:0; }
+ .jj-rule-edit-overview td::before { display:block;content:attr(data-label);font-size:var(--text-label);color:var(--muted);margin-bottom:10px; }
+ .jj-rule-edit-overview td.jj-table-state { vertical-align:top; }
+}
+
+/* 行内选择器高于目录的整行热区，调整要求不触发进入详情。 */
+.jj-rule-edit-overview td:last-child { position:relative;z-index:2; }
+.jj-rule-edit-overview .jj-table-choice { max-width:var(--field-compact);min-width:0; }

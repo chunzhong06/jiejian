@@ -1,0 +1,15 @@
+.jj-flow-summary { min-width:0; display:grid; gap:28px; container:flow-summary / inline-size; }
+.jj-flow-summary > section > h3 { font-size:var(--text-body); margin-bottom:12px; }
+.jj-flow-summary-purpose { font-weight:var(--weight-semibold); margin-bottom:16px; }
+.jj-flow-summary-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 32px; }
+.jj-flow-summary .jj-facts > div { min-width:0; padding:0; }
+.jj-flow-summary small { display:block; margin-top:4px; color:var(--muted); }
+.jj-flow-summary code { overflow-wrap:anywhere; white-space:normal; }
+.jj-flow-summary-steps { list-style:none; padding:0; margin:0; display:grid; gap:16px; }
+.jj-flow-summary-steps > li { display:flex; align-items:baseline; gap:16px; }
+.jj-flow-summary-steps > li > span { color:var(--muted); font-size:var(--text-meta); }
+.jj-flow-summary-steps > li > div { min-width:0; }
+.jj-flow-summary-steps p,.jj-flow-summary-outcome p { margin-top:6px; color:var(--muted); line-height:var(--leading-reading); }
+.jj-flow-summary-outcome { display:grid; gap:20px; }
+.jj-flow-summary-technical > dl { margin-top:12px; display:grid; gap:16px; }
+@container flow-summary (max-width:540px) { .jj-flow-summary-facts { grid-template-columns:minmax(0,1fr); gap:16px; } }

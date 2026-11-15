@@ -19,12 +19,14 @@ export function resultTitle(story:ResultStory){
   if(story.repair_verification?.status==='VERIFIED'&&story.verdict!=='PASS')return story.verdict==='BLOCK'?`原问题已修复，仍有 ${issues} 项违规`:'原问题已修复，其他结果尚未确认'
   if(story.repair_verification)return {VERIFIED:'原问题已修复，正常功能保留',NOT_VERIFIED:'原问题尚未解决',INCONCLUSIVE:'证据不足，无法验收修复',STALE:'规则已变化，需要重新确认修复范围'}[story.repair_verification.status]
   const count=story.actions.filter(item=>judgement(item)==='negative').length
-  return story.verdict==='PASS'?'本次范围符合权限规则':story.verdict==='BLOCK'?count?`${count} 项结果不符合权限规则`:'存在不符合权限规则的结果':'仍有检查结果无法确认'
+  return story.verdict==='PASS'?'本次已执行样本符合权限规则':story.verdict==='BLOCK'?count?`${count} 项结果不符合权限规则`:'存在不符合权限规则的结果':'仍有检查结果无法确认'
 }
 
 export function repairGap(reasons:string[]){
   const messages:Record<string,string>={
     REPAIR_STANDARD_CHANGED:'本次采用的证明要求与原检查不同。请核对参照文件和采集方式，再复验原问题。',
+    REPAIR_CHALLENGE_CHANGED:'本次请求或前置步骤与原问题不同，尚不能确认原漏洞路径已修复。请保持原请求条件后再复验。',
+    REPAIR_CHALLENGE_UNAVAILABLE:'缺少可核对的原请求条件，尚不能验收原题。请检查原始记录，不使用当前请求回填。',
     REPAIR_RUNTIME_NOT_CONFIRMED:'尚未确认本次检查实际运行的代码，暂时无法验收修复。',
     EXTERNAL_RECHECK_CONTEXT_MISMATCH:'本次环境、范围或原问题引用无法对应，请重新核对。',
     REPAIR_CONTEXT_MISMATCH:'本次检查未关联原问题的修改记录，请从该规则下重新预览复验。',

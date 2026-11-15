@@ -57,6 +57,16 @@ class ObservedPermissionConditions(ConditionModel):
         return value
 
 
+def condition_source_reference(proof):
+    """条件事实必须关联冻结的独立来源；HTTP 查询按已冻结的查询摘要标识。"""
+    if proof.rule == 'REGISTERED_EFFECT':
+        return proof.reference.descriptor_id, proof.reference.descriptor_fingerprint
+    if proof.rule == 'HTTP_ENTITY_QUERY':
+        fingerprint = proof.reference.query_fingerprint
+        return 'psr_' + fingerprint[:32], fingerprint
+    return None
+
+
 def match_permission_conditions(expected, observed):
     """只比较已采集的公开条件值；租户要求同时约束真实主体、所有者与资源。"""
     if expected is None:

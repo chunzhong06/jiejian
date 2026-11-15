@@ -213,7 +213,7 @@ class CurrentProjectRepairService:
                         reason_codes=("REPAIR_CONTEXT_NOT_LINKED",)))
             change = self._changes.latest_for_repair(project_id, contract.reference())
             change_id = None if change is None else change.manifest.change_id
-            if not repair_policy_matches(contract,policy_epoch=boundary.policy_epoch,permissions=refs):
+            if not repair_policy_matches(contract,permissions=refs):
                 status = "STALE"
             elif change is not None and change_id != linked_change:
                 status = "READY_TO_VERIFY" if change.revalidation.status=="READY" and change.revalidation.can_execute else "CHANGE_SUBMITTED"
@@ -240,10 +240,10 @@ def _same_conditions(first, current):
     def normal_requirements(contract):
         return {(item.identity.fingerprint(), item.evidence_standard_fingerprints)
             for item in (contract.selected_control, *contract.regressions)}
-    return (first.original_policy_epoch == current.original_policy_epoch
-        and first.original_intents == current.original_intents
+    # 新增规则和正常义务可以扩充本轮检查，原义务与证明不能被替换或减少。
+    return (all(item in current.original_intents for item in first.original_intents)
         and first.deny.evidence_standard_fingerprints == current.deny.evidence_standard_fingerprints
-        and normal_requirements(first) == normal_requirements(current))
+        and normal_requirements(first) <= normal_requirements(current))
 
 
 def _case_families(package):

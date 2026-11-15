@@ -8,6 +8,7 @@ from product.protocols.codec import content_hash, encode_json, decode_document, 
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from product.protocols.checks.conditions import PermissionConditions
+from product.protocols.checks.discovery import DiscoveryCoverage
 from product.protocols.web.environment import FrozenEnvironment
 from product.protocols.checks.routine_reference import FrozenRoutineReference
 from product.protocols.checks.scenarios import FrozenBusinessScenario, validate_scenario_cases
@@ -397,6 +398,7 @@ class ExecutionRequest(WireModel):
     project_id: LogicalId
     source_fingerprint: Hash | None
     policy_epoch: int = Field(ge=0)
+    discovery_coverage: DiscoveryCoverage | None = Field(default=None, exclude_if=lambda value: value is None)
     engine_version: str = Field(pattern=r"^[a-zA-Z0-9_.-]{1,64}$")
     plan_fingerprint: Hash
     actions: tuple[ExecutionAction, ...] = Field(min_length=1, max_length=512)

@@ -16,8 +16,8 @@ def build_business_scenarios_router(context):
         return data_response(context.business_scenarios.listing(project_id))
 
     @router.get('/api/projects/{project_id}/business-scenarios/context',response_model=ApiResponse)
-    def preparation(project_id:str):
-        return data_response(context.business_scenarios.context(project_id))
+    def preparation(project_id:str,scenario_id:str|None=None,revision:int|None=None):
+        return data_response(context.business_scenarios.context(project_id,scenario_id=scenario_id,revision=revision))
 
     @router.get('/api/projects/{project_id}/business-scenarios/{scenario_id}/{revision}',response_model=ApiResponse)
     def read(project_id:str,scenario_id:str,revision:int):

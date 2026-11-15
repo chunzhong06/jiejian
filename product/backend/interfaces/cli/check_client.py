@@ -103,6 +103,11 @@ class CheckClient:
             self.request('POST', '/api/jobs/'+quote(status['job']['job_id'], safe='')+'/cancel')
         return self.status(project, run_id)
 
+    def report(self, project, run_id):
+        """先核对所属应用，再读取 GUI 与 Agent 共用的不可变结果故事。"""
+        self.status(project, run_id)
+        return self.request('GET', '/api/runs/'+quote(run_id, safe='')+'/result-story')
+
     def wait(self, project, run_id, *, timeout, interval=1, clock=time.monotonic, sleep=time.sleep):
         deadline = clock()+timeout
         while True:

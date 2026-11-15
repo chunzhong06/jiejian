@@ -116,7 +116,8 @@ def test_submit_freezes_request_and_config_with_one_nonretryable_job(tmp_path, m
         store = CheckRequestStore(core.var_dir)
         request = store.load(first.job.job_id, expected_hash=first.job.request_hash)
         assert canonical_execution_request_bytes(request) == frozen_before
-        assert request.plan_fingerprint == preview.plan_fingerprint
+        # 执行计划摘要与提交确认摘要分工独立；后者还绑定当时的业务线索审阅范围。
+        assert request.discovery_coverage == preview.discovery_coverage
         assert store.load_bundle(first.job.job_id, expected_hash=request.config_fingerprint).identities[0].verification is None
         configs = list(RuntimePaths(core.var_dir).jobs.glob("*/config-*.json"))
         assert len(configs) == 1

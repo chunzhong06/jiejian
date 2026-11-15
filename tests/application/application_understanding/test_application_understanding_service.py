@@ -147,6 +147,11 @@ def test_control_origin_is_rejected_before_probe_without_fixed_port(
             "当前地址是界鉴自身服务，请填写实际被检查应用地址"
         )
         assert probes == []
+        with pytest.raises(JiejianError) as alias:
+            application.application_understanding.confirm_endpoint(
+                connected.project.project_id, endpoint='http://localhost:9000', revision=0)
+        assert alias.value.code == ErrorCode.SELF_TARGET_FORBIDDEN.value
+        assert probes == []
         assert application.application_understanding.get(
             connected.project.project_id
         ).confirmed_endpoint is None

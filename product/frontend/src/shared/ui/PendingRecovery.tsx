@@ -8,5 +8,5 @@ import {ActionLink,Button} from './actions'
 export function PendingRecovery({storageKey,projectId,destination='/reports',label='查看检查记录'}:{storageKey:string;projectId?:string;destination?:string;label?:string}){
   const [removed,setRemoved]=useState(false)
   if(removed||!pendingProblem(storageKey))return null
-  return <Notice tone="caution"><p>{pendingProblem(storageKey)}移除本地副本不会取消服务端任务。</p><div className="jj-inline-actions"><ActionLink href={'#'+scopedPath(destination,projectId)} kind="quiet">{label}</ActionLink><Button kind="quiet" onClick={()=>{savePending(storageKey,undefined);if(!pendingProblem(storageKey))setRemoved(true)}}>已核对，移除本地副本</Button></div></Notice>
+  return <Notice tone="caution" title="先核对原任务记录" actions={<ActionLink kind="default" href={'#'+scopedPath(destination,projectId)}>{label}</ActionLink>}><p>{pendingProblem(storageKey)}</p><details><summary>已核对原记录？</summary><p>可移除损坏的本地副本，服务端原任务继续保留。</p><Button kind="quiet" onClick={()=>{savePending(storageKey,undefined);if(!pendingProblem(storageKey))setRemoved(true)}}>已核对，移除本地副本</Button></details></Notice>
 }

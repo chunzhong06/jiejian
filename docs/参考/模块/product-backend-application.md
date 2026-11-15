@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[根目录](#根目录)（2 个文件）、[agent_access](#agent_access)（13 个文件）、[application_understanding](#application_understanding)（6 个文件）、[application_understanding/analysis](#application_understandinganalysis)（8 个文件）、[business_boundaries](#business_boundaries)（5 个文件）、[business_boundaries/candidates](#business_boundariescandidates)（8 个文件）、[business_boundaries/proposals](#business_boundariesproposals)（7 个文件）、[business_boundaries/reading](#business_boundariesreading)（4 个文件）、[changes](#changes)（4 个文件）、[checks](#checks)（9 个文件）、[checks/reading](#checksreading)（6 个文件）、[checks/repairs](#checksrepairs)（4 个文件）、[development](#development)（4 个文件）、[examples](#examples)（10 个文件）、[onboarding](#onboarding)（5 个文件）、[preparation](#preparation)（12 个文件）、[preparation/bindings](#preparationbindings)（5 个文件）、[preparation/guidance](#preparationguidance)（5 个文件）、[preparation/materials](#preparationmaterials)（4 个文件）、[preparation/proofs](#preparationproofs)（9 个文件）、[preparation/supplemental](#preparationsupplemental)（3 个文件）、[projects](#projects)（5 个文件）、[recording](#recording)（13 个文件）、[runtime](#runtime)（6 个文件）、[test_identities](#test_identities)（8 个文件）、[workspace](#workspace)（8 个文件）。
+按目录定位：[根目录](#根目录)（2 个文件）、[agent_access](#agent_access)（13 个文件）、[application_understanding](#application_understanding)（6 个文件）、[application_understanding/analysis](#application_understandinganalysis)（8 个文件）、[business_boundaries](#business_boundaries)（7 个文件）、[business_boundaries/candidates](#business_boundariescandidates)（8 个文件）、[business_boundaries/proposals](#business_boundariesproposals)（7 个文件）、[business_boundaries/reading](#business_boundariesreading)（4 个文件）、[changes](#changes)（5 个文件）、[checks](#checks)（9 个文件）、[checks/reading](#checksreading)（8 个文件）、[checks/repairs](#checksrepairs)（4 个文件）、[development](#development)（4 个文件）、[examples](#examples)（11 个文件）、[onboarding](#onboarding)（5 个文件）、[preparation](#preparation)（13 个文件）、[preparation/bindings](#preparationbindings)（5 个文件）、[preparation/guidance](#preparationguidance)（5 个文件）、[preparation/materials](#preparationmaterials)（5 个文件）、[preparation/proofs](#preparationproofs)（9 个文件）、[preparation/supplemental](#preparationsupplemental)（3 个文件）、[projects](#projects)（5 个文件）、[recording](#recording)（13 个文件）、[runtime](#runtime)（6 个文件）、[test_identities](#test_identities)（8 个文件）、[workspace](#workspace)（8 个文件）。
 
 ## 根目录
 
@@ -26,7 +26,7 @@
 
 ### agent_access/capabilities.py
 
-[源码](../../../product/backend/application/agent_access/capabilities.py)（779 行）。公开声明：`Capability`、`parameters`、`ProductCapabilities`。
+[源码](../../../product/backend/application/agent_access/capabilities.py)（830 行）。公开声明：`Capability`、`parameters`、`ProductCapabilities`。
 
 ### agent_access/client_config.py
 
@@ -50,7 +50,7 @@
 
 ### agent_access/execution.py
 
-[源码](../../../product/backend/application/agent_access/execution.py)（263 行）。公开声明：`StartAgent`、`AgentExecution`。
+[源码](../../../product/backend/application/agent_access/execution.py)（279 行）。公开声明：`StartAgent`、`AgentExecution`。
 
 ### agent_access/github_issues.py
 
@@ -66,11 +66,11 @@
 
 ### agent_access/tasks.py
 
-[源码](../../../product/backend/application/agent_access/tasks.py)（497 行）。公开声明：`TaskInput`、`CreateCollaboration`、`CollaborationAction`、`CollaborationQuestion`、`CollaborationFollowup`、`CollaborationTasks`。
+[源码](../../../product/backend/application/agent_access/tasks.py)（506 行）。公开声明：`TaskInput`、`CreateCollaboration`、`CollaborationAction`、`CollaborationQuestion`、`CollaborationFollowup`、`CollaborationTasks`。
 
 ### agent_access/workflow.py
 
-[源码](../../../product/backend/application/agent_access/workflow.py)（84 行）。公开声明：`AgentWorkflowContext`。
+[源码](../../../product/backend/application/agent_access/workflow.py)（87 行）。公开声明：`AgentWorkflowContext`。
 
 ## application_understanding
 
@@ -80,7 +80,7 @@
 
 ### application_understanding/endpoints.py
 
-[源码](../../../product/backend/application/application_understanding/endpoints.py)（438 行）。公开声明：`EndpointModel`、`EndpointDiscoveryLimits`、`EndpointProbeObservation`、`EndpointCandidate`、`EndpointDiscoveryResult`、`normalize_loopback_endpoint`、`TargetEndpointDiscovery`。
+[源码](../../../product/backend/application/application_understanding/endpoints.py)（380 行）。公开声明：`EndpointModel`、`EndpointDiscoveryLimits`、`EndpointProbeObservation`、`EndpointCandidate`、`EndpointDiscoveryResult`、`normalize_loopback_endpoint`、`TargetEndpointDiscovery`。
 
 ### application_understanding/environments.py
 
@@ -92,11 +92,11 @@
 
 ### application_understanding/service.py
 
-[源码](../../../product/backend/application/application_understanding/service.py)（679 行）。公开声明：`ApplicationConnectionView`、`ApplicationUnderstandingService`。
+[源码](../../../product/backend/application/application_understanding/service.py)（693 行）。公开声明：`ApplicationConnectionView`、`ApplicationUnderstandingService`。
 
 ### application_understanding/sources.py
 
-[源码](../../../product/backend/application/application_understanding/sources.py)（161 行）。公开声明：`ApplicationSources`。
+[源码](../../../product/backend/application/application_understanding/sources.py)（188 行）。公开声明：`ApplicationSources`。
 
 ## application_understanding/analysis
 
@@ -138,6 +138,10 @@
 
 [源码](../../../product/backend/application/business_boundaries/__init__.py)（29 行）。公开声明：包、内部机制或样式。
 
+### business_boundaries/discovery.py
+
+[源码](../../../product/backend/application/business_boundaries/discovery.py)（77 行）。公开声明：`discovery_coverage`。
+
 ### business_boundaries/fingerprints.py
 
 [源码](../../../product/backend/application/business_boundaries/fingerprints.py)（78 行）。公开声明：`candidate_source_snapshot`、`legacy_candidate_source_snapshot`、`implementation_candidate_snapshot`。
@@ -152,7 +156,11 @@
 
 ### business_boundaries/service.py
 
-[源码](../../../product/backend/application/business_boundaries/service.py)（510 行）。公开声明：`BusinessBoundaryService`。
+[源码](../../../product/backend/application/business_boundaries/service.py)（515 行）。公开声明：`BusinessBoundaryService`。
+
+### business_boundaries/validation.py
+
+[源码](../../../product/backend/application/business_boundaries/validation.py)（275 行）。公开声明：`ValidationEffect`、`ValidationRequirement`、`ValidationQuestion`、`ValidationPlan`、`OpenValidationQuestion`、`validation_questions`、`build_validation_plan`。
 
 ## business_boundaries/candidates
 
@@ -182,7 +190,7 @@
 
 ### business_boundaries/candidates/rule_candidates.py
 
-[源码](../../../product/backend/application/business_boundaries/candidates/rule_candidates.py)（507 行）。公开声明：`RuleCandidateService`。
+[源码](../../../product/backend/application/business_boundaries/candidates/rule_candidates.py)（572 行）。公开声明：`RuleCandidateService`。
 
 ### business_boundaries/candidates/scope.py
 
@@ -242,6 +250,10 @@
 
 [源码](../../../product/backend/application/changes/__init__.py)（4 行）。公开声明：包、内部机制或样式。
 
+### changes/continuation.py
+
+[源码](../../../product/backend/application/changes/continuation.py)（46 行）。公开声明：`ChangedRequirement`、`ChangeContinuation`、`change_continuation`。
+
 ### changes/identity.py
 
 [源码](../../../product/backend/application/changes/identity.py)（94 行）。公开声明：`SourceIdentityRecord`、`SourceIdentityComparison`、`SourceIdentityReader`。
@@ -252,7 +264,7 @@
 
 ### changes/service.py
 
-[源码](../../../product/backend/application/changes/service.py)（285 行）。公开声明：`SourceRevalidationInspection`、`CurrentChangeView`、`permission_refs`、`PreparedSourceChange`、`CurrentSourceChangeService`。
+[源码](../../../product/backend/application/changes/service.py)（292 行）。公开声明：`SourceRevalidationInspection`、`CurrentChangeView`、`permission_refs`、`PreparedSourceChange`、`CurrentSourceChangeService`。
 
 ## checks
 
@@ -286,11 +298,11 @@
 
 ### checks/runtime_bundle.py
 
-[源码](../../../product/backend/application/checks/runtime_bundle.py)（332 行）。公开声明：`recorded_request_template`、`CheckRuntimeBuilder`、`derive_target_classifiers`。
+[源码](../../../product/backend/application/checks/runtime_bundle.py)（338 行）。公开声明：`recorded_request_template`、`CheckRuntimeBuilder`、`derive_target_classifiers`。
 
 ### checks/service.py
 
-[源码](../../../product/backend/application/checks/service.py)（482 行）。公开声明：`ExternalRecheckCommand`、`CheckPreview`、`CheckService`。
+[源码](../../../product/backend/application/checks/service.py)（495 行）。公开声明：`ExternalRecheckCommand`、`CheckPreview`、`CheckService`。
 
 ## checks/reading
 
@@ -302,21 +314,29 @@
 
 [源码](../../../product/backend/application/checks/reading/comparison.py)（239 行）。公开声明：`ComparisonRun`、`ComparisonObservation`、`ComparisonItem`、`RunComparison`、`classify_change`、`CheckComparisonService`。
 
+### checks/reading/coverage.py
+
+[源码](../../../product/backend/application/checks/reading/coverage.py)（58 行）。公开声明：`CoverageSample`、`RequirementCoverage`、`sample_coverage`。
+
+### checks/reading/delivery.py
+
+[源码](../../../product/backend/application/checks/reading/delivery.py)（85 行）。公开声明：`DeliveryItem`、`delivery_items`、`historical_permission_labels`。
+
 ### checks/reading/observation_reading.py
 
 [源码](../../../product/backend/application/checks/reading/observation_reading.py)（66 行）。公开声明：`ObservationReading`、`observation_reading`。
 
 ### checks/reading/records.py
 
-[源码](../../../product/backend/application/checks/reading/records.py)（288 行）。公开声明：`RecordLink`、`EvidenceRecordIndex`、`VerificationSection`、`EvidenceRecordView`、`record_index`、`record_view`。
+[源码](../../../product/backend/application/checks/reading/records.py)（307 行）。公开声明：`RecordLink`、`EvidenceRecordIndex`、`VerificationSection`、`EvidenceRecordView`、`record_index`、`record_view`。
 
 ### checks/reading/results.py
 
-[源码](../../../product/backend/application/checks/reading/results.py)（440 行）。公开声明：`CheckRunView`、`CheckJobView`、`CheckProgressCaseView`、`CheckProgressView`、`CheckRunStatus`、`CheckContinuation`、`CheckHistoryCursor`、`CheckHistoryItem`等。
+[源码](../../../product/backend/application/checks/reading/results.py)（449 行）。公开声明：`CheckRunView`、`CheckJobView`、`CheckProgressCaseView`、`CheckProgressView`、`CheckRunStatus`、`CheckContinuation`、`CheckHistoryCursor`、`CheckHistoryItem`等。
 
 ### checks/reading/story.py
 
-[源码](../../../product/backend/application/checks/reading/story.py)（440 行）。公开声明：`StoryIdentity`、`StoryEffect`、`StoryControl`、`FactComparison`、`EvidenceExplanation`、`StoryTraceEvent`、`StoryExecutionPath`、`StoryRequestActivity`等。
+[源码](../../../product/backend/application/checks/reading/story.py)（454 行）。公开声明：`StoryIdentity`、`StoryEffect`、`StoryControl`、`FactComparison`、`EvidenceExplanation`、`StoryTraceEvent`、`StoryExecutionPath`、`StoryRequestActivity`等。
 
 ## checks/repairs
 
@@ -326,11 +346,11 @@
 
 ### checks/repairs/repair.py
 
-[源码](../../../product/backend/application/checks/repairs/repair.py)（166 行）。公开声明：`build_current_repair_contract`、`CurrentRepairService`。
+[源码](../../../product/backend/application/checks/repairs/repair.py)（170 行）。公开声明：`build_current_repair_contract`、`CurrentRepairService`。
 
 ### checks/repairs/repair_presentation.py
 
-[源码](../../../product/backend/application/checks/repairs/repair_presentation.py)（83 行）。公开声明：`RepairComparisonRow`、`RepairReview`、`build_repair_comparison`。
+[源码](../../../product/backend/application/checks/repairs/repair_presentation.py)（88 行）。公开声明：`RepairComparisonRow`、`RepairReview`、`build_repair_comparison`。
 
 ### checks/repairs/repair_text.py
 
@@ -360,9 +380,13 @@
 
 [源码](../../../product/backend/application/examples/__init__.py)（1 行）。公开声明：包、内部机制或样式。
 
+### examples/change_labels.py
+
+[源码](../../../product/backend/application/examples/change_labels.py)（26 行）。公开声明：`gallery_operation_key`、`gallery_change_labels`。
+
 ### examples/environment.py
 
-[源码](../../../product/backend/application/examples/environment.py)（642 行）。公开声明：`OfficialBoundaryDraft`、`OfficialScenarioVersion`、`OfficialExperienceView`、`OfficialSampleExperience`。
+[源码](../../../product/backend/application/examples/environment.py)（644 行）。公开声明：`OfficialBoundaryDraft`、`OfficialScenarioVersion`、`OfficialExperienceView`、`OfficialSampleExperience`。
 
 ### examples/gallery_materials.py
 
@@ -378,7 +402,7 @@
 
 ### examples/journey.py
 
-[源码](../../../product/backend/application/examples/journey.py)（65 行）。公开声明：`OfficialDevelopmentJourney`、`build_development_journey`。
+[源码](../../../product/backend/application/examples/journey.py)（114 行）。公开声明：`OfficialChangeOption`、`OfficialDevelopmentJourney`、`build_development_journey`。
 
 ### examples/materials.py
 
@@ -386,7 +410,7 @@
 
 ### examples/node_environment.py
 
-[源码](../../../product/backend/application/examples/node_environment.py)（473 行）。公开声明：`NodeOfficialSampleExperience`。
+[源码](../../../product/backend/application/examples/node_environment.py)（493 行）。公开声明：`NodeOfficialSampleExperience`。
 
 ### examples/preset_delivery.py
 
@@ -430,7 +454,7 @@
 
 ### preparation/business_scenarios.py
 
-[源码](../../../product/backend/application/preparation/business_scenarios.py)（76 行）。公开声明：`BusinessScenarioService`。
+[源码](../../../product/backend/application/preparation/business_scenarios.py)（94 行）。公开声明：`BusinessScenarioService`。
 
 ### preparation/demonstrations.py
 
@@ -444,9 +468,13 @@
 
 [源码](../../../product/backend/application/preparation/flow_trials.py)（181 行）。公开声明：`TrialSelection`、`StartFlowTrial`、`FlowTrialService`。
 
+### preparation/identity_reuse.py
+
+[源码](../../../product/backend/application/preparation/identity_reuse.py)（52 行）。公开声明：`retained_identity_assignments`。
+
 ### preparation/models.py
 
-[源码](../../../product/backend/application/preparation/models.py)（105 行）。公开声明：`RuleCaseDataSelection`、`PreparationStatus`、`PreparationItemView`、`IdentitySlotPreparationView`、`IdentityPreparationView`、`ResourcePreparationView`、`EffectEvidencePreparationView`、`ActionTechnicalPreparationView`等。
+[源码](../../../product/backend/application/preparation/models.py)（112 行）。公开声明：`RuleCaseDataSelection`、`PreparationStatus`、`PreparationItemView`、`IdentitySlotPreparationView`、`IdentityPreparationView`、`ResourcePreparationView`、`EffectEvidencePreparationView`、`ActionTechnicalPreparationView`等。
 
 ### preparation/operation_flows.py
 
@@ -462,7 +490,7 @@
 
 ### preparation/service.py
 
-[源码](../../../product/backend/application/preparation/service.py)（434 行）。公开声明：`preparation_recommendation`、`BoundaryReader`、`IdentityReader`、`PreparationBindingReader`、`PreparationService`。
+[源码](../../../product/backend/application/preparation/service.py)（450 行）。公开声明：`preparation_recommendation`、`BoundaryReader`、`IdentityReader`、`PreparationBindingReader`、`PreparationService`。
 
 ### preparation/trial_jobs.py
 
@@ -526,6 +554,10 @@
 
 [源码](../../../product/backend/application/preparation/materials/models.py)（42 行）。公开声明：`MaterialReference`、`MaterialChange`、`PreparationDraft`。
 
+### preparation/materials/review.py
+
+[源码](../../../product/backend/application/preparation/materials/review.py)（58 行）。公开声明：`material_handling`、`material_context`。
+
 ### preparation/materials/service.py
 
 [源码](../../../product/backend/application/preparation/materials/service.py)（254 行）。公开声明：`PreparationMaterialService`。
@@ -566,7 +598,7 @@
 
 ### preparation/proofs/service.py
 
-[源码](../../../product/backend/application/preparation/proofs/service.py)（690 行）。公开声明：`PreparationFacts`、`ProofPreparationService`。
+[源码](../../../product/backend/application/preparation/proofs/service.py)（692 行）。公开声明：`PreparationFacts`、`ProofPreparationService`。
 
 ## preparation/supplemental
 
@@ -602,7 +634,7 @@
 
 ### projects/rules.py
 
-[源码](../../../product/backend/application/projects/rules.py)（72 行）。公开声明：`RuleWorkspaceService`。
+[源码](../../../product/backend/application/projects/rules.py)（75 行）。公开声明：`RuleWorkspaceService`。
 
 ## recording
 
@@ -652,7 +684,7 @@
 
 ### recording/source.py
 
-[源码](../../../product/backend/application/recording/source.py)（163 行）。公开声明：`current_recording_instance`、`recording_endpoint_fingerprint`、`recording_source_fingerprint`、`require_recording_source`、`require_persisted_recording_source`。
+[源码](../../../product/backend/application/recording/source.py)（165 行）。公开声明：`current_recording_instance`、`recording_endpoint_fingerprint`、`recording_source_fingerprint`、`require_recording_source`、`require_persisted_recording_source`。
 
 ### recording/submission.py
 
@@ -726,7 +758,7 @@
 
 ### workspace/models.py
 
-[源码](../../../product/backend/application/workspace/models.py)（232 行）。公开声明：`WorkspaceModel`、`WorkspaceProjectView`、`WorkspaceConnectionView`、`ActorWorkspaceView`、`ActionWorkspaceView`、`PrimaryTaskView`、`PreparationWorkAction`、`PreparationWorkView`等。
+[源码](../../../product/backend/application/workspace/models.py)（236 行）。公开声明：`WorkspaceModel`、`WorkspaceProjectView`、`WorkspaceConnectionView`、`ActorWorkspaceView`、`ActionWorkspaceView`、`PrimaryTaskView`、`PreparationWorkAction`、`PreparationWorkView`等。
 
 ### workspace/preparation.py
 
@@ -742,11 +774,11 @@
 
 ### workspace/reading.py
 
-[源码](../../../product/backend/application/workspace/reading.py)（152 行）。公开声明：`WorkspaceCheckReaders`、`WorkspaceCheckFacts`、`WorkspaceDevelopmentFacts`、`WorkspaceReader`、`PreparationReading`。
+[源码](../../../product/backend/application/workspace/reading.py)（157 行）。公开声明：`WorkspaceCheckReaders`、`WorkspaceCheckFacts`、`WorkspaceDevelopmentFacts`、`WorkspaceReader`、`PreparationReading`。
 
 ### workspace/service.py
 
-[源码](../../../product/backend/application/workspace/service.py)（86 行）。公开声明：`WorkspaceService`。
+[源码](../../../product/backend/application/workspace/service.py)（87 行）。公开声明：`WorkspaceService`。
 
 ### workspace/tasks.py
 

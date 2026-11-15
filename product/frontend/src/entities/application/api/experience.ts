@@ -66,7 +66,7 @@ export type CompetitionValidationSummaryViewDto = {
 }
 
 export const experienceApi = {
-  development: () => request<OfficialDevelopmentJourneyDto>('/api/experience/official-sample/development'),
+  development: (signal?:AbortSignal) => request<OfficialDevelopmentJourneyDto>('/api/experience/official-sample/development',{signal}),
   observation: (available: boolean) => request<OfficialExperienceDto>('/api/experience/official-sample/observation', { method: 'POST', body: JSON.stringify({ schema_version: '1', available }) }),
   reconcile: () => request<OfficialExperienceDto>('/api/experience/official-sample/reconcile', { method: 'POST' }),
   reset: (operationId: string) => request<OfficialExperienceDto>('/api/experience/official-sample/reset', { method: 'POST', body: JSON.stringify({ schema_version: '1', consent: true, operation_id: operationId }) }),
@@ -82,13 +82,14 @@ export const experienceApi = {
     request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
   boundaryDraft: (exhibitionDownload=true) => request<OfficialBoundaryDraftDto>('/api/experience/official-sample/boundary-draft?exhibition_download='+String(exhibitionDownload)),
   boundaryProposal: (exhibitionDownload?: boolean) => request<BoundaryProposalViewDto>('/api/experience/official-sample/boundary-proposal', { method: 'POST', ...(exhibitionDownload===undefined?{}:{body:JSON.stringify({exhibition_download:exhibitionDownload})}) }),
-  switchVersion: (version: OfficialScenarioVersion, reference?: RepairReference) =>
+  switchVersion: (version: OfficialScenarioVersion, reference?: RepairReference, basis?: {project_id:string;expected_basis:string}) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/version', {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '1',
         version,
         repair_reference: reference ?? null,
+        ...basis,
       }),
     }),
   stop: (operationId?: string) => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST', ...(operationId ? { body: JSON.stringify({ operation_id: operationId }) } : {}) }),
@@ -99,4 +100,11 @@ export type OfficialDevelopmentJourneyDto = {
   project_id: string; implementation: OfficialScenarioVersion | 'CUSTOM'; delivery_source: 'PRESET_DEMONSTRATION' | 'EXTERNAL_CODE'
   run_id: string | null; verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
   can_optimize: boolean; repair_verified: boolean; evidence_limited: boolean; reason: string
+  policy_epoch: number | null
+  source_fingerprint?: string | null
+  current_change_id?: string | null
+  has_active_tasks?: boolean
+  transition_basis: string
+  change_options: Array<{version:'VULNERABLE'|'EXPOSE_REVOKE';available:boolean;reason:string|null}>
+  stage: 'STATE_UNAVAILABLE' | 'REQUIREMENTS' | 'BASELINE_CHECK' | 'BASELINE_RESULT' | 'CHANGED_CHECK' | 'CHECK_RESULT' | 'CUSTOM'
 }

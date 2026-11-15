@@ -1,6 +1,6 @@
 import {useLayoutEffect,useRef,useState,type RefObject} from 'react'
 import {motionMilliseconds} from './motionTiming'
-import {animateMotion,springSample,stopMotion} from './motion'
+import {animateMotion,layoutBounds,springSample,stopMotion} from './motion'
 
 type Bounds={x:number;y:number;width:number;height:number}
 const axes=['x','y','width','height'] as const
@@ -28,13 +28,15 @@ export function useSelectionIndicator(root:RefObject<HTMLElement|null>,selector:
       const item=node.querySelector<HTMLElement>(selector)
       if(!item){setBounds(undefined);return}
       // 分组索引和原生表格的 offsetParent 不一定是标记容器，统一换算到容器的滚动坐标。
-      const area=node.getBoundingClientRect(),target=item.getBoundingClientRect()
-      const next={x:target.left-area.left-node.clientLeft+node.scrollLeft,y:target.top-area.top-node.clientTop+node.scrollTop+(kind==='underline'?target.height-2:0),width:target.width,height:kind==='underline'?2:target.height}
+      const area=layoutBounds(node),target=layoutBounds(item)
+      const next={x:target.x-area.x-node.clientLeft+node.scrollLeft,y:target.y-area.y-node.clientTop+node.scrollTop+(kind==='underline'?target.height-2:0),width:target.width,height:kind==='underline'?2:target.height}
       setBounds(previous=>previous&&previous.x===next.x&&previous.y===next.y&&previous.width===next.width&&previous.height===next.height?previous:next)
     }
     place()
     const observer='ResizeObserver' in window?new ResizeObserver(place):undefined
     observer?.observe(node)
+    const selected=node.querySelector<HTMLElement>(selector)
+    if(selected)observer?.observe(selected)
     node.querySelectorAll<HTMLElement>('button,a').forEach(item=>observer?.observe(item))
     return()=>observer?.disconnect()
   },[root,selector,identity,kind])

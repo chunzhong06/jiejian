@@ -109,19 +109,22 @@ class CurrentRepairService:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"原题修复引用无法核对")
         if package.request.external_recheck is not None:
             verification=verify_external_recheck(matches[0],request=package.request,bundle=package.bundle,
-                result=package.result,evidence=package.evidence,source_environment=source.bundle.environment)
+                result=package.result,evidence=package.evidence,source_environment=source.bundle.environment,
+                original_request=source.request,original_bundle=source.bundle)
             return verification,build_repair_comparison(matches[0],source,package)
         change = package.request.change_context
         expected = None if change is None else self._change_context_reader(package.request.project_id,change.change_id)
         verification = verify_current_repair(matches[0],request=package.request,bundle=package.bundle,
-            result=package.result,evidence=package.evidence,expected_change_context=expected)
+            result=package.result,evidence=package.evidence,expected_change_context=expected,
+            original_request=source.request,original_bundle=source.bundle)
         return verification, build_repair_comparison(matches[0], source, package)
 
     def verification_for_contract(self, package, contract):
+        source=self._reader.package(contract.source_run_id,project_id=package.request.project_id)
         if package.request.external_recheck is not None:
-            source=self._reader.package(contract.source_run_id,project_id=package.request.project_id)
             return verify_external_recheck(contract,request=package.request,bundle=package.bundle,result=package.result,
-                evidence=package.evidence,source_environment=source.bundle.environment)
+                evidence=package.evidence,source_environment=source.bundle.environment,
+                original_request=source.request,original_bundle=source.bundle)
         change = package.request.change_context
         expected = None if change is None else self._change_context_reader(package.request.project_id, change.change_id)
         targets = () if change is None or self._rule_targets_reader is None else self._rule_targets_reader(
@@ -129,6 +132,7 @@ class CurrentRepairService:
         # 目标集合进入冻结的 change_context 指纹，历史检查不能事后追加修复目标。
         return verify_current_repair(contract, request=package.request, bundle=package.bundle,
             result=package.result, evidence=package.evidence, expected_change_context=expected,
+            original_request=source.request,original_bundle=source.bundle,
             linked_repair_references=tuple(item.repair for item in targets if item.repair is not None))
 
     def reviews_from_verified_package(self, package):

@@ -7,6 +7,7 @@ from pydantic import Field
 
 from product.backend.domain.lifecycle import CaseVerdict, RunVerdict
 from product.backend.domain.checks.repair import CurrentRepairContract, CurrentRepairVerification
+from product.protocols.checks.discovery import DiscoveryCoverage
 from product.backend.domain.verification.breakpoints import BreakpointLocator, BreakpointResult
 from product.backend.domain.verification.checks import CheckDecisionInput, project_check_effect_facts
 from product.backend.domain.verification.trace import TraceAuthorizationDecision, TraceEventKind
@@ -17,11 +18,13 @@ from product.protocols.checks.routine_reference import FrozenRoutineReference
 from product.protocols.web.environment import FrozenEnvironment
 from product.protocols.runtime.request_activity import RequestActivity
 from product.backend.application.reading import projection_read
+from product.backend.application.checks.reading.delivery import DeliveryItem, delivery_items, historical_permission_labels
+from product.backend.application.checks.reading.coverage import RequirementCoverage, sample_coverage
 from product.protocols.checks.execution_request import ChangeContext, ExternalRecheckContext, FrozenPermission, FrozenRequirementScope, FrozenCheckSelection, WireModel
 
 
 JUDGEMENTS = {
-    "PASS": "检查结果符合已批准的权限要求",
+    "PASS": "本次已执行样本符合已批准的权限要求",
     "BLOCK": "已发现规则禁止的实际结果",
     "INCONCLUSIVE": "证据或检查条件不足，尚不能确定",
 }
@@ -171,6 +174,8 @@ class ActionResultStory(WireModel):
 
 
 class ResultStory(WireModel):
+    sample_coverage: tuple[RequirementCoverage, ...] = ()
+    delivery_summary: tuple[DeliveryItem, ...] = ()
     routine: FrozenRoutineReference | None = Field(default=None, exclude_if=lambda value:value is None)
     environment: FrozenEnvironment | None = Field(default=None, exclude_if=lambda value:value is None)
     external_recheck: ExternalRecheckContext | None = Field(default=None,exclude_if=lambda value:value is None)
@@ -190,14 +195,16 @@ class ResultStory(WireModel):
     runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
     runtime_instance_id: str | None = None
     requirement_scope: tuple[FrozenRequirementScope, ...] = ()
+    discovery_coverage: DiscoveryCoverage | None = Field(default=None, exclude_if=lambda value: value is None)
     selection: FrozenCheckSelection | None = None
 
 
 class CheckStoryBuilder:
     """只消费 Reader 已验证的同 Run 事实；定位和解释不会重算或改写已发布 Verdict。"""
 
-    def __init__(self, reader):
+    def __init__(self, reader, *, uow_factory=None):
         self._reader = reader
+        self._uow_factory = uow_factory
         self._repairs = None
 
     def bind_repairs(self, repairs):
@@ -353,9 +360,11 @@ class CheckStoryBuilder:
                 verification, repair_comparison = repair_reviews[0].verification, repair_reviews[0].comparison
         correspondence = getattr(package.result, "runtime_correspondence", None)
         runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
-        return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+        story = ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+            sample_coverage=sample_coverage(package),
             routine=package.request.routine, environment=package.request.environment,
             requirement_scope=getattr(package.request, 'requirement_scope', ()),
+            discovery_coverage=package.request.discovery_coverage,
             selection=package.request.selection,
             runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.runtime.reference.instance_id,
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
@@ -363,6 +372,11 @@ class CheckStoryBuilder:
             technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),
             change_context=package.request.change_context,repair_verification=verification,external_recheck=package.request.external_recheck,
             repair_comparison=repair_comparison, repair_reviews=repair_reviews)
+        labels={}
+        if self._uow_factory is not None and story.selection is not None and story.selection.omitted:
+            with self._uow_factory() as work:
+                labels=historical_permission_labels(work,story.project_id,story.selection.omitted)
+        return story.model_copy(update={'delivery_summary': delivery_items(story,labels)})
 
 
 def _proof_coverage(case, proofs, documents, facts):

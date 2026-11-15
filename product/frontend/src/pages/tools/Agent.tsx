@@ -1,6 +1,5 @@
 import './workspace.css'
 import { useRef, useState } from 'react';
-import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import { agentClients, agentConnectionsApi, mcpAccessApi, type AgentClient, type MCPAccessLevel, type AgentConnection } from '../../entities/runtime/api/mcp';
 import { Choice } from "../../shared/ui/Choice";
 import { Badge, ErrorNote, InlineFeedback, Loading } from "../../shared/ui/feedback";
@@ -49,26 +48,26 @@ export function Agent({ projectId, name, onError,embedded=false }: {
       <section className="jj-tools-connection">
         <header className="jj-tools-heading"><h2>工具连接</h2></header>
         <div className="jj-tools-body">
-          <div className="jj-tool-selector"><div className="jj-tool-object"><Field label="开发工具"><Choice value={client} disabled={busy} onValueChange={value=>{setClient(value as AgentClient);setProfile('');setMessage('');}}>{agentClients.map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</Choice></Field><div className="jj-tool-state">{connection.loading?<Badge>读取中</Badge>:!connection.error&&connection.data&&<><Badge tone={connected?'positive':connection.data.state==='FAILED'?'negative':'neutral'}>{connectionLabels[connection.data.state]}</Badge>{connection.data.tool_count>0&&<span className="jj-small jj-muted">{connection.data.tool_count} 项工具</span>}</>}</div></div></div>
+          <div className="jj-tool-selector"><div className="jj-tool-object"><Field measure="short" label="开发工具"><Choice measure="short" value={client} disabled={busy} onValueChange={value=>{setClient(value as AgentClient);setProfile('');setMessage('');}}>{agentClients.map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</Choice></Field><div className="jj-tool-state">{connection.loading?<Badge>读取中</Badge>:!connection.error&&connection.data&&<><Badge tone={connected?'positive':connection.data.state==='FAILED'?'negative':'neutral'}>{connectionLabels[connection.data.state]}</Badge>{connection.data.tool_count>0&&<span className="jj-small jj-muted">{connection.data.tool_count} 项工具</span>}</>}</div></div></div>
           {(connection.error||connectionHint||connected||Boolean(connection.data?.profiles.length))&&<section className="jj-tool-detail" key={client}>
-            {connection.error?<ErrorNote error={connection.error}/>:<>
+            {connection.error?<ErrorNote error={connection.error} onRetry={connection.reload} retryLabel="重新读取开发工具配置"/>:<>
               {connectionHint&&<p className="jj-tool-message">{connectionHint}</p>}
               {connected&&<p className="jj-small jj-muted">显示最近活动，不代表客户端持续在线。</p>}
-              {Boolean(connection.data?.profiles.length)&&<Field label="配置位置"><Choice value={profile} disabled={busy} onValueChange={setProfile}><option value="">选择配置</option>{connection.data!.profiles.map(item=><option key={item} value={item}>{item}</option>)}</Choice></Field>}
+              {Boolean(connection.data?.profiles.length)&&<Field measure="standard" label="配置位置"><Choice value={profile} disabled={busy} onValueChange={setProfile}><option value="">选择配置</option>{connection.data!.profiles.map(item=><option key={item} value={item}>{item}</option>)}</Choice></Field>}
             </>}
           </section>}
         </div>
         {state.data&&<section className="jj-tools-service"><div className="jj-tools-service-row"><div className="jj-tools-service-state"><ObjectIdentity name={<strong>本地接入服务</strong>} status={<Badge tone={state.data.paired&&state.data.accepting_connections?'positive':'neutral'}>{state.data.paired?state.data.accepting_connections?'可连接':'已暂停':'未配对'}</Badge>}/></div>{state.data.paired&&<Switch label="允许开发工具接入" checked={state.data.accepting_connections} busy={busy} onCheckedChange={accepting=>void act(async()=>{await(accepting?mcpAccessApi.resume():mcpAccessApi.pause());})}/>}</div>
           <details className="jj-tool-management"><summary>连接管理</summary><div className="jj-tool-management-content"><dl className="jj-facts"><dt>本地接入地址</dt><dd className="jj-path">{state.data.endpoint}</dd></dl>{connected&&connection.data?.message&&<p className="jj-small jj-muted">{connection.data.message}</p>}<div className="jj-inline-actions">{connection.data&&connection.data.state!=='NOT_CONFIGURED'&&<Button disabled={busy} onClick={()=>setConfirm('restore')}>恢复此工具原配置</Button>}{state.data.paired&&<Button kind="danger" disabled={busy} onClick={()=>setConfirm('forget')}>解除全部工具配对</Button>}</div></div></details>
         </section>}
-        <footer className="jj-tools-actions"><Button kind={connected?'quiet':'primary'} disabled={busy||connection.loading||Boolean(connection.error)||Boolean(connection.data?.profiles.length&&!profile)} onClick={()=>setConfirm('connect')}>{connection.data?.state==='NOT_CONFIGURED'?'配置连接':'更新连接'}<ArrowRightOutlined aria-hidden="true"/></Button></footer>
+        <footer className="jj-tools-actions"><Button kind={connected?'quiet':'primary'} disabled={busy||connection.loading||Boolean(connection.error)||Boolean(connection.data?.profiles.length&&!profile)} onClick={()=>setConfirm('connect')}>{connection.data?.state==='NOT_CONFIGURED'?'配置连接':'更新连接'}</Button></footer>
       </section>
       <section className="jj-tools-access">
         <header><h2>应用授权</h2></header>
         <p className="jj-access-explanation">选择这个开发工具可以在当前应用中做什么。连接工具与授予访问权限分别确认。</p>
-        {state.loading ? <Loading page/> : state.error ? <ErrorNote error={state.error}/> : <>
+        {state.loading ? <Loading page/> : state.error ? <ErrorNote error={state.error} onRetry={state.reload} retryLabel="重新读取开发工具配置"/> : <>
           <div className="jj-current-grant"><h3>{name??(projectId?'已选应用':'尚未选择应用')}</h3>{projectId&&<Badge tone={grant?'positive':'neutral'}>{grant?'已授权':'未授权'}</Badge>}</div>
-          <Field label="访问范围" hint={levelDetails[chosenLevel]||"读取业务要求、检查材料和已发布报告。"}><Choice value={chosenLevel} disabled={!projectId||busy} onValueChange={value=>setLevel(value as MCPAccessLevel)}>{Object.entries(levels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</Choice></Field>
+          <Field measure="medium" label="访问范围" hint={levelDetails[chosenLevel]||"读取业务要求、检查材料和已发布报告。"}><Choice value={chosenLevel} disabled={!projectId||busy} onValueChange={value=>setLevel(value as MCPAccessLevel)}>{Object.entries(levels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</Choice></Field>
           {accessChanged&&<p className="jj-access-current">当前权限：{levels[grant!.level]}，新范围尚未保存。</p>}
           {!state.data?.paired&&<p className="jj-access-explanation">先配置工具连接，再选择它可以访问的应用和操作范围。</p>}
           <Button disabled={!projectId||busy||!state.data?.paired||Boolean(grant&&!accessChanged)} onClick={()=>setConfirm('access')}>{grant?'保存权限':'授予访问权限'}</Button>

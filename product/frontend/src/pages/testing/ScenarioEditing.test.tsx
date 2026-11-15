@@ -31,6 +31,19 @@ async function choose(label:string,option:string){
 }
 afterEach(()=>{vi.restoreAllMocks();discardProjectEditorDrafts(project)})
 
+it('对照变化可以移除，正常流程与原准备项继续保留，操作不自动保存',async()=>{
+ const save=setup()
+ await screen.findByRole('textbox',{name:'场景名称'})
+ fireEvent.click(screen.getByRole('button',{name:'添加对照变化'}))
+ expect(screen.getByRole('tab',{name:'省略步骤'})).toHaveAttribute('aria-selected','true')
+ fireEvent.click(screen.getByRole('button',{name:'移除此变化'}))
+ expect(screen.queryByRole('tab',{name:'省略步骤'})).not.toBeInTheDocument()
+ expect(screen.getByRole('tab',{name:'正常业务'})).toHaveAttribute('aria-selected','true')
+ expect(screen.getByRole('button',{name:'2 查看申请2'})).toBeVisible()
+ expect(screen.queryByRole('button',{name:'移除此变化'})).not.toBeInTheDocument()
+ expect(save).not.toHaveBeenCalled()
+})
+
 it('准备项选择保留准确权限、账号和资源绑定，分项核对不产生保存',async()=>{
  const save=setup()
  await screen.findByRole('combobox',{name:'已准备的操作与数据'})
@@ -44,7 +57,7 @@ it('准备项选择保留准确权限、账号和资源绑定，分项核对不�
 
 it('范围选择只改变预览范围，显式预览才另存准确前缀，不提交整个场景',async()=>{
  const save=setup()
- await screen.findByRole('combobox',{name:'核对范围'})
+ fireEvent.click(await screen.findByText('先核对当前实验或步骤'));await screen.findByRole('combobox',{name:'核对范围'})
  await choose('核对范围','正常流程至「查看申请1」')
  expect(save).not.toHaveBeenCalled()
  fireEvent.click(screen.getByRole('button',{name:'预览所选检查范围'}))
@@ -60,11 +73,11 @@ it('单独试运行独占任务操作，返回后保留场景草稿与当前步�
  const save=setup()
  const input=await screen.findByRole('textbox',{name:'步骤说明'})
  fireEvent.change(input,{target:{value:'本步尚未保存的说明'}})
- await choose('核对范围','当前动作（单独试运行）')
+ fireEvent.click(screen.getByText('先核对当前实验或步骤'));await choose('核对范围','当前动作（单独试运行）')
  fireEvent.click(screen.getByRole('button',{name:'进入单独试运行'}))
  expect(screen.getByRole('heading',{level:1,name:'当前动作试运行'})).toBeVisible()
  expect(screen.queryByRole('button',{name:'保存并预览检查'})).not.toBeInTheDocument()
- expect(screen.queryByRole('button',{name:'请 Agent 整理'})).not.toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'请 Agent 整理业务场景'})).not.toBeInTheDocument()
  expect(save).not.toHaveBeenCalled()
  fireEvent.click(screen.getByRole('button',{name:'返回场景草稿'}))
  expect(screen.getByRole('textbox',{name:'步骤说明'})).toHaveValue('本步尚未保存的说明')

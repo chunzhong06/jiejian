@@ -33,6 +33,19 @@ export function stopAllMotion(){
   active.clear()
 }
 
+/** 布局定位排除本系统 position 通道的临时位移，保留真实尺寸与业务 CSS 布局。 */
+export function layoutBounds(node:HTMLElement){
+  const rect=node.getBoundingClientRect()
+  let x=rect.left,y=rect.top
+  for(let current:HTMLElement|null=node;current;current=current.parentElement){
+    const movement=owners.get(current)?.get('position')?.animation
+    if(!movement||movement.playState==='idle')continue
+    const [dx,dy]=(getComputedStyle(current).translate||'none').split(/\s+/).map(parseFloat)
+    x-=Number.isFinite(dx)?dx:0;y-=Number.isFinite(dy)?dy:0
+  }
+  return {x,y,width:rect.width,height:rect.height}
+}
+
 /** 归一化弹簧同时返回位置与速度，快速改向不会把新动作重置为静止。 */
 export function springSample(from:number,target:number,velocity:number,seconds:number,duration:number,damping=.86){
   const frequency=8/(duration/1000),delta=from-target,t=Math.max(0,seconds)

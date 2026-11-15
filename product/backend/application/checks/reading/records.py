@@ -124,6 +124,12 @@ def _entries(document):
         labels={'OBJECT_CREATION':'本次创建的实际对象','COMMITTED_STATE':'已保存的数据修改','IDENTITY_CHECK':'实际账号核对','FIELD_DISCLOSURE':'受保护字段比较',
             'REFERENCE_ARTIFACT':'已采用的文件参照','FILE_RECEIPT':'实际接收的文件内容','ASYNC_TASK':'异步任务与原请求关联','ANONYMOUS_CHECK':'实际访客身份核对'}
         label=f'第 {fact.data.scope_ordinal+1} 次数据修改' if fact.data.kind=='COMMITTED_STATE' else labels[fact.data.kind]
+        if fact.data.kind=='IDENTITY_CHECK':
+            # 名称来自本次封存检查的角色关系，不读当前账号或按记录顺序猜对象。
+            case=document.effective_case
+            subject=fact.data.identity_id==case.subject_test_identity_id
+            owner=fact.data.identity_id==case.resource_owner_test_identity_id
+            label='操作账号与资源所有者核对' if subject and owner else '操作账号核对' if subject else '资源所有者账号核对' if owner else label
         add('FACT',fact,f'/business_facts/{index}',label)
     for index,item in enumerate(document.observations):
         add('OBSERVATION',item,f'/observations/{index}',PHASES[item.phase]+'的结果观察',
@@ -167,7 +173,11 @@ def _summary(link,value):
     if data.kind=='IDENTITY_CHECK':return '独立身份读取的结果：账号'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.subject_match]+'，角色'+{'MATCH':'一致','MISMATCH':'不一致','UNKNOWN':'尚未确认'}[data.role_match]+'。'
     if data.kind=='FIELD_DISCLOSURE':return '对实际返回的受保护字段逐项比较；摘要用于核对内容，不展示原始敏感正文。'
     if data.kind=='REFERENCE_ARTIFACT':return '这是用户采用的测试参照，只定义要比较的内容，本身不能证明本次已经收到文件。'
-    if data.kind=='ASYNC_TASK':return '从实际提交响应跟随同一任务，并核对主体、资源和原请求。任务终态与实际文件接收分别证明。'
+    if data.kind=='ASYNC_TASK':
+        # 只解释这条封存任务事实；成功状态不替代独立文件接收，也不重算已发布判断。
+        if not value.complete or not data.correlated:return '任务记录尚未完整对应本次账号、资源和原请求，导出完成情况仍待核对。'
+        state={'QUEUED':'仍在排队','RUNNING':'仍在运行','SUCCESS':'服务声明已完成','FAILED':'服务声明失败','CANCELLED':'服务声明已取消','TIMED_OUT':'服务声明超时'}[data.state]
+        return f'本次观察结束时，导出任务{state}，并已对应本次账号、资源和原请求。实际文件是否完整收到，请查看文件接收记录。'
     return {'MATCH':'实际完整收到的内容与已采用参照一致。','DIFFERENT':'实际收到的内容与参照不同，不能把它当作原完整文件。','INCOMPLETE':'本次没有形成完整文件接收证明。'}[data.comparison]
 
 
@@ -202,6 +212,12 @@ def record_view(package,evidence_id,case_id,record_id):
         bindings={proof.binding_fingerprint for proof in case.proof_requirements if proof.proof_fingerprint in selected_proofs}
         expected=[proof.expected_state for proof in configuration.proofs if proof.binding_fingerprint in bindings and proof.expected_state is not None]
         if expected:method+=' 判断条件采用本轮确认的状态定义，具体字段和值可在原始记录中核对。'
+    if link.kind=='FACT' and value.data.kind=='ASYNC_TASK':
+        # 同一文件来源也引用任务事实；任务自身的方法说明不能套用文件内容比较。
+        method='读取导出任务状态接口，按已审阅的状态映射记录有限等待结束时的进展，并核对任务、账号、资源及原请求的对应关系。完整文件是否收到及内容是否一致，由独立的文件接收记录说明。'
+    if link.kind=='FACT' and value.data.kind=='IDENTITY_CHECK':
+        # 身份事实可被多条业务观察引用，不能因此套用那些观察的数据修改或文件比较方法。
+        method='在本次执行中独立读取实际账号与角色，并与计划使用的测试身份比较；这里只解释已封存的身份核对结果。'
     if not method:
         method='读取同一封存证据中的实际执行核对。' if link.kind=='OUTCOME' else '读取本题显式执行事件及它记录的前序关系；不按时间相邻推断因果。' if link.kind=='TRACE' else '读取宿主在真实请求作用域内自动采集的调用；父引用来自同一请求，不用时间相邻拼接路径。' if link.kind=='ACTIVITY' else '原观察只保存了来源、阶段和判断字段，没有封存更细的采集步骤。'
     reasons=[REASONS.get(code,f'已发布原因 {code} 尚无对应说明，请结合原记录核对。') for code in result.reason_codes]
@@ -234,6 +250,9 @@ def record_view(package,evidence_id,case_id,record_id):
         'association':dict(actual_identity_status=outcome.actual_identity_status,run_correlated=outcome.run_correlated,resource_correlated=outcome.resource_correlated),
         'reason':dict(reason_codes=list(result.reason_codes)),
         'boundary':dict(resource_id=case.resource_id,permission=case.permission.model_dump(mode='json'))}
+    if link.kind=='FACT' and value.data.kind in {'IDENTITY_CHECK','ASYNC_TASK'}:
+        locations['method']=(pointer,digest)
+        source_fragments['method']=dict(collector_kind=value.collector_kind,data=value.data.model_dump(mode='json'))
     if link.kind=='ACTIVITY':
         locations['association']=('/activity',digest)
         source_fragments['association']=dict(collector=document.activity.collector,complete=document.activity.complete,event_id=value.event_id)

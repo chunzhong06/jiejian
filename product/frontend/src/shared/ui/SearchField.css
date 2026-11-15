@@ -1,4 +1,4 @@
-.jj-search-field { display:flex; align-items:center; gap:10px; width:100%; min-width:0; min-height:var(--control-height); padding-inline:12px 4px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); color:var(--muted); }
+.jj-search-field { display:flex; align-items:center; gap:10px; width:min(var(--field-standard),100%); max-width:var(--field-standard); min-width:0; min-height:var(--control-height); padding-inline:12px 4px; border:1px solid var(--line-strong); border-radius:var(--radius-control); background:var(--control-bg); color:var(--muted); }
 .jj-search-field:hover { border-color:var(--accent); }
 .jj-search-field:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:3px; }
 .jj-search-field > .anticon { flex:none; font-size:var(--text-body); line-height:1; }

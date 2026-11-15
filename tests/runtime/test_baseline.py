@@ -12,4 +12,4 @@ def test_prepared_permissions_produce_a_readable_report(official,runtime_server,
     assert result.status['result_integrity']=='VALID'
     assert result.story['project_id']==official.project_id
     assert result.story['verdict']=='PASS'
-    capture_workflow(browser_page,runtime_server.origin,runtime_server.output,result.run_id)
+    capture_workflow(browser_page,runtime_server.origin,runtime_server.output,result.run_id,project_id=official.project_id)

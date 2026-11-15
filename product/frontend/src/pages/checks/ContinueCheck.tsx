@@ -15,10 +15,10 @@ export function ContinueCheck({projectId,route}:PageProps){
  const state=useRead('continue:'+projectId+':'+run,async signal=>{const value=await currentChecksApi.continuation(projectId,run,signal);assertProject(value.project_id,projectId);if(value.run_id!==run)throw new Error('检查记录引用不一致');return value})
  const restored=useRef(false)
  useEffect(()=>{if(state.data?.state==='AVAILABLE'&&!restored.current){restored.current=true;replaceDestination(continuationDestination(projectId,state.data,origin),projectId)}},[state.data,projectId,origin])
- if(state.loading&&!state.data)return <PageSkeleton view="/reports" title="重新核对原检查"/>
+ if(state.loading&&!state.data)return <PageSkeleton layout="report" view="/reports" title="重新核对原检查"/>
  if(!state.data)return <PageError title="重新核对原检查" error={state.error}/>
  const value=state.data
- if(value.state==='AVAILABLE')return <PageSkeleton view="/reports" title="重新核对原检查"/>
+ if(value.state==='AVAILABLE')return <PageSkeleton layout="report" view="/reports" title="重新核对原检查"/>
  return <><Heading eyebrow="继续已有工作" title="重新核对原检查">沿用原检查范围，重新核对当前材料。</Heading>
   <section className="jj-panel"><h2>{value.state==='WAITING'?'原运行尚未结束':'原检查范围暂时无法恢复'}</h2>
    <p>{value.state==='WAITING'?'这次检查仍沿原记录执行。查看进度或处理停止请求后，再重新核对范围。':value.message}</p>

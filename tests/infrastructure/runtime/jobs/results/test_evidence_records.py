@@ -107,4 +107,65 @@ def test_automatic_activity_is_published_addressed_and_read_as_supporting(packag
     changed=raw.replace(b'"duration_us":2,',b'"duration_us":3,')
     with pytest.raises(ValueError):parse_check_document(changed,CheckEvidence)
 
+@pytest.mark.parametrize('state,complete,correlated,word',[
+    ('SUCCESS',True,True,'服务声明已完成'),('RUNNING',True,True,'仍在运行'),
+    ('FAILED',True,True,'服务声明失败'),('CANCELLED',True,True,'服务声明已取消'),
+    ('SUCCESS',False,True,'尚未完整对应'),('SUCCESS',True,False,'尚未完整对应')])
+def test_async_task_reading_explains_frozen_state_without_replacing_file_or_verdict(package_parts,monkeypatch,state,complete,correlated,word):
+    from product.protocols.checks.business_facts import AsyncTaskFact
+    from product.protocols.checks.check_result import canonical_check_document
+    package,original=detailed_package(package_parts)
+    prior=original.business_facts[0]
+    fact=seal_business_fact(case_id=prior.case_id,request_ref=prior.request_ref,observed_at_us=10,
+        collector_kind='ASYNC_STATUS',proofs=prior.proofs,complete=complete,
+        data=AsyncTaskFact(task_fingerprint='a'*64,mapping_fingerprint='b'*64,dispatch_request_digest='c'*64,
+            state=state,subject_identity_id=original.case.subject_test_identity_id,owner_identity_id=original.case.resource_owner_test_identity_id,
+            resource_id=original.case.resource_id,correlated=correlated,polls_used=2))
+    fields={key:getattr(original,key) for key in type(original).model_fields if key not in {'evidence_id','business_facts','fact_references'}}
+    reference=original.fact_references[0].model_copy(update={'fact_ids':tuple(sorted((prior.fact_id,fact.fact_id)))})
+    document=seal_check_evidence(**fields,business_facts=tuple(sorted((prior,fact),key=lambda item:item.fact_id)),fact_references=(reference,))
+    results=tuple(item.model_copy(update={'evidence_ids':(document.evidence_id,)}) if item.case_id==document.case.case_id else item for item in package.result.case_results)
+    package=replace(package,evidence=(document,),result=package.result.model_copy(update={'case_results':results}))
+    raw=canonical_check_document(document)
+    def forbidden(*args,**kwargs):raise AssertionError('reading must not evaluate')
+    monkeypatch.setattr('product.backend.domain.verification.checks.evaluate_check_case',forbidden)
+    view=record_view(package,document.evidence_id,document.case.case_id,fact.fact_id)
+    assert word in view.summary and view.role=='SUPPORTING'
+    assert '禁止' in view.published_judgement
+    assert view.fragment['data']['state']==state
+    method=next(item.text for item in view.verification if item.key=='method')
+    assert '状态接口' in method and '独立的文件接收记录' in method
+    assert 'SHA-256' not in method
+    assert canonical_check_document(document)==raw
+    if complete and correlated:assert '文件接收记录' in view.summary
+
+
+def test_identity_fact_does_not_inherit_the_methods_of_business_observations(package_parts,monkeypatch):
+    from product.protocols.checks.business_facts import IdentityCheckFact
+    from product.protocols.checks.check_result import canonical_check_document
+    package,original=detailed_package(package_parts)
+    prior=original.business_facts[0]
+    identity=seal_business_fact(case_id=prior.case_id,request_ref=prior.request_ref,observed_at_us=10,
+        collector_kind='IDENTITY_READER',proofs=prior.proofs,complete=True,
+        data=IdentityCheckFact(identity_id=original.case.subject_test_identity_id,subject_match='MATCH',role_match='MATCH'))
+    fields={key:getattr(original,key) for key in type(original).model_fields if key not in {'evidence_id','business_facts','fact_references'}}
+    reference=original.fact_references[0].model_copy(update={'fact_ids':tuple(sorted((prior.fact_id,identity.fact_id)))})
+    document=seal_check_evidence(**fields,business_facts=tuple(sorted((prior,identity),key=lambda item:item.fact_id)),fact_references=(reference,))
+    results=tuple(item.model_copy(update={'evidence_ids':(document.evidence_id,)}) if item.case_id==document.case.case_id else item for item in package.result.case_results)
+    package=replace(package,evidence=(document,),result=package.result.model_copy(update={'case_results':results}))
+    raw=canonical_check_document(document)
+    def forbidden(*args,**kwargs):raise AssertionError('reading must not evaluate')
+    monkeypatch.setattr('product.backend.domain.verification.checks.evaluate_check_case',forbidden)
+    view=record_view(package,document.evidence_id,document.case.case_id,identity.fact_id)
+    link=next(item for item in record_index(package,document.evidence_id,document.case.case_id).records if item.record_id==identity.fact_id)
+    assert '操作账号' in link.label
+    assert '资源所有者' in link.label if document.effective_case.subject_test_identity_id==document.effective_case.resource_owner_test_identity_id else '资源所有者' not in link.label
+    method=next(item.text for item in view.verification if item.key=='method')
+    assert '独立读取实际账号与角色' in method and '数据修改' not in method
+    explanation=next(item for item in view.verification if item.key=='method')
+    assert explanation.source['pointer']==view.location['pointer']
+    assert explanation.fragment['data']['kind']=='IDENTITY_CHECK'
+    assert '禁止' in view.published_judgement and canonical_check_document(document)==raw
+
+
 pytestmark = [pytest.mark.level3]

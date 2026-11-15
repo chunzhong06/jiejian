@@ -1,11 +1,98 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react'
+import {fireEvent, render, screen, waitFor,within} from '@testing-library/react'
 import {afterEach, expect, it, vi} from 'vitest'
 import {Collaboration} from './Collaboration'
 import {CollaborationArtifactReview} from './CollaborationArtifactReview'
 import {CollaborationEntry} from '../../entities/runtime/ui/CollaborationEntry'
 import {requestCollaboration,useHandoffContext} from '../../entities/runtime/model/handoff'
+import {FlowComparison,flowComparisonBaseline} from '../../entities/preparation/ui/FlowCandidateReview'
 
 afterEach(()=>vi.unstubAllGlobals())
+
+it('流程结构没有变化时仍可就地核对完整候选，不必先进入编辑器',()=>{
+  const flow={id:'flow',revision:2,business_action_id:'action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',actual_resource_id:'alpha',workflow:{target_step_id:'target',steps:[{id:'target',purpose:'TARGET',request_template:{method:'GET',path:'/files/{case_resource_id}',query:[],headers:[],body:{kind:'EMPTY'}},extractors:[]}]},recovery:null}
+  render(<FlowComparison candidate={flow as never} previous={flowComparisonBaseline(flow as never)} baselineLabel="当前已采用流程" accounts={[{identity_id:'owner',label:'负责人'}] as never}/>);
+  expect(screen.getByText('流程结构没有变化。')).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'完整流程'}))
+  expect(screen.getByRole('rowheader',{name:'测试数据'})).toBeVisible()
+  expect(screen.getAllByText('alpha')).toHaveLength(2)
+})
+
+it('任务更新中断只提示一次，重读成功前保留回答并禁止按旧状态提交',async()=>{
+  const task={task_id:'task',project_id:'app',goal:'整理权限',purpose:'RULES',state:'WAITING_USER',revision:1,references:{},operations:[],events:[],questions:[{question_id:'question',question:'成员可以修改谁的工单？',options:['仅自己','同团队'],answer:null}],execution:null}
+  let reads=0,restore=false,finishRead:((value:Response)=>void)|undefined
+  const writes:string[]=[]
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const path=String(input)
+    if(init?.method==='POST'){writes.push(path);return response(task)}
+    if(path.startsWith('/api/collaboration/executor'))return response({available:false})
+    if(path.endsWith('/activity'))return response([])
+    if(path==='/api/projects/app/collaboration/task'){
+      reads++
+      if(reads===1)return response(task)
+      if(restore)return new Promise<Response>(resolve=>{finishRead=resolve})
+      return new Response(JSON.stringify({schema_version:'1',error:{code:'SERVICE_UNAVAILABLE',message:'暂时无法读取任务'}}),{status:503})
+    }
+    return response(null)
+  }))
+  render(<Collaboration projectId="app" taskId="task"/>);
+  fireEvent.click(await screen.findByLabelText('仅自己'))
+  expect(screen.getByRole('button',{name:'提交回答并继续'})).toBeEnabled()
+  await waitFor(()=>expect(screen.getByText('任务状态更新中断')).toBeVisible(),{timeout:3500})
+  expect(screen.getAllByText('任务状态更新中断')).toHaveLength(1)
+  expect(screen.getByRole('button',{name:'提交回答并继续'})).toBeDisabled()
+  restore=true;fireEvent.click(screen.getByRole('button',{name:'重新读取任务'}))
+  await waitFor(()=>expect(finishRead).toBeDefined())
+  expect(screen.getByRole('button',{name:'提交回答并继续'})).toBeDisabled()
+  finishRead!(response(task))
+  await waitFor(()=>expect(screen.getByRole('button',{name:'提交回答并继续'})).toBeEnabled())
+  expect(screen.getByLabelText('仅自己')).toBeChecked()
+  expect(writes).toHaveLength(0)
+})
+
+it('结果未知时展示原范围，只查询同一操作回执；暂停不遮蔽核对入口',async()=>{
+  const operation={operation_id:'original',capability:'checks.start',title:'执行已核对的检查',state:'UNKNOWN',arguments:{run_id:'original-run'},summary:[{label:'检查范围',value:'评审读取公开展示版与正常功能对照'}],result:null}
+  const task={task_id:'task',project_id:'app',goal:'继续核对公开文件',purpose:'CHECK',state:'PAUSED',revision:1,updated_at_us:1,references:{},reviews:[],questions:[],events:[],execution:null,operations:[operation]}
+  const writes:string[]=[]
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const path=String(input)
+    if(init?.method==='POST'){writes.push(path);expect(path).toBe('/api/projects/app/collaboration/task/actions/original/reconcile');return response(operation)}
+    if(path.includes('executor'))return response({available:false})
+    if(path.endsWith('/activity'))return response([])
+    return response(task)
+  }))
+  render(<Collaboration projectId="app" taskId="task"/>)
+  expect(await screen.findByRole('region',{name:'原操作范围'})).toHaveTextContent('评审读取公开展示版与正常功能对照')
+  expect(screen.getByText('original-run')).toBeVisible()
+  expect(writes).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button',{name:'核对原操作'}))
+  await waitFor(()=>expect(writes).toEqual(['/api/projects/app/collaboration/task/actions/original/reconcile']))
+  expect(screen.queryByRole('button',{name:'确认并执行'})).not.toBeInTheDocument()
+})
+
+it('原报告归属交接资料，成功操作生成的报告才归属任务产物，均保留准确对象',async()=>{
+  const task={task_id:'task',project_id:'app',goal:'解释原问题',purpose:'UNDERSTAND',state:'COMPLETED',revision:1,updated_at_us:1,references:{run_id:'original',case_id:'case'},reviews:[],questions:[],events:[],execution:null,operations:[{operation_id:'operation',capability:'checks.start',title:'执行检查',state:'SUCCEEDED',arguments:{},result:{run_id:'new'}}]}
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}),{headers:{'content-type':'application/json'}})
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+    const path=String(input)
+    if(path.startsWith('/api/collaboration/executor'))return response({available:false,provider:'codex-app-server'})
+    if(path.endsWith('/activity'))return response([])
+    if(path==='/api/projects/app/collaboration/task')return response(task)
+    if(path==='/api/runs/original/result-story')return response({project_id:'app',run_id:'original',verdict:'BLOCK',actions:[{case_id:'case',display_name:'取得内部完整包',case_verdict:'VULNERABLE',permission:{expectation:'DENY',relation:'OTHER_ROLE'},fact_comparison:{planned_identity:{actor_label:'评审'},planned_resource_owner:{actor_label:'项目负责人'},resource_id:'campus',effects:[{effect_id:'received',business_label:'内部完整包已被接收',assessment_state:'CONFIRMED'}]}}]})
+    throw new Error(path)
+  }))
+  render(<Collaboration projectId="app" taskId="task"/>);
+  fireEvent.click(await screen.findByRole('tab',{name:'产物与相关资料'}))
+  const artifacts=screen.getByRole('heading',{name:'任务产物'}).parentElement!
+  const handoff=screen.getByRole('heading',{name:'交接的检查依据'}).parentElement!
+  expect(within(artifacts).getByRole('link',{name:'最新检查报告'})).toHaveAttribute('href',expect.stringContaining('run_id=new'))
+  expect(within(artifacts).queryByRole('link',{name:'原问题报告'})).not.toBeInTheDocument()
+  expect(await within(handoff).findByRole('heading',{name:'评审 · 取得内部完整包'})).toBeVisible()
+  expect(within(handoff).getByText('项目负责人的资源 · campus')).toBeVisible()
+  expect(within(handoff).getByText('完整收到内部包')).toBeVisible()
+  expect(within(handoff).getByRole('link',{name:'阅读这项检查与证据'})).toHaveAttribute('href',expect.stringContaining('run_id=original&case_id=case'))
+})
 
 it('通过产品接口展示同一任务，区分请求回执和后台完成',async()=>{
   let accepted=false
@@ -33,7 +120,7 @@ it('通过产品接口展示同一任务，区分请求回执和后台完成',as
   fireEvent.click(screen.getByRole('tab',{name:'操作记录'}))
   expect(await screen.findByText('执行已完成')).toBeVisible()
   expect(screen.getByRole('heading',{name:'操作记录'})).toBeVisible()
-  expect(screen.getByText('已取得回执')).toBeVisible()
+  expect(screen.getByText('已提交检查')).toBeVisible()
 })
 
 it('交代目标即可建立任务，结果未知时重试沿用原标识',async()=>{
@@ -43,6 +130,7 @@ it('交代目标即可建立任务，结果未知时重试沿用原标识',async
       expect(String(input)).toBe('/api/projects/app/collaboration')
       const body=JSON.parse(String(init.body));identifiers.push(body.operation_id)
       expect(body.goal).toBe('检查工单访问权限')
+      expect(body.brief).toEqual({title:'工单访问检查',objective:'',outputs:[]})
       return new Response(JSON.stringify({schema_version:'1',error:{code:'UNKNOWN',message:'回执暂不可达'}}),{status:503})
     }
     expect(String(input)).toBe('/api/projects/app/collaboration-active')
@@ -57,6 +145,8 @@ it('交代目标即可建立任务，结果未知时重试沿用原标识',async
   expect(screen.getByLabelText('希望 Agent 完成什么')).toHaveValue('根据当前应用的接口资料，整理业务操作与权限要求，提交待我确认的候选。')
   expect(identifiers).toHaveLength(0)
   fireEvent.change(screen.getByLabelText('希望 Agent 完成什么'),{target:{value:'检查工单访问权限'}})
+  fireEvent.click(screen.getByText('为任务命名（选填）'))
+  fireEvent.change(screen.getByRole('textbox',{name:'简明任务名称'}),{target:{value:'工单访问检查'}})
   fireEvent.click(screen.getByRole('button',{name:'建立协作任务'}))
   expect(await screen.findByText('回执暂不可达')).toBeVisible()
   entry.rerender(<CollaborationEntry projectId="app" route="/workspace" portalHost={document.createElement('nav')}/>)
@@ -110,6 +200,44 @@ it('等待继续时突出实际启动入口，打开确认前不调用本地模�
   expect(screen.getByText(/最多 8 个模型回合/)).toBeVisible();
   expect(screen.queryByRole('heading',{name:'操作记录'})).not.toBeInTheDocument();
 });
+
+it('失败后可明确改用新会话，打开与选择本身不调用模型',async()=>{
+  const task={task_id:'task',project_id:'app',goal:'继续核对资料发布',purpose:'SETUP',state:'WAITING_AGENT',revision:1,references:{},reviews:[],questions:[],events:[],execution:{state:'FAILED',session_id:'old-session'},operations:[]}
+  const requests:Record<string,unknown>[]=[]
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const path=String(input)
+    if(path.endsWith('/execute')){requests.push(JSON.parse(String(init?.body)));return response(task)}
+    if(path.startsWith('/api/collaboration/executor'))return response({available:true,ready:true,read_only:false})
+    if(path.endsWith('/activity'))return response([])
+    return response(task)
+  }))
+  render(<Collaboration projectId="app" taskId="task"/>)
+  fireEvent.click(await screen.findByRole('button',{name:'继续本地 Agent'}))
+  const choice=screen.getByRole('checkbox',{name:'改用新的模型会话'})
+  expect(choice).not.toBeChecked()
+  fireEvent.click(choice)
+  expect(requests).toHaveLength(0)
+  expect(screen.getByText(/原模型对话历史不会带入/)).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'用新会话继续当前任务'}))
+  await waitFor(()=>expect(requests).toHaveLength(1))
+  expect(requests[0]).toMatchObject({new_session:true,allow_changes:false,continuous:true})
+})
+
+it('材料任务完成后接续准备，历史模型问题保留在操作记录',async()=>{
+  const task={task_id:'task',project_id:'app',goal:'补齐资料发布的检查材料',purpose:'SETUP',state:'COMPLETED',revision:2,references:{},reviews:[],questions:[],events:[],execution:{state:'FINISHED',message:'此前模型有一次工具请求未完成',replaced_session_id:'old'},operations:[],outcome:{fulfilled:true,title:'本次检查材料已齐备',destination:'/preparation'}}
+  const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>String(input).endsWith('/activity')?response([]):response(task)))
+  render(<Collaboration projectId="app" taskId="task"/>)
+  const link=await screen.findByRole('link',{name:'进入检查准备'})
+  expect(link.getAttribute('href')).toContain('/preparation')
+  expect(link.getAttribute('href')).toContain('return_to=')
+  expect(screen.queryByText(task.execution.message)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('tab',{name:'操作记录'}))
+  expect(await screen.findByText(task.execution.message)).toBeVisible()
+  expect(screen.getByText(/保留原业务任务后/)).toBeVisible()
+  expect(screen.queryByText('还没有操作记录。')).not.toBeInTheDocument()
+})
 
 it.each([['整理权限要求','RULES'],['补齐检查准备','SETUP'],['调查权限问题','CHECK']])('目标示例%s采用自己的完成判据',async(label,purpose)=>{
   const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
@@ -200,11 +328,11 @@ it('多项待办一次只展开一项，跨事项和页签保留回答，提交�
   expect(writes).toEqual(['/api/projects/app/collaboration/task/questions/question'])
 })
 
-it('协作事项就地比较准确流程修订，只读查看不保存或采用',async()=>{
+it.each([true,false])('协作事项比较准确交接或已采用修订，只读查看不保存或采用（交接=%s）',async(withHandoff)=>{
   const base={id:'flow_review',revision:1,business_action_id:'review_action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',provenance:'MANUAL',source_recording_id:null,source_fingerprint:null,actual_resource_id:'campus',recovery:null,workflow:{target_step_id:'read',steps:[{id:'read',identity_id:'CASE_SUBJECT',purpose:'TARGET',request_template:{method:'GET',path:'/before',body:{kind:'JSON',value:{private_value:'literal-not-for-review'}}},classifier:{accepted:[],denied:[]},depends_on_step_ids:[]}]}}
   const candidate={...base,revision:2,workflow:{...base.workflow,steps:base.workflow.steps.map(step=>({...step,request_template:{...step.request_template,path:'/after'}}))}}
   const review={id:'flow_review@2',title:'核对执行与恢复步骤',destination:'/testing?action_id=review_action&flow_id=flow_review&revision=2&review=1',action_label:'比较并审阅流程'}
-  const task={task_id:'review_task',goal:'补全读取流程',editor:{kind:'FLOW',flow_id:'flow_review',revision:1,action_id:'review_action'},operations:[{capability:'flows.save',state:'SUCCEEDED',result:{id:'flow_review',revision:2}}]}
+  const task={task_id:'review_task',goal:'补全读取流程',editor:withHandoff?{kind:'FLOW',flow_id:'flow_review',revision:1,action_id:'review_action'}:undefined,operations:[{capability:'flows.save',state:'SUCCEEDED',result:{id:'flow_review',revision:2}}]}
   const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}),{headers:{'content-type':'application/json'}})
   const requests:string[]=[]
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
@@ -212,13 +340,14 @@ it('协作事项就地比较准确流程修订，只读查看不保存或采用'
     if(path.endsWith('/operation-flows/flow_review/2'))return response(candidate)
     if(path.endsWith('/operation-flows/flow_review/1'))return response(base)
     if(path.endsWith('/test-identities'))return response([{identity_id:'owner',label:'负责人'}])
+    if(path.endsWith('/operation-flows'))return response({project_id:'review-app',flows:[{document:base,in_use:true},{document:candidate,in_use:false}]})
     throw new Error('unexpected '+path)
   }))
   render(<CollaborationArtifactReview projectId="review-app" task={task as never} review={review}/>)
   expect(await screen.findByText('GET /after')).toBeVisible()
   expect(screen.getByText('GET /before')).toBeVisible()
   expect(screen.queryByText('literal-not-for-review')).not.toBeInTheDocument()
-  expect(screen.getByText(/与交接时保存的流程比较/)).toBeVisible()
+  expect(screen.getByText(withHandoff?/与交接时保存的流程比较/:/与当前已采用流程比较/)).toBeVisible()
   expect(screen.getByRole('link',{name:'进入流程继续核对'})).toHaveAttribute('href',expect.stringContaining('revision=2'))
   expect(screen.getByRole('link',{name:'进入流程继续核对'})).toHaveAttribute('href',expect.stringContaining('return_to='))
   expect(requests).toHaveLength(3)

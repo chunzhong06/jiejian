@@ -11,11 +11,11 @@ export type FrozenBusinessScenario={document:BusinessScenario;fingerprint:string
 export type AvailableScenarioCase={case_id:string;subject_test_identity_id:string|null;resource_owner_test_identity_id:string;resource_id:string;permission:PermissionReference&{expectation:'ALLOW'|'DENY'}}
 export type ScenarioSummary={id:string;revision:number;label:string;description:string;experiment_count:number}
 export type ScenarioListing={project_id:string;documents:ScenarioSummary[]}
-export type ScenarioContext=ScenarioListing&{actions:Array<{action_id:string;action_revision:number;label:string;cases:AvailableScenarioCase[];trial_flow?:{flow_id:string;revision:number}|null;creates_resource?:boolean}>;identities:Array<{identity_id:string;label:string}>;gaps:CheckPreview['gaps']}
+export type ScenarioContext=ScenarioListing&{scenario?:{id:string;revision:number};requirements?:{permission:PermissionReference;expectation:'ALLOW'|'DENY'|null}[];actions:Array<{action_id:string;action_revision:number;label:string;cases:AvailableScenarioCase[];trial_flow?:{flow_id:string;revision:number}|null;creates_resource?:boolean}>;identities:Array<{identity_id:string;label:string}>;gaps:CheckPreview['gaps']}
 const path=(project:string)=>'/api/projects/'+encodeURIComponent(project)+'/business-scenarios'
 export const businessScenariosApi={
   list:(project:string,signal?:AbortSignal)=>request<ScenarioListing>(path(project),{signal}),
-  context:(project:string,signal?:AbortSignal)=>request<ScenarioContext>(path(project)+'/context',{signal}),
+  context:(project:string,signal?:AbortSignal,scenario?:ScenarioReference)=>request<ScenarioContext>(path(project)+'/context'+(scenario?'?'+new URLSearchParams({scenario_id:scenario.scenario_id,revision:String(scenario.revision)}):''),{signal}),
   read:(project:string,id:string,revision:number)=>request<BusinessScenario>(path(project)+'/'+encodeURIComponent(id)+'/'+revision),
   save:(project:string,document:BusinessScenario)=>request<BusinessScenario>(path(project),{method:'PUT',body:JSON.stringify(document)}),
 }
