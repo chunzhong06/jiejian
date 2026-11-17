@@ -30,7 +30,7 @@ def test_named_changes_and_published_business_effects(runtime_server,browser_pag
 
     def variants(name):
         capture(name+'-light')
-        page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+        page.get_by_role('button',name='切换深色',exact=True).click()
         expect(page.locator('html')).to_have_attribute('data-studio-theme','dark')
         capture(name+'-dark')
         page.set_viewport_size({'width':760,'height':980})

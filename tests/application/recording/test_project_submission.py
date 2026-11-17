@@ -55,6 +55,7 @@ def test_project_recording_rejects_unbounded_duration_before_side_effects(durati
             subject_slot_id="isl_" + "1" * 32, resource_owner_slot_id="isl_" + "1" * 32,
             duration_seconds=duration, idempotency_key="invalid-duration")
     assert error.value.code == ErrorCode.INPUT_INVALID.value
+    assert error.value.to_dict()['details']['request_outcome']=='NOT_ACCEPTED'
     assert dependency.mock_calls == []
 
 
@@ -95,6 +96,7 @@ def test_supplement_rejects_different_parent_source_before_browser_session(tmp_p
             context.harness.core.project_recordings.submit(context.project_id, **arguments,
                 purpose=RecordingPurpose.RECOVERY, parent_recording_id=parent.recording_id)
         assert error.value.code == ErrorCode.INPUT_INVALID.value
+        assert error.value.to_dict()['details']['request_outcome']=='NOT_ACCEPTED'
         credentials.assert_not_called()
     finally:
         context.harness.close()
@@ -130,6 +132,7 @@ def test_submission_failure_clears_only_this_recording_vault(tmp_path, monkeypat
         with pytest.raises(JiejianError) as error:
             core.project_recordings.submit(context.project_id, **_arguments(context))
         assert error.value.code == ErrorCode.RECORD_STATE_PRECONDITION.value
+        assert 'request_outcome' not in error.value.to_dict()['details']
         assert core.runtime_secrets.model_dump() == {"session_count": 1}
         assert core.runtime_secrets.resolve(("OTHER",)) == {"OTHER": "other-secret"}
     finally:

@@ -54,11 +54,11 @@
 
 ### model/useAppearance.ts
 
-[源码](../../../product/frontend/src/app/model/useAppearance.ts)（12 行）。公开声明：`useAppearance`。
+[源码](../../../product/frontend/src/app/model/useAppearance.ts)（13 行）。公开声明：`useAppearance`。
 
 ### model/useApplication.ts
 
-[源码](../../../product/frontend/src/app/model/useApplication.ts)（52 行）。公开声明：`useApplication`。
+[源码](../../../product/frontend/src/app/model/useApplication.ts)（53 行）。公开声明：`useApplication`。
 
 ## providers
 

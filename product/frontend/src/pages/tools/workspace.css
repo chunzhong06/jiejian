@@ -29,3 +29,6 @@
 .jj-tools-access > :is(.jj-notice,.jj-loading) { margin-top:24px; }
 @media(max-width:1050px) { .jj-tools-layout { grid-template-columns:minmax(0,1fr); max-width:680px; } .jj-tools-access > .jj-button { margin-top:24px; } }
 @media(max-width:600px) { .jj-tools-connection, .jj-tools-access { padding:20px; } .jj-tool-object > .jj-field { max-width:none; } }
+.jj-access-empty { display:flex;flex:1;flex-direction:column;gap:16px;min-width:0;margin-top:24px; }
+.jj-access-empty > p { max-width:42ch;color:var(--muted);line-height:var(--leading-reading); }
+.jj-access-empty > .jj-button { align-self:flex-end;margin-top:auto; }

@@ -6,6 +6,7 @@ import type {MaterialDetails,MaterialReference} from '../../../entities/preparat
 import {ApiError} from '../../../shared/api/http'
 import {operationFlowsApi,type OperationFlow} from '../../../entities/preparation/api/operationFlows'
 import {testIdentitiesApi} from '../../../entities/preparation/api/testIdentities'
+import {recordingsApi,type RecordingViewDto} from '../../../entities/preparation/api/recordings'
 
 const reference:MaterialReference={action_id:'action',action_revision:1,kind:'evidence',member_id:'effect'}
 const details:MaterialDetails={material:reference,status:'SATISFIED',reason_codes:[],retained:true,source_recording_id:'old',confirmed_at_us:100,expected_fingerprint:'basis',observed_at_us:100,recording_context:null,
@@ -99,4 +100,66 @@ it.each(['transport','server'])('%s 回执不明后刷新恢复原操作，并�
   fireEvent.click(screen.getByRole('button',{name:'查看本次使用结果'}))
   await waitFor(()=>expect(p.onBack).toHaveBeenCalledOnce())
   expect(save).toHaveBeenCalledOnce()
+})
+
+function newRecording(){
+  vi.mocked(preparationApi.material).mockResolvedValue({...details,candidates:[],recording_context:{context_id:'context',material:reference,expected_fingerprint:'basis',can_execute:true,business_action_id:'action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',subject_slot_id:'subject',resource_owner_slot_id:'resource',recording_purpose:'OBSERVATION',parent_recording_id:'original',effect_id:'effect',recording_id:null,title:'',why_now:'',user_responsibility:'',system_will_do:''}})
+  vi.spyOn(recordingsApi,'setup').mockResolvedValue({test_identity_options:[],action_options:[]})
+}
+const recoveredRecording:RecordingViewDto={recording:{recording_id:'recorded',project_id:'project',business_action_id:'action',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',purpose:'OBSERVATION',parent_recording_id:'original',state:'RECORDING',capture_phase:'AWAITING_CAPTURE'}}
+
+it('明确未受理的录制创建释放新请求，允许处理条件后重建',async()=>{
+ newRecording()
+ vi.spyOn(recordingsApi,'createRecording').mockRejectedValue(new ApiError('STATE_PRECONDITION','先核对账号',undefined,undefined,undefined,undefined,'NOT_ACCEPTED'))
+ const p=props();render(<MaterialEditor {...p}/>)
+ fireEvent.click(await screen.findByLabelText('我已核对本次操作账号与资源所有者'))
+ fireEvent.click(screen.getByRole('button',{name:'建立本次录制'}))
+ await waitFor(()=>expect(p.onError).toHaveBeenCalledOnce())
+ expect(screen.getByRole('button',{name:'建立本次录制'})).toBeEnabled()
+ expect(screen.queryByRole('button',{name:'查询并恢复本次录制'})).not.toBeInTheDocument()
+})
+
+it('建立录制的服务错误保留原请求，重新打开先查询回执而不重建',async()=>{
+  newRecording()
+  const create=vi.spyOn(recordingsApi,'createRecording').mockRejectedValue(new ApiError('STORAGE_FAILURE','响应未能完成'))
+  const receipt=vi.spyOn(recordingsApi,'receipt').mockResolvedValue(recoveredRecording)
+  vi.spyOn(recordingsApi,'recording').mockResolvedValue(recoveredRecording)
+  const first=render(<MaterialEditor {...props()}/>)
+  fireEvent.click(await screen.findByLabelText('我已核对本次操作账号与资源所有者'))
+  fireEvent.click(screen.getByRole('button',{name:'建立本次录制'}))
+  expect(await screen.findByRole('button',{name:'查询并恢复本次录制'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'建立本次录制'})).toBeDisabled()
+  const operation=create.mock.calls[0][2]
+  first.unmount();render(<MaterialEditor {...props()}/>)
+  expect(await screen.findByRole('button',{name:'开始记录这个操作'})).toBeVisible()
+  expect(receipt).toHaveBeenCalledWith('project',operation)
+  expect(create).toHaveBeenCalledOnce()
+})
+
+it.each(['action','account','purpose','id'])('恢复录制拒绝错误对应：%s，继续保留原请求',async mismatch=>{
+  newRecording()
+  const create=vi.spyOn(recordingsApi,'createRecording').mockRejectedValue(new TypeError('连接中断'))
+  const receipt=vi.spyOn(recordingsApi,'receipt')
+  const read=vi.spyOn(recordingsApi,'recording')
+  const p=props();render(<MaterialEditor {...p}/>)
+  fireEvent.click(await screen.findByLabelText('我已核对本次操作账号与资源所有者'))
+  fireEvent.click(screen.getByRole('button',{name:'建立本次录制'}))
+  const recover=await screen.findByRole('button',{name:'查询并恢复本次录制'})
+  const wrong=structuredClone(recoveredRecording)
+  if(mismatch==='action')wrong.recording!.action_revision=2
+  if(mismatch==='account')wrong.recording!.subject_test_identity_id='another'
+  if(mismatch==='purpose')wrong.recording!.purpose='RECOVERY'
+  if(mismatch==='id'){
+    const key=Object.keys(sessionStorage).find(key=>key.endsWith(':recording'))!
+    const pending=JSON.parse(sessionStorage.getItem(key)!)
+    sessionStorage.setItem(key,JSON.stringify({...pending,recordingId:'original-id'}))
+    read.mockResolvedValue(wrong)
+  }else receipt.mockResolvedValue(wrong)
+  fireEvent.click(recover)
+  await waitFor(()=>expect(p.onError).toHaveBeenCalledTimes(2))
+  await waitFor(()=>expect(screen.getByRole('button',{name:'建立本次录制'})).toBeDisabled())
+  await waitFor(()=>expect(mismatch==='id'?read:receipt).toHaveBeenCalled())
+  expect(screen.queryByRole('button',{name:'开始记录这个操作'})).not.toBeInTheDocument()
+  expect(create).toHaveBeenCalledOnce()
+  expect(Object.keys(sessionStorage).some(key=>key.endsWith(':recording'))).toBe(true)
 })

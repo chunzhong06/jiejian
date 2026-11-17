@@ -111,14 +111,14 @@ class ProjectRecordingService:
         """校验项目式输入并提交；异常时精确清理本次短期会话。"""
 
         if type(duration_seconds) is not int or not 1 <= duration_seconds <= 3_600:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "录制时长必须在 1 到 3600 秒之间")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "录制时长必须在 1 到 3600 秒之间").not_accepted()
         if (purpose is RecordingPurpose.TARGET) != (parent_recording_id is None):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "补录必须关联原业务录制")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "补录必须关联原业务录制").not_accepted()
         if (purpose is RecordingPurpose.OBSERVATION) != (effect_id is not None):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明必须指定已确认的业务效果")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明必须指定已确认的业务效果").not_accepted()
         if parent_recording_id is not None:
             if self._uow_factory is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "补录服务尚未装配")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "补录服务尚未装配").not_accepted()
             with self._uow_factory() as work:
                 parent = work.recordings.get(parent_recording_id)
                 parent_job = work.jobs.get_by_recording(parent_recording_id)
@@ -129,9 +129,9 @@ class ProjectRecordingService:
                 or parent.state is not RecordingState.COMPLETED
                 or parent_job is None
             ):
-                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "原业务录制不存在或尚未完成")
+                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "原业务录制不存在或尚未完成").not_accepted()
             if self._request_store is None:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "补录请求存储尚未装配")
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "补录请求存储尚未装配").not_accepted()
             parent_request = self._request_store.load(
                 parent_job.job_id,
                 expected_hash=parent_job.request_hash,
@@ -145,7 +145,7 @@ class ProjectRecordingService:
                 raise JiejianError(
                     ErrorCode.INPUT_INVALID,
                     "补录必须沿用原业务动作和测试账号",
-                )
+                ).not_accepted()
         if (
             self._projects is not None
             and self._projects.get(project_id).status is ProjectStatus.ARCHIVED
@@ -153,7 +153,7 @@ class ProjectRecordingService:
             raise JiejianError(
                 ErrorCode.PROJECT_ARCHIVE_CONFLICT,
                 "已移除应用不能创建新的录制任务，请先重新接入应用",
-            )
+            ).not_accepted()
         understanding = self._application_understanding.get(project_id)
         boundary = self._business_boundaries.view(project_id)
         action = next(
@@ -165,34 +165,34 @@ class ProjectRecordingService:
             None,
         )
         if action is None:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "录制动作尚未确认或已经失效")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "录制动作尚未确认或已经失效").not_accepted()
         if not any(
             item.action_id == business_action_id and item.action_revision == action_revision
             and item.status is ImplementationBindingStatus.CURRENT
             for item in boundary.action_bindings
         ):
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先确认业务动作的当前实现")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先确认业务动作的当前实现").not_accepted()
         if effect_id is not None and effect_id not in {item.effect_id for item in action.effect_catalog}:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明引用的业务效果不属于当前动作")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明引用的业务效果不属于当前动作").not_accepted()
         if purpose is RecordingPurpose.RECOVERY and not action.state_changing:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "只读业务动作不需要录制恢复方式")
+            raise JiejianError(ErrorCode.INPUT_INVALID, "只读业务动作不需要录制恢复方式").not_accepted()
         if understanding.confirmed_endpoint is None:
-            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "请先确认应用运行地址")
+            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "请先确认应用运行地址").not_accepted()
         if self._preparation is None:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配").not_accepted()
         prepared_action = next((item for item in self._preparation.get(project_id).actions
                                 if (item.action_id, item.action_revision) == (business_action_id, action_revision)), None)
         if prepared_action is None:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化").not_accepted()
         from product.backend.application.preparation.demonstrations import legal_demonstrations
         combinations = legal_demonstrations(prepared_action.assurance_contract, boundary.permission_intents,
                                             prepared_action.identity_requirements)
         requested = (subject_test_identity_id, resource_owner_test_identity_id, subject_slot_id, resource_owner_slot_id)
         if not any(item.can_execute and (item.subject_test_identity_id, item.resource_owner_test_identity_id,
                    item.subject_slot_id, item.resource_owner_slot_id) == requested for item in combinations):
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化", details={"reason": "ALLOW_RESOURCE_SETUP_REQUIRED"})
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化", details={"reason": "ALLOW_RESOURCE_SETUP_REQUIRED"}).not_accepted()
         if subject_test_identity_id != resource_owner_test_identity_id and resource_owner_confirmed is not True:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "准备选择无效", details={"reason": "RESOURCE_OWNER_CONFIRMATION_REQUIRED"})
+            raise JiejianError(ErrorCode.INPUT_INVALID, "准备选择无效", details={"reason": "RESOURCE_OWNER_CONFIRMATION_REQUIRED"}).not_accepted()
         identity = self._test_identities.get(subject_test_identity_id)
         owner = self._test_identities.get(resource_owner_test_identity_id)
         if (
@@ -207,10 +207,10 @@ class ProjectRecordingService:
                 for item in boundary.actor_bindings
             )
         ):
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制需要本应用当前角色下已登录的测试账号")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制需要本应用当前角色下已登录的测试账号").not_accepted()
         from product.backend.application.recording.source import current_recording_instance
         if self._uow_factory is None:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制来源事务尚未装配")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制来源事务尚未装配").not_accepted()
         with self._uow_factory() as work:
             controlled_instance_id = current_recording_instance(work, project_id)
         source_fingerprint = recording_source_fingerprint(
@@ -234,6 +234,7 @@ class ProjectRecordingService:
                 raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, "原录制请求的账号、资源或范围已变化")
             return ProjectRecordingSubmission(request=request, result=result, action=action, test_identity=identity)
         now_us = self._clock_us()
+        # 此前显式业务拒绝均未建立会话或提交Job；从这里开始失败继续保留未知结果。
         recording_id = f"rec_{uuid4().hex}"
         duration_us = duration_seconds * 1_000_000
         session = self._recording_credentials.prepare(

@@ -19,7 +19,7 @@ def test_official_example_explains_requirements_and_connects_the_baseline(runtim
 
     def variants(name):
         capture(name+'-light')
-        page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+        page.get_by_role('button',name='切换深色',exact=True).click()
         expect(page.locator('html')).to_have_attribute('data-studio-theme','dark')
         capture(name+'-dark')
         page.set_viewport_size({'width':760,'height':980})
@@ -29,7 +29,7 @@ def test_official_example_explains_requirements_and_connects_the_baseline(runtim
         expect(page.locator('html')).to_have_attribute('data-studio-theme','light')
 
     page.goto(server.origin)
-    expect(page.get_by_role('heading',name='体验一次权限问题的发现与修复')).to_be_visible()
+    expect(page.get_by_role('heading',name='请求被拒绝，就没有越权吗？')).to_be_visible()
     variants('welcome')
     page.get_by_role('link',name='体验官方示例',exact=True).click()
     expect(page.get_by_role('heading',name='官方示例',exact=True)).to_be_visible()
@@ -66,7 +66,7 @@ def test_official_example_explains_requirements_and_connects_the_baseline(runtim
     report_ready(page)
     expect(page.get_by_role('link',name='查看错误修改',exact=True)).to_be_visible()
     variants('baseline-result')
-    page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+    page.get_by_role('button',name='切换深色',exact=True).click()
     expect(page.locator('html')).to_have_attribute('data-studio-theme','dark')
     navigate(page,server.origin,f'/workspace?project_id={project}')
     expect(page.get_by_role('heading',name='正常起点已形成，接着看一次错误修改',exact=True)).to_be_visible()

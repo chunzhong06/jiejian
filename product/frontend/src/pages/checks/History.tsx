@@ -34,22 +34,31 @@ export function restoreHistory(key: string): HistoryMemory {
     catch { }
     return initial;
 }
+/** 分页游标属于准确规则修订；同一规则的新修订不能复用旧页和比较选择。 */
+export function historyKey(projectId:string,route:ReportsProps['route'],archive=false){
+    const intent=route.query.get('intent_id')
+    const scope=intent?JSON.stringify([intent,route.query.get('revision'),route.query.get('intent_hash')]):'all'
+    return 'jiejian.studio.history:'+projectId+':'+scope+(archive?':archive':'')
+}
 export function History({ projectId, name, route, archive = false }: ReportsProps) {
     const origin=archive?null:returnDestination(route.query.get('return_to'))
     const here=route.path+'?'+route.query
-    const key = 'jiejian.studio.history:' + projectId + ':' + (route.query.get('intent_id') ?? 'all') + (archive?':archive':'');
+    const key = historyKey(projectId,route,archive);
     const [saved] = useState(() => restoreHistory(key));
+    const newQuery=route.query.has('query')&&route.query.get('query')!==saved.search;
     const [comparison,setComparison]=useState<ComparisonSelection[]>(()=>Array.isArray(saved.comparison)?saved.comparison.filter(item=>item&&typeof item.run_id==='string'&&/^run_[0-9a-f]{32}$/.test(item.run_id)&&Number.isSafeInteger(item.created_at_us)).slice(0,2):[]);
-    const [query, setQuery] = useState(route.query.get('query') ?? saved.query), [search, setSearch] = useState(route.query.get('query') ?? saved.search), [filter, setFilter] = useState<CheckVerdict | 'ALL'>(saved.filter), [cursor, setCursor] = useState<CheckHistoryCursor | undefined>(saved.cursor), [stack, setStack] = useState<Array<CheckHistoryCursor | undefined>>(saved.stack);
-    const restored = useRef(false), scroll = useRef(saved.scroll);
+    const [query, setQuery] = useState(route.query.get('query') ?? saved.query), [search, setSearch] = useState(route.query.get('query') ?? saved.search), [filter, setFilter] = useState<CheckVerdict | 'ALL'>(saved.filter), [cursor, setCursor] = useState<CheckHistoryCursor | undefined>(newQuery?undefined:saved.cursor), [stack, setStack] = useState<Array<CheckHistoryCursor | undefined>>(newQuery?[]:saved.stack);
+    const restored = useRef(false), scroll = useRef(newQuery?0:saved.scroll);
     useEffect(() => { sessionStorage.setItem(key, JSON.stringify({ query, search, filter, cursor, stack, scroll: scroll.current, comparison })); if (!archive)
         sessionStorage.setItem('jiejian.studio.history-location:' + projectId, route.path + (route.query.size ? '?' + route.query : '')); }, [key, query, search, filter, cursor, stack, comparison, route.path, route.query.toString()]);
     const rule = route.query.get('intent_id') && route.query.get('revision') && route.query.get('intent_hash') ? { intent_id: route.query.get('intent_id')!, revision: Number(route.query.get('revision')), intent_hash: route.query.get('intent_hash')! } : undefined;
     const state = useRead(`reports:${projectId}:${search}:${filter}:${JSON.stringify(cursor)}:${JSON.stringify(rule)}`, async (signal) => { const value = await api.history(projectId, { rule, query: search, verdict: filter === 'ALL' ? undefined : filter, cursor }, signal); assertProject(value.project_id, projectId); value.items.forEach(item => assertProject(item.status.run.project_id, projectId)); return value; });
     useEffect(() => { if (!state.data || restored.current)
-        return; restored.current = true; const frame = requestAnimationFrame(() => window.scrollTo({ top: saved.scroll, behavior: 'instant' })); return () => cancelAnimationFrame(frame); }, [Boolean(state.data)]);
-    const openRun = (runId: string) => { scroll.current = window.scrollY; sessionStorage.setItem(key, JSON.stringify({ query, search, filter, cursor, stack, scroll: scroll.current, comparison })); go(withReturnDestination((archive?'/archive?project_id='+encodeURIComponent(projectId)+'&':'/reports?')+'run_id='+encodeURIComponent(runId),here),projectId); };
+        return; restored.current = true; const frame = requestAnimationFrame(() => window.scrollTo({ top: newQuery?0:saved.scroll, behavior: 'instant' })); return () => cancelAnimationFrame(frame); }, [Boolean(state.data)]);
+    const rememberPosition=()=>{scroll.current=window.scrollY;sessionStorage.setItem(key,JSON.stringify({query,search,filter,cursor,stack,scroll:scroll.current,comparison}))};
+    const openRun = (runId: string) => { rememberPosition(); go(withReturnDestination((archive?'/archive?project_id='+encodeURIComponent(projectId)+'&':'/reports?')+'run_id='+encodeURIComponent(runId),here),projectId); };
     const hasHistoryContext=Boolean(state.data?.items.length||query||search||filter!=='ALL'||stack.length);
+    const partialPage=Boolean(stack.length||state.data?.next_cursor);
     return <>
     {origin&&<div className="jj-back-link"><ActionLink navigationScope="page" href={'#'+scopedPath(origin)} kind="quiet">{returnDestinationLabel(origin)}</ActionLink></div>}
     <Heading eyebrow={archive?'已归档示例':undefined} title={archive?name+'的检查记录':'检查记录'} actions={archive?<ActionLink href="#/environment"><ArrowLeftOutlined aria-hidden="true"/>返回官方示例</ActionLink>: (Boolean(state.data?.items.length) || Boolean(search) || filter!=='ALL') && <ActionLink navigationScope="page" href={'#'+scopedPath('/reports?view=plan')} kind={comparison.length?'quiet':'primary'}>发起新检查 </ActionLink>}>{archive?'保留各次检查当时的要求、结论和证据。':undefined}</Heading>
@@ -69,9 +78,9 @@ export function History({ projectId, name, route, archive = false }: ReportsProp
           <td className="jj-table-actions"><Button kind="quiet" onClick={() => openRun(run.run_id)}>{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '查看进度' : '阅读报告'}</Button></td>
         </tr>;
             })}</tbody></table></div>
-        {!archive&&comparison.length>0&&<TaskActions className="jj-history-compare" aria-label="记录比较" note={<span role="status">已选 {comparison.length} 条记录{comparison.length===1?'，再选 1 条可比较':''}</span>}><Button onClick={()=>setComparison([])}>清除选择</Button><Button kind="primary" disabled={comparison.length!==2} onClick={()=>{const ordered=[...comparison].sort((a,b)=>a.created_at_us-b.created_at_us);go(withReturnDestination('/reports?'+new URLSearchParams({view:'compare',baseline:ordered[0].run_id,current:ordered[1].run_id}),here),projectId)}}>查看本轮变化</Button></TaskActions>}
-        {(stack.length>0||state.data.next_cursor)&&<div className="jj-pagination jj-history-pagination"><Button disabled={!stack.length} onClick={() => { setCursor(stack.at(-1)); setStack(value => value.slice(0, -1)); }}>上一页</Button><span>第 {stack.length + 1} 页</span><Button disabled={!state.data.next_cursor} onClick={() => { setStack(value => [...value, cursor]); setCursor(state.data!.next_cursor ?? undefined); }}>下一页</Button></div>}
-      </> : !state.data ? null : <Empty layout="section" title={search || filter !== 'ALL' ? '没有符合筛选条件的检查' : archive ? '这份示例没有检查记录' : '这里将保存你的检查报告'} action={search || filter !== 'ALL' ? <Button onClick={() => { setQuery(''); setSearch(''); setFilter('ALL'); setCursor(undefined); setStack([]); }}>清除筛选</Button> : !archive && <ActionLink navigationScope="page" href={'#'+scopedPath('/reports?view=plan')} kind="primary">发起检查</ActionLink>}>{!search&&filter==='ALL'&&!archive&&'完成一次检查后，可以在这里查阅结果、原始依据和后续复验。'}</Empty>}
+        {!archive&&comparison.length>0&&<TaskActions className="jj-history-compare" aria-label="记录比较" note={<span role="status">已选 {comparison.length} 条记录{comparison.length===1?'，再选 1 条可比较':''}</span>}><Button onClick={()=>setComparison([])}>清除选择</Button><Button kind="primary" disabled={comparison.length!==2} onClick={()=>{rememberPosition();const ordered=[...comparison].sort((a,b)=>a.created_at_us-b.created_at_us);go(withReturnDestination('/reports?'+new URLSearchParams({view:'compare',baseline:ordered[0].run_id,current:ordered[1].run_id}),here),projectId)}}>查看本轮变化</Button></TaskActions>}
+      </> : !state.data ? null : <Empty layout="section" title={partialPage?'这一页没有检查记录':search || filter !== 'ALL' ? '没有符合筛选条件的检查' : archive ? '这份示例没有检查记录' : '这里将保存你的检查报告'} action={!partialPage&&(search || filter !== 'ALL' ? <Button onClick={() => { setQuery(''); setSearch(''); setFilter('ALL'); setCursor(undefined); setStack([]); }}>清除筛选</Button> : !archive && <ActionLink navigationScope="page" href={'#'+scopedPath('/reports?view=plan')} kind="primary">发起检查</ActionLink>)}>{state.data.next_cursor?'可继续翻页查找。':stack.length?'可返回上一页继续查看。':!search&&filter==='ALL'&&!archive&&'完成一次检查后，可以在这里查阅结果、原始依据和后续复验。'}</Empty>}
+      {!state.loading&&!state.error&&state.data&&(stack.length>0||state.data.next_cursor)&&<div className="jj-pagination jj-history-pagination"><Button disabled={!stack.length} onClick={() => { setCursor(stack.at(-1)); setStack(value => value.slice(0, -1)); }}>上一页</Button><span>第 {stack.length + 1} 页</span><Button disabled={!state.data.next_cursor} onClick={() => { setStack(value => [...value, cursor]); setCursor(state.data!.next_cursor ?? undefined); }}>下一页</Button></div>}
     </section>
   </>;
 }

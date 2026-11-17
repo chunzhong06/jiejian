@@ -41,7 +41,7 @@ export function CollaborationArtifactReview({projectId,task,review,returnTo}:{pr
         const resource=context.resources.find(item=>item.resource_binding_id===source.config.resource_binding_id);
         return {kind:'candidate' as const,source,action,effect,resource,owner:context.identities.find(item=>item.identity_id===resource?.owner_identity_id)?.label};
     });
-    const data=useRead(flowReview?'artifact-flow:'+projectId+':'+id+':'+revision+':'+task.task_id:null,async signal=>{
+    const data=useRead(flowReview?'artifact-flow:'+projectId+':'+id+':'+revision+':'+actionId+':'+task.task_id:null,async signal=>{
         const [candidate,accounts]=await Promise.all([operationFlowsApi.read(projectId,id!,revision,signal),testIdentitiesApi.list(projectId,signal)]);
         if(candidate.id!==id||candidate.revision!==revision||candidate.business_action_id!==actionId)throw new Error('产物关联已变化，请返回任务重新核对。');
         let previous:FlowComparisonBaseline|undefined=editorDraft<FlowEditorDraft>(flowDraftKey(projectId,actionId!),projectId);

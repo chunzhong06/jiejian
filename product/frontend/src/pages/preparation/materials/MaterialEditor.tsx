@@ -9,7 +9,7 @@ import { ApiError } from '../../../shared/api/http';
 import { assertProject } from '../../../shared/model/page';
 import { date, text } from '../../../shared/lib/format';
 import { useRead } from '../../../shared/lib/useRead';
-import { operationId, readPending, savePending } from '../../../shared/lib/operations';
+import { operationId, readPending, savePending, notAccepted } from '../../../shared/lib/operations';
 import { Badge, ErrorNote, Loading, Notice } from "../../../shared/ui/feedback";
 import { Button } from "../../../shared/ui/actions";
 import {Field,FormColumns,Heading,ObjectIdentity,TaskActions,TaskFrame,TaskStage} from "../../../shared/ui/layout"
@@ -66,6 +66,19 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
     type CaptureRequest = { operation: string; recordingId?: string; input?: RecordingCreateInput };
     const [capturePending, setCapturePending] = useState(() => readPending<CaptureRequest>(captureKey));
     const rememberCapture = (value?: CaptureRequest) => { savePending(captureKey, value); setCapturePending(value); };
+    const checkCapture = (value: RecordingViewDto, expected?: CaptureRequest) => {
+        const item = value.recording;
+        assertProject(item?.project_id ?? '', projectId);
+        if (!item || item.business_action_id !== reference.action_id || item.action_revision !== reference.action_revision
+            || expected?.recordingId && item.recording_id !== expected.recordingId)
+            throw new Error('录制与原操作或修订不一致，请返回当前材料核对。');
+        const input = expected?.input;
+        if (input && (item.subject_test_identity_id !== input.subject_test_identity_id
+            || item.resource_owner_test_identity_id !== input.resource_owner_test_identity_id
+            || item.purpose !== input.purpose || (item.parent_recording_id ?? null) !== input.parent_recording_id))
+            throw new Error('录制的账号或用途与原请求不一致，请核对原录制。');
+        return value;
+    };
     const mounted = useRef(true);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     const complete = (receipt: Awaited<ReturnType<typeof api.materialReceipt>>, operation: string) => {
@@ -81,10 +94,7 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
         if (!recordingId)
             return null;
         const value = await recordingsApi.recording(recordingId);
-        assertProject(value.recording?.project_id ?? '', projectId);
-        if (value.recording?.business_action_id !== reference.action_id || value.recording.action_revision !== reference.action_revision)
-            throw new Error('录制属于另一项操作或原版本，请返回当前材料核对。');
-        return value;
+        return checkCapture(value, { operation: '', recordingId });
     }, value => recordingNeedsPolling(value?.recording?.state) ? 1000 : 0);
     const current = active.data ?? recording, details = state.data;
     const setup = useRead(details?.recording_context?.can_execute || recordingId ? 'recording-accounts:' + projectId : null, () => recordingsApi.setup(projectId));
@@ -105,11 +115,11 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
         const value = saved?.recordingId ? await recordingsApi.recording(saved.recordingId) : saved ? await recordingsApi.receipt(projectId, saved.operation) : null;
         if (!value && retry && saved?.input) {
             const created = await recordingsApi.createRecording(projectId, saved.input, saved.operation);
-            assertProject(created.recording?.project_id ?? '', projectId);
+            checkCapture(created, saved);
             setRecording(created); setCaptureUnknown(false); rememberCapture({ ...saved, recordingId: created.recording!.recording_id });
         }
         if (value?.recording) {
-            assertProject(value.recording.project_id, projectId);
+            checkCapture(value, saved);
             setRecording(value); setCaptureUnknown(false);
             if (recordingEnded(value.recording.state)) rememberCapture();
             else if (saved) rememberCapture({ ...saved, recordingId: value.recording.recording_id });
@@ -151,14 +161,14 @@ function MaterialEditorSession({ projectId, reference, label, actionName, resume
                 const input: RecordingCreateInput = { material_candidate: true, business_action_id: c.business_action_id, action_revision: c.action_revision, subject_test_identity_id: c.subject_test_identity_id, resource_owner_test_identity_id: c.resource_owner_test_identity_id, subject_slot_id: c.subject_slot_id, resource_owner_slot_id: c.resource_owner_slot_id, resource_owner_confirmed: true, duration_seconds: duration, purpose: c.recording_purpose, parent_recording_id: c.parent_recording_id, effect_id: c.effect_id };
                 rememberCapture({ operation, input });
                 const value = await recordingsApi.createRecording(projectId, input, operation);
-                assertProject(value.recording?.project_id ?? '', projectId);
-                rememberCapture({ operation, recordingId: value.recording!.recording_id });
+                checkCapture(value, { operation, input });
+                rememberCapture({ operation, input, recordingId: value.recording!.recording_id });
                 setRecording(value);
             }
             catch (error) {
-                if (!(error instanceof ApiError))
-                    setCaptureUnknown(true);
-                else rememberCapture();
+                // 服务端错误也可能发生在提交之后；只有明确未受理才能释放原操作身份。
+                if (notAccepted(error)) rememberCapture();
+                else setCaptureUnknown(true);
                 throw error;
             } })}>建立本次录制</Button></div></> : <Notice tone="caution">当前还不能录制，请先核对账号、权限与资源条件。<Button kind="quiet" onClick={onBack}>返回核对准备条件</Button></Notice>}</div> : <>
         {!preview&&<fieldset className="jj-recording-list" aria-label="已有操作录制">{details.candidates.map((item, index) => <label key={item.recording_id}><input type="radio" name="material-recording" value={item.recording_id} checked={selected === item.recording_id} disabled={busy || Boolean(uncertain)} onChange={() => { setSelected(item.recording_id); setPreview(undefined); }}/><ObjectIdentity name={<strong>{item.recording_id === details.source_recording_id ? '已用于检查的录制' : `操作记录 ${index + 1}`}</strong>} status={<Badge tone={item.current ? 'positive' : 'neutral'}>{item.current ? '当前版本' : '需重新核对'}</Badge>}/>{item.captured_at_us && <time dateTime={new Date(item.captured_at_us / 1000).toISOString()}>{date(item.captured_at_us)}</time>}</label>)}</fieldset>}

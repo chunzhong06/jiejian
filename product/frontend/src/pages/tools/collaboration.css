@@ -175,11 +175,6 @@
 .jj-handoff-report { display:grid;gap:24px;min-width:0;padding:24px;border:1px solid var(--line);border-radius:var(--radius-control);container:handoff-report / inline-size; }
 .jj-handoff-report p { margin:0;line-height:var(--leading-reading); }
 .jj-handoff-report + .jj-handoff-report { margin-top:28px; }
-.jj-handoff-comparison { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px; }
-.jj-handoff-comparison > section { display:grid;align-content:start;gap:14px;min-width:0; }
-.jj-handoff-comparison h4 { margin:0;color:var(--muted);font-weight:var(--weight-regular); }
-.jj-handoff-comparison ul { margin:0;padding-left:18px;display:grid;gap:10px; }
-.jj-handoff-comparison li { margin:0;line-height:var(--leading-reading); }
 .jj-handoff-report .jj-object-description { font-size:var(--text-meta); }
 .jj-collaboration-context-grid { grid-template-rows:min-content 1fr; }
 .jj-collaboration-context-grid[data-has-products=false] > .jj-collaboration-artifacts { grid-column:2;grid-row:1; }
@@ -187,7 +182,6 @@
 .jj-collaboration-context-grid[data-has-products=false] > .jj-collaboration-methods { grid-column:2;grid-row:2;border:0;padding:0; }
 .jj-collaboration-context-grid[data-has-products=false] > :is(.jj-collaboration-artifacts,.jj-collaboration-methods) > h2 { font-size:var(--text-object); }
 .jj-collaboration-context-return { grid-column:1/-1; }
-@container handoff-report (max-width:540px) { .jj-handoff-comparison { grid-template-columns:minmax(0,1fr);gap:24px; } }
 @container collaboration-panel (max-width:760px) {
  .jj-collaboration-context-grid[data-has-products=false] > :is(.jj-collaboration-artifacts,.jj-collaboration-methods,.jj-collaboration-handoff) { grid-column:1;grid-row:auto; }
  .jj-collaboration-context-grid[data-has-products=false] > .jj-collaboration-handoff { grid-row:1; }

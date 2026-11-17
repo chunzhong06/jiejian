@@ -239,6 +239,21 @@ it('材料任务完成后接续准备，历史模型问题保留在操作记录'
   expect(screen.queryByText('还没有操作记录。')).not.toBeInTheDocument()
 })
 
+it('尚未完成的受限模型交互直接显示原因和接续入口，不自动再次调用',async()=>{
+ const task={task_id:'task',project_id:'app',goal:'读取当前报告',purpose:'UNDERSTAND',state:'WAITING_AGENT',revision:2,references:{},reviews:[],questions:[],events:[],operations:[],execution:{state:'FINISHED',restricted:true,message:'Agent 请求了当前适配器尚不支持的交互，本次未执行。可在已连接开发工具中接续原任务。'}}
+ const writes:string[]=[]
+ const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const path=String(input);if(init?.method==='POST')writes.push(path)
+  return response(path.includes('/executor')?{available:true,ready:true,read_only:true}:path.endsWith('/activity')?[]:task)
+ }))
+ render(<Collaboration projectId="app" taskId="task"/>)
+ expect(await screen.findByRole('heading',{name:'上次模型交互受限'})).toBeVisible()
+ expect(screen.getByText(task.execution.message)).toBeVisible()
+ expect(screen.getByRole('button',{name:'继续本地 Agent'})).toBeVisible()
+ expect(writes).toEqual([])
+})
+
 it.each([['整理权限要求','RULES'],['补齐检查准备','SETUP'],['调查权限问题','CHECK']])('目标示例%s采用自己的完成判据',async(label,purpose)=>{
   const response=(data:unknown)=>new Response(JSON.stringify({schema_version:'1',data}))
   let submitted=false

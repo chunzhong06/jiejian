@@ -8,9 +8,12 @@
 .jj-example-change-requirement ul { margin:0;padding-left:20px;display:grid;gap:10px;font-size:var(--text-body);line-height:var(--leading-reading); }
 .jj-example-change .jj-task-actions { margin-top:28px; }
 .jj-example-change .jj-action-note { max-width:64ch; }
-.jj-example-deeper { margin-top:24px; }
+.jj-example-deeper { margin-top:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:20px 32px; }
+.jj-example-deeper h2 { font-size:var(--text-group);line-height:var(--leading-reading);font-weight:var(--weight-semibold); }
+.jj-example-deeper p { margin-top:10px;max-width:60ch;color:var(--muted);line-height:var(--leading-reading); }
+.jj-example-deeper .jj-task-actions { margin:0; }
 /* 深入示例保留完整内容，主体验只突出当前待验证的问题。 */
 .jj-example-change:not([data-primary]) { background:transparent;padding-inline:0; }
 .jj-example-change:not([data-primary]) .jj-example-change-question p { font-size:var(--text-object);line-height:var(--leading-reading); }
 @container example-change (max-width:620px) { .jj-example-change-reading { grid-template-columns:minmax(0,1fr);gap:28px; } }
-@media(max-width:760px) { .jj-example-change { padding:24px 20px; }.jj-example-change-body { padding:22px 20px; } }
+@media(max-width:760px) { .jj-example-change { padding:24px 20px; }.jj-example-change-body { padding:22px 20px; }.jj-example-deeper { grid-template-columns:minmax(0,1fr); } }

@@ -1,6 +1,6 @@
 import {fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {beforeEach,afterEach,expect,it,vi} from 'vitest'
-import {History} from './History'
+import {History,historyKey} from './History'
 import {Reports} from './Reports'
 import {readRoute} from '../../shared/lib/navigation'
 
@@ -121,4 +121,88 @@ it('同名操作按准确修改说明区分，缺失说明保留原操作名，�
  expect(screen.queryByText('预设演示：VULNERABLE')).not.toBeInTheDocument()
  expect(screen.getAllByText('取得内部完整包')).toHaveLength(3)
  expect(screen.getAllByRole('button',{name:'阅读报告'})).toHaveLength(3)
+})
+
+function historyItem(letter:string,time:number){return {status:{run:{run_id:'run_'+letter.repeat(32),project_id:'app',created_at_us:time,policy_epoch:1,verdict:'PASS',lifecycle:'COMPLETED'}},action_labels:['读取订单'],source_run_id:null,change_id:null}}
+
+it('较早页读取失败后重读原游标，跨页比较与回程保留原选择和位置',async()=>{
+ const cursor={created_at_us:20,run_id:'run_'+'b'.repeat(32)}
+ let failed=true
+ const calls:string[]=[]
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const path=String(input);calls.push(path)
+  const older=new URL(path,'http://localhost').searchParams.has('before_run_id')
+  if(older&&failed)return new Response(JSON.stringify({schema_version:'1',error:{code:'STORAGE_FAILURE',message:'旧记录读取中断'}}),{status:500})
+  return new Response(JSON.stringify({schema_version:'1',data:{project_id:'app',items:[historyItem(older?'a':'c',older?10:30)],next_cursor:older?null:cursor}}))
+ }))
+ const view=render(<Reports {...props()}/>)
+ fireEvent.click(await screen.findByRole('checkbox',{name:'选择比较记录 cccccccc'}))
+ fireEvent.click(screen.getByRole('button',{name:'下一页'}))
+ expect(await screen.findByRole('alert')).toHaveTextContent('旧记录读取中断')
+ const failedPath=calls.at(-1)
+ failed=false;fireEvent.click(screen.getByRole('button',{name:'重新读取检查记录'}))
+ fireEvent.click(await screen.findByRole('checkbox',{name:'选择比较记录 aaaaaaaa'}))
+ expect(calls.at(-1)).toBe(failedPath)
+ vi.spyOn(window,'scrollY','get').mockReturnValue(456)
+ fireEvent.click(screen.getByRole('button',{name:'查看本轮变化'}))
+ const comparison=readRoute().query
+ expect(comparison.get('baseline')).toBe('run_'+'a'.repeat(32))
+ expect(comparison.get('current')).toBe('run_'+'c'.repeat(32))
+ view.unmount();location.hash=comparison.get('return_to')!
+ render(<Reports {...props()}/>)
+ expect(await screen.findByRole('checkbox',{name:'选择比较记录 aaaaaaaa'})).toBeChecked()
+ expect(screen.getByText('第 2 页')).toBeVisible()
+ expect(JSON.parse(sessionStorage.getItem('jiejian.studio.history:app:all')!).scroll).toBe(456)
+})
+
+it('深链接更换查找条件从第一页开始，不沿用上一查询的分页游标',async()=>{
+ sessionStorage.setItem('jiejian.studio.history:app:all',JSON.stringify({query:'旧条件',search:'旧条件',filter:'ALL',cursor:{created_at_us:1,run_id:'run_'+'a'.repeat(32)},stack:[null],scroll:0}))
+ location.hash='/reports?project_id=app&query=新条件'
+ const fetcher=vi.mocked(fetch)
+ render(<Reports {...props()}/>)
+ await screen.findByText('没有符合筛选条件的检查')
+ const query=new URL(String(fetcher.mock.calls[0][0]),'http://localhost').searchParams
+ expect(query.get('query')).toBe('新条件')
+ expect(query.has('before_run_id')).toBe(false)
+ expect(screen.queryByText('第 2 页')).not.toBeInTheDocument()
+})
+
+it('规则修订变化重建历史范围，不混用原修订的筛选和比较选择',async()=>{
+ populatedHistory()
+ location.hash='/reports?project_id=app&intent_id=rule&revision=1&intent_hash=old'
+ sessionStorage.setItem(historyKey('app',readRoute()),JSON.stringify({query:'旧修订',search:'旧修订',filter:'BLOCK',stack:[],scroll:0}))
+ const view=render(<Reports {...props()}/>)
+ expect(await screen.findByLabelText('查找检查记录')).toHaveValue('旧修订')
+ location.hash='/reports?project_id=app&intent_id=rule&revision=2&intent_hash=new'
+ view.rerender(<Reports {...props()}/>)
+ await waitFor(()=>expect(screen.getByLabelText('查找检查记录')).toHaveValue(''))
+ const last=new URL(String(vi.mocked(fetch).mock.calls.at(-1)![0]),'http://localhost').searchParams
+ expect(last.get('revision')).toBe('2')
+ expect(last.get('intent_hash')).toBe('new')
+ expect(last.has('query')).toBe(false)
+})
+
+it('较早页为空仍能返回上一页，不困在初始空态',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const older=new URL(String(input),'http://localhost').searchParams.has('before_run_id')
+  return new Response(JSON.stringify({schema_version:'1',data:{project_id:'app',items:older?[]:[historyItem('a',10)],next_cursor:older?null:{created_at_us:10,run_id:'run_'+'a'.repeat(32)}}}))
+ }))
+ render(<History {...props()}/>)
+ fireEvent.click(await screen.findByRole('button',{name:'下一页'}))
+ await screen.findByText('这一页没有检查记录')
+ expect(screen.queryByRole('button',{name:'阅读报告'})).not.toBeInTheDocument()
+ const previous=await screen.findByRole('button',{name:'上一页'})
+ await waitFor(()=>expect(previous).toBeEnabled())
+ fireEvent.click(previous)
+ expect(await screen.findByRole('button',{name:'阅读报告'})).toBeVisible()
+})
+
+it('有扫描游标的空页可以继续查找，不冒充全部历史没有匹配',async()=>{
+ location.hash='/reports?project_id=app&query=订单'
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({schema_version:'1',data:{project_id:'app',items:[],next_cursor:{created_at_us:1,run_id:'run_'+'a'.repeat(32)}}}))))
+ render(<History {...props()}/>)
+ expect(await screen.findByText('这一页没有检查记录')).toBeVisible()
+ expect(screen.getByText('可继续翻页查找。')).toBeVisible()
+ expect(screen.getByRole('button',{name:'下一页'})).toBeEnabled()
+ expect(screen.queryByText('没有符合筛选条件的检查')).not.toBeInTheDocument()
 })

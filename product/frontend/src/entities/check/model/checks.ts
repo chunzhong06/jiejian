@@ -45,7 +45,7 @@ const businessSentences:Record<string,[string,string,string]>={
   '内部包曾向操作账号开放':['内部包访问权曾被开放','本次未开放内部包访问权','内部包访问权是否开放尚未确认'],
   '公开作品说明可见':['读到了公开作品说明','未读到公开作品说明','公开说明是否可读尚未确认'],
 }
-export function actual(effect:ActionResultStory['fact_comparison']['effects'][number]){
+export function actual(effect:Pick<ActionResultStory['fact_comparison']['effects'][number],'business_label'|'assessment_state'>){
   const state=effect.assessment_state??'UNKNOWN'
   const known=businessSentences[effect.business_label]
   return known?known[state==='CONFIRMED'?0:state==='ABSENT'?1:2]:state==='CONFIRMED'?`已确认：${text(effect.business_label)}`:state==='ABSENT'?`本次未观察到“${text(effect.business_label)}”`:`尚不能确认“${text(effect.business_label)}”`

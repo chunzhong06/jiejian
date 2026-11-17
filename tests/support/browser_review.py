@@ -27,7 +27,7 @@ def capture_workflow(page,origin,output,run_id,*,project_id,evidence_label='查�
     capture('permissions-light','/permissions','permissions')
     capture('preparation-light','/preparation','preparation')
     capture('report-light','/reports?run_id='+run_id,'report')
-    page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+    page.get_by_role('button',name='切换深色',exact=True).click()
     expect(page.locator('html')).to_have_attribute('data-studio-theme','dark')
     capture('preparation-dark','/preparation','preparation')
     capture('report-dark','/reports?run_id='+run_id,'report')

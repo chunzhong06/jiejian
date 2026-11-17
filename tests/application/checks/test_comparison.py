@@ -55,7 +55,8 @@ pytestmark=[pytest.mark.level3]
     (True,True,'BLOCK','FIXED'),
     (True,False,'INCONCLUSIVE','INSUFFICIENT'),
 ])
-def test_comparison_completion_uses_exact_original_verification(linked,normal_safe,whole_run,expected):
+@pytest.mark.parametrize('index_signature_changed',[False,True])
+def test_comparison_completion_uses_exact_original_verification(linked,normal_safe,whole_run,expected,index_signature_changed,monkeypatch):
     from product.backend.application.checks.reading.comparison import CheckComparisonService
     from product.backend.application.checks.repairs.repair import CurrentRepairService
     from product.backend.domain.lifecycle import RunLifecycle,RunVerdict
@@ -72,8 +73,19 @@ def test_comparison_completion_uses_exact_original_verification(linked,normal_sa
     reader=SimpleNamespace(inspect=inspect,package=lambda run,**_kwargs:packages[run])
     repairs=CurrentRepairService(reader=reader,change_context_reader=lambda *_:change if linked else None)
     service=CheckComparisonService(reader,None);service.bind_repairs(repairs)
+    if index_signature_changed:
+        from product.backend.application.checks.reading import comparison
+        index=comparison._index
+        def changed_index(value):
+            rows=index(value)
+            if value is current:
+                # 重录可改变一般比较身份；原题验收仍核对完整冻结标准与挑战，本夹具不改变验收事实。
+                for row in rows.values():row['signature']='different-technical-source'
+            return rows
+        monkeypatch.setattr(comparison,'_index',changed_index)
+        if expected!='FIXED':expected='INCOMPARABLE'
     compared=service.compare(source.request.project_id,source.result.run_id,current.result.run_id)
     row=next(item for item in compared.items if item.after.expectation=='DENY')
     assert row.state==expected
     assert row.verification_scope==('SOURCE_CHANGE' if expected=='FIXED' else None)
-    if not linked:assert 'REPAIR_CONTEXT_MISMATCH' in row.reasons
+    if not linked and not index_signature_changed:assert 'REPAIR_CONTEXT_MISMATCH' in row.reasons

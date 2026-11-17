@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[api](#api)（1 个文件）、[lib](#lib)（20 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（35 个文件）。
+按目录定位：[api](#api)（1 个文件）、[lib](#lib)（21 个文件）、[model](#model)（1 个文件）、[styles](#styles)（10 个文件）、[ui](#ui)（35 个文件）。
 
 ## api
 
@@ -54,7 +54,7 @@
 
 ### lib/navigation.ts
 
-[源码](../../../product/frontend/src/shared/lib/navigation.ts)（55 行）。公开声明：`Route`、`checkPlanDestination`、`go`、`historyLocation`、`readRoute`、`replaceDestination`、`returnDestination`、`returnDestinationLabel`等。
+[源码](../../../product/frontend/src/shared/lib/navigation.ts)（56 行）。公开声明：`Route`、`checkPlanDestination`、`go`、`historyLocation`、`readRoute`、`replaceDestination`、`returnDestination`、`returnDestinationLabel`等。
 
 ### lib/operations.ts
 
@@ -67,6 +67,10 @@
 ### lib/pageTransition.ts
 
 [源码](../../../product/frontend/src/shared/lib/pageTransition.ts)（75 行）。公开声明：`commitPageTransition`、`commitReadingTransition`、`commitThemeTransition`、`pageTransitionActive`。
+
+### lib/preferences.ts
+
+[源码](../../../product/frontend/src/shared/lib/preferences.ts)（13 行）。公开声明：`readPreference`、`writePreference`。
 
 ### lib/routePage.tsx
 

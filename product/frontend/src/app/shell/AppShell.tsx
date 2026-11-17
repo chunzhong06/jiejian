@@ -43,7 +43,7 @@ export function AppShell({route,current,project,projects,choose,appearance,toggl
         <Breadcrumbs route={route} projectName={project?.name} projectId={project?.project_id}/>
         <nav className="jj-toolbar" aria-label="全局工具">
           <div className="jj-toolbar-actions" role="group" aria-label="显示与刷新">
-          <Button kind="quiet" aria-label={appearance==='light'?'切换雾蓝深色':'切换浅色'} title={appearance==='light'?'雾蓝深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/>
+          <Button kind="quiet" aria-label={appearance==='light'?'切换深色':'切换浅色'} title={appearance==='light'?'深色':'浅色'} icon={appearance==='light'?<MoonOutlined aria-hidden="true"/>:<SunOutlined aria-hidden="true"/>} onClick={toggleAppearance}/>
           <Button kind="quiet" aria-label="刷新当前界面" tip="刷新当前界面" busy={refreshing} icon={<ReloadOutlined aria-hidden="true"/>} onClick={()=>{setRefreshing(true);void refreshCurrentPage().finally(()=>setRefreshing(false))}}/>
           </div>
           <div className="jj-toolbar-exit"><Shutdown compact showLabel/></div>

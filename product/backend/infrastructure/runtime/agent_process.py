@@ -53,6 +53,7 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
     started, turn_id, interrupted = time.monotonic(), None, False
     interrupted_at = None
     restricted, failed_tools, tool_calls = False, False, []
+    restriction_reason = None
     try:
         reader.start()
         send(dict(id=1, method='initialize', params=dict(clientInfo=dict(name='jiejian', title='界鉴', version=__version__))))
@@ -98,7 +99,8 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
                     continue
                 status = message['params']['turn']['status']
                 return dict(state='FINISHED' if status == 'completed' else 'INTERRUPTED' if status == 'interrupted' else 'FAILED',
-                    session_id=session_id, restricted=restricted, failed_tools=failed_tools, tool_calls=tool_calls)
+                    session_id=session_id, restricted=restricted, failed_tools=failed_tools, tool_calls=tool_calls,
+                    **({'restriction_reason':restriction_reason} if restriction_reason else {}))
             elif message.get('method') in ('item/started', 'item/completed'):
                 item = message.get('params', {}).get('item', {})
                 if item.get('type') in ('mcpToolCall', 'fileChange', 'commandExecution'):
@@ -111,10 +113,13 @@ def run_codex(*, executable, cwd, profile, connector, python, prompt, session_id
                 # 任务授权不包含提升沙箱、任意终端或新增网络；这些请求不能自动批准。
                 if message['method'] in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
                     send(dict(id=message['id'], result=dict(decision='decline')))
-                    on_event('RESTRICTED', None)
+                    reason = 'NATIVE_COMMAND_APPROVAL' if message['method']=='item/commandExecution/requestApproval' else 'NATIVE_FILE_APPROVAL'
                 else:
                     send(dict(id=message['id'], error=dict(code=-32601, message='当前执行适配器不支持该交互，请使用界鉴协作工具。')))
-                    on_event('RESTRICTED', None)
+                    reason = 'UNSUPPORTED_INTERACTION'
+                # 只保留实际拒绝的交互种类，不保存参数、客户端错误或模型原文。
+                restriction_reason = restriction_reason or reason
+                on_event('RESTRICTED', restriction_reason)
                 restricted = True
         raise JiejianError(ErrorCode.STATE_PRECONDITION, '本轮 Agent 已达到运行时限，请核对原任务后继续')
     finally:

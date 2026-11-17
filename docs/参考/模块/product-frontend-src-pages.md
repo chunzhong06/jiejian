@@ -42,7 +42,7 @@
 
 ### checks/comparison.css
 
-[源码](../../../product/frontend/src/pages/checks/comparison.css)（38 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/checks/comparison.css)（39 行）。公开声明：包、内部机制或样式。
 
 ### checks/Comparison.tsx
 
@@ -54,15 +54,15 @@
 
 ### checks/History.tsx
 
-[源码](../../../product/frontend/src/pages/checks/History.tsx)（77 行）。公开声明：`History`、`HistoryMemory`、`restoreHistory`。
+[源码](../../../product/frontend/src/pages/checks/History.tsx)（86 行）。公开声明：`History`、`HistoryMemory`、`historyKey`、`restoreHistory`。
 
 ### checks/official-result.css
 
-[源码](../../../product/frontend/src/pages/checks/official-result.css)（21 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/checks/official-result.css)（9 行）。公开声明：包、内部机制或样式。
 
 ### checks/OfficialResultContext.tsx
 
-[源码](../../../product/frontend/src/pages/checks/OfficialResultContext.tsx)（18 行）。公开声明：`OfficialResultContext`。
+[源码](../../../product/frontend/src/pages/checks/OfficialResultContext.tsx)（19 行）。公开声明：`OfficialResultContext`。
 
 ### checks/Reports.tsx
 
@@ -86,7 +86,7 @@
 
 ### checks/styles.css
 
-[源码](../../../product/frontend/src/pages/checks/styles.css)（508 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/checks/styles.css)（503 行）。公开声明：包、内部机制或样式。
 
 ### checks/types.ts
 
@@ -104,7 +104,7 @@
 
 ### checks/report/EvidenceInspector.tsx
 
-[源码](../../../product/frontend/src/pages/checks/report/EvidenceInspector.tsx)（231 行）。公开声明：`EvidenceInspector`。
+[源码](../../../product/frontend/src/pages/checks/report/EvidenceInspector.tsx)（253 行）。公开声明：`EvidenceInspector`。
 
 ### checks/report/EvidenceRecord.tsx
 
@@ -112,7 +112,7 @@
 
 ### checks/report/Report.tsx
 
-[源码](../../../product/frontend/src/pages/checks/report/Report.tsx)（182 行）。公开声明：`Report`。
+[源码](../../../product/frontend/src/pages/checks/report/Report.tsx)（184 行）。公开声明：`Report`。
 
 ### checks/report/SampleCoverage.tsx
 
@@ -138,7 +138,7 @@
 
 ### connections/example-change.css
 
-[源码](../../../product/frontend/src/pages/connections/example-change.css)（16 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/connections/example-change.css)（19 行）。公开声明：包、内部机制或样式。
 
 ### connections/ExampleLab.tsx
 
@@ -298,7 +298,7 @@
 
 ### preparation/materials/MaterialEditor.tsx
 
-[源码](../../../product/frontend/src/pages/preparation/materials/MaterialEditor.tsx)（198 行）。公开声明：`MaterialEditor`。
+[源码](../../../product/frontend/src/pages/preparation/materials/MaterialEditor.tsx)（208 行）。公开声明：`MaterialEditor`。
 
 ### preparation/materials/reasons.ts
 
@@ -404,11 +404,11 @@
 
 ### tools/Agent.tsx
 
-[源码](../../../product/frontend/src/pages/tools/Agent.tsx)（86 行）。公开声明：`Agent`。
+[源码](../../../product/frontend/src/pages/tools/Agent.tsx)（88 行）。公开声明：`Agent`。
 
 ### tools/collaboration.css
 
-[源码](../../../product/frontend/src/pages/tools/collaboration.css)（196 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/tools/collaboration.css)（190 行）。公开声明：包、内部机制或样式。
 
 ### tools/Collaboration.tsx
 
@@ -432,8 +432,8 @@
 
 ### tools/ReportHandoff.tsx
 
-[源码](../../../product/frontend/src/pages/tools/ReportHandoff.tsx)（27 行）。公开声明：`ReportHandoff`。
+[源码](../../../product/frontend/src/pages/tools/ReportHandoff.tsx)（28 行）。公开声明：`ReportHandoff`。
 
 ### tools/workspace.css
 
-[源码](../../../product/frontend/src/pages/tools/workspace.css)（31 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/pages/tools/workspace.css)（34 行）。公开声明：包、内部机制或样式。

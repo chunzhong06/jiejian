@@ -45,6 +45,21 @@ it('项目变化时停止读取，不显示其他项目的同名配置',async()=
  expect(screen.queryByRole('heading',{name:'发布资料'})).not.toBeInTheDocument()
 })
 
+it('同份流程链接改指其他业务时重新核对，不复用上一份候选读取',async()=>{
+ const document={id:'flow',revision:2,business_action_id:'publish',action_revision:1,subject_test_identity_id:'owner',resource_owner_test_identity_id:'owner',actual_resource_id:'alpha',workflow:{target_step_id:'target',steps:[]},recovery:null}
+ const review={id:'flow@2',title:'发布流程',destination:'/testing?flow_id=flow&revision=2&action_id=publish',action_label:'核对流程'}
+ const task={task_id:'task',operations:[{state:'SUCCEEDED',capability:'flows.save',result:{id:'flow',revision:2}}]}
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const path=String(input)
+  return response(path.includes('/test-identities')?[]:path.endsWith('/flow/2')?document:{project_id:'app',flows:[]})
+ }))
+ const view=render(<CollaborationArtifactReview projectId="app" task={task as never} review={review}/>)
+ expect(await screen.findByRole('link',{name:'进入流程继续核对'})).toBeVisible()
+ view.rerender(<CollaborationArtifactReview projectId="app" task={task as never} review={{...review,destination:review.destination.replace('action_id=publish','action_id=withdraw')}}/>)
+ expect(await screen.findByRole('alert')).toHaveTextContent('产物关联已变化')
+ expect(screen.queryByRole('link',{name:'进入流程继续核对'})).not.toBeInTheDocument()
+})
+
 it('多份证明及已审阅场景各保留入口，回程恢复产物页签',async()=>{
  const task={task_id:'task',project_id:'app',goal:'准备发布与撤回',purpose:'SETUP',state:'COMPLETED',references:{},questions:[],events:[],reviews:[],operations:[proofOperation,{...proofOperation,result:{source_id:'proof-b',revision:1}},{state:'SUCCEEDED',capability:'scenarios.save',result:{id:'scenario-a',revision:4}}]}
  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>response(String(input).includes('executor')?{available:false}:String(input).endsWith('/activity')?[]:task)))

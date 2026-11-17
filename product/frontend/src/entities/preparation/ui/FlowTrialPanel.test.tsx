@@ -151,6 +151,34 @@ test('指定记录失效时保留缺失反馈，不回退其他试运行',async(
   expect(api.start).not.toHaveBeenCalled();
 })
 
+test('指定记录所在列表为空仍解释原引用失效，不把它当作首次试运行',async()=>{
+ vi.mocked(api.history).mockResolvedValue([])
+ render(<FlowTrialPanel {...props} initialTrialId="missing-record"/>)
+ expect(await screen.findByText('未找到指定的试运行记录，请重新选择一条记录。')).toBeVisible()
+ expect(api.start).not.toHaveBeenCalled()
+})
+
+test('单独恢复沿用原试运行的账号资源和旧修订，仅在确认后提交一次',async()=>{
+ const original=receipt('old-operation')
+ original.state='FAILED';original.recovery_pending=true
+ original.request={...original.request,trial_id:'original-trial',plan:{...plan,state_changing:true,flow:{...flow,revision:1,recovery:{method:'POST',relative_path:'/restore/{case_resource_id}',json_body:{}}},case:{...plan.case,resource_id:'original-order'}}}
+ const restorePlan={...original.request.plan,mode:'RESTORE' as const}
+ vi.mocked(api.history).mockResolvedValue([original])
+ vi.mocked(api.preview).mockResolvedValue({plan:restorePlan,plan_hash:'c'.repeat(64)})
+ vi.mocked(api.start).mockResolvedValue({...receipt('restore-operation'),request:{...original.request,trial_id:'restored',plan:restorePlan}})
+ render(<FlowTrialPanel {...props}/>)
+ fireEvent.click(await screen.findByRole('button',{name:'处理恢复请求'}))
+ fireEvent.click(screen.getByRole('button',{name:'预览恢复请求'}))
+ const execute=await screen.findByRole('button',{name:'确认执行恢复请求'})
+ const selection={flow_id:flow.id,revision:1,subject_identity_id:'owner',resource_owner_identity_id:'owner',resource_id:'original-order',restore_trial_id:'original-trial'}
+ expect(api.preview).toHaveBeenCalledWith('app',selection)
+ expect(screen.queryByText('GET /orders/{id}')).not.toBeInTheDocument()
+ expect(api.start).not.toHaveBeenCalled()
+ fireEvent.click(execute)
+ await waitFor(()=>expect(api.start).toHaveBeenCalledTimes(1))
+ expect(vi.mocked(api.start).mock.calls[0].slice(0,3)).toEqual(['app',selection,{plan:restorePlan,plan_hash:'c'.repeat(64)}])
+})
+
 test('返回编辑器仍保留后台试运行门禁，不把离开当作执行结束',async()=>{
   editorContext();vi.mocked(api.history).mockResolvedValue([receipt('active')]);
   render(<OperationFlowEditor projectId="gate-app" actionId="action" initialFlow={flow} onBack={vi.fn()}/>);

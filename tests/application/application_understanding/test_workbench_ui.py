@@ -101,7 +101,7 @@ def test_shared_corner_profile_and_fallback_in_browser(readonly_official_review)
             for theme in ('light', 'dark'):
                 navigate(page, server.origin, '/application?view=sources&project_id='+scenario.project_id)
                 if page.locator('html').get_attribute('data-studio-theme') != theme:
-                    page.get_by_role('button', name='切换雾蓝深色' if theme == 'dark' else '切换浅色', exact=True).click()
+                    page.get_by_role('button', name='切换深色' if theme == 'dark' else '切换浅色', exact=True).click()
                 page.get_by_role('button', name='导入接口资料或请求', exact=True).click()
                 dialog = page.get_by_role('dialog', name='导入接口资料', exact=True)
                 settled(page)
@@ -285,7 +285,7 @@ def test_application_sources_and_continuous_navigation_in_browser():
             assert page.locator('.jj-request-item').count()==64
             assert page.locator('.jj-source-requests').evaluate('element=>element.scrollHeight>element.clientHeight')
             settled(page);page.screenshot(path=str(output/'sources-light.png'),full_page=True)
-            page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+            page.get_by_role('button',name='切换深色',exact=True).click()
             expect(page.locator('html')).to_have_attribute('data-studio-theme','dark')
             settled(page);page.screenshot(path=str(output/'sources-dark.png'),full_page=True)
             page.set_viewport_size({'width':800,'height':960})

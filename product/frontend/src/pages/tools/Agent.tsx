@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { agentClients, agentConnectionsApi, mcpAccessApi, type AgentClient, type MCPAccessLevel, type AgentConnection } from '../../entities/runtime/api/mcp';
 import { Choice } from "../../shared/ui/Choice";
 import { Badge, ErrorNote, InlineFeedback, Loading } from "../../shared/ui/feedback";
-import { Button } from "../../shared/ui/actions";
+import { ActionLink,Button } from "../../shared/ui/actions";
 import {Switch} from '../../shared/ui/Switch';
 import { Dialog } from "../../shared/ui/Dialog";
 import {Field, Heading,ObjectIdentity} from "../../shared/ui/layout"
@@ -66,11 +66,13 @@ export function Agent({ projectId, name, onError,embedded=false }: {
         <header><h2>应用授权</h2></header>
         <p className="jj-access-explanation">选择这个开发工具可以在当前应用中做什么。连接工具与授予访问权限分别确认。</p>
         {state.loading ? <Loading page/> : state.error ? <ErrorNote error={state.error} onRetry={state.reload} retryLabel="重新读取开发工具配置"/> : <>
-          <div className="jj-current-grant"><h3>{name??(projectId?'已选应用':'尚未选择应用')}</h3>{projectId&&<Badge tone={grant?'positive':'neutral'}>{grant?'已授权':'未授权'}</Badge>}</div>
+          {!projectId?<div className="jj-access-empty"><h3>先选择要授权的应用</h3><p>工具连接可以先配置。选择具体应用后，再确认它可以读取或处理哪些内容。</p><ActionLink navigationScope="page" href="#/application">选择或建立应用</ActionLink></div>:<>
+          <div className="jj-current-grant"><h3>{name??'已选应用'}</h3><Badge tone={grant?'positive':'neutral'}>{grant?'已授权':'未授权'}</Badge></div>
           <Field measure="medium" label="访问范围" hint={levelDetails[chosenLevel]||"读取业务要求、检查材料和已发布报告。"}><Choice value={chosenLevel} disabled={!projectId||busy} onValueChange={value=>setLevel(value as MCPAccessLevel)}>{Object.entries(levels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</Choice></Field>
           {accessChanged&&<p className="jj-access-current">当前权限：{levels[grant!.level]}，新范围尚未保存。</p>}
           {!state.data?.paired&&<p className="jj-access-explanation">先配置工具连接，再选择它可以访问的应用和操作范围。</p>}
           <Button disabled={!projectId||busy||!state.data?.paired||Boolean(grant&&!accessChanged)} onClick={()=>setConfirm('access')}>{grant?'保存权限':'授予访问权限'}</Button>
+          </>}
         </>}
       </section>
     </div>

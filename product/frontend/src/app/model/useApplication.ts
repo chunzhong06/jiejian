@@ -7,9 +7,10 @@ import {assertProject} from '../../shared/model/page'
 import {go,type Route} from '../../shared/lib/navigation'
 import {useRead} from '../../shared/lib/useRead'
 import {discardProjectEditorDrafts} from '../../entities/runtime/model/handoff'
+import {readPreference,writePreference} from '../../shared/lib/preferences'
 
 export function useApplication(current:string,route:Route){
-  const [selected,setSelected]=useState(()=>localStorage.getItem('jiejian.studio.project')??'')
+  const [selected,setSelected]=useState(()=>readPreference('jiejian.studio.project')??'')
   const projects=useRead('applications',projectsApi.projects)
   const runId=current==='/reports'?route.query.get('run_id'):null
   const legacy=useRead(runId&&!route.query.has('project_id')?'report-owner:'+runId:null,async()=>runId?currentChecksApi.status(runId):null)
@@ -44,7 +45,7 @@ export function useApplication(current:string,route:Route){
     lastRevision.current={project:project.project_id,value:revision.data.revision}
     if(previous?.project===project.project_id&&previous.value!==revision.data.revision&&!workspace.data?.active_check)workspace.reload()
   },[project?.project_id,revision.data?.revision])
-  useEffect(()=>{if(project)localStorage.setItem('jiejian.studio.project',project.project_id)},[project?.project_id])
+  useEffect(()=>{if(project)writePreference('jiejian.studio.project',project.project_id)},[project?.project_id])
   const choose=(id:string)=>{setSelected(id);go('/workspace',id)}
   const refresh=()=>{workspace.reload();projects.reload();environment.reload()}
   const connected=(id:string)=>{projects.reload();setSelected(id);environment.reload();const query=new URLSearchParams(route.query);query.delete('project_id');if(query.get('view')==='create')query.delete('view');go(current==='/application'?'/application'+(query.size?'?'+query:''):'/workspace',id)}

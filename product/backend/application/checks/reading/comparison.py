@@ -196,12 +196,16 @@ class CheckComparisonService:
             deployment = 'MATCHED' if all(header.deployment=='MATCHED' for header in headers[:2]) else 'UNKNOWN'
             state, reasons = classify_change(a,b,deployment=deployment,earlier=older.get(key))
             verification_scope = None
-            if state in ('FIXED','NO_LONGER_OBSERVED') and a is not None and right[1] is not None:
+            repair_candidate = (a is not None and b is not None and a['result'] is not None and
+                b['result'] is not None and a['result'].verdict.value == 'VULNERABLE' and
+                b['result'].verdict.value == 'SAFE')
+            # 一般比较的技术来源指纹可以变化；准确原题验收另核完整业务标准及挑战，不能被摘要指纹提前挡住。
+            if repair_candidate and right[1] is not None:
                 contract = contracts.get(a['case'].case_id)
                 verification = None if contract is None else self.repairs.verification_for_contract(right[1], contract)
                 if verification is not None and verification.status == 'VERIFIED':
                     state, reasons, verification_scope = 'FIXED', (), verification.verification_scope
-                else:
+                elif state in ('FIXED','NO_LONGER_OBSERVED'):
                     state = 'NO_LONGER_OBSERVED'
                     reasons = tuple(dict.fromkeys((*reasons, *(verification.reason_codes if verification else ('REPAIR_CONTEXT_NOT_LINKED',)))))
             missing = b or a

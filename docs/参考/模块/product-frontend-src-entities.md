@@ -6,7 +6,7 @@
 
 按目录定位后读取对应小节；每个文件有独立标题，源码链接用于核对声明与直接消费者。行数和公开声明由静态提取，不表示运行验收。
 
-按目录定位：[application/api](#applicationapi)（4 个文件）、[application/model](#applicationmodel)（1 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（5 个文件）、[check/ui](#checkui)（13 个文件）、[permission/api](#permissionapi)（5 个文件）、[permission/ui](#permissionui)（9 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/model](#preparationmodel)（2 个文件）、[preparation/ui](#preparationui)（21 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（2 个文件）、[runtime/ui](#runtimeui)（4 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（5 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
+按目录定位：[application/api](#applicationapi)（4 个文件）、[application/model](#applicationmodel)（1 个文件）、[check/api](#checkapi)（4 个文件）、[check](#check)（1 个文件）、[check/model](#checkmodel)（5 个文件）、[check/ui](#checkui)（17 个文件）、[permission/api](#permissionapi)（5 个文件）、[permission/ui](#permissionui)（9 个文件）、[preparation/api](#preparationapi)（10 个文件）、[preparation/model](#preparationmodel)（2 个文件）、[preparation/ui](#preparationui)（21 个文件）、[runtime/api](#runtimeapi)（3 个文件）、[runtime/model](#runtimemodel)（2 个文件）、[runtime/ui](#runtimeui)（4 个文件）、[source-change/api](#source-changeapi)（2 个文件）、[source-change/ui](#source-changeui)（5 个文件）、[workspace/api](#workspaceapi)（1 个文件）、[workspace](#workspace)（2 个文件）。
 
 ## application/api
 
@@ -84,6 +84,14 @@
 
 [源码](../../../product/frontend/src/entities/check/ui/AgentHandoff.tsx)（32 行）。公开声明：`AgentHandoff`。
 
+### check/ui/business-outcome.css
+
+[源码](../../../product/frontend/src/entities/check/ui/business-outcome.css)（10 行）。公开声明：包、内部机制或样式。
+
+### check/ui/BusinessOutcome.tsx
+
+[源码](../../../product/frontend/src/entities/check/ui/BusinessOutcome.tsx)（14 行）。公开声明：`BusinessOutcome`。
+
 ### check/ui/ExternalRecheck.tsx
 
 [源码](../../../product/frontend/src/entities/check/ui/ExternalRecheck.tsx)（57 行）。公开声明：`ExternalRecheck`。
@@ -104,17 +112,25 @@
 
 [源码](../../../product/frontend/src/entities/check/ui/repair-cases.css)（26 行）。公开声明：包、内部机制或样式。
 
+### check/ui/repair-outcomes.css
+
+[源码](../../../product/frontend/src/entities/check/ui/repair-outcomes.css)（7 行）。公开声明：包、内部机制或样式。
+
 ### check/ui/RepairCases.tsx
 
 [源码](../../../product/frontend/src/entities/check/ui/RepairCases.tsx)（15 行）。公开声明：`RepairCases`。
 
+### check/ui/RepairOutcomes.tsx
+
+[源码](../../../product/frontend/src/entities/check/ui/RepairOutcomes.tsx)（15 行）。公开声明：`RepairOutcomes`。
+
 ### check/ui/RepairTask.css
 
-[源码](../../../product/frontend/src/entities/check/ui/RepairTask.css)（32 行）。公开声明：包、内部机制或样式。
+[源码](../../../product/frontend/src/entities/check/ui/RepairTask.css)（34 行）。公开声明：包、内部机制或样式。
 
 ### check/ui/RepairTask.tsx
 
-[源码](../../../product/frontend/src/entities/check/ui/RepairTask.tsx)（80 行）。公开声明：`RepairTask`。
+[源码](../../../product/frontend/src/entities/check/ui/RepairTask.tsx)（81 行）。公开声明：`RepairTask`。
 
 ### check/ui/RoutineBindingRequirements.tsx
 

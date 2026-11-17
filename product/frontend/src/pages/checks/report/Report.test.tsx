@@ -28,6 +28,53 @@ it('普通应用展示自动调用，选择节点可读取对应发布记录且�
 beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}))
 const props=(value:ResultStory)=>({story:value,selectedCaseId:null,tab:null,evidenceId:null,recordId:null,onError:vi.fn()})
 
+it('普通逐项结果缺少观察时不以安全判断代替业务事实',()=>{
+ const value=story();value.actions[0].fact_comparison.effects=[]
+ value.actions[0].judgement='已发布的判断说明'
+ const view=render(<Report {...props(value)}/>)
+ expect(view.container.querySelector('.jj-result-actual')).toHaveTextContent('尚无可读取的业务观察')
+ expect(view.container.querySelector('.jj-result-actual')).not.toHaveTextContent('已发布的判断说明')
+})
+
+it.each([['CONFIRMED','完整收到内部包'],['ABSENT','未完整收到内部包'],['UNKNOWN','内部包是否完整接收尚未确认']] as const)('证明入口首先说明当前观察，不把证明名称当作事实：%s',(state,label)=>{
+ const value=story(),action=value.actions[0]
+ action.proof_coverage=[{effect_id:'file',business_label:'内部完整包已被接收',proof_fingerprint:'proof',required_level:'VERDICT_REQUIRED',source_label:'独立文件记录',observed_state:state,evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
+ const onLocate=vi.fn()
+ render(<EvidenceInspector story={value} action={action} tab="facts" evidenceId={null} recordId={null} onClose={vi.fn()} onLocate={onLocate} onError={vi.fn()}/>)
+ const entry=screen.getByRole('button',{name:'打开证明记录：内部完整包已被接收'})
+ expect(within(entry).getByText(label)).toBeVisible()
+ expect(within(entry).getByText('核对内容：内部完整包已被接收')).toBeVisible()
+ expect(within(entry).queryByText('符合规则')).not.toBeInTheDocument()
+ fireEvent.click(entry)
+ expect(onLocate).toHaveBeenCalledWith('records','ev1',undefined,'proof','')
+})
+
+it('Escape按片段、目录、记录列表逐层返回，保留证明与执行节点的定位',async()=>{
+ const value=story(),action=value.actions[0],onLocate=vi.fn(),onClose=vi.fn()
+ vi.spyOn(currentChecksApi,'evidenceBundle').mockResolvedValue(bundle() as never)
+ const p={story:value,action,tab:'records',evidenceId:'ev1',recordId:'missing',proofId:'proof',stepId:'node',onLocate,onClose,onError:vi.fn()}
+ const view=render(<EvidenceInspector {...p}/>)
+ fireEvent.keyDown(screen.getByRole('complementary',{name:'检查依据'}),{key:'Escape'})
+ expect(onLocate).toHaveBeenLastCalledWith('records','ev1',undefined,'proof')
+ view.rerender(<EvidenceInspector {...p} recordId={null}/>)
+ fireEvent.keyDown(screen.getByRole('complementary',{name:'检查依据'}),{key:'Escape'})
+ expect(onLocate).toHaveBeenLastCalledWith('records',undefined,undefined,undefined,'')
+ view.rerender(<EvidenceInspector {...p} recordId={null} evidenceId={null}/>)
+ expect(screen.getByRole('button',{name:/查看内容/})).toHaveFocus()
+ fireEvent.keyDown(screen.getByRole('complementary',{name:'检查依据'}),{key:'Escape'})
+ expect(onClose).toHaveBeenCalledOnce()
+})
+
+it('从独立证据任务标题按Escape也回到当前上一级',()=>{
+ vi.spyOn(currentChecksApi,'evidenceBundle').mockResolvedValue(bundle() as never)
+ render(<Report {...props(story())} selectedCaseId="c1" tab="records" evidenceId="ev1"/>)
+ fireEvent.keyDown(screen.getByRole('heading',{name:'证明记录',level:1}),{key:'Escape'})
+ const query=new URLSearchParams(location.hash.split('?')[1])
+ expect(query.get('case_id')).toBe('c1')
+ expect(query.get('tab')).toBe('records')
+ expect(query.has('evidence_id')).toBe(false)
+})
+
 it('证明入口按真实业务名称识别，同一文件保留多项结果并定位原引用',()=>{
  const value=story(),action=value.actions[0],locate=vi.fn()
  action.proof_coverage=['已提交审批','记录归属正确'].map(label=>({effect_id:label,business_label:label,proof_fingerprint:label,required_level:'VERDICT_REQUIRED',source_label:'独立业务记录',observed_state:'CONFIRMED',evidence_refs:['ev-shared'],supporting_evidence_refs:[],limitations:[]}))

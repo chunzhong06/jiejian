@@ -73,7 +73,7 @@ export function ExampleLab({projectId,onError,onChanged,focused=false}:{projectI
     {uncertain&&<Notice tone="caution" title="加载结果尚未确认" actions={<Button busy={busy} onClick={()=>void recover()}>查询本次加载结果</Button>}>先读取当前实现和原交付记录，暂不提交另一份修改。{message&&<p>{message}</p>}</Notice>}
     {!uncertain&&message&&<Notice tone="positive">{message}</Notice>}
     {data.journey.implementation==='CUSTOM'?<Notice tone="caution">当前源码已由外部修改，请在原开发任务中继续；预设修改不会覆盖它。</Notice>:change(deeper?'EXPOSE_REVOKE':'VULNERABLE',true)}
-    {!deeper&&<details className="jj-example-deeper"><summary>深入体验：响应拒绝，业务后果是否仍然发生</summary>{change('EXPOSE_REVOKE')}</details>}
+    {!deeper&&<section className="jj-example-deeper" aria-label="响应与后果的进一步核对"><div><h2>响应拒绝、最后恢复，还需要检查什么？</h2><p>再看一次处理中开放访问、随后撤回的修改，核对访问权是否曾被开放。</p></div><TaskActions><ActionLink navigationScope="page" href={href('/environment?view=change&experiment=expose')}>查看开放后撤回的修改</ActionLink></TaskActions></section>}
     {contract&&<TaskActions note="修复从具体问题接续，原请求、账号与正常功能一并保留。"><ActionLink navigationScope="page" href={href(issueDestination(contract,undefined,{section:'repair'}))}>处理内部包访问问题</ActionLink></TaskActions>}
     <details><summary>其他示例维护</summary>{change('PREVIEW_CHANGED')}</details>
   </>:null

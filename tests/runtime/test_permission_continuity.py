@@ -98,7 +98,7 @@ def test_new_business_and_unrelated_rules_preserve_original_repair(official,runt
     for width,theme in ((960,'light'),(420,'light'),(420,'dark'),(1512,'dark')):
         browser_page.set_viewport_size({'width':width,'height':980})
         if theme=='dark' and browser_page.locator('html').get_attribute('data-studio-theme')!='dark':
-            browser_page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+            browser_page.get_by_role('button',name='切换深色',exact=True).click()
         if width==1512:
             browser_page.get_by_text('完整适用条件与记录引用',exact=True).click()
         settled(browser_page)

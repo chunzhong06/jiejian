@@ -14,6 +14,12 @@ from product.backend.application.agent_access.service import MCPAccessLevel
 from product.backend.domain.errors import ErrorCode, JiejianError
 from product.backend.infrastructure.runtime.agent_process import run_codex
 
+_RESTRICTIONS = {
+    'NATIVE_COMMAND_APPROVAL':'Agent 请求了需要额外批准的终端命令，本次未执行。请沿界鉴已有能力继续；确需终端操作时在开发工具中另行处理。',
+    'NATIVE_FILE_APPROVAL':'Agent 请求了需要额外批准的文件修改，本次未执行。请核对当前源码范围；确需额外文件操作时在开发工具中另行处理。',
+    'UNSUPPORTED_INTERACTION':'Agent 请求了当前适配器尚不支持的交互，本次未执行。可在已连接开发工具中接续原任务。',
+}
+
 
 class StartAgent(TaskInput):
     """一次授权窗口包含等待时间；单回合模式不自动使用剩余回合额度。"""
@@ -259,16 +265,25 @@ class AgentExecution:
             if kind == 'SESSION':
                 self.core.collaboration.execution_progress(project, task, operation_id, session_id=data)
             elif kind in messages:
-                self.core.collaboration.execution_progress(project, task, operation_id, message=messages[kind])
+                if kind=='RESTRICTED':
+                    reason=data if data in _RESTRICTIONS else 'UNKNOWN'
+                    self.core.collaboration.execution_progress(project, task, operation_id,
+                        restriction_reason=reason, message=_RESTRICTIONS.get(reason,'本轮交互受限，尚未取得具体原因。请核对原任务后在开发工具中继续。'))
+                else:self.core.collaboration.execution_progress(project, task, operation_id, message=messages[kind])
         try:
             result = self.runner(executable=executable, cwd=str(cwd), profile=profile,
                 connector=str(Path(__file__).with_name('connector.py').resolve()), python=sys.executable,
                 prompt=prompt, session_id=session, allow_changes=allow_changes,
                 read_only=self.access.level_for(project) == MCPAccessLevel.READ, cancelled=stop, on_event=event,
                 timeout_seconds=timeout)
-            self.core.collaboration.execution_progress(project, task, operation_id, **result,
-                message='有工具调用未完成，请核对当前任务后继续' if result.get('restricted') or result.get('failed_tools')
-                    else '本轮 Agent 已返回，后续以任务及业务回执为准')
+            if result.get('restricted'):
+                reason=result.get('restriction_reason')
+                reason=reason if reason in _RESTRICTIONS else 'UNKNOWN'
+                result={**result,'restriction_reason':reason}
+                message=_RESTRICTIONS.get(reason,'本轮交互受限，尚未取得具体原因。请核对原任务后在开发工具中继续。')
+            else:
+                message='有工具调用未完成，请核对原操作结果后继续' if result.get('failed_tools') else '本轮 Agent 已返回，后续以任务及业务回执为准'
+            self.core.collaboration.execution_progress(project, task, operation_id, **result, message=message)
             return result
         except Exception as error:
             code = error.code if isinstance(error, JiejianError) else 'AGENT_EXECUTION_FAILED'

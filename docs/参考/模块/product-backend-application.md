@@ -50,7 +50,7 @@
 
 ### agent_access/execution.py
 
-[源码](../../../product/backend/application/agent_access/execution.py)（279 行）。公开声明：`StartAgent`、`AgentExecution`。
+[源码](../../../product/backend/application/agent_access/execution.py)（294 行）。公开声明：`StartAgent`、`AgentExecution`。
 
 ### agent_access/github_issues.py
 
@@ -312,7 +312,7 @@
 
 ### checks/reading/comparison.py
 
-[源码](../../../product/backend/application/checks/reading/comparison.py)（239 行）。公开声明：`ComparisonRun`、`ComparisonObservation`、`ComparisonItem`、`RunComparison`、`classify_change`、`CheckComparisonService`。
+[源码](../../../product/backend/application/checks/reading/comparison.py)（243 行）。公开声明：`ComparisonRun`、`ComparisonObservation`、`ComparisonItem`、`RunComparison`、`classify_change`、`CheckComparisonService`。
 
 ### checks/reading/coverage.py
 
@@ -676,7 +676,7 @@
 
 ### recording/project_submission.py
 
-[源码](../../../product/backend/application/recording/project_submission.py)（307 行）。公开声明：`ProjectRecordingSubmission`、`ProjectRecordingService`。
+[源码](../../../product/backend/application/recording/project_submission.py)（308 行）。公开声明：`ProjectRecordingSubmission`、`ProjectRecordingService`。
 
 ### recording/review.py
 

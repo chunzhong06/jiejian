@@ -15,6 +15,7 @@ import { Button } from "../../../shared/ui/actions";
 import { Tabs } from "../../../shared/ui/Tabs";
 import { Choice } from "../../../shared/ui/Choice";
 import {EvidenceRecord} from './EvidenceRecord';
+import {BusinessOutcome} from '../../../entities/check/ui/BusinessOutcome';
 import { actual, gaps, judgement, judgementLabels, owner, requirement } from '../../../entities/check/model/checks';
 type Props = {
     story: ResultStory;
@@ -36,6 +37,13 @@ type PublishedEvent = StoryTraceEvent | ActivityEvent;
 export function EvidenceInspector({ story, action, tab, evidenceId, recordId, proofId, stepId, comparison, summaryPresented=false, standalone=false, onClose, onLocate }: Props) {
     const heading = useRef<HTMLHeadingElement>(null), tabId = useId();
     const [event, setEvent] = useState<PublishedEvent>();
+    const surface=useRef<HTMLElement>(null),lastEvidence=useRef(evidenceId??'');
+    useEffect(()=>{
+        if(evidenceId){lastEvidence.current=evidenceId;return}
+        if(tab!=='records'||!lastEvidence.current)return;
+        // 从片段目录返回时入口已重建；焦点归还准确封存文件，连续Escape仍属于当前阅读层。
+        Array.from(surface.current?.querySelectorAll<HTMLButtonElement>('[data-evidence-id]')??[]).find(node=>node.dataset.evidenceId===lastEvidence.current)?.focus({preventScroll:true});
+    },[evidenceId,tab]);
     useEffect(() => { const node = heading.current; node?.focus({ preventScroll: true }); const panel = node?.closest('.jj-evidence-inspector'), top = panel?.getBoundingClientRect().top; if (top !== undefined && (top < 84 || top > innerHeight - 180))
         window.scrollTo({ top: window.scrollY + top - 92, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }, []);
     if (!action)
@@ -44,21 +52,24 @@ export function EvidenceInspector({ story, action, tab, evidenceId, recordId, pr
     const currentTab = ['trace', 'records'].includes(tab ?? '') ? tab : 'facts', tone = judgement(action), missing = gaps(action);
     const openRecord = (id: string, proof?: string) => { setEvent(undefined); onLocate('records', id, undefined, proof, ''); };
     const evidenceSources = action.proof_coverage?.filter(item => item.required_level === 'VERDICT_REQUIRED') ?? [];
-    return <aside className={"jj-evidence-inspector"+(summaryPresented?" is-inline jj-row-detail":"")} data-standalone={standalone||undefined} aria-label="检查依据" onKeyDown={e => { if (e.key === 'Escape') {
+    return <aside ref={surface} className={"jj-evidence-inspector"+(summaryPresented?" is-inline jj-row-detail":"")} data-standalone={standalone||undefined} aria-label="检查依据" onKeyDown={e => { if (e.key === 'Escape') {
         e.stopPropagation();
-        if (evidenceId)
-            onLocate('records');
+        // Escape与可见返回使用同一深度；离开片段时保留原证明范围和执行节点。
+        if (recordId&&evidenceId)
+            onLocate('records',evidenceId,undefined,proofId??undefined);
+        else if (evidenceId)
+            onLocate('records',undefined,undefined,undefined,'');
         else
             onClose();
-    } }}><header className="jj-inspector-header" hidden={standalone||summaryPresented}><span>检查依据</span><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></header><div className="jj-inspector-title" hidden={summaryPresented||standalone}><div className="jj-object-line"><h2 ref={heading} tabIndex={-1}>{text(action.display_name)}</h2><Badge tone={tone}>{judgementLabels[tone]}</Badge></div><p>{owner(action)}的资源</p></div>{!standalone&&(summaryPresented?<div className="jj-inline-evidence-actions"><h4 ref={heading} tabIndex={-1} className="jj-title-caption">{requirement(action)}的判断依据</h4><Button kind="quiet" onClick={()=>onLocate('trace')}>操作经过</Button><Button kind="quiet" onClick={()=>onLocate('records')}>证明记录</Button><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></div>:<Tabs density="compact" className="jj-inspector-tabs" label="依据视图" value={currentTab ?? 'facts'} idPrefix={tabId} panelId={tabId + '-panel'} items={[{ value: 'facts', label: '业务结果' }, { value: 'trace', label: '操作经过' }, { value: 'records', label: '证明记录' }]} onValueChange={onLocate}/>)}<div className="jj-inspector-content" data-view={currentTab} role={summaryPresented||standalone?undefined:"tabpanel"} id={tabId + '-panel'} aria-labelledby={summaryPresented||standalone?undefined:tabId + '-' + currentTab} key={currentTab}>
+    } }}><header className="jj-inspector-header" hidden={standalone||summaryPresented}><span>检查依据</span><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></header><div className="jj-inspector-title" hidden={summaryPresented||standalone}><div className="jj-object-line"><h2 ref={heading} tabIndex={-1}>{text(action.display_name)}</h2>{currentTab!=='facts'&&<Badge tone={tone}>{judgementLabels[tone]}</Badge>}</div>{currentTab!=='facts'&&<p>{owner(action)}的资源</p>}</div>{!standalone&&(summaryPresented?<div className="jj-inline-evidence-actions"><h4 ref={heading} tabIndex={-1} className="jj-title-caption">{requirement(action)}的判断依据</h4><Button kind="quiet" onClick={()=>onLocate('trace')}>操作经过</Button><Button kind="quiet" onClick={()=>onLocate('records')}>证明记录</Button><Button kind="quiet" aria-label="关闭检查依据" onClick={onClose} icon={<CloseOutlined aria-hidden="true"/>}/></div>:<Tabs density="compact" className="jj-inspector-tabs" label="依据视图" value={currentTab ?? 'facts'} idPrefix={tabId} panelId={tabId + '-panel'} items={[{ value: 'facts', label: '业务结果' }, { value: 'trace', label: '操作经过' }, { value: 'records', label: '证明记录' }]} onValueChange={onLocate}/>)}<div className="jj-inspector-content" data-view={currentTab} role={summaryPresented||standalone?undefined:"tabpanel"} id={tabId + '-panel'} aria-labelledby={summaryPresented||standalone?undefined:tabId + '-' + currentTab} key={currentTab}>
     {currentTab === 'facts' && <div className="jj-evidence-reading">
       <div className="jj-evidence-main">
         {!summaryPresented&&<section className="jj-evidence-comparison" aria-label="权限要求与实际结果">
-          <div><h3 className="jj-title-caption">权限要求</h3><p>{requirement(action)}</p><small>{owner(action)}的资源</small>{action.scenario_context&&<>{(reading.labels.length>0||reading.batch)&&<dl className="jj-facts jj-scenario-context" data-layout="columns">{reading.labels.map(item=><div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}{reading.batch&&<div><dt>批量范围</dt><dd>{reading.batch}</dd></div>}</dl>}{action.scenario_context.same_resource_occurrences>1&&<p className="jj-small jj-muted">同一资源出现 {action.scenario_context.same_resource_occurrences} 次，共同核对该请求内此资源的结果，不区分内部每次处理。</p>}</>}</div>
-          <div data-tone={tone}><h3 className="jj-title-caption">实际结果</h3>{action.fact_comparison.effects.map(effect => <p key={effect.effect_id}>{actual(effect)}</p>)}{!action.fact_comparison.effects.length && <p>{text(action.judgement)}</p>}</div>
+          <BusinessOutcome action={action}/>
+          {action.scenario_context&&<>{(reading.labels.length>0||reading.batch)&&<dl className="jj-facts jj-scenario-context" data-layout="columns">{reading.labels.map(item=><div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}{reading.batch&&<div><dt>批量范围</dt><dd>{reading.batch}</dd></div>}</dl>}{action.scenario_context.same_resource_occurrences>1&&<p className="jj-small jj-muted">同一资源出现 {action.scenario_context.same_resource_occurrences} 次，共同核对该请求内此资源的结果，不区分内部每次处理。</p>}</>}
         </section>}
         {tone === 'caution' && missing.length > 0 && <section className="jj-inspector-section is-gap"><h3>还缺哪些依据</h3><ul className="jj-gap-list">{missing.map(item => <li key={item}>{item}</li>)}</ul></section>}
-        <section className="jj-inspector-section is-proofs"><h3>判断所用的记录</h3>{evidenceSources.length ? evidenceSources.map((source, index) => <ProofEntry key={source.proof_fingerprint + index} label={text(source.business_label)} source={text(source.source_label)} onRead={source.evidence_refs.length ? () => openRecord(source.evidence_refs[0], source.proof_fingerprint) : undefined}/>) : action.decisive_proof_chain.map((item, index) => <ProofEntry key={index} label={text(item.source_label)} onRead={item.evidence_refs.length ? () => openRecord(item.evidence_refs[0]) : undefined}/>)}</section>
+        <section className="jj-inspector-section is-proofs"><h3>判断所用的记录</h3>{evidenceSources.length ? evidenceSources.map((source, index) => <ProofEntry key={source.proof_fingerprint + index} label={text(source.business_label)} summary={actual({business_label:source.business_label,assessment_state:source.observed_state})} source={text(source.source_label)} onRead={source.evidence_refs.length ? () => openRecord(source.evidence_refs[0], source.proof_fingerprint) : undefined}/>) : action.decisive_proof_chain.map((item, index) => <ProofEntry key={index} label={text(item.source_label)} onRead={item.evidence_refs.length ? () => openRecord(item.evidence_refs[0]) : undefined}/>)}</section>
         {comparison}
       </div>
       <aside className="jj-evidence-context" aria-label="本项检查上下文">
@@ -68,20 +79,21 @@ export function EvidenceInspector({ story, action, tab, evidenceId, recordId, pr
       </aside>
     </div>}
     {currentTab === 'trace' && <OperationPath action={action} selectedId={stepId} onSelect={id => onLocate('trace', undefined, undefined, undefined, id)} onRead={item => { setEvent(item); onLocate('records', ('parent_event_id' in item ? action.request_activity!.evidence_refs : action.execution_path!.evidence_refs)[0], undefined, undefined, item.event_id); }}/>}
-    {currentTab === 'records' && (evidenceId ? <PublishedRecords showBack={!standalone} story={story} action={action} evidenceId={evidenceId} recordId={recordId} proofId={proofId} selectedEvent={stepId ? action.request_activity?.capture.events.find(item => item.event_id === stepId) ?? action.execution_path?.events.find(item => item.event_id === stepId) : event} onLocate={onLocate}/> : <section className="jj-evidence-records" aria-label="本项保留的发布记录"><SectionHeading level={3} appearance="group" title="业务证明与辅助记录"/><p className="jj-small jj-muted">核对“{text(action.display_name)}”的实际结果及其来源。每份记录内可继续阅读具体片段。</p><div className="jj-record-list">{publishedEntries(action).map(item => <Button kind="quiet" className="jj-record-link" key={item.id} onClick={() => openRecord(item.id)}><span><strong>{item.labels.join('、') || '本次检查的发布记录'}</strong>{item.sources.length>0&&<small>{item.sources.join('、')}</small>}</span><span>查看内容</span></Button>)}</div></section>)}
+    {currentTab === 'records' && (evidenceId ? <PublishedRecords showBack={!standalone} story={story} action={action} evidenceId={evidenceId} recordId={recordId} proofId={proofId} selectedEvent={stepId ? action.request_activity?.capture.events.find(item => item.event_id === stepId) ?? action.execution_path?.events.find(item => item.event_id === stepId) : event} onLocate={onLocate}/> : <section className="jj-evidence-records" aria-label="本项保留的发布记录"><SectionHeading level={3} appearance="group" title="业务证明与辅助记录"/><p className="jj-small jj-muted">核对“{text(action.display_name)}”的实际结果及其来源。每份记录内可继续阅读具体片段。</p><div className="jj-record-list">{publishedEntries(action).map(item => <Button kind="quiet" className="jj-record-link" data-evidence-id={item.id} key={item.id} onClick={() => openRecord(item.id)}><span><strong>{item.summaries.join('；')||item.labels.join('、')||'本次检查的发布记录'}</strong>{item.summaries.length>0&&<small>核对内容：{item.labels.join('、')}</small>}{item.sources.length>0&&<small>{item.sources.join('、')}</small>}</span><span>查看内容</span></Button>)}</div></section>)}
   </div></aside>;
 }
 // 同一封存文件可支持多项业务结果；按准确引用合并名称，不生成新的证明或判断。
 function publishedEntries(action:ActionResultStory){
-    const entries=new Map<string,{id:string;labels:string[];sources:string[]}>();
-    const add=(id:string,label:string,source?:string)=>{
-        const entry=entries.get(id)??{id,labels:[],sources:[]};
+    const entries=new Map<string,{id:string;labels:string[];sources:string[];summaries:string[]}>();
+    const add=(id:string,label:string,source?:string,summary?:string)=>{
+        const entry=entries.get(id)??{id,labels:[],sources:[],summaries:[]};
         if(label&&!entry.labels.includes(label))entry.labels.push(label);
         if(source&&!entry.sources.includes(source))entry.sources.push(source);
+        if(summary&&!entry.summaries.includes(summary))entry.summaries.push(summary);
         entries.set(id,entry);
     };
     for(const item of action.proof_coverage??[]){
-        for(const id of item.evidence_refs)add(id,text(item.business_label),text(item.source_label));
+        for(const id of item.evidence_refs)add(id,text(item.business_label),text(item.source_label),actual({business_label:item.business_label,assessment_state:item.observed_state}));
         for(const id of item.supporting_evidence_refs)add(id,'辅助采集记录',text(item.source_label));
     }
     for(const item of [...action.decisive_proof_chain,...action.evidence_explanations]){
@@ -91,8 +103,8 @@ function publishedEntries(action:ActionResultStory){
     }
     return [...entries.values()];
 }
-function ProofEntry({label, source, onRead}: {label: string; source?: string; onRead?: () => void}) {
-    const content = <><span><strong>{label}</strong><small>{source ?? '已发布证明记录'}</small></span><span>{onRead ? '查看记录' : '没有可读取的记录'}</span></>;
+function ProofEntry({label, summary, source, onRead}: {label: string; summary?:string; source?: string; onRead?: () => void}) {
+    const content = <><span><strong>{summary??label}</strong>{summary&&<small>核对内容：{label}</small>}<small>{source ?? '已发布证明记录'}</small></span><span>{onRead ? '查看记录' : '没有可读取的记录'}</span></>;
     return onRead ? <Button kind="quiet" className="jj-proof-entry" onClick={onRead} aria-label={'打开证明记录：' + label}>{content}</Button> : <div className="jj-proof-entry">{content}</div>;
 }
 const traceLabels: Record<StoryTraceEvent['kind'], string> = { ENTRY: '收到业务请求', IDENTITY: '确认操作身份', AUTHORIZATION: '执行权限判断', PERSISTENT_EFFECT: '提交业务数据', MESSAGE: '发出业务消息', DELEGATION: '调用下游服务', FINAL_EFFECT: '形成业务结果', RECOVERY: '恢复业务状态' };
@@ -169,6 +181,10 @@ function PublishedRecords({ story, action, evidenceId, recordId, proofId, select
     selectedEvent?: PublishedEvent;
     onLocate: Props['onLocate'];
 }) {
+    const root=useRef<HTMLDivElement>(null),lastRecord=useRef(recordId??'');
+    useEffect(()=>{
+        if(recordId)lastRecord.current=recordId;
+    },[recordId]);
     const allowed = new Set([...action.decisive_proof_chain.flatMap(item => item.evidence_refs), ...action.evidence_explanations.flatMap(item => item.evidence_refs), ...(action.proof_coverage ?? []).flatMap(item => [...item.evidence_refs, ...item.supporting_evidence_refs]), ...(action.execution_path?.evidence_refs ?? []), ...(action.request_activity?.evidence_refs ?? [])]);
     const bundle = useRead(`evidence:${story.project_id}:${story.run_id}:${action.case_id}:${evidenceId}:${recordId}:${proofId}:${selectedEvent?.event_id}`, async () => {
         if (!allowed.has(evidenceId))
@@ -192,13 +208,19 @@ function PublishedRecords({ story, action, evidenceId, recordId, proofId, select
         }
         return item;
     });
+    useEffect(()=>{
+        if(recordId||!bundle.data||bundle.loading||bundle.error||!lastRecord.current)return;
+        // 详情返回后的列表由新读取重建，按原片段身份归还焦点，而非聚焦旧DOM。
+        const button=Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[data-record-id]')??[]).find(node=>node.dataset.recordId===lastRecord.current);
+        button?.focus({preventScroll:true});
+    },[recordId,bundle.data,bundle.loading,bundle.error]);
     if (bundle.loading)
         return <Loading>正在核对发布证据</Loading>;
     if (bundle.error)
         return <ErrorNote error={bundle.error} onRetry={bundle.reload} retryLabel="重新读取证明片段"/>;
     const value = bundle.data?.record, links = bundle.data?.index.records.filter(item => (!proofId || item.proof_fingerprint === proofId) && (!selectedEvent || item.event_id === selectedEvent.event_id)) ?? [];
-    return <div className="jj-published-records">
-      {!recordId&&<p className="jj-evidence-observation">本次业务结果：{action.fact_comparison.effects.map(effect=>effect.business_label+'：'+actual(effect)).join('；')||'尚无独立业务记录'}</p>}
+    return <div className="jj-published-records" ref={root}>
+      {!recordId&&<section aria-label="本项业务核对"><BusinessOutcome action={action}/></section>}
       {showBack&&<div className="jj-back-link"><Button kind="quiet" icon={<ArrowLeftOutlined aria-hidden="true"/>} onClick={() => onLocate('records', recordId ? evidenceId : undefined, undefined, recordId ? proofId ?? undefined : undefined)}>{recordId ? '全部证明片段' : '全部发布记录'}</Button></div>}
       {recordId ? value && <EvidenceRecord key={value.evidence_id+':'+value.record.record_id} value={value}/> : <section className="jj-evidence-records">
         <SectionHeading level={3} appearance="group" title={proofId ? '这项业务结果的证明片段' : selectedEvent ? '对应的执行节点' : '这份证据包含的记录'} meta={links.length+' 项'}/>
@@ -207,12 +229,12 @@ function PublishedRecords({ story, action, evidenceId, recordId, proofId, select
           const entries=links.filter(item=>group.kinds.includes(item.kind));
           return entries.length>0&&<section className="jj-record-group" key={group.title}>
             <h4 className="jj-title-caption">{group.title} <span className="jj-small jj-muted">{entries.length} 项</span></h4>
-            <div className="jj-record-list jj-record-tiles">{entries.map(item=>{
+            <div className="jj-record-list jj-record-tiles" data-count={entries.length}>{entries.map(item=>{
               // 名称来自已发布的准确证明对应；分组不增删索引，也不替代单项归属校验。
               const proof=action.proof_coverage?.find(proof=>proof.proof_fingerprint===item.proof_fingerprint);
               const phase=item.phase?({BASELINE:'初始状态',BEFORE:'操作前',AFTER:'操作后',EVENTUAL:'最终观察',RECOVERY:'恢复后'} as Record<string,string>)[item.phase]??'已采集观察':undefined;
-              return <Button kind="quiet" className="jj-record-link" key={item.record_id} onClick={()=>onLocate('records',evidenceId,item.record_id,proofId??undefined)}>
-                <span><strong>{text(item.label)}</strong>{(proof||phase)&&<small>{[proof?.business_label,phase].filter(Boolean).join(' · ')}</small>}</span><span>阅读片段</span>
+              return <Button kind="quiet" className="jj-record-link" data-record-id={item.record_id} key={item.record_id} onClick={()=>onLocate('records',evidenceId,item.record_id,proofId??undefined)}>
+                <span><strong>{text(item.label)}</strong>{(proof||phase)&&<small>{[proof?'核对内容：'+text(proof.business_label):null,phase].filter(Boolean).join(' · ')}</small>}</span><span>阅读片段</span>
               </Button>;
             })}</div>
           </section>;

@@ -69,7 +69,7 @@ def invoke(monkeypatch, *, cancelled=None, read_only=False, process=None):
 
 def test_resume_keeps_current_turn_and_declines_native_escalation(monkeypatch):
     process, spawned, released, events, result = invoke(monkeypatch)
-    assert result == dict(state='FINISHED', session_id='session', restricted=True, failed_tools=False, tool_calls=[])
+    assert result == dict(state='FINISHED', session_id='session', restricted=True, failed_tools=False, tool_calls=[],restriction_reason='NATIVE_COMMAND_APPROVAL')
     assert any(item.get('method') == 'turn/start' for item in process.messages)
     turn = next(item for item in process.messages if item.get('method') == 'turn/start')
     assert turn['params']['sandboxPolicy'] == {'type': 'readOnly', 'networkAccess': False}
@@ -77,7 +77,7 @@ def test_resume_keeps_current_turn_and_declines_native_escalation(monkeypatch):
     assert 'OPENAI_API_KEY' not in spawned[0][1]['env']
     assert released == [process]
     assert process.waits == [2]
-    assert ('RESTRICTED', None) in events
+    assert ('RESTRICTED', 'NATIVE_COMMAND_APPROVAL') in events
     config = tomllib.loads(spawned[0][0][-1])['mcp_servers']['jiejian']
     assert config['required'] and config['default_tools_approval_mode'] == 'writes'
     assert config['tools']['jiejian_collaboration_action']['approval_mode'] == 'approve'
@@ -126,3 +126,25 @@ def test_missing_model_history_is_classified_without_restarting_or_logging_error
     assert 'fixture-private-client-detail' not in str(error.value)
     assert not any(item.get('method') in ('thread/start','turn/start') for item in process.messages)
     assert process.closed
+
+
+@pytest.mark.parametrize('method,reason',[
+    ('item/fileChange/requestApproval','NATIVE_FILE_APPROVAL'),
+    ('item/tool/requestUserInput','UNSUPPORTED_INTERACTION'),
+    ('fixture/private-unknown-method','UNSUPPORTED_INTERACTION'),
+])
+def test_restriction_reason_comes_only_from_owned_protocol_branch(monkeypatch,method,reason):
+    class RestrictedInteraction(ProtocolProcess):
+        def reply(self,value):
+            if value.get('id')==20:
+                value={**value,'method':method,'params':{'private':'fixture-secret-content'}}
+            super().reply(value)
+    process,_,released,events,result=invoke(monkeypatch,process=RestrictedInteraction())
+    assert result['restriction_reason']==reason
+    assert ('RESTRICTED',reason) in events
+    assert 'fixture-secret-content' not in json.dumps(result)
+    assert 'fixture/private' not in json.dumps(result)
+    reply=next(item for item in process.messages if item.get('id')==20)
+    if reason=='NATIVE_FILE_APPROVAL':assert reply['result']=={'decision':'decline'}
+    else:assert reply['error']['code']==-32601
+    assert released==[process]

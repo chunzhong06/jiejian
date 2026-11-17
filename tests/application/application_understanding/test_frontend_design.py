@@ -160,7 +160,7 @@ def test_navigation_selection_motion_in_browser():
             page=browser.new_page(viewport={'width':1512,'height':980},device_scale_factor=1)
             page.goto(server.origin+'/#/permissions?project_id='+scenario.project_id)
             expect(page.get_by_role('table')).to_be_visible();settled(page)
-            if page.locator('html').get_attribute('data-studio-theme')!='dark':page.get_by_role('button',name='切换雾蓝深色',exact=True).click();settled(page)
+            if page.locator('html').get_attribute('data-studio-theme')!='dark':page.get_by_role('button',name='切换深色',exact=True).click();settled(page)
             page.screenshot(path=str(output/'permissions-before.png'),full_page=True)
             all_button=page.get_by_role('button',name='全部',exact=True)
             page.get_by_role('button',name='允许',exact=True).hover();settled(page)
@@ -653,7 +653,7 @@ def test_collection_hit_areas_feedback_and_review_reading_stay_consistent():
             for theme in ('light','dark'):
                 navigate(page,server.origin,'/testing?project_id='+scenario.project_id)
                 if page.locator('html').get_attribute('data-studio-theme')!=theme:
-                    page.get_by_role('button',name='切换雾蓝深色' if theme=='dark' else '切换浅色',exact=True).click()
+                    page.get_by_role('button',name='切换深色' if theme=='dark' else '切换浅色',exact=True).click()
                 for width in (1512,800,375):
                     page.set_viewport_size({'width':width,'height':980})
                     for path in ('/testing','/permissions'):

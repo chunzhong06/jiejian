@@ -37,7 +37,7 @@ def test_complex_workbenches_use_shared_controls_and_preserve_theme():
             page.set_default_timeout(30000);page.on('pageerror',lambda error:errors.append(type(error).__name__))
             def theme(value):
                 if page.locator('html').get_attribute('data-studio-theme')!=value:
-                    page.get_by_role('button',name='切换雾蓝深色' if value=='dark' else '切换浅色',exact=True).click()
+                    page.get_by_role('button',name='切换深色' if value=='dark' else '切换浅色',exact=True).click()
                 settled(page)
             def layout(name):
                 # ResizeObserver 在布局帧内校准选择标记；先完成两帧再等待其过渡，避免读取上一宽度的位置。
@@ -261,7 +261,7 @@ def test_scenario_node_trial_uses_adopted_flow_and_keeps_history():
                     dialog.get_by_role('button',name='关闭',exact=True).click();expect(dialog).not_to_be_visible()
                     page.set_viewport_size(dict(width=1512,height=980))
                     if page.locator('html').get_attribute('data-studio-theme')!='dark':
-                        page.get_by_role('button',name='切换雾蓝深色',exact=True).click()
+                        page.get_by_role('button',name='切换深色',exact=True).click()
                     page.get_by_role('button',name='单独试运行',exact=True).click()
                     dialog.get_by_role('tab',name='试运行记录 1',exact=True).click()
                     expect(dialog.get_by_text('主体核验：一致。本场景无需恢复',exact=True)).to_be_visible()
@@ -331,7 +331,7 @@ def test_plan_flow_maintenance_and_agent_review_keep_context():
                     def visit(path):navigate(page,origin,path+('&' if '?' in path else '?')+'project_id='+app.project_id)
                     def theme(value):
                         if page.locator('html').get_attribute('data-studio-theme')!=value:
-                            page.get_by_role('button',name='切换雾蓝深色' if value=='dark' else '切换浅色',exact=True).click()
+                            page.get_by_role('button',name='切换深色' if value=='dark' else '切换浅色',exact=True).click()
                         settled(page)
                     def inspect(name):
                         for value in ('dark','light'):

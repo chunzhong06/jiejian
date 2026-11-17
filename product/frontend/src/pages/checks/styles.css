@@ -177,7 +177,7 @@
 .jj-evidence-records { display:grid;gap:16px;min-width:0; }
 .jj-evidence-records > .jj-section-header { margin:0; }
 .jj-evidence-records > p { margin:0;line-height:var(--leading-reading); }
-.jj-record-list { display:grid;min-width:0;max-width:900px;border:1px solid var(--line);border-radius:var(--radius-control);overflow:hidden; }
+.jj-record-list { display:grid;min-width:0;border:1px solid var(--line);border-radius:var(--radius-control);overflow:hidden; }
 .jj-record-list > .jj-record-link + .jj-record-link { border-top-color:var(--line);border-radius:0; }
 .jj-record-list > .jj-record-link:not(:disabled):hover { background:var(--soft);border-top-color:var(--line); }
 .jj-record-list .jj-record-link { white-space:normal;justify-content:space-between; }
@@ -193,6 +193,9 @@
 .jj-record-tiles > .jj-record-link > span:last-child { align-self:flex-end;margin-top:auto; }
 @container evidence-inspector (min-width:680px) { .jj-record-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @container evidence-inspector (min-width:1100px) { .jj-record-tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+/* 少量阶段不留下整片空轨道；四个观察阶段按两行成组阅读。 */
+.jj-record-tiles[data-count="1"] { grid-template-columns:minmax(0,1fr); }
+@container evidence-inspector (min-width:680px) { .jj-record-tiles:is([data-count="2"],[data-count="4"]) { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .jj-published-records { display:grid;gap:24px;min-width:0; }
 .jj-published-records > .jj-back-link { --return-layout-gap:24px; justify-self:start; }
 .jj-published-records > .jj-record-reading { margin-top:0; }
@@ -317,14 +320,7 @@
 
 .jj-evidence-reading { display:grid; grid-template-columns:minmax(0,1fr); gap:24px; }
 .jj-evidence-main { min-width:0; }
-.jj-evidence-comparison { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:32px; margin-bottom:28px; border-bottom:1px solid var(--line); }
-.jj-evidence-comparison > div { padding:0 0 24px; min-width:0; }
-.jj-evidence-comparison > div + div { border:0; }
-.jj-evidence-comparison h3 { color:var(--muted);   margin-bottom:10px; }
-.jj-evidence-comparison p { font-size:var(--text-object); line-height:var(--leading-reading); font-weight:var(--weight-regular); }
-.jj-evidence-comparison p + p { margin-top:8px; }
-.jj-evidence-comparison small { display:block; color:var(--muted); margin-top:5px; }
-.jj-evidence-comparison [data-tone=negative] p { color:var(--bad); }
+.jj-evidence-comparison { display:grid;gap:24px;margin-bottom:32px;min-width:0; }
 .jj-evidence-context { min-width:0; padding-top:24px; border-top:1px solid var(--line); }
 .jj-evidence-context > section + section, .jj-evidence-context > details { margin-top:24px; }
 .jj-evidence-context h3 { margin-bottom:14px;  }
@@ -333,7 +329,6 @@
 .jj-evidence-context summary { font-size:var(--text-meta); }
 @container evidence-inspector (max-width:620px) { .jj-evidence-reading { grid-template-columns:minmax(0,1fr); } .jj-evidence-context { border-left:0; padding:20px 0 0; border-top:1px solid var(--line); } }
 @container evidence-inspector (max-width:380px) { .jj-proof-entry, .jj-button.jj-proof-entry { align-items:start; flex-direction:column; gap:10px; } }
-@container evidence-inspector (min-width:600px) { .jj-evidence-comparison { grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px; }.jj-evidence-comparison > div + div { border-top:0; } }
 
 .jj-plan-expectation { color:var(--muted); }
 .jj-scenario-plan-summary { margin:24px 0; }

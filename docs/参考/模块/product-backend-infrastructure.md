@@ -382,7 +382,7 @@
 
 ### runtime/agent_process.py
 
-[源码](../../../product/backend/infrastructure/runtime/agent_process.py)（140 行）。公开声明：`run_codex`。
+[源码](../../../product/backend/infrastructure/runtime/agent_process.py)（145 行）。公开声明：`run_codex`。
 
 ### runtime/diagnostics.py
 

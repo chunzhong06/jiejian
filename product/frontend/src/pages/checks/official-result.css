@@ -1,21 +1,9 @@
 .jj-official-result { padding:28px;margin:0 0 32px;background:var(--surface);border-radius:var(--radius-surface); }
 .jj-official-result > h2 { font-size:var(--text-section); }
-.jj-official-requirement { margin-top:12px;color:var(--muted); }
-.jj-official-result-columns { display:grid;grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr);gap:32px 44px;margin-top:28px; }
-.jj-official-result-columns h3 { margin-bottom:18px;font-size:var(--text-group); }
-.jj-official-result-columns dl { display:grid;gap:12px; }
-.jj-official-result-columns dl > div { display:flex;gap:20px;align-items:baseline; }
-.jj-official-result-columns dt { color:var(--muted);font-size:var(--text-label); }
-.jj-official-result-columns dd { margin:0; }
-.jj-official-result-columns section > p:not(.jj-official-effect,.jj-official-judgement) { margin-top:18px;color:var(--muted);font-size:var(--text-meta);line-height:var(--leading-reading); }
-.jj-official-business h3 { font-size:var(--text-label);font-weight:var(--weight-medium);color:var(--muted); }
-.jj-official-effect { font-size:var(--text-section);line-height:28px;font-weight:var(--weight-medium);margin-top:12px; }
-.jj-official-judgement { margin-top:22px; }
-.jj-official-judgement strong { font-weight:var(--weight-semibold); }
-.jj-official-judgement[data-tone=negative] strong { color:var(--bad); }
-.jj-official-judgement[data-tone=caution] strong { color:var(--warn); }
-.jj-official-judgement[data-tone=positive] strong { color:var(--good); }
-.jj-official-process { padding-left:28px;border-left:1px solid var(--line); }
+.jj-official-result > .jj-business-outcome { margin-top:24px; }
+.jj-official-process { margin-top:24px; }
+.jj-official-process .jj-facts { margin-top:20px; }
+.jj-official-process > p { margin-top:16px;color:var(--muted);font-size:var(--text-label); }
 .jj-official-result-next { display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px 28px;margin-top:28px;color:var(--muted);font-size:var(--text-meta); }
 .jj-official-result-next > .jj-button { margin-left:auto; }
-@media(max-width:760px) { .jj-official-result { padding:22px 20px; }.jj-official-result-columns { grid-template-columns:1fr;gap:28px; }.jj-official-process { padding:0;border:0; } }
+@media(max-width:760px) { .jj-official-result { padding:22px 20px; } }

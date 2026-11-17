@@ -2,7 +2,7 @@
 .jj-rule-editor > .jj-section-header { justify-content:flex-start; margin-bottom:16px; }
 .jj-rule-edit-workspace { display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,2fr);gap:32px;align-items:start; }
 .jj-rule-edit-index .jj-index-item { display:grid;width:100%;gap:8px;text-align:left;padding:18px 20px; }
-.jj-rule-edit-index :is(small,span) { color:var(--muted);font-size:var(--text-meta); }
+.jj-rule-edit-index small { color:var(--muted);font-size:var(--text-meta); }
 .jj-rule-edit-detail { min-width:0;padding-left:32px;border-left:1px solid var(--line);container:rule-detail / inline-size; }
 .jj-rule-edit-heading { display:grid;gap:10px;margin-bottom:28px; }
 .jj-rule-edit-heading :is(h3,p) { margin:0; }

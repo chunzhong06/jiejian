@@ -14,6 +14,14 @@ function prepare(state:AgentConnection['state']='NOT_CONFIGURED',grant?:MCPAcces
 }
 beforeEach(()=>{vi.clearAllMocks();prepare()})
 
+it('没有应用时提供就近接续，不把默认范围显示成已授权',async()=>{
+  render(<Agent onError={vi.fn()} embedded/>)
+  expect(await screen.findByRole('link',{name:'选择或建立应用'})).toHaveAttribute('href','#/application')
+  expect(screen.queryByRole('combobox',{name:'访问范围'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'授予访问权限'})).not.toBeInTheDocument()
+  expect(mcpAccessApi.setProjectAccess).not.toHaveBeenCalled()
+})
+
 it('即时接入开关失败时保留服务器确认值，不连带修改应用授权',async()=>{
   const error=new Error('连接状态未修改'),onError=vi.fn()
   vi.mocked(mcpAccessApi.pause).mockRejectedValue(error)

@@ -1,0 +1,7 @@
+.jj-repair-outcomes { list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 32px; }
+.jj-repair-outcomes > li { min-width:0;display:grid;gap:8px; }
+.jj-repair-outcomes > li[data-purpose=original] { grid-column:1/-1;margin-bottom:8px; }
+.jj-repair-outcomes strong { font-size:var(--text-object);line-height:var(--leading-body);font-weight:var(--weight-medium); }
+.jj-repair-outcomes > li > p { font-size:var(--text-label);line-height:var(--leading-body); }
+.jj-repair-outcomes > li > small { color:var(--muted);font-size:var(--text-meta); }
+@container repair-task (max-width:660px) { .jj-repair-outcomes { grid-template-columns:minmax(0,1fr); } }

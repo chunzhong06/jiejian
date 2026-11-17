@@ -301,6 +301,37 @@ def test_portable_executor_uses_declared_client_without_host_path(tmp_path,monke
     assert execution._codex_executable() is None
 
 
+@pytest.mark.parametrize('reason,expected',[
+    ('NATIVE_COMMAND_APPROVAL','终端命令'),
+    ('NATIVE_FILE_APPROVAL','文件修改'),
+    ('UNSUPPORTED_INTERACTION','尚不支持的交互'),
+    (None,'尚未取得具体原因'),
+    ('fixture-private-client-error','尚未取得具体原因'),
+])
+def test_restricted_executor_preserves_bounded_cause_and_existing_task(harness,monkeypatch,reason,expected):
+    from types import SimpleNamespace
+    from product.backend.application.agent_access import execution
+    from product.backend.application.agent_access.service import MCPAccessLevel
+    monkeypatch.setattr(execution,'_codex_executable',lambda:'fixture-client')
+    current=harness.core.application_understanding.get(harness.project_id)
+    monkeypatch.setattr(harness.core.application_understanding,'get',lambda _:current.model_copy(update={'source_analysis_authorized':True}))
+    access=SimpleNamespace(view=lambda:SimpleNamespace(paired=True),level_for=lambda _:MCPAccessLevel.READ)
+    value,calls=task(harness),[]
+    def runner(**arguments):
+        calls.append(arguments)
+        return dict(state='FINISHED',session_id='original-session',restricted=True,restriction_reason=reason)
+    executor=execution.AgentExecution(harness.core,access,SimpleNamespace(prepare_managed_profile=lambda _:'fixture-profile'),runner=runner)
+    executor.start(harness.project_id,value['task_id'],execution.StartAgent(operation_id=uuid4().hex))
+    executor.close()
+    result=harness.core.collaboration.show(harness.project_id,value['task_id'])
+    assert result['execution']['restriction_reason']==(reason if reason in execution._RESTRICTIONS else 'UNKNOWN')
+    assert expected in result['execution']['message']
+    assert 'fixture-private-client-error' not in str(result)
+    assert result['operations']==value['operations']
+    assert result['execution']['session_id']=='original-session'
+    assert len(calls)==1 and calls[0]['allow_changes'] is False
+
+
 @pytest.mark.parametrize('source_free',[False,True])
 def test_read_only_executor_can_read_results_but_cannot_request_source_writes(harness, monkeypatch, source_free):
     from types import SimpleNamespace
